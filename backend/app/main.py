@@ -1,318 +1,418 @@
-# FastAPI Backend for QA AI Platform
-# This will be the main backend service
-
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer
 from pydantic import BaseModel
+import uuid
+import time
+import json
 from typing import List, Optional, Dict, Any
-import asyncio
-import logging
-from datetime import datetime
+import os
+import sys
 
-# Import your custom LLM service
-from app.services.llm_service import CustomLLMService
-from app.services.test_generation_service import TestGenerationService
-from app.services.defect_analysis_service import DefectAnalysisService
-from app.services.test_execution_service import TestExecutionService
-from app.core.config import settings
-from app.core.database import get_db
-from app.models.schemas import *
+# Add the parent directory to the path to import our services
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Initialize FastAPI app
 app = FastAPI(
-    title="QA AI Platform API",
-    description="AI-powered Quality Assurance platform for automated test generation and analysis",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="QAOne AI & Runs API",
+    version="0.1.8",
+    description="Service providing AI test generation, failure triage, and test run ingestion"
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=["http://localhost:8080", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Security
-security = HTTPBearer()
+# Pydantic models
+class GenerateTestsRequest(BaseModel):
+    org_id: str
+    project_id: str
+    requirements: str
+    context: Optional[Dict[str, Any]] = None
 
-# Initialize services
-llm_service = CustomLLMService()
-test_generation_service = TestGenerationService(llm_service)
-defect_analysis_service = DefectAnalysisService(llm_service)
-test_execution_service = TestExecutionService()
+class TestStep(BaseModel):
+    action: str
+    data: Optional[Dict[str, Any]] = {}
+    expected: str
+    locator_hints: Optional[List[str]] = []
 
-# Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+class TestCase(BaseModel):
+    case_id: str
+    title: str
+    description: str
+    priority: str
+    tags: List[str]
+    steps: List[TestStep]
 
-# Health check endpoint
+class AuditInfo(BaseModel):
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    latency_ms: int
+
+class GenerateTestsResponse(BaseModel):
+    cases: List[TestCase]
+    audit: AuditInfo
+
+class TriageRequest(BaseModel):
+    org_id: str
+    project_id: str
+    run_id: str
+    logs: str
+    artifacts: Optional[List[Dict[str, Any]]] = []
+
+class TriageResponse(BaseModel):
+    summary: str
+    root_cause: str
+    category: Optional[str] = None
+    suggested_fixes: List[str] = []
+    selector_suggestions: List[str] = []
+    likelihood_flaky: float = 0.0
+    related_cases: List[str] = []
+
+class RunIngestRequest(BaseModel):
+    org_id: str
+    project_id: str
+    runner_version: str
+    started_at: str
+    completed_at: str
+    status: str
+    environment: Optional[str] = "local"
+    branch: Optional[str] = None
+    commit: Optional[str] = None
+    steps: List[Dict[str, Any]]
+
+class RunIngestResponse(BaseModel):
+    run_id: str
+
+# Mock AI Service for development
+class MockAIService:
+    def __init__(self):
+        self.default_delay = 2.0  # seconds
+
+    async def generate_test_case(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock test case generation"""
+        import asyncio
+        await asyncio.sleep(self.default_delay)
+        
+        # Generate realistic test case based on requirements
+        requirements = request.get("description", "")
+        feature = request.get("feature", "Test Feature")
+        
+        test_cases = []
+        
+        # Generate multiple test cases based on requirements
+        if "login" in requirements.lower():
+            test_cases.extend([
+                {
+                    "name": "User Login with Valid Credentials",
+                    "description": "Verify that a user can successfully log in with correct username and password",
+                    "steps": [
+                        {"action": "Navigate to login page", "expectedResult": "Login form is displayed"},
+                        {"action": "Enter valid username and password", "expectedResult": "Credentials are accepted"},
+                        {"action": "Click login button", "expectedResult": "User is redirected to dashboard"}
+                    ],
+                    "priority": "critical",
+                    "tags": ["authentication", "smoke", "critical-path"]
+                },
+                {
+                    "name": "User Login with Invalid Credentials",
+                    "description": "Verify that login fails with invalid credentials",
+                    "steps": [
+                        {"action": "Navigate to login page", "expectedResult": "Login form is displayed"},
+                        {"action": "Enter invalid username and password", "expectedResult": "Credentials are rejected"},
+                        {"action": "Click login button", "expectedResult": "Error message is displayed"}
+                    ],
+                    "priority": "high",
+                    "tags": ["authentication", "negative-testing"]
+                }
+            ])
+        else:
+            # Generic test case
+            test_cases.append({
+                "name": f"Test {feature} Functionality",
+                "description": f"Verify that {feature} works as expected",
+                "steps": [
+                    {"action": "Navigate to the application", "expectedResult": "Application loads successfully"},
+                    {"action": "Perform the main action", "expectedResult": "Action completes successfully"},
+                    {"action": "Verify the result", "expectedResult": "Expected result is achieved"}
+                ],
+                "priority": "medium",
+                "tags": ["functional", "regression"]
+            })
+
+        return {
+            "testCase": test_cases[0],  # Return first test case
+            "suggestions": [
+                "Consider edge cases for input validation",
+                "Add performance checks for this flow",
+                "Explore security vulnerabilities"
+            ]
+        }
+
+    async def analyze_defect(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock defect analysis"""
+        import asyncio
+        await asyncio.sleep(self.default_delay)
+        
+        logs = request.get("logs", "")
+        
+        # Analyze logs for common patterns
+        if "element not found" in logs.lower():
+            return {
+                "summary": "Element not found error detected",
+                "root_cause": "The test is trying to interact with an element that doesn't exist or isn't visible",
+                "category": "locator",
+                "suggested_fixes": [
+                    "Add explicit wait for element visibility",
+                    "Use more robust selector strategy",
+                    "Check if element is in iframe"
+                ],
+                "selector_suggestions": [
+                    "[data-testid='element']",
+                    "button:contains('text')",
+                    "form input[name='field']"
+                ],
+                "likelihood_flaky": 0.8,
+                "related_cases": []
+            }
+        elif "timeout" in logs.lower():
+            return {
+                "summary": "Timeout error detected",
+                "root_cause": "The operation took longer than expected to complete",
+                "category": "timing",
+                "suggested_fixes": [
+                    "Increase timeout duration",
+                    "Optimize application performance",
+                    "Add loading state checks"
+                ],
+                "selector_suggestions": [],
+                "likelihood_flaky": 0.6,
+                "related_cases": []
+            }
+        else:
+            return {
+                "summary": "Generic error analysis",
+                "root_cause": "An unexpected error occurred during test execution",
+                "category": "data",
+                "suggested_fixes": [
+                    "Check application logs for more details",
+                    "Verify test data is correct",
+                    "Ensure environment is properly configured"
+                ],
+                "selector_suggestions": [],
+                "likelihood_flaky": 0.3,
+                "related_cases": []
+            }
+
+# Initialize mock AI service
+mock_ai_service = MockAIService()
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0",
-        "services": {
-            "llm": "connected",
-            "database": "connected",
-            "redis": "connected",
-            "celery": "connected"
+    return {"status": "ok"}
+
+@app.post("/ai/generate-tests")
+async def generate_tests(request: Request, body: GenerateTestsRequest):
+    """Generate structured test cases from requirements and context"""
+    try:
+        # Validate required fields
+        if not body.org_id or not body.project_id or not body.requirements:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: org_id, project_id, requirements"
+            )
+
+        # Generate idempotency key if not provided
+        idempotency_key = request.headers.get("idempotency-key") or str(uuid.uuid4())
+        
+        # Start timing for audit
+        start_time = time.time()
+        
+        # Call the AI service
+        ai_request = {
+            "feature": body.context.get("product_area", "Test Feature") if body.context else "Test Feature",
+            "description": body.requirements,
+            "requirements": body.requirements,
+            "testType": "manual",
+            "complexity": "medium",
+            "context": ", ".join(body.context.get("acceptance_criteria", [])) if body.context else ""
         }
+        
+        ai_response = await mock_ai_service.generate_test_case(ai_request)
+
+        # Calculate timing and costs
+        end_time = time.time()
+        latency_ms = int((end_time - start_time) * 1000)
+        
+        # Convert AI response to API format
+        test_case = ai_response["testCase"]
+        test_steps = [
+            TestStep(
+                action=step["action"],
+                data={},
+                expected=step["expectedResult"],
+                locator_hints=[]
+            )
+            for step in test_case["steps"]
+        ]
+        
+        test_cases = [TestCase(
+            case_id=str(uuid.uuid4()),
+            title=test_case["name"],
+            description=test_case["description"],
+            priority=map_priority(test_case["priority"]),
+            tags=test_case["tags"],
+            steps=test_steps
+        )]
+
+        # Calculate audit info
+        prompt_tokens = estimate_tokens(body.requirements)
+        completion_tokens = estimate_tokens(json.dumps(test_case))
+        
+        audit_info = AuditInfo(
+            model="mock-ai-service",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=calculate_cost(prompt_tokens, completion_tokens),
+            latency_ms=latency_ms
+        )
+
+        response = GenerateTestsResponse(
+            cases=test_cases,
+            audit=audit_info
+        )
+
+        return response
+
+    except Exception as e:
+        print(f"Error generating tests: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate test cases: {str(e)}"
+        )
+
+@app.post("/ai/triage")
+async def triage_failure(request: Request, body: TriageRequest):
+    """Analyze failing test logs and artifacts for root cause and fixes"""
+    try:
+        # Validate required fields
+        if not body.org_id or not body.project_id or not body.run_id or not body.logs:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: org_id, project_id, run_id, logs"
+            )
+
+        # Start timing
+        start_time = time.time()
+        
+        # Call the AI service
+        ai_request = {
+            "logs": body.logs,
+            "artifacts": body.artifacts or []
+        }
+        
+        ai_response = await mock_ai_service.analyze_defect(ai_request)
+
+        # Calculate timing
+        end_time = time.time()
+        latency_ms = int((end_time - start_time) * 1000)
+
+        response = TriageResponse(
+            summary=ai_response["summary"],
+            root_cause=ai_response["root_cause"],
+            category=ai_response["category"],
+            suggested_fixes=ai_response["suggested_fixes"],
+            selector_suggestions=ai_response["selector_suggestions"],
+            likelihood_flaky=ai_response["likelihood_flaky"],
+            related_cases=ai_response["related_cases"]
+        )
+
+        return response
+
+    except Exception as e:
+        print(f"Error analyzing defect: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze defect: {str(e)}"
+        )
+
+@app.post("/runs/ingest")
+async def ingest_run(request: Request, body: RunIngestRequest):
+    """Ingest a completed test run with steps and artifacts"""
+    try:
+        # Validate required fields
+        if not body.org_id or not body.project_id or not body.runner_version:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: org_id, project_id, runner_version"
+            )
+
+        # Generate run ID
+        run_id = str(uuid.uuid4())
+        
+        # TODO: Store run data in database
+        # For now, just return the run ID
+        
+        response = RunIngestResponse(run_id=run_id)
+        
+        return response
+
+    except Exception as e:
+        print(f"Error ingesting run: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to ingest run: {str(e)}"
+        )
+
+@app.post("/integrations/jira/webhook")
+async def jira_webhook(request: Request):
+    """Receive Jira issue updates (status, assignee, comments)"""
+    try:
+        # Get the webhook payload
+        payload = await request.json()
+        
+        # TODO: Process Jira webhook
+        # For now, just acknowledge receipt
+        
+        return {"status": "acknowledged"}
+        
+    except Exception as e:
+        print(f"Error processing Jira webhook: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process webhook: {str(e)}"
+        )
+
+def map_priority(priority: str) -> str:
+    """Map internal priority to API format"""
+    priority_map = {
+        "critical": "P0",
+        "high": "P1", 
+        "medium": "P2",
+        "low": "P3"
     }
+    return priority_map.get(priority, "P2")
 
-# Test Generation Endpoints
-@app.post("/api/v1/test-cases/generate", response_model=TestGenerationResponse)
-async def generate_test_case(
-    request: TestGenerationRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Generate AI-powered test case from feature description"""
-    try:
-        # Generate test case using custom LLM
-        result = await test_generation_service.generate_test_case(request)
-        
-        # Store in database
-        background_tasks.add_task(
-            test_generation_service.store_test_case,
-            result, db
-        )
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error generating test case: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+def estimate_tokens(text: str) -> int:
+    """Rough token estimation (4 chars per token)"""
+    return len(text) // 4
 
-@app.post("/api/v1/test-plans/generate", response_model=TestPlanResponse)
-async def generate_test_plan(
-    request: TestPlanRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Generate comprehensive test plan using AI"""
-    try:
-        result = await test_generation_service.generate_test_plan(request)
-        
-        # Store test plan and cases
-        background_tasks.add_task(
-            test_generation_service.store_test_plan,
-            result, db
-        )
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error generating test plan: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Defect Analysis Endpoints
-@app.post("/api/v1/defects/analyze", response_model=DefectAnalysisResponse)
-async def analyze_defect(
-    request: DefectAnalysisRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Analyze test failure and provide AI-powered insights"""
-    try:
-        result = await defect_analysis_service.analyze_defect(request)
-        
-        # Store analysis results
-        background_tasks.add_task(
-            defect_analysis_service.store_analysis,
-            result, db
-        )
-        
-        return result
-    except Exception as e:
-        logger.error(f"Error analyzing defect: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/v1/triage/batch-analyze")
-async def batch_analyze_defects(
-    defects: List[DefectAnalysisRequest],
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Batch analyze multiple defects for triage"""
-    try:
-        results = await defect_analysis_service.batch_analyze(defects)
-        
-        # Store all analyses
-        background_tasks.add_task(
-            defect_analysis_service.store_batch_analysis,
-            results, db
-        )
-        
-        return {"analyses": results, "count": len(results)}
-    except Exception as e:
-        logger.error(f"Error in batch analysis: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Test Execution Endpoints
-@app.post("/api/v1/test-runs/execute")
-async def execute_test_run(
-    run_request: TestRunRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Execute test run with AI-powered monitoring"""
-    try:
-        # Start test execution
-        run_id = await test_execution_service.start_test_run(run_request)
-        
-        # Execute tests in background
-        background_tasks.add_task(
-            test_execution_service.execute_tests,
-            run_id, run_request, db
-        )
-        
-        return {"run_id": run_id, "status": "started"}
-    except Exception as e:
-        logger.error(f"Error starting test run: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/test-runs/{run_id}/status")
-async def get_test_run_status(run_id: str, db: Session = Depends(get_db)):
-    """Get real-time test run status"""
-    try:
-        status = await test_execution_service.get_run_status(run_id, db)
-        return status
-    except Exception as e:
-        logger.error(f"Error getting run status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# AI Optimization Endpoints
-@app.post("/api/v1/optimization/suggest")
-async def suggest_optimizations(
-    test_results: List[Dict[str, Any]],
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Get AI-powered test suite optimization suggestions"""
-    try:
-        suggestions = await test_generation_service.optimize_test_suite(test_results)
-        
-        # Store optimization suggestions
-        background_tasks.add_task(
-            test_generation_service.store_optimization_suggestions,
-            suggestions, test_results, db
-        )
-        
-        return {"suggestions": suggestions}
-    except Exception as e:
-        logger.error(f"Error generating optimizations: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# CRUD Endpoints for Test Management
-@app.get("/api/v1/test-plans", response_model=List[TestPlan])
-async def get_test_plans(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """Get all test plans"""
-    try:
-        plans = await test_generation_service.get_test_plans(skip, limit, db)
-        return plans
-    except Exception as e:
-        logger.error(f"Error getting test plans: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/test-cases", response_model=List[TestCase])
-async def get_test_cases(
-    plan_id: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """Get test cases, optionally filtered by plan"""
-    try:
-        cases = await test_generation_service.get_test_cases(plan_id, skip, limit, db)
-        return cases
-    except Exception as e:
-        logger.error(f"Error getting test cases: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/test-runs", response_model=List[TestRun])
-async def get_test_runs(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """Get test runs"""
-    try:
-        runs = await test_execution_service.get_test_runs(skip, limit, db)
-        return runs
-    except Exception as e:
-        logger.error(f"Error getting test runs: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Vector Search Endpoints (for pgvector integration)
-@app.post("/api/v1/search/similar-tests")
-async def find_similar_tests(
-    query: str,
-    limit: int = 10,
-    db: Session = Depends(get_db)
-):
-    """Find similar test cases using vector similarity"""
-    try:
-        similar_tests = await test_generation_service.find_similar_tests(query, limit, db)
-        return {"similar_tests": similar_tests}
-    except Exception as e:
-        logger.error(f"Error finding similar tests: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/v1/search/similar-defects")
-async def find_similar_defects(
-    error_message: str,
-    limit: int = 10,
-    db: Session = Depends(get_db)
-):
-    """Find similar defects using vector similarity"""
-    try:
-        similar_defects = await defect_analysis_service.find_similar_defects(error_message, limit, db)
-        return {"similar_defects": similar_defects}
-    except Exception as e:
-        logger.error(f"Error finding similar defects: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup"""
-    logger.info("Starting QA AI Platform API...")
+def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
+    """Calculate cost based on token usage"""
+    # Mock pricing for development
+    prompt_cost_per_1k = 0.002
+    completion_cost_per_1k = 0.006
     
-    # Initialize database connections
-    await test_generation_service.initialize()
-    await defect_analysis_service.initialize()
-    await test_execution_service.initialize()
+    prompt_cost = (prompt_tokens / 1000) * prompt_cost_per_1k
+    completion_cost = (completion_tokens / 1000) * completion_cost_per_1k
     
-    logger.info("QA AI Platform API started successfully!")
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    logger.info("Shutting down QA AI Platform API...")
-    
-    # Cleanup connections
-    await test_generation_service.cleanup()
-    await defect_analysis_service.cleanup()
-    await test_execution_service.cleanup()
-    
-    logger.info("QA AI Platform API shutdown complete!")
+    return round(prompt_cost + completion_cost, 4)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8000)

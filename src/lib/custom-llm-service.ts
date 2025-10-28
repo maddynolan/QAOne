@@ -1,25 +1,16 @@
 // Custom LLM Service for QA AI Platform
-// This integrates with your custom LLM infrastructure
-// Falls back to mock service in development mode
+// This integrates with the QAOne backend API
 
-export interface CustomLLMConfig {
-  modelEndpoint: string;
-  apiKey: string;
-  modelName: string;
-  temperature: number;
-  maxTokens: number;
-}
-
-export interface TestGenerationRequest {
+export interface TestCaseGenerationRequest {
   feature: string;
   description: string;
   requirements?: string;
-  testType: 'api' | 'ui' | 'e2e' | 'performance';
+  testType: 'api' | 'ui' | 'e2e' | 'performance' | 'manual';
   complexity: 'simple' | 'medium' | 'complex';
   context?: string;
 }
 
-export interface TestGenerationResponse {
+export interface TestCaseGenerationResponse {
   testCase: {
     name: string;
     description: string;
@@ -57,7 +48,7 @@ export interface DefectAnalysisResponse {
   investigationSteps: string[];
 }
 
-export interface TestPlanRequest {
+export interface TestPlanGenerationRequest {
   projectDescription: string;
   features: string[];
   testTypes: string[];
@@ -66,7 +57,7 @@ export interface TestPlanRequest {
   resources?: string[];
 }
 
-export interface TestPlanResponse {
+export interface TestPlanGenerationResponse {
   testPlan: {
     name: string;
     description: string;
@@ -85,274 +76,221 @@ export interface TestPlanResponse {
   resourceRequirements: string[];
 }
 
-class CustomLLMService {
-  private config: CustomLLMConfig;
+export interface OptimizationSuggestionRequest {
+  testResults: any[];
+  performanceMetrics?: any;
+  coverageData?: any;
+}
 
-  constructor(config: CustomLLMConfig) {
-    this.config = config;
+export interface OptimizationSuggestionResponse {
+  suggestions: string[];
+  impactEstimate: 'low' | 'medium' | 'high';
+  priority: 'low' | 'medium' | 'high';
+}
+
+class CustomLLMService {
+  private apiBaseUrl: string;
+
+  constructor(apiBaseUrl: string = 'http://localhost:8000') {
+    this.apiBaseUrl = apiBaseUrl;
   }
 
-  async generateTestCase(request: TestGenerationRequest): Promise<TestGenerationResponse> {
-    const prompt = this.buildTestCasePrompt(request);
-    
+  async generateTestCase(request: TestCaseGenerationRequest): Promise<TestCaseGenerationResponse> {
     try {
-      const response = await this.callLLM(prompt);
-      return this.parseTestCaseResponse(response);
+      const response = await fetch(`${this.apiBaseUrl}/ai/generate-tests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          org_id: 'demo-org', // TODO: Get from auth context
+          project_id: 'demo-project', // TODO: Get from auth context
+          requirements: request.description,
+          context: {
+            product_area: request.feature,
+            acceptance_criteria: request.requirements ? [request.requirements] : [],
+            prior_flaky_cases: [],
+            style: 'imperative',
+            test_count_hint: 1
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Convert API response to our expected format
+      const testCase = data.cases[0];
+      return {
+        testCase: {
+          name: testCase.title,
+          description: testCase.description,
+          steps: testCase.steps.map((step: any) => ({
+            action: step.action,
+            expectedResult: step.expected
+          })),
+          preconditions: ['User is logged in and has necessary permissions'],
+          testData: ['Test data will be provided during execution'],
+          priority: mapPriorityFromAPI(testCase.priority),
+          tags: testCase.tags,
+          automationScript: undefined
+        },
+        suggestions: [
+          'Consider edge cases for input validation',
+          'Add performance checks for this flow',
+          'Explore security vulnerabilities'
+        ],
+        estimatedTime: 15,
+        confidence: 85
+      };
     } catch (error) {
       console.error('Error generating test case:', error);
-      throw new Error('Failed to generate test case with custom LLM');
+      throw new Error('Failed to generate test case with AI service');
     }
   }
 
   async analyzeDefect(request: DefectAnalysisRequest): Promise<DefectAnalysisResponse> {
-    const prompt = this.buildDefectAnalysisPrompt(request);
-    
     try {
-      const response = await this.callLLM(prompt);
-      return this.parseDefectAnalysisResponse(response);
+      const response = await fetch(`${this.apiBaseUrl}/ai/triage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          org_id: 'demo-org', // TODO: Get from auth context
+          project_id: 'demo-project', // TODO: Get from auth context
+          run_id: crypto.randomUUID(),
+          logs: `${request.errorMessage}\n\nContext: ${request.testContext}\nEnvironment: ${request.environment}\nTest Type: ${request.testType}`,
+          artifacts: []
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        severity: mapSeverityFromCategory(data.category),
+        priority: mapPriorityFromLikelihood(data.likelihood_flaky),
+        category: data.category || 'unknown',
+        rootCause: data.root_cause,
+        suggestedFix: data.suggested_fixes?.[0] || 'Investigate further',
+        similarIssues: data.related_cases || [],
+        confidence: Math.round(data.confidence || 80),
+        investigationSteps: data.suggested_fixes || ['Review logs and application state']
+      };
     } catch (error) {
       console.error('Error analyzing defect:', error);
-      throw new Error('Failed to analyze defect with custom LLM');
+      throw new Error('Failed to analyze defect with AI service');
     }
   }
 
-  async generateTestPlan(request: TestPlanRequest): Promise<TestPlanResponse> {
-    const prompt = this.buildTestPlanPrompt(request);
-    
-    try {
-      const response = await this.callLLM(prompt);
-      return this.parseTestPlanResponse(response);
-    } catch (error) {
-      console.error('Error generating test plan:', error);
-      throw new Error('Failed to generate test plan with custom LLM');
-    }
-  }
-
-  async optimizeTestSuite(testResults: any[]): Promise<string[]> {
-    const prompt = this.buildOptimizationPrompt(testResults);
-    
-    try {
-      const response = await this.callLLM(prompt);
-      return this.parseOptimizationResponse(response);
-    } catch (error) {
-      console.error('Error optimizing test suite:', error);
-      throw new Error('Failed to optimize test suite with custom LLM');
-    }
-  }
-
-  private async callLLM(prompt: string): Promise<string> {
-    const response = await fetch(this.config.modelEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
+  async generateTestPlan(request: TestPlanGenerationRequest): Promise<TestPlanGenerationResponse> {
+    // For now, return a mock response since we don't have a dedicated endpoint
+    return {
+      testPlan: {
+        name: `Test Plan for ${request.projectDescription}`,
+        description: `Comprehensive test plan covering ${request.features.join(', ')}`,
+        testCases: request.features.map(feature => ({
+          name: `Test ${feature}`,
+          description: `Verify ${feature} functionality`,
+          priority: 'medium',
+          type: 'functional',
+          estimatedTime: 30
+        })),
+        estimatedDuration: request.features.length * 30,
+        coverage: request.coverage,
+        riskAssessment: 'Medium risk - standard testing approach recommended'
       },
-      body: JSON.stringify({
-        model: this.config.modelName,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert QA engineer with deep knowledge of testing methodologies, automation frameworks, and quality assurance best practices.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: this.config.temperature,
-        max_tokens: this.config.maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+      recommendations: [
+        'Implement automated regression testing',
+        'Add performance testing for critical paths',
+        'Include security testing for user-facing features'
+      ],
+      resourceRequirements: [
+        'QA Engineer',
+        'Test Environment',
+        'Test Data Management'
+      ]
+    };
   }
 
-  private buildTestCasePrompt(request: TestGenerationRequest): string {
-    return `
-Generate a comprehensive test case for the following feature:
+  async getOptimizationSuggestions(request: OptimizationSuggestionRequest): Promise<OptimizationSuggestionResponse> {
+    return {
+      suggestions: [
+        'Optimize database queries for frequently accessed data',
+        'Implement client-side caching for static assets',
+        'Reduce bundle size by lazy-loading components',
+        'Review API response times and add indexing to relevant database tables'
+      ],
+      impactEstimate: 'high',
+      priority: 'high'
+    };
+  }
 
-**Feature**: ${request.feature}
-**Description**: ${request.description}
-**Requirements**: ${request.requirements || 'Not specified'}
-**Test Type**: ${request.testType}
-**Complexity**: ${request.complexity}
-**Context**: ${request.context || 'Not specified'}
+  async testConnection(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/health`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
 
-Please provide a detailed test case including:
-1. Clear test case name and description
-2. Step-by-step test execution steps with expected results
-3. Preconditions and test data requirements
-4. Priority level based on risk assessment
-5. Relevant tags for categorization
-6. Estimated execution time
-7. Optional automation script suggestions
-8. Additional suggestions for edge cases
-
-Respond in JSON format with this exact structure:
-{
-  "testCase": {
-    "name": "string",
-    "description": "string",
-    "steps": [{"action": "string", "expectedResult": "string"}],
-    "preconditions": ["string"],
-    "testData": ["string"],
-    "priority": "low|medium|high|critical",
-    "tags": ["string"],
-    "automationScript": "string (optional)"
-  },
-  "suggestions": ["string"],
-  "estimatedTime": number,
-  "confidence": number
+  async searchSimilarTestCases(query: string): Promise<string[]> {
+    // Mock implementation - would integrate with search service
+    return [
+      `Similar to "${query}" - Test Case A`,
+      `Similar to "${query}" - Test Case B`,
+      `Similar to "${query}" - Test Case C`,
+    ];
+  }
 }
-`;
-  }
 
-  private buildDefectAnalysisPrompt(request: DefectAnalysisRequest): string {
-    return `
-Analyze the following test failure and provide comprehensive defect analysis:
-
-**Error Message**: ${request.errorMessage}
-**Test Context**: ${request.testContext}
-**Stack Trace**: ${request.stackTrace || 'Not available'}
-**Environment**: ${request.environment}
-**Test Type**: ${request.testType}
-
-Please provide:
-1. Severity assessment (low/medium/high/critical)
-2. Priority recommendation (low/medium/high/critical)
-3. Category classification
-4. Root cause analysis
-5. Suggested fix or investigation steps
-6. Similar known issues
-7. Confidence level (0-100)
-8. Step-by-step investigation plan
-
-Respond in JSON format:
-{
-  "severity": "low|medium|high|critical",
-  "priority": "low|medium|high|critical",
-  "category": "string",
-  "rootCause": "string",
-  "suggestedFix": "string",
-  "similarIssues": ["string"],
-  "confidence": number,
-  "investigationSteps": ["string"]
+// Helper functions
+function mapPriorityFromAPI(priority: string): 'low' | 'medium' | 'high' | 'critical' {
+  const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'critical'> = {
+    'P0': 'critical',
+    'P1': 'high',
+    'P2': 'medium',
+    'P3': 'low'
+  };
+  return priorityMap[priority] || 'medium';
 }
-`;
-  }
 
-  private buildTestPlanPrompt(request: TestPlanRequest): string {
-    return `
-Create a comprehensive test plan for the following project:
-
-**Project**: ${request.projectDescription}
-**Features**: ${request.features.join(', ')}
-**Test Types**: ${request.testTypes.join(', ')}
-**Coverage Level**: ${request.coverage}
-**Timeline**: ${request.timeline || 'Not specified'}
-**Resources**: ${request.resources?.join(', ') || 'Not specified'}
-
-Please provide:
-1. Test plan name and description
-2. List of test cases with priorities, types, and time estimates
-3. Estimated total duration
-4. Coverage assessment
-5. Risk assessment
-6. Recommendations for test strategy
-7. Resource requirements
-
-Respond in JSON format:
-{
-  "testPlan": {
-    "name": "string",
-    "description": "string",
-    "testCases": [{"name": "string", "description": "string", "priority": "string", "type": "string", "estimatedTime": number}],
-    "estimatedDuration": number,
-    "coverage": "string",
-    "riskAssessment": "string"
-  },
-  "recommendations": ["string"],
-  "resourceRequirements": ["string"]
+function mapSeverityFromCategory(category: string): 'low' | 'medium' | 'high' | 'critical' {
+  const severityMap: Record<string, 'low' | 'medium' | 'high' | 'critical'> = {
+    'locator': 'medium',
+    'timing': 'medium',
+    'network': 'high',
+    'data': 'high',
+    'enviro': 'low'
+  };
+  return severityMap[category] || 'medium';
 }
-`;
-  }
 
-  private buildOptimizationPrompt(testResults: any[]): string {
-    return `
-Analyze these test results and provide optimization recommendations:
-
-**Test Results**: ${JSON.stringify(testResults, null, 2)}
-
-Please provide actionable suggestions for:
-1. Performance optimization
-2. Test coverage improvements
-3. Flaky test identification and fixes
-4. Resource optimization
-5. Test maintenance best practices
-6. Automation opportunities
-7. Risk mitigation strategies
-
-Respond as an array of specific, actionable recommendations.
-`;
-  }
-
-  private parseTestCaseResponse(response: string): TestGenerationResponse {
-    try {
-      return JSON.parse(response);
-    } catch (error) {
-      throw new Error('Failed to parse test case response from LLM');
-    }
-  }
-
-  private parseDefectAnalysisResponse(response: string): DefectAnalysisResponse {
-    try {
-      return JSON.parse(response);
-    } catch (error) {
-      throw new Error('Failed to parse defect analysis response from LLM');
-    }
-  }
-
-  private parseTestPlanResponse(response: string): TestPlanResponse {
-    try {
-      return JSON.parse(response);
-    } catch (error) {
-      throw new Error('Failed to parse test plan response from LLM');
-    }
-  }
-
-  private parseOptimizationResponse(response: string): string[] {
-    try {
-      return JSON.parse(response);
-    } catch (error) {
-      // Fallback to splitting by lines if JSON parsing fails
-      return response.split('\n').filter(line => line.trim().length > 0);
-    }
-  }
+function mapPriorityFromLikelihood(likelihood: number): 'low' | 'medium' | 'high' | 'critical' {
+  if (likelihood >= 0.8) return 'critical';
+  if (likelihood >= 0.6) return 'high';
+  if (likelihood >= 0.4) return 'medium';
+  return 'low';
 }
 
 // Import mock service for development
 import { mockAIService, aiService as mockAIServiceInstance } from './mock-ai-service';
 
-// Default configuration - should be moved to environment variables
-const defaultConfig: CustomLLMConfig = {
-  modelEndpoint: import.meta.env.VITE_LLM_ENDPOINT || 'http://localhost:8000/api/v1/llm/generate',
-  apiKey: import.meta.env.VITE_LLM_API_KEY || '',
-  modelName: import.meta.env.VITE_LLM_MODEL || 'qa-ai-model',
-  temperature: 0.7,
-  maxTokens: 2000,
-};
-
 // Development mode detection
 const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
-const useMockService = isDevelopment && (!defaultConfig.apiKey || defaultConfig.apiKey === '');
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Export the appropriate service based on environment
-export const customLLMService = useMockService ? mockAIServiceInstance : new CustomLLMService(defaultConfig);
+export const customLLMService = isDevelopment ? mockAIServiceInstance : new CustomLLMService(apiBaseUrl);
 
 // Export both services for manual switching if needed
 export { mockAIService };
