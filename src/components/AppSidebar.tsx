@@ -65,12 +65,9 @@ export function AppSidebar() {
                         end 
                         className={
                           isActive
-                            ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium !text-white"
-                            : "text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground !text-gray-800 dark:!text-gray-200"
+                            ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         }
-                        style={{
-                          color: isActive ? 'white' : 'inherit'
-                        }}
                       >
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
