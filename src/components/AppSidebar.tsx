@@ -53,24 +53,30 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-sidebar-foreground">Main Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end 
-                      className={({ isActive }) => 
-                        isActive
-                          ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      }
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {items.map((item) => {
+                const isActive = location.pathname === item.url;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <NavLink 
+                        to={item.url} 
+                        end 
+                        className={
+                          isActive
+                            ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium !text-white"
+                            : "text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground !text-gray-800 dark:!text-gray-200"
+                        }
+                        style={{
+                          color: isActive ? 'white' : 'inherit'
+                        }}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
