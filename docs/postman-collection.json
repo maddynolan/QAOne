@@ -1,0 +1,385 @@
+{
+  "info": {
+    "name": "QAOne AI & Runs API",
+    "description": "Service providing AI test generation, failure triage, and test run ingestion",
+    "version": "0.1.8",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.qaone.dev",
+      "type": "string"
+    },
+    {
+      "key": "staging_url",
+      "value": "https://staging.api.qaone.dev",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "org_id",
+      "value": "123e4567-e89b-12d3-a456-426614174000",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "123e4567-e89b-12d3-a456-426614174001",
+      "type": "string"
+    },
+    {
+      "key": "run_id",
+      "value": "123e4567-e89b-12d3-a456-426614174002",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Liveness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the API service is running"
+          },
+          "response": [
+            {
+              "name": "OK Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"ok\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI Services",
+      "item": [
+        {
+          "name": "Generate Tests",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}",
+                "description": "Optional idempotency key"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"requirements\": \"As a user, I want to be able to log in to the application so that I can access my account.\",\n  \"context\": {\n    \"product_area\": \"Authentication\",\n    \"acceptance_criteria\": [\n      \"User can enter valid credentials\",\n      \"User is redirected to dashboard on success\",\n      \"User sees error message for invalid credentials\"\n    ],\n    \"prior_flaky_cases\": [],\n    \"style\": \"gherkin\",\n    \"test_count_hint\": 5\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/generate-tests",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "generate-tests"]
+            },
+            "description": "Generate structured test cases from requirements and context"
+          },
+          "response": [
+            {
+              "name": "Generated Test Cases",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"requirements\": \"User login functionality\",\n  \"context\": {\n    \"product_area\": \"Authentication\",\n    \"style\": \"gherkin\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/ai/generate-tests",
+                  "host": ["{{base_url}}"],
+                  "path": ["ai", "generate-tests"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"cases\": [\n    {\n      \"case_id\": \"123e4567-e89b-12d3-a456-426614174003\",\n      \"title\": \"User Login with Valid Credentials\",\n      \"description\": \"Verify that a user can successfully log in with correct credentials\",\n      \"priority\": \"P0\",\n      \"tags\": [\"authentication\", \"smoke\"],\n      \"steps\": [\n        {\n          \"action\": \"Navigate to login page\",\n          \"expected\": \"Login form is displayed\",\n          \"locator_hints\": [\"#login-form\"]\n        },\n        {\n          \"action\": \"Enter valid email and password\",\n          \"expected\": \"Credentials are accepted\",\n          \"locator_hints\": [\"#email\", \"#password\"]\n        },\n        {\n          \"action\": \"Click login button\",\n          \"expected\": \"User is redirected to dashboard\",\n          \"locator_hints\": [\"#login-btn\"]\n        }\n      ]\n    }\n  ],\n  \"audit\": {\n    \"model\": \"gpt-4\",\n    \"prompt_tokens\": 150,\n    \"completion_tokens\": 300,\n    \"cost_usd\": 0.002,\n    \"latency_ms\": 1200\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Triage Failure",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"run_id\": \"{{run_id}}\",\n  \"logs\": \"Error: Element not found: #login-btn\\nStack trace: at LoginPage.clickLoginButton (login.spec.js:45)\\nTest failed after 10 seconds timeout\",\n  \"artifacts\": [\n    {\n      \"type\": \"screenshot\",\n      \"url\": \"https://storage.example.com/screenshots/login-failure.png\",\n      \"size_bytes\": 245760,\n      \"checksum\": \"sha256:abc123...\"\n    },\n    {\n      \"type\": \"trace\",\n      \"url\": \"https://storage.example.com/traces/login-trace.zip\",\n      \"size_bytes\": 1024000,\n      \"checksum\": \"sha256:def456...\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/triage",
+              "host": ["{{base_url}}"],
+              "path": ["ai", "triage"]
+            },
+            "description": "Analyze failing test logs and artifacts for root cause and fixes"
+          },
+          "response": [
+            {
+              "name": "Triage Analysis",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"run_id\": \"{{run_id}}\",\n  \"logs\": \"Element not found error\",\n  \"artifacts\": []\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/ai/triage",
+                  "host": ["{{base_url}}"],
+                  "path": ["ai", "triage"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"summary\": \"Login button element not found due to timing issue\",\n  \"root_cause\": \"The login button element (#login-btn) is not present when the test tries to click it, likely due to slow page loading or dynamic content rendering.\",\n  \"category\": \"timing\",\n  \"suggested_fixes\": [\n    \"Add explicit wait for element visibility before clicking\",\n    \"Increase timeout for element location\",\n    \"Use more robust selector strategy\"\n  ],\n  \"selector_suggestions\": [\n    \"[data-testid=\\\"login-button\\\"]\",\n    \"button:contains(\\\"Login\\\")\",\n    \"form button[type=\\\"submit\\\"]\"\n  ],\n  \"likelihood_flaky\": 0.8,\n  \"related_cases\": [\"123e4567-e89b-12d3-a456-426614174004\"]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Test Runs",
+      "item": [
+        {
+          "name": "Ingest Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"runner_version\": \"playwright-1.40.0\",\n  \"started_at\": \"2024-01-15T10:30:00Z\",\n  \"completed_at\": \"2024-01-15T10:35:00Z\",\n  \"status\": \"failed\",\n  \"environment\": \"ci\",\n  \"branch\": \"main\",\n  \"commit\": \"abc123def456\",\n  \"steps\": [\n    {\n      \"case_id\": \"123e4567-e89b-12d3-a456-426614174003\",\n      \"title\": \"User Login with Valid Credentials\",\n      \"status\": \"failed\",\n      \"duration_ms\": 10000,\n      \"error_message\": \"Element not found: #login-btn\",\n      \"stdout\": \"Starting login test...\",\n      \"stderr\": \"Error: Element not found\",\n      \"artifacts\": [\n        {\n          \"type\": \"screenshot\",\n          \"url\": \"https://storage.example.com/screenshots/login-failure.png\",\n          \"size_bytes\": 245760,\n          \"checksum\": \"sha256:abc123...\"\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/runs/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["runs", "ingest"]
+            },
+            "description": "Ingest a completed test run with steps and artifacts"
+          },
+          "response": [
+            {
+              "name": "Run Accepted",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"project_id\": \"{{project_id}}\",\n  \"runner_version\": \"playwright-1.40.0\",\n  \"started_at\": \"2024-01-15T10:30:00Z\",\n  \"completed_at\": \"2024-01-15T10:35:00Z\",\n  \"status\": \"passed\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/runs/ingest",
+                  "host": ["{{base_url}}"],
+                  "path": ["runs", "ingest"]
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"run_id\": \"123e4567-e89b-12d3-a456-426614174005\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Integrations",
+      "item": [
+        {
+          "name": "Jira Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"webhookEvent\": \"jira:issue_updated\",\n  \"issue\": {\n    \"id\": \"12345\",\n    \"key\": \"QA-123\",\n    \"fields\": {\n      \"status\": {\n        \"name\": \"In Progress\"\n      },\n      \"assignee\": {\n        \"displayName\": \"John Doe\"\n      }\n    }\n  },\n  \"changelog\": {\n    \"items\": [\n      {\n        \"field\": \"status\",\n        \"fromString\": \"Open\",\n        \"toString\": \"In Progress\"\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/integrations/jira/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["integrations", "jira", "webhook"]
+            },
+            "description": "Receive Jira issue updates (status, assignee, comments)"
+          },
+          "response": [
+            {
+              "name": "Webhook Acknowledged",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"webhookEvent\": \"jira:issue_updated\",\n  \"issue\": {\n    \"id\": \"12345\",\n    \"key\": \"QA-123\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/integrations/jira/webhook",
+                  "host": ["{{base_url}}"],
+                  "path": ["integrations", "jira", "webhook"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"acknowledged\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-generate UUIDs if not set",
+          "if (!pm.variables.get('org_id') || pm.variables.get('org_id') === '') {",
+          "    pm.variables.set('org_id', pm.variables.replaceIn('{{$randomUUID}}'));",
+          "}",
+          "",
+          "if (!pm.variables.get('project_id') || pm.variables.get('project_id') === '') {",
+          "    pm.variables.set('project_id', pm.variables.replaceIn('{{$randomUUID}}'));",
+          "}",
+          "",
+          "if (!pm.variables.get('run_id') || pm.variables.get('run_id') === '') {",
+          "    pm.variables.set('run_id', pm.variables.replaceIn('{{$randomUUID}}'));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Extract run_id from ingest response",
+          "if (pm.response.code === 202 && pm.response.json().run_id) {",
+          "    pm.variables.set('run_id', pm.response.json().run_id);",
+          "}",
+          "",
+          "// Log response for debugging",
+          "console.log('Response Status:', pm.response.status);",
+          "console.log('Response Time:', pm.response.responseTime + 'ms');"
+        ]
+      }
+    }
+  ]
+}
