@@ -1,0 +1,98 @@
+name: OpenAPI Validation & Type Generation
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'api/openapi.yaml'
+      - 'src/types/api.d.ts'
+      - '.github/workflows/openapi.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'api/openapi.yaml'
+      - 'src/types/api.d.ts'
+      - '.github/workflows/openapi.yml'
+
+jobs:
+  validate-openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate OpenAPI spec
+        run: |
+          # Install swagger-codegen for validation
+          npm install -g @apidevtools/swagger-cli
+          swagger-cli validate api/openapi.yaml
+
+      - name: Generate types
+        run: npm run openapi:gen
+
+      - name: Check for type changes
+        run: |
+          if [ -n "$(git status --porcelain src/types/api.d.ts)" ]; then
+            echo "::error::Generated types are out of sync with OpenAPI spec"
+            echo "Please run 'npm run openapi:gen' and commit the changes"
+            git diff src/types/api.d.ts
+            exit 1
+          fi
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  test-api-types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate types
+        run: npm run openapi:gen
+
+      - name: Test API types
+        run: |
+          # Create a simple test to verify types are valid
+          cat > test-api-types.ts << 'EOF'
+          import type { paths } from './src/types/api';
+          
+          // Test that we can reference the generated types
+          type GenerateTestsRequest = paths['/ai/generate-tests']['post']['requestBody']['content']['application/json'];
+          type GenerateTestsResponse = paths['/ai/generate-tests']['post']['responses']['200']['content']['application/json'];
+          type TriageRequest = paths['/ai/triage']['post']['requestBody']['content']['application/json'];
+          type TriageResponse = paths['/ai/triage']['post']['responses']['200']['content']['application/json'];
+          
+          // This should compile without errors
+          const testRequest: GenerateTestsRequest = {
+            org_id: '123e4567-e89b-12d3-a456-426614174000',
+            project_id: '123e4567-e89b-12d3-a456-426614174001',
+            requirements: 'Test requirements'
+          };
+          
+          console.log('API types are valid:', testRequest);
+          EOF
+          
+          npx tsc --noEmit test-api-types.ts
+          rm test-api-types.ts

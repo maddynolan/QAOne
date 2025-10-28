@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment variables and secrets
+.env
+*.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +30,51 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Testing
+coverage
+.nyc_output
+test-results
+playwright-report
+playwright/.cache
+
+# Build outputs
+build
+out
+.next
+.nuxt
+.cache
+.temp
+.tmp
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp

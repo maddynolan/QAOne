@@ -1,0 +1,421 @@
+openapi: 3.1.0
+info:
+  title: QAOne AI & Runs API
+  version: 0.1.8
+  description: Service providing AI test generation, failure triage, and test run ingestion
+servers:
+  - url: https://api.qaone.dev
+    description: Production
+  - url: https://staging.api.qaone.dev
+    description: Staging
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+  /ai/generate-tests:
+    post:
+      summary: Generate structured test cases from requirements/context
+      operationId: generateTests
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateTestsRequest'
+      responses:
+        "200":
+          description: Structured test cases
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateTestsResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "429":
+          $ref: '#/components/responses/RateLimited'
+        "500":
+          $ref: '#/components/responses/ServerError'
+  /ai/triage:
+    post:
+      summary: Analyze failing test logs and artifacts for root cause & fixes
+      operationId: triageFailure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriageRequest'
+      responses:
+        "200":
+          description: Triage analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriageResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "429":
+          $ref: '#/components/responses/RateLimited'
+        "500":
+          $ref: '#/components/responses/ServerError'
+  /runs/ingest:
+    post:
+      summary: Ingest a completed run with steps & artifacts
+      operationId: ingestRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunIngestRequest'
+      responses:
+        "202":
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "413":
+          description: Payload too large
+        "500":
+          $ref: '#/components/responses/ServerError'
+  /integrations/jira/webhook:
+    post:
+      summary: Receive Jira issue updates (status, assignee, comments)
+      operationId: jiraWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Acknowledge
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: seconds to wait
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    GenerateTestsRequest:
+      type: object
+      required:
+        - org_id
+        - project_id
+        - requirements
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        requirements:
+          type: string
+          description: Free text or markdown spec
+        context:
+          type: object
+          properties:
+            product_area:
+              type: string
+            acceptance_criteria:
+              type: array
+              items:
+                type: string
+            prior_flaky_cases:
+              type: array
+              items:
+                type: string
+                format: uuid
+            style:
+              type: string
+              enum: [gherkin, imperative]
+            test_count_hint:
+              type: integer
+              minimum: 1
+              maximum: 200
+    GenerateTestsResponse:
+      type: object
+      required:
+        - cases
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestCase'
+        audit:
+          type: object
+          properties:
+            model:
+              type: string
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            cost_usd:
+              type: number
+            latency_ms:
+              type: integer
+    TestCase:
+      type: object
+      required:
+        - title
+        - priority
+        - steps
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        priority:
+          type: string
+          enum: [P0, P1, P2, P3]
+        tags:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestStep'
+    TestStep:
+      type: object
+      required:
+        - action
+        - expected
+      properties:
+        action:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        expected:
+          type: string
+        locator_hints:
+          type: array
+          items:
+            type: string
+    TriageRequest:
+      type: object
+      required:
+        - org_id
+        - project_id
+        - run_id
+        - logs
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        run_id:
+          type: string
+          format: uuid
+        logs:
+          type: string
+          description: Raw or structured logs
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Artifact'
+    TriageResponse:
+      type: object
+      required:
+        - summary
+        - root_cause
+      properties:
+        summary:
+          type: string
+        root_cause:
+          type: string
+        category:
+          type: string
+          enum: [locator, timing, network, data, enviro]
+        suggested_fixes:
+          type: array
+          items:
+            type: string
+        selector_suggestions:
+          type: array
+          items:
+            type: string
+        likelihood_flaky:
+          type: number
+          minimum: 0
+          maximum: 1
+        related_cases:
+          type: array
+          items:
+            type: string
+            format: uuid
+    RunIngestRequest:
+      type: object
+      required:
+        - org_id
+        - project_id
+        - runner_version
+        - started_at
+        - completed_at
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        runner_version:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [passed, failed, partial, error]
+        environment:
+          type: string
+          enum: [ci, local, staging, prod]
+        branch:
+          type: string
+        commit:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            required:
+              - case_id
+              - title
+              - status
+              - duration_ms
+            properties:
+              case_id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              status:
+                type: string
+                enum: [passed, failed, skipped]
+              duration_ms:
+                type: integer
+              error_message:
+                type: string
+              stdout:
+                type: string
+              stderr:
+                type: string
+              artifacts:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+    Artifact:
+      type: object
+      required:
+        - type
+        - url
+      properties:
+        type:
+          type: string
+          enum: [screenshot, video, trace, har, log, other]
+        url:
+          type: string
+          format: uri
+        size_bytes:
+          type: integer
+        checksum:
+          type: string
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
