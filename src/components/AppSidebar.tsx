@@ -56,7 +56,15 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end className={getNavClass(item.url)}>
+                    <NavLink 
+                      to={item.url} 
+                      end 
+                      className={({ isActive }) => 
+                        isActive
+                          ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                          : "hover:bg-secondary"
+                      }
+                    >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </NavLink>

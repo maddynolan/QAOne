@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
+import TestPlans from "./pages/TestPlans";
+import TestRuns from "./pages/TestRuns";
+import Triage from "./pages/Triage";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -17,10 +21,10 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
-          <Route path="/plans" element={<Layout><div className="text-center py-12">Test Plans - Coming Soon</div></Layout>} />
-          <Route path="/runs" element={<Layout><div className="text-center py-12">Test Runs - Coming Soon</div></Layout>} />
-          <Route path="/triage" element={<Layout><div className="text-center py-12">Triage - Coming Soon</div></Layout>} />
-          <Route path="/settings" element={<Layout><div className="text-center py-12">Settings - Coming Soon</div></Layout>} />
+          <Route path="/plans" element={<Layout><TestPlans /></Layout>} />
+          <Route path="/runs" element={<Layout><TestRuns /></Layout>} />
+          <Route path="/triage" element={<Layout><Triage /></Layout>} />
+          <Route path="/settings" element={<Layout><Settings /></Layout>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
