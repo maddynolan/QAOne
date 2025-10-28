@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import TestPlans from "./pages/TestPlans";
+import TestCases from "./pages/TestCases";
+import CreateTestCase from "./pages/CreateTestCase";
 import TestRuns from "./pages/TestRuns";
 import Triage from "./pages/Triage";
 import Settings from "./pages/Settings";
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/plans" element={<Layout><TestPlans /></Layout>} />
           <Route path="/plans/create" element={<Layout><CreateTestPlan /></Layout>} />
           <Route path="/plans/edit/:id" element={<Layout><EditTestPlan /></Layout>} />
+          <Route path="/cases" element={<Layout><TestCases /></Layout>} />
+          <Route path="/cases/create" element={<Layout><CreateTestCase /></Layout>} />
           <Route path="/runs" element={<Layout><TestRuns /></Layout>} />
           <Route path="/runs/:id" element={<Layout><TestRunDetail /></Layout>} />
           <Route path="/triage" element={<Layout><Triage /></Layout>} />
