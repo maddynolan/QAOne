@@ -50,10 +50,16 @@ export default function Triage() {
       console.log("Starting AI defect analysis...");
       
       const request = {
-        errorMessage: issue.error,
-        testContext: issue.test,
-        environment: "Test Environment",
-        testType: "Automated Test"
+        org_id: "550e8400-e29b-41d4-a716-446655440000", // Mock org ID
+        project_id: "550e8400-e29b-41d4-a716-446655440001", // Mock project ID
+        run_id: "550e8400-e29b-41d4-a716-446655440002", // Mock run ID
+        logs: issue.error,
+        artifacts: [
+          {
+            type: "screenshot",
+            url: "https://example.com/screenshot.png"
+          }
+        ]
       };
 
       console.log("AI analysis request:", request);
@@ -140,28 +146,30 @@ export default function Triage() {
                     </h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="font-medium">Root Cause:</span>
-                        <p className="text-muted-foreground">{issue.aiAnalysis.rootCause}</p>
+                        <span className="font-medium">Summary:</span>
+                        <p className="text-muted-foreground">{issue.aiAnalysis.summary}</p>
                       </div>
                       <div>
-                        <span className="font-medium">Suggested Fix:</span>
-                        <p className="text-muted-foreground">{issue.aiAnalysis.suggestedFix}</p>
+                        <span className="font-medium">Root Cause:</span>
+                        <p className="text-muted-foreground">{issue.aiAnalysis.root_cause}</p>
                       </div>
                     </div>
-                    <div>
-                      <span className="font-medium">Investigation Steps:</span>
-                      <ul className="list-disc list-inside text-sm text-muted-foreground mt-1">
-                        {issue.aiAnalysis.investigationSteps.map((step, index) => (
-                          <li key={index}>{step}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    {issue.aiAnalysis.suggested_fixes && (
+                      <div>
+                        <span className="font-medium">Suggested Fixes:</span>
+                        <ul className="list-disc list-inside text-sm text-muted-foreground mt-1">
+                          {issue.aiAnalysis.suggested_fixes.map((fix, index) => (
+                            <li key={index}>{fix}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">
-                        Confidence: {issue.aiAnalysis.confidence}%
+                        Category: {issue.aiAnalysis.category || "Unknown"}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        Category: {issue.aiAnalysis.category}
+                        Flaky Likelihood: {issue.aiAnalysis.likelihood_flaky ? `${Math.round(issue.aiAnalysis.likelihood_flaky * 100)}%` : "N/A"}
                       </span>
                     </div>
                   </div>
