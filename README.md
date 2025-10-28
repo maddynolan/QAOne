@@ -1,204 +1,263 @@
 # QA AI Platform
 
-A comprehensive hybrid AI-powered Quality Assurance platform for automated test generation, execution, and analysis.
+> An intelligent Quality Assurance platform with AI-powered test generation, execution, and analysis.
 
-## 🚀 Features
+## 🚀 Project Overview
 
-### Core Functionality
-- **AI-Powered Test Generation**: Generate comprehensive test plans from API specifications
-- **Multi-Framework Support**: Execute tests using Postman (API) and Playwright (UI/E2E)
-- **Intelligent Triage**: AI-powered failure analysis and root cause identification
-- **Automated Patching**: Generate fixes for failing tests
-- **Real-time Monitoring**: Live test execution with detailed reporting
+QA AI Platform is a comprehensive testing management solution designed to streamline the entire QA lifecycle. From AI-powered test generation to intelligent defect analysis, this platform provides teams with cutting-edge tools to ensure software quality.
 
-### Technical Stack
-- **Backend**: FastAPI with Python 3.9+
-- **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
-- **Database**: PostgreSQL with pgvector for embeddings
-- **Caching**: Redis for performance optimization
-- **Task Queue**: Celery for asynchronous job processing
-- **Containerization**: Docker & Docker Compose
+**Live Demo**: https://lovable.dev/projects/3a83fa07-1365-49d9-befd-ca91ddd8af04
+
+## ✨ Key Features
+
+### 🤖 AI-Powered Test Generation
+- **Smart Test Case Creation**: Generate comprehensive test cases from feature descriptions
+- **Intelligent Defect Analysis**: AI-powered root cause analysis and suggested fixes
+- **Context-Aware Responses**: Dynamic test steps based on test type and complexity
+- **Mock AI Service**: Development-ready AI simulation for immediate testing
+
+### 📋 Test Management
+- **Test Plans**: Create and manage comprehensive test suites with customizable strategies
+- **Test Cases**: Define detailed test cases with step-by-step instructions, preconditions, and expected results
+- **Test Runs**: Execute test plans and track progress in real-time
+- **Test Execution Details**: View detailed test run results with pass/fail statistics and execution timeline
+
+### 🐛 Defect Tracking
+- **Bug Reporting**: Comprehensive defect creation with severity, priority, and lifecycle management
+- **AI-Powered Triage**: Intelligent failure analysis with root cause identification
+- **Defect Lifecycle**: Track bugs from creation through resolution with customizable statuses
+- **Environment Details**: Capture browser, OS, version, and environment information
+
+### 📊 Dashboard & Analytics
+- **Real-time Metrics**: Track active test plans, total test cases, and pass rates
+- **Quick Actions**: Fast access to common tasks like running tests and creating plans
+- **Recent Activity**: Monitor latest test runs and their outcomes
+- **AI Configuration**: Manage AI service settings and test connections
+
+## 🛠️ Technology Stack
+
+This project is built with modern web technologies:
+
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS with custom design system
+- **UI Components**: shadcn/ui component library
+- **Routing**: React Router DOM v6
+- **State Management**: TanStack Query (React Query)
+- **Forms**: React Hook Form with Zod validation
+- **Icons**: Lucide React
+- **Backend**: Supabase (BaaS) with PostgreSQL
+- **Notifications**: Sonner for toast notifications
+- **AI Integration**: Custom LLM service with mock AI for development
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │   Database      │
-│   (Next.js)     │◄──►│   (FastAPI)     │◄──►│   (PostgreSQL)  │
+│   React Frontend│    │   Supabase      │    │   Custom LLM    │
+│   (Port 8081)   │◄──►│   (Database)    │◄──►│   (Your Server) │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          │              ┌─────────────────┐              │
-         │              │   Task Queue     │              │
-         └──────────────►│   (Celery)      │◄─────────────┘
-                        └─────────────────┘
-                                 │
-                        ┌─────────────────┐
-                        │   Cache Layer   │
-                        │   (Redis)       │
+         │              │   Local Storage │              │
+         └──────────────►│   (Test Data)   │◄─────────────┘
                         └─────────────────┘
 ```
 
-## 🛠️ Installation & Setup
+## 🚀 Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose
-- Node.js 18+ (for local development)
-- Python 3.9+ (for local development)
+- Node.js 18+
+- npm or yarn
 
-### Quick Start with Docker
+### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd qa-ai-platform
+   git clone https://github.com/maddynolan/QAOne.git
+   cd QAOne
    ```
 
-2. **Start all services**
+2. **Install dependencies**
    ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
-
-### Local Development Setup
-
-1. **Backend Setup**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-   ```
-
-2. **Frontend Setup**
-   ```bash
-   cd frontend
    npm install
+   ```
+
+3. **Start the development server**
+   ```bash
    npm run dev
    ```
 
-3. **Database Setup**
-   ```bash
-   # Start PostgreSQL and Redis
-   docker-compose up postgres redis -d
-   
-   # Run migrations (when available)
-   alembic upgrade head
-   ```
+4. **Access the application**
+   - Frontend: http://localhost:8081
+   - The app will automatically initialize with sample data
 
 ## 📁 Project Structure
 
 ```
-qa-ai-platform/
-├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── core/           # Configuration and settings
-│   │   ├── models/         # Database models and schemas
-│   │   ├── services/       # Business logic services
-│   │   ├── runners/        # Test execution runners
-│   │   ├── tasks.py        # Celery tasks
-│   │   └── main.py         # FastAPI application
-│   ├── requirements.txt    # Python dependencies
-│   └── Dockerfile         # Backend container
-├── frontend/               # Next.js frontend
+QAOne/
+├── src/                    # Source code
 │   ├── components/        # React components
-│   ├── pages/             # Next.js pages
-│   ├── styles/            # CSS and styling
-│   ├── package.json       # Node.js dependencies
-│   └── Dockerfile         # Frontend container
-├── docker-compose.yml     # Multi-service orchestration
-├── .github/               # CI/CD workflows
+│   │   ├── ui/            # shadcn/ui components
+│   │   ├── Layout.tsx     # Main layout component
+│   │   └── AppSidebar.tsx # Sidebar navigation
+│   ├── pages/             # Page components
+│   │   ├── Dashboard.tsx  # Main dashboard
+│   │   ├── TestCases.tsx  # Test case management
+│   │   ├── CreateTestCase.tsx # AI-powered test creation
+│   │   ├── Triage.tsx     # AI-powered defect analysis
+│   │   └── Settings.tsx   # Configuration
+│   ├── lib/               # Utility libraries
+│   │   ├── custom-llm-service.ts # AI service integration
+│   │   ├── mock-ai-service.ts    # Mock AI for development
+│   │   └── data-storage.ts       # Local data persistence
+│   ├── integrations/      # External service integrations
+│   │   └── supabase/      # Supabase client & types
+│   ├── App.tsx            # Root component with routing
+│   └── main.tsx           # Application entry point
+├── public/                 # Static assets
+├── package.json           # Project dependencies
 └── README.md              # This file
 ```
 
-## 🔧 Configuration
+## 🎨 Design System
 
-### Environment Variables
+The platform uses a comprehensive design system built on CSS custom properties:
 
-Create a `.env` file in the root directory:
+- **Colors**: Semantic color tokens for consistent theming
+- **Typography**: Hierarchical text styles with gradient effects
+- **Spacing**: Consistent spacing scale
+- **Components**: Pre-built UI components with variants
+- **Dark Mode**: Full dark mode support
 
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/qa_ai_platform
-POSTGRES_USER=qa_user
-POSTGRES_PASSWORD=qa_password
-POSTGRES_DB=qa_ai_platform
+All design tokens are defined in `src/index.css` and `tailwind.config.ts`
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
+## 🔧 Available Scripts
 
-# API Configuration
-API_V1_STR=/api/v1
-SECRET_KEY=your-secret-key-here
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+```sh
+# Development server with hot reload
+npm run dev
 
-# LLM Configuration
-OPENAI_API_KEY=your-openai-api-key
-LLM_MODEL=gpt-4
-LLM_TEMPERATURE=0.7
+# Build for production
+npm run build
 
-# Test Execution
-POSTMAN_COLLECTION_PATH=/path/to/collections
-PLAYWRIGHT_CONFIG_PATH=/path/to/playwright.config.js
+# Preview production build locally
+npm run preview
+
+# Run ESLint for code quality
+npm run lint
 ```
+
+## 🤖 AI Features
+
+### Test Case Generation
+- **Input**: Feature description, test type, complexity level
+- **Output**: Complete test case with steps, preconditions, priority, and tags
+- **Variety**: Different templates for API, UI, E2E, and Performance tests
+- **Context-Aware**: Smart naming and step generation based on feature content
+
+### Defect Analysis
+- **Input**: Error message, test context, environment details
+- **Output**: Root cause analysis, suggested fixes, investigation steps
+- **Confidence Scoring**: AI confidence levels for analysis accuracy
+- **Similar Issues**: Identification of related problems
+
+### Mock AI Service
+- **Development Ready**: Works immediately without custom LLM setup
+- **Realistic Responses**: Professional test cases and analysis
+- **Configurable**: Adjustable delay and success rates
+- **Easy Migration**: Seamless switch to real AI when ready
+
+## 🔄 Development Workflow
+
+### Using Mock AI (Default)
+The platform comes with a fully functional mock AI service that generates realistic test cases and defect analysis. No setup required!
+
+### Switching to Real AI
+When your custom LLM is ready:
+
+1. **Configure Environment Variables**:
+   ```bash
+   VITE_LLM_ENDPOINT=http://your-llm-server:port/api/v1/generate
+   VITE_LLM_API_KEY=your-actual-api-key
+   ```
+
+2. **Restart the Application**:
+   ```bash
+   npm run dev
+   ```
+
+3. **The app automatically switches to real AI!** 🎉
+
+## 📊 Data Management
+
+### Local Storage
+- **Test Cases**: Complete test case data with steps and metadata
+- **Test Plans**: Organized test suites and execution strategies
+- **Test Runs**: Execution history and results
+- **Defects**: Bug tracking with AI analysis
+
+### Sample Data
+The platform initializes with realistic sample data:
+- Pre-built test cases for common scenarios
+- Sample test runs with different statuses
+- Example defect reports with AI analysis
 
 ## 🚀 Usage
 
-### Creating Test Plans
+### Creating AI-Powered Test Cases
 
-1. Navigate to the Dashboard
-2. Click "Create Test Plan"
-3. Fill in the plan details:
-   - Plan name and description
-   - Test types (API, UI, Performance, Accessibility)
-   - Priority level
-   - Source specification (OpenAPI, user stories, etc.)
-4. Submit to generate AI-powered test cases
+1. Navigate to **Test Cases** → **Create Test Case**
+2. Enter a description like: "User login with valid credentials"
+3. Click **"Generate Test Case with AI"** ✨
+4. Watch as AI generates complete test case with steps, preconditions, and priority!
+5. Click **"Create Test Case"** to save
 
-### Running Tests
+### AI-Powered Defect Analysis
 
-1. Go to the "Runs" section
-2. Select a test suite
-3. Configure execution parameters
-4. Monitor real-time progress
-5. Review detailed results and reports
+1. Go to **Triage** page
+2. Click **"Analyze with AI"** on any issue
+3. See AI provide root cause analysis, suggested fixes, and investigation steps!
 
-### Analyzing Results
+### Managing Test Cases
 
-1. View comprehensive reports in the "Reports" section
-2. Analyze failure patterns and trends
-3. Review AI-generated triage suggestions
-4. Apply automated patches for failing tests
+1. View all test cases in **Test Cases** page
+2. Search and filter by name, description, or tags
+3. Edit, run, or delete test cases
+4. View detailed test case information
 
-## 🔄 CI/CD Integration
+## 🔧 Configuration
 
-The platform includes GitHub Actions workflows for:
+### AI Service Settings
+Access **Settings** → **AI Service Configuration** to:
+- Test AI connection
+- Switch between mock and real AI
+- Adjust mock AI parameters
+- View service status
 
-- **Continuous Integration**: Automated testing on pull requests
-- **End-to-End Testing**: Comprehensive test suite execution
-- **Deployment**: Automated deployment to staging/production
+### Environment Variables
 
-### Workflow Files
-- `.github/workflows/ci-cd.yml` - Main CI/CD pipeline
-- `.github/workflows/e2e-test.yml` - End-to-end testing
+Create a `.env` file for custom configuration:
+
+```env
+# Custom LLM Configuration (for production)
+VITE_LLM_ENDPOINT=http://your-llm-server:port/api/v1/generate
+VITE_LLM_API_KEY=your-custom-llm-api-key
+VITE_LLM_MODEL=qa-ai-model
+VITE_LLM_TEMPERATURE=0.7
+VITE_LLM_MAX_TOKENS=2000
+
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
 ## 🧪 Testing
 
 ### Running Tests
 
 ```bash
-# Backend tests
-cd backend
-pytest
-
 # Frontend tests
-cd frontend
 npm test
 
 # E2E tests
@@ -208,29 +267,33 @@ npm run test:e2e
 ### Test Coverage
 
 ```bash
-# Backend coverage
-cd backend
-pytest --cov=app
-
 # Frontend coverage
-cd frontend
 npm run test:coverage
 ```
 
-## 📊 Monitoring & Observability
+## 🚀 Deployment
 
-- **Health Checks**: Built-in health monitoring endpoints
-- **Metrics**: Prometheus-compatible metrics
-- **Tracing**: OpenTelemetry integration for distributed tracing
-- **Logging**: Structured logging with correlation IDs
+### Vercel (Recommended)
 
-## 🔒 Security
+1. Connect your GitHub repository to Vercel
+2. Deploy automatically on every push
+3. Environment variables configured in Vercel dashboard
 
-- **Authentication**: JWT-based authentication
-- **Authorization**: Role-based access control
-- **Input Validation**: Comprehensive input sanitization
-- **Rate Limiting**: API rate limiting and throttling
-- **Secrets Management**: Secure environment variable handling
+### Netlify
+
+1. Connect your GitHub repository to Netlify
+2. Build command: `npm run build`
+3. Publish directory: `dist`
+
+### Self-Hosting
+
+```bash
+# Build the project
+npm run build
+
+# The dist/ folder contains production-ready files
+# Deploy the dist/ folder to your hosting provider
+```
 
 ## 🤝 Contributing
 
@@ -242,69 +305,17 @@ npm run test:coverage
 
 ### Development Guidelines
 
-- Follow PEP 8 for Python code
-- Use TypeScript for frontend development
+- Use TypeScript for all new code
+- Follow the existing component patterns
 - Write comprehensive tests for new features
 - Update documentation for API changes
 - Follow conventional commit messages
-
-## 📝 API Documentation
-
-### Core Endpoints
-
-- `GET /health` - Health check
-- `GET /api/v1/plans` - List test plans
-- `POST /api/v1/plans` - Create test plan
-- `GET /api/v1/suites` - List test suites
-- `POST /api/v1/runs` - Execute test run
-- `GET /api/v1/reports` - Get test reports
-
-### Interactive Documentation
-
-Visit http://localhost:8000/docs for interactive API documentation with Swagger UI.
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Port Conflicts**
-   - Ensure ports 3000, 8000, 5432, and 6379 are available
-   - Modify `docker-compose.yml` if needed
-
-2. **Database Connection Issues**
-   - Check PostgreSQL service status
-   - Verify connection string in `.env`
-
-3. **Redis Connection Issues**
-   - Ensure Redis is running
-   - Check Redis URL configuration
-
-4. **Frontend Build Issues**
-   - Clear `node_modules` and reinstall
-   - Check Node.js version compatibility
-
-### Debug Mode
-
-```bash
-# Enable debug logging
-export LOG_LEVEL=DEBUG
-docker-compose up
-```
-
-## 📈 Performance
-
-### Optimization Features
-
-- **Caching**: Redis-based caching for LLM responses and test results
-- **Async Processing**: Celery-based task queue for non-blocking operations
-- **Database Indexing**: Optimized database queries with proper indexing
-- **CDN Integration**: Static asset optimization
-- **Connection Pooling**: Database connection pooling for better performance
 
 ## 🔮 Roadmap
 
 ### Upcoming Features
 
+- [ ] **Real Custom LLM Integration**: Connect to your custom AI infrastructure
 - [ ] **Multi-tenant Support**: Organization and team management
 - [ ] **Advanced Analytics**: Machine learning-based insights
 - [ ] **Integration Hub**: Third-party tool integrations
@@ -313,15 +324,16 @@ docker-compose up
 - [ ] **Test Data Management**: Synthetic data generation
 - [ ] **Performance Testing**: Load testing capabilities
 
-## 📄 License
+## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- FastAPI team for the excellent web framework
-- Next.js team for the React framework
-- PostgreSQL and Redis communities
+- React team for the excellent frontend framework
+- Vite team for the fast build tool
+- shadcn/ui team for the beautiful component library
+- Supabase team for the backend-as-a-service platform
 - All open-source contributors
 
 ## 📞 Support
@@ -335,3 +347,12 @@ For support and questions:
 ---
 
 **Built with ❤️ for the QA community**
+
+## 🎯 Key Differentiators
+
+- **AI-First Approach**: Built from the ground up with AI integration
+- **Development Ready**: Works immediately with mock AI service
+- **Modern Stack**: React 18, TypeScript, Vite, Tailwind CSS
+- **Beautiful UI**: Professional design with shadcn/ui components
+- **Realistic Data**: Comprehensive sample data and realistic AI responses
+- **Easy Migration**: Seamless transition from mock to real AI

@@ -1,474 +1,318 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+# FastAPI Backend for QA AI Platform
+# This will be the main backend service
+
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import asyncio
 import logging
-import uuid
 from datetime import datetime
-import time
 
-from app.core.config import settings, get_db, get_redis
-from app.models.schemas import (
-    TestPlan, TestPlanCreate, TestPlanResponse,
-    SuiteArtifacts, SuiteArtifactsCreate, SuiteArtifactsResponse,
-    RunResult, RunResultCreate, RunResultResponse,
-    TriageResult, TriageResultCreate, TriageResultResponse,
-    PatchGet, PatchCreate, PatchResponse,
-    APIResponse, ErrorResponse, PaginationParams, PaginatedResponse
-)
-from app.models.database import Plan, Suite, Run, TriageResult as TriageResultDB, Patch
-from app.services.test_plan_service import TestPlanService
-from app.services.suite_service import SuiteService
-from app.services.run_service import RunService
-from app.services.triage_service import TriageService
-from app.services.patch_service import PatchService
-from app.tasks import (
-    create_test_plan_task,
-    create_test_suite_task,
-    execute_test_run_task,
-    triage_failures_task,
-    generate_patches_task
-)
+# Import your custom LLM service
+from app.services.llm_service import CustomLLMService
+from app.services.test_generation_service import TestGenerationService
+from app.services.defect_analysis_service import DefectAnalysisService
+from app.services.test_execution_service import TestExecutionService
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.schemas import *
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Create FastAPI app
+# Initialize FastAPI app
 app = FastAPI(
-    title=settings.api_title,
-    version=settings.api_version,
-    description=settings.api_description,
-    debug=settings.debug
+    title="QA AI Platform API",
+    description="AI-powered Quality Assurance platform for automated test generation and analysis",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Add security middleware
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.yourdomain.com"]
-)
-
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Request ID middleware for tracing
-@app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-    
-    # Add request ID to response headers
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-    
-    return response
-
-# Rate limiting middleware
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    if request.method == "POST":
-        redis_client = get_redis()
-        client_ip = request.client.host
-        current_time = int(time.time())
-        
-        # Simple sliding window rate limiting
-        key = f"rate_limit:{client_ip}:{current_time // 60}"
-        current_requests = redis_client.incr(key)
-        
-        if current_requests == 1:
-            redis_client.expire(key, 60)  # Expire after 1 minute
-        
-        if current_requests > settings.rate_limit_per_minute:
-            return JSONResponse(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"error": "Rate limit exceeded"}
-            )
-    
-    response = await call_next(request)
-    return response
+# Security
+security = HTTPBearer()
 
 # Initialize services
-test_plan_service = TestPlanService()
-suite_service = SuiteService()
-run_service = RunService()
-triage_service = TriageService()
-patch_service = PatchService()
+llm_service = CustomLLMService()
+test_generation_service = TestGenerationService(llm_service)
+defect_analysis_service = DefectAnalysisService(llm_service)
+test_execution_service = TestExecutionService()
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Health check endpoint
 @app.get("/health")
-async def health_check(request: Request):
-    """Enhanced health check with queue status"""
-    try:
-        redis_client = get_redis()
-        redis_status = "healthy" if redis_client.ping() else "unhealthy"
-        
-        return {
-            "status": "healthy",
-            "timestamp": datetime.utcnow(),
-            "request_id": getattr(request.state, 'request_id', None),
-            "services": {
-                "database": "healthy",  # TODO: Add actual DB health check
-                "redis": redis_status,
-                "celery": "healthy"  # TODO: Add actual Celery health check
-            }
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "services": {
+            "llm": "connected",
+            "database": "connected",
+            "redis": "connected",
+            "celery": "connected"
         }
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "unhealthy", "error": str(e)}
-        )
+    }
 
-# Test Plan endpoints with async job processing
-@app.post("/generate_test_plan", response_model=APIResponse)
+# Test Generation Endpoints
+@app.post("/api/v1/test-cases/generate", response_model=TestGenerationResponse)
+async def generate_test_case(
+    request: TestGenerationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Generate AI-powered test case from feature description"""
+    try:
+        # Generate test case using custom LLM
+        result = await test_generation_service.generate_test_case(request)
+        
+        # Store in database
+        background_tasks.add_task(
+            test_generation_service.store_test_case,
+            result, db
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error generating test case: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/test-plans/generate", response_model=TestPlanResponse)
 async def generate_test_plan(
-    plan_data: TestPlanCreate,
-    request: Request,
+    request: TestPlanRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Generate a test plan from specification (async)"""
+    """Generate comprehensive test plan using AI"""
     try:
-        # Add request ID to plan data for tracing
-        plan_data_dict = plan_data.dict()
-        plan_data_dict["request_id"] = getattr(request.state, 'request_id', None)
+        result = await test_generation_service.generate_test_plan(request)
         
-        # Submit to Celery queue
-        task = create_test_plan_task.delay(plan_data_dict)
-        
-        logger.info(f"Submitted test plan creation task {task.id}")
-        
-        return APIResponse(
-            success=True,
-            message="Test plan generation started",
-            data={
-                "task_id": task.id,
-                "status": "processing",
-                "request_id": getattr(request.state, 'request_id', None)
-            }
+        # Store test plan and cases
+        background_tasks.add_task(
+            test_generation_service.store_test_plan,
+            result, db
         )
         
+        return result
     except Exception as e:
-        logger.error(f"Error submitting test plan creation: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit test plan creation: {str(e)}"
-        )
+        logger.error(f"Error generating test plan: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/plans", response_model=PaginatedResponse)
-async def get_plans(
-    page: int = 1,
-    size: int = 20,
-    status_filter: Optional[str] = None,
+# Defect Analysis Endpoints
+@app.post("/api/v1/defects/analyze", response_model=DefectAnalysisResponse)
+async def analyze_defect(
+    request: DefectAnalysisRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Get all test plans with pagination"""
+    """Analyze test failure and provide AI-powered insights"""
     try:
-        plans = await test_plan_service.get_plans(db, page, size, status_filter)
+        result = await defect_analysis_service.analyze_defect(request)
+        
+        # Store analysis results
+        background_tasks.add_task(
+            defect_analysis_service.store_analysis,
+            result, db
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error analyzing defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/triage/batch-analyze")
+async def batch_analyze_defects(
+    defects: List[DefectAnalysisRequest],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Batch analyze multiple defects for triage"""
+    try:
+        results = await defect_analysis_service.batch_analyze(defects)
+        
+        # Store all analyses
+        background_tasks.add_task(
+            defect_analysis_service.store_batch_analysis,
+            results, db
+        )
+        
+        return {"analyses": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"Error in batch analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Test Execution Endpoints
+@app.post("/api/v1/test-runs/execute")
+async def execute_test_run(
+    run_request: TestRunRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Execute test run with AI-powered monitoring"""
+    try:
+        # Start test execution
+        run_id = await test_execution_service.start_test_run(run_request)
+        
+        # Execute tests in background
+        background_tasks.add_task(
+            test_execution_service.execute_tests,
+            run_id, run_request, db
+        )
+        
+        return {"run_id": run_id, "status": "started"}
+    except Exception as e:
+        logger.error(f"Error starting test run: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/test-runs/{run_id}/status")
+async def get_test_run_status(run_id: str, db: Session = Depends(get_db)):
+    """Get real-time test run status"""
+    try:
+        status = await test_execution_service.get_run_status(run_id, db)
+        return status
+    except Exception as e:
+        logger.error(f"Error getting run status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# AI Optimization Endpoints
+@app.post("/api/v1/optimization/suggest")
+async def suggest_optimizations(
+    test_results: List[Dict[str, Any]],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Get AI-powered test suite optimization suggestions"""
+    try:
+        suggestions = await test_generation_service.optimize_test_suite(test_results)
+        
+        # Store optimization suggestions
+        background_tasks.add_task(
+            test_generation_service.store_optimization_suggestions,
+            suggestions, test_results, db
+        )
+        
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Error generating optimizations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# CRUD Endpoints for Test Management
+@app.get("/api/v1/test-plans", response_model=List[TestPlan])
+async def get_test_plans(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Get all test plans"""
+    try:
+        plans = await test_generation_service.get_test_plans(skip, limit, db)
         return plans
     except Exception as e:
-        logger.error(f"Error fetching plans: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch plans: {str(e)}"
-        )
+        logger.error(f"Error getting test plans: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/plans/{plan_id}", response_model=APIResponse)
-async def get_plan(plan_id: str, db: Session = Depends(get_db)):
-    """Get a specific test plan by ID"""
-    try:
-        plan = await test_plan_service.get_plan_by_id(db, plan_id)
-        if not plan:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Test plan not found"
-            )
-        return APIResponse(
-            success=True,
-            data=TestPlanResponse(
-                plan_id=plan.plan_id,
-                name=plan.name,
-                description=plan.description,
-                status=plan.status,
-                created_at=plan.created_at,
-                updated_at=plan.updated_at
-            )
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching plan {plan_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch plan: {str(e)}"
-        )
-
-# Suite endpoints with async processing
-@app.post("/create_tests", response_model=APIResponse)
-async def create_tests(
-    suite_data: SuiteArtifactsCreate,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """Create test artifacts from a test plan (async)"""
-    try:
-        suite_data_dict = suite_data.dict()
-        suite_data_dict["request_id"] = getattr(request.state, 'request_id', None)
-        
-        task = create_test_suite_task.delay(suite_data_dict)
-        
-        logger.info(f"Submitted test suite creation task {task.id}")
-        
-        return APIResponse(
-            success=True,
-            message="Test suite creation started",
-            data={
-                "task_id": task.id,
-                "status": "processing",
-                "request_id": getattr(request.state, 'request_id', None)
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error submitting test suite creation: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit test suite creation: {str(e)}"
-        )
-
-@app.get("/suites", response_model=PaginatedResponse)
-async def get_suites(
-    page: int = 1,
-    size: int = 20,
+@app.get("/api/v1/test-cases", response_model=List[TestCase])
+async def get_test_cases(
     plan_id: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Get all test suites with pagination"""
+    """Get test cases, optionally filtered by plan"""
     try:
-        suites = await suite_service.get_suites(db, page, size, plan_id)
-        return suites
+        cases = await test_generation_service.get_test_cases(plan_id, skip, limit, db)
+        return cases
     except Exception as e:
-        logger.error(f"Error fetching suites: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch suites: {str(e)}"
-        )
+        logger.error(f"Error getting test cases: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Run endpoints with async processing
-@app.post("/run_tests", response_model=APIResponse)
-async def run_tests(
-    run_data: RunResultCreate,
-    request: Request,
+@app.get("/api/v1/test-runs", response_model=List[TestRun])
+async def get_test_runs(
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Execute a test suite (async)"""
+    """Get test runs"""
     try:
-        run_data_dict = run_data.dict()
-        run_data_dict["request_id"] = getattr(request.state, 'request_id', None)
-        
-        task = execute_test_run_task.delay(run_data_dict)
-        
-        logger.info(f"Submitted test execution task {task.id}")
-        
-        return APIResponse(
-            success=True,
-            message="Test execution started",
-            data={
-                "task_id": task.id,
-                "status": "processing",
-                "request_id": getattr(request.state, 'request_id', None)
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error submitting test execution: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit test execution: {str(e)}"
-        )
-
-@app.get("/runs", response_model=PaginatedResponse)
-async def get_runs(
-    page: int = 1,
-    size: int = 20,
-    suite_id: Optional[str] = None,
-    status_filter: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """Get all test runs with pagination"""
-    try:
-        runs = await run_service.get_runs(db, page, size, suite_id, status_filter)
+        runs = await test_execution_service.get_test_runs(skip, limit, db)
         return runs
     except Exception as e:
-        logger.error(f"Error fetching runs: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch runs: {str(e)}"
-        )
+        logger.error(f"Error getting test runs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Triage endpoints with async processing
-@app.post("/triage_failures", response_model=APIResponse)
-async def triage_failures(
-    triage_data: TriageResultCreate,
-    request: Request,
+# Vector Search Endpoints (for pgvector integration)
+@app.post("/api/v1/search/similar-tests")
+async def find_similar_tests(
+    query: str,
+    limit: int = 10,
     db: Session = Depends(get_db)
 ):
-    """Analyze test failures and suggest fixes (async)"""
+    """Find similar test cases using vector similarity"""
     try:
-        triage_data_dict = triage_data.dict()
-        triage_data_dict["request_id"] = getattr(request.state, 'request_id', None)
-        
-        task = triage_failures_task.delay(triage_data_dict)
-        
-        logger.info(f"Submitted triage task {task.id}")
-        
-        return APIResponse(
-            success=True,
-            message="Failure triage started",
-            data={
-                "task_id": task.id,
-                "status": "processing",
-                "request_id": getattr(request.state, 'request_id', None)
-            }
-        )
-        
+        similar_tests = await test_generation_service.find_similar_tests(query, limit, db)
+        return {"similar_tests": similar_tests}
     except Exception as e:
-        logger.error(f"Error submitting triage: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit triage: {str(e)}"
-        )
+        logger.error(f"Error finding similar tests: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/triage/{run_id}", response_model=APIResponse)
-async def get_triage(run_id: str, db: Session = Depends(get_db)):
-    """Get triage results for a specific run"""
-    try:
-        triage = await triage_service.get_triage_by_run_id(db, run_id)
-        if not triage:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Triage results not found"
-            )
-        return APIResponse(
-            success=True,
-            data=TriageResultResponse(
-                run_id=triage.run_id,
-                name=triage.name,
-                cluster_count=len(triage.clusters),
-                confidence_score=triage.confidence_score,
-                status=triage.status,
-                created_at=triage.created_at
-            )
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching triage for run {run_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch triage results: {str(e)}"
-        )
-
-# Patch endpoints with async processing
-@app.post("/update_tests", response_model=APIResponse)
-async def update_tests(
-    patch_data: PatchCreate,
-    request: Request,
+@app.post("/api/v1/search/similar-defects")
+async def find_similar_defects(
+    error_message: str,
+    limit: int = 10,
     db: Session = Depends(get_db)
 ):
-    """Generate patches for test updates (async)"""
+    """Find similar defects using vector similarity"""
     try:
-        patch_data_dict = patch_data.dict()
-        patch_data_dict["request_id"] = getattr(request.state, 'request_id', None)
-        
-        task = generate_patches_task.delay(patch_data_dict)
-        
-        logger.info(f"Submitted patch generation task {task.id}")
-        
-        return APIResponse(
-            success=True,
-            message="Patch generation started",
-            data={
-                "task_id": task.id,
-                "status": "processing",
-                "request_id": getattr(request.state, 'request_id', None)
-            }
-        )
-        
+        similar_defects = await defect_analysis_service.find_similar_defects(error_message, limit, db)
+        return {"similar_defects": similar_defects}
     except Exception as e:
-        logger.error(f"Error submitting patch generation: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit patch generation: {str(e)}"
-        )
+        logger.error(f"Error finding similar defects: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Reports endpoint
-@app.get("/reports", response_model=APIResponse)
-async def get_reports(
-    suite_id: Optional[str] = None,
-    days: int = 30,
-    db: Session = Depends(get_db)
-):
-    """Get test reports and metrics"""
-    try:
-        reports = await run_service.get_reports(db, suite_id, days)
-        return APIResponse(
-            success=True,
-            data=reports
-        )
-    except Exception as e:
-        logger.error(f"Error fetching reports: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch reports: {str(e)}"
-        )
-
-# Task status endpoint
-@app.get("/tasks/{task_id}")
-async def get_task_status(task_id: str):
-    """Get status of a Celery task"""
-    try:
-        from celery.result import AsyncResult
-        
-        result = AsyncResult(task_id)
-        
-        return {
-            "task_id": task_id,
-            "status": result.status,
-            "result": result.result if result.ready() else None,
-            "info": result.info if not result.ready() else None
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fetching task status {task_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch task status: {str(e)}"
-        )
-
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc):
-    request_id = getattr(request.state, 'request_id', None)
-    logger.error(f"Unhandled exception [{request_id}]: {str(exc)}")
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting QA AI Platform API...")
     
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            success=False,
-            message="Internal server error",
-            errors=[str(exc)],
-            details={"request_id": request_id}
-        ).dict()
-    )
+    # Initialize database connections
+    await test_generation_service.initialize()
+    await defect_analysis_service.initialize()
+    await test_execution_service.initialize()
+    
+    logger.info("QA AI Platform API started successfully!")
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down QA AI Platform API...")
+    
+    # Cleanup connections
+    await test_generation_service.cleanup()
+    await defect_analysis_service.cleanup()
+    await test_execution_service.cleanup()
+    
+    logger.info("QA AI Platform API shutdown complete!")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
