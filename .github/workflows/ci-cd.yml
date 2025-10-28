@@ -1,0 +1,301 @@
+name: QA AI Platform CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: qaai_test
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install Python dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    
+    - name: Install Node.js for Newman and Playwright
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install Newman and Playwright
+      run: |
+        npm install -g newman
+        npm install -g playwright
+        playwright install --with-deps
+    
+    - name: Run database migrations
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        REDIS_URL: redis://localhost:6379
+      run: |
+        # Create database schema
+        psql -h localhost -U postgres -d ${{ env.POSTGRES_DB }} -f sql/init.sql
+    
+    - name: Run backend tests
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        REDIS_URL: redis://localhost:6379
+        ENVIRONMENT: test
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Run frontend tests
+      working-directory: ./frontend
+      run: |
+        npm run lint
+        npm run type-check
+        npm run build
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-build
+        path: frontend/.next/
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        # Backend
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio httpx
+        
+        # Frontend
+        cd ../frontend
+        npm ci
+        
+        # Test tools
+        npm install -g newman playwright
+        playwright install --with-deps
+    
+    - name: Start backend server
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://postgres:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        REDIS_URL: redis://localhost:6379
+        ENVIRONMENT: test
+      run: |
+        # Create database schema
+        psql -h localhost -U postgres -d ${{ env.POSTGRES_DB }} -f sql/init.sql
+        
+        # Start server in background
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        sleep 10
+    
+    - name: Start frontend server
+      working-directory: ./frontend
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+      run: |
+        npm run build
+        npm start &
+        sleep 10
+    
+    - name: Run integration tests
+      env:
+        API_BASE_URL: http://localhost:8000
+        FRONTEND_URL: http://localhost:3000
+      run: |
+        # Test API health
+        curl -f http://localhost:8000/health || exit 1
+        
+        # Test frontend
+        curl -f http://localhost:3000 || exit 1
+        
+        # Run end-to-end API tests
+        python backend/tests/integration/test_api_flow.py
+    
+    - name: Test Postman collection generation
+      run: |
+        # Create a test plan
+        curl -X POST http://localhost:8000/generate_test_plan \
+          -H "Content-Type: application/json" \
+          -d '{
+            "name": "CI Test Plan",
+            "description": "Test plan for CI/CD",
+            "source": "OpenAPI spec for testing",
+            "targets": {"endpoints": ["/health", "/api/test"]},
+            "api_ui": {"api": true, "ui": false, "performance": false, "accessibility": false},
+            "priority": 1
+          }'
+    
+    - name: Test Playwright execution
+      run: |
+        # Create a test suite
+        curl -X POST http://localhost:8000/create_tests \
+          -H "Content-Type: application/json" \
+          -d '{
+            "plan_id": "plan-001",
+            "name": "CI Test Suite",
+            "test_type": "playwright",
+            "artifacts": [{"type": "playwright", "path": "test.spec.js", "content": "test(\"basic test\", async ({ page }) => { await page.goto(\"http://localhost:3000\"); });"}]
+          }'
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, integration-tests]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: kubectl apply -f k8s/staging/
+        # Example: docker-compose -f docker-compose.staging.yml up -d
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests, integration-tests, security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: kubectl apply -f k8s/production/
+        # Example: docker-compose -f docker-compose.prod.yml up -d
