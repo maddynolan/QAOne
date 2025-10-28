@@ -1,13 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { customLLMService } from "@/lib/custom-llm-service";
+import { dataStorageService } from "@/lib/data-storage";
 
 interface TestStep {
   id: string;
@@ -20,11 +22,43 @@ export default function CreateTestCase() {
   const [testSteps, setTestSteps] = useState<TestStep[]>([
     { id: "1", action: "", expectedResult: "" }
   ]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    requirements: "",
+    testType: "",
+    complexity: "",
+    context: ""
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Test case created successfully!");
-    navigate("/cases");
+    
+    try {
+      const testCaseData = {
+        name: formData.name,
+        description: formData.description,
+        steps: testSteps.map(step => ({
+          action: step.action,
+          expectedResult: step.expectedResult
+        })),
+        preconditions: [], // You can add preconditions input later
+        testData: [], // You can add test data input later
+        priority: "medium" as const, // You can add priority input later
+        tags: [], // You can add tags input later
+        testType: formData.testType || "manual",
+        complexity: formData.complexity || "medium",
+        estimatedTime: 15 // You can calculate this based on steps
+      };
+
+      await dataStorageService.createTestCase(testCaseData);
+      toast.success("Test case created and saved successfully!");
+      navigate("/cases");
+    } catch (error) {
+      console.error("Error saving test case:", error);
+      toast.error("Failed to save test case. Please try again.");
+    }
   };
 
   const handleCancel = () => {
@@ -45,6 +79,58 @@ export default function CreateTestCase() {
     setTestSteps(testSteps.map(step => 
       step.id === id ? { ...step, [field]: value } : step
     ));
+  };
+
+  const generateWithAI = async () => {
+    if (!formData.description.trim()) {
+      toast.error("Please provide a description before generating with AI");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      console.log("Starting AI generation...");
+      
+      const request = {
+        feature: formData.name || "Test Feature",
+        description: formData.description,
+        requirements: formData.requirements,
+        testType: formData.testType || "manual",
+        complexity: formData.complexity || "medium",
+        context: formData.context
+      };
+
+      console.log("AI request:", request);
+      const response = await customLLMService.generateTestCase(request);
+      console.log("AI response:", response);
+      
+      // Update form with AI-generated content
+      setFormData(prev => ({
+        ...prev,
+        name: response.testCase.name,
+        description: response.testCase.description
+      }));
+
+      // Update test steps
+      const generatedSteps = response.testCase.steps.map((step, index) => ({
+        id: (index + 1).toString(),
+        action: step.action,
+        expectedResult: step.expectedResult
+      }));
+      setTestSteps(generatedSteps);
+
+      toast.success("Test case generated successfully with AI!");
+      
+      // Show suggestions if any
+      if (response.suggestions.length > 0) {
+        toast.info(`AI Suggestions: ${response.suggestions.join(", ")}`);
+      }
+    } catch (error) {
+      console.error("Error generating test case:", error);
+      toast.error(`Failed to generate test case with AI: ${error.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -71,17 +157,42 @@ export default function CreateTestCase() {
               <Input
                 id="name"
                 placeholder="e.g., User Login Flow"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 required
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe what this test case validates..."
-                rows={4}
-              />
+              <div className="space-y-2">
+                <Textarea
+                  id="description"
+                  placeholder="Describe what this test case validates..."
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={4}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={generateWithAI}
+                  disabled={isGenerating || !formData.description.trim()}
+                  className="w-full"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating with AI...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate Test Case with AI
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { AIConfiguration } from "@/components/AIConfiguration";
 
 export default function Settings() {
   return (
@@ -12,6 +13,8 @@ export default function Settings() {
         <h1 className="text-3xl font-bold gradient-text">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your QA AI Platform configuration</p>
       </div>
+
+      <AIConfiguration />
 
       <Card>
         <CardHeader>

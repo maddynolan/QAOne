@@ -1,18 +1,12 @@
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Edit, Play, History, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const testCases = [
-  { id: 1, name: "User Login Flow", priority: "high", status: "active", plan: "Regression Test Suite", lastRun: "2024-01-15" },
-  { id: 2, name: "API Authentication", priority: "high", status: "active", plan: "API Integration Tests", lastRun: "2024-01-14" },
-  { id: 3, name: "Payment Processing", priority: "critical", status: "active", plan: "E2E User Flows", lastRun: "2024-01-15" },
-  { id: 4, name: "User Registration", priority: "medium", status: "active", plan: "Regression Test Suite", lastRun: "2024-01-13" },
-  { id: 5, name: "Password Reset", priority: "medium", status: "draft", plan: "Regression Test Suite", lastRun: "2024-01-10" },
-  { id: 6, name: "Product Search", priority: "low", status: "active", plan: "E2E User Flows", lastRun: "2024-01-12" },
-];
+import { dataStorageService, TestCase } from "@/lib/data-storage";
 
 const getPriorityColor = (priority: string) => {
   switch (priority) {
@@ -25,13 +19,68 @@ const getPriorityColor = (priority: string) => {
 
 export default function TestCases() {
   const navigate = useNavigate();
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    loadTestCases();
+  }, []);
+
+  const loadTestCases = async () => {
+    try {
+      setLoading(true);
+      await dataStorageService.initializeSampleData(); // Initialize sample data if needed
+      const cases = await dataStorageService.getTestCases();
+      setTestCases(cases);
+    } catch (error) {
+      console.error("Error loading test cases:", error);
+      toast.error("Failed to load test cases");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTestCase = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this test case?")) {
+      try {
+        await dataStorageService.deleteTestCase(id);
+        setTestCases(prev => prev.filter(tc => tc.id !== id));
+        toast.success("Test case deleted successfully");
+      } catch (error) {
+        console.error("Error deleting test case:", error);
+        toast.error("Failed to delete test case");
+      }
+    }
+  };
+
+  const filteredTestCases = testCases.filter(testCase =>
+    testCase.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    testCase.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    testCase.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">Test Cases</h1>
+            <p className="text-muted-foreground mt-1">Loading test cases...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold gradient-text">Test Cases</h1>
-          <p className="text-muted-foreground mt-1">Create and manage individual test cases</p>
+          <p className="text-muted-foreground mt-1">
+            Create and manage individual test cases ({testCases.length} total)
+          </p>
         </div>
         <Button className="gradient-primary" onClick={() => navigate("/cases/create")}>
           <Plus className="h-4 w-4 mr-2" />
@@ -42,7 +91,12 @@ export default function TestCases() {
       <div className="flex gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search test cases..." className="pl-10" />
+          <Input 
+            placeholder="Search test cases..." 
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <Button variant="outline">
           <Filter className="h-4 w-4 mr-2" />
@@ -50,55 +104,102 @@ export default function TestCases() {
         </Button>
       </div>
 
-      <div className="grid gap-4">
-        {testCases.map((testCase) => (
-          <Card key={testCase.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="text-xl">{testCase.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Plan: {testCase.plan} • Last run {testCase.lastRun}
-                  </p>
+      {filteredTestCases.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <div className="space-y-4">
+              <div className="text-6xl">📝</div>
+              <h3 className="text-xl font-semibold">No test cases found</h3>
+              <p className="text-muted-foreground">
+                {searchTerm ? "No test cases match your search criteria." : "Create your first test case to get started."}
+              </p>
+              {!searchTerm && (
+                <Button className="gradient-primary" onClick={() => navigate("/cases/create")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Test Case
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {filteredTestCases.map((testCase) => (
+            <Card key={testCase.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-xl">{testCase.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {testCase.description}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span>Type: {testCase.testType}</span>
+                      <span>Complexity: {testCase.complexity}</span>
+                      <span>Est. Time: {testCase.estimatedTime}min</span>
+                      <span>Steps: {testCase.steps.length}</span>
+                    </div>
+                    {testCase.tags.length > 0 && (
+                      <div className="flex gap-1 mt-2">
+                        {testCase.tags.map((tag, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge variant={getPriorityColor(testCase.priority)}>
+                      {testCase.priority}
+                    </Badge>
+                    <Badge variant="default">
+                      {testCase.testType}
+                    </Badge>
+                  </div>
                 </div>
+              </CardHeader>
+              <CardContent>
                 <div className="flex gap-2">
-                  <Badge variant={getPriorityColor(testCase.priority)}>
-                    {testCase.priority}
-                  </Badge>
-                  <Badge variant={testCase.status === "active" ? "default" : "secondary"}>
-                    {testCase.status}
-                  </Badge>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate(`/cases/edit/${testCase.id}`)}
+                  >
+                    <Edit className="h-3 w-3 mr-1" />
+                    Edit
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate("/runs")}
+                  >
+                    <Play className="h-3 w-3 mr-1" />
+                    Run Test
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate("/runs")}
+                  >
+                    <History className="h-3 w-3 mr-1" />
+                    History
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleDeleteTestCase(testCase.id)}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Delete
+                  </Button>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate(`/cases/edit/${testCase.id}`)}
-                >
-                  Edit
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/runs")}
-                >
-                  Run Test
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/runs")}
-                >
-                  View History
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

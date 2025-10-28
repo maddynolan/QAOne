@@ -1,32 +1,38 @@
 # QA AI Platform
 
-> An intelligent Quality Assurance platform for managing test plans, test cases, test runs, and defects with AI-powered insights.
+> An intelligent Quality Assurance platform with AI-powered test generation, execution, and analysis.
 
 ## 🚀 Project Overview
 
-QA AI Platform is a comprehensive testing management solution designed to streamline the entire QA lifecycle. From planning test strategies to tracking defects, this platform provides teams with the tools they need to ensure software quality.
+QA AI Platform is a comprehensive testing management solution designed to streamline the entire QA lifecycle. From AI-powered test generation to intelligent defect analysis, this platform provides teams with cutting-edge tools to ensure software quality.
 
 **Live Demo**: https://lovable.dev/projects/3a83fa07-1365-49d9-befd-ca91ddd8af04
 
 ## ✨ Key Features
 
-### Test Management
+### 🤖 AI-Powered Test Generation
+- **Smart Test Case Creation**: Generate comprehensive test cases from feature descriptions
+- **Intelligent Defect Analysis**: AI-powered root cause analysis and suggested fixes
+- **Context-Aware Responses**: Dynamic test steps based on test type and complexity
+- **Mock AI Service**: Development-ready AI simulation for immediate testing
+
+### 📋 Test Management
 - **Test Plans**: Create and manage comprehensive test suites with customizable strategies
 - **Test Cases**: Define detailed test cases with step-by-step instructions, preconditions, and expected results
 - **Test Runs**: Execute test plans and track progress in real-time
 - **Test Execution Details**: View detailed test run results with pass/fail statistics and execution timeline
 
-### Defect Tracking
+### 🐛 Defect Tracking
 - **Bug Reporting**: Comprehensive defect creation with severity, priority, and lifecycle management
+- **AI-Powered Triage**: Intelligent failure analysis with root cause identification
 - **Defect Lifecycle**: Track bugs from creation through resolution with customizable statuses
 - **Environment Details**: Capture browser, OS, version, and environment information
-- **Reproduction Steps**: Document detailed steps to reproduce issues
 
-### Dashboard & Analytics
+### 📊 Dashboard & Analytics
 - **Real-time Metrics**: Track active test plans, total test cases, and pass rates
 - **Quick Actions**: Fast access to common tasks like running tests and creating plans
 - **Recent Activity**: Monitor latest test runs and their outcomes
-- **Triage Management**: Prioritize and manage critical issues
+- **AI Configuration**: Manage AI service settings and test connections
 
 ## 🛠️ Technology Stack
 
@@ -38,77 +44,80 @@ This project is built with modern web technologies:
 - **UI Components**: shadcn/ui component library
 - **Routing**: React Router DOM v6
 - **State Management**: TanStack Query (React Query)
-- **Form Handling**: React Hook Form with Zod validation
+- **Forms**: React Hook Form with Zod validation
 - **Icons**: Lucide React
-- **Backend**: Supabase (Database, Auth, Edge Functions)
-- **Notifications**: Sonner for toast messages
+- **Backend**: Supabase (BaaS) with PostgreSQL
+- **Notifications**: Sonner for toast notifications
+- **AI Integration**: Custom LLM service with mock AI for development
 
-## 📋 Prerequisites
+## 🏗️ Architecture
 
-- Node.js 18+ and npm (recommend using [nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
-- Git for version control
-- A Supabase account (for backend services)
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   React Frontend│    │   Supabase      │    │   Custom LLM    │
+│   (Port 8081)   │◄──►│   (Database)    │◄──►│   (Your Server) │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │              ┌─────────────────┐              │
+         │              │   Local Storage │              │
+         └──────────────►│   (Test Data)   │◄─────────────┘
+                        └─────────────────┘
+```
 
-## 🚦 Getting Started
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
 
 ### Installation
 
-```sh
-# Clone the repository
-git clone https://github.com/maddynolan/QAOne.git
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/maddynolan/QAOne.git
+   cd QAOne
+   ```
 
-# Navigate to project directory
-cd QAOne
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-# Install dependencies
-npm install
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-# Start development server
-npm run dev
-```
-
-The application will be available at `http://localhost:5173`
-
-### Environment Setup
-
-Create a `.env` file in the root directory (if not already present):
-
-```env
-# Supabase Configuration (already configured)
-SUPABASE_URL=https://fimqstvogqqnkvasorlj.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your_publishable_key_here
-```
+4. **Access the application**
+   - Frontend: http://localhost:8081
+   - The app will automatically initialize with sample data
 
 ## 📁 Project Structure
 
 ```
 QAOne/
-├── src/
-│   ├── components/          # Reusable UI components
-│   │   ├── ui/             # shadcn/ui components
-│   │   ├── AppSidebar.tsx  # Navigation sidebar
-│   │   ├── Layout.tsx      # Main layout wrapper
-│   │   ├── MetricCard.tsx  # Dashboard metric cards
-│   │   └── TopNav.tsx      # Top navigation bar
-│   ├── pages/              # Route pages
-│   │   ├── Dashboard.tsx   # Main dashboard
-│   │   ├── TestPlans.tsx   # Test plans listing
-│   │   ├── TestCases.tsx   # Test cases listing
-│   │   ├── TestRuns.tsx    # Test runs listing
-│   │   ├── Defects.tsx     # Defects listing
-│   │   ├── Triage.tsx      # Issue triage
-│   │   └── Settings.tsx    # App settings
-│   ├── hooks/              # Custom React hooks
-│   ├── lib/                # Utility functions
-│   ├── integrations/       # External service integrations
-│   │   └── supabase/       # Supabase client & types
-│   ├── App.tsx             # Root component with routing
-│   ├── main.tsx            # Application entry point
-│   └── index.css           # Global styles & design tokens
+├── src/                    # Source code
+│   ├── components/        # React components
+│   │   ├── ui/            # shadcn/ui components
+│   │   ├── Layout.tsx     # Main layout component
+│   │   └── AppSidebar.tsx # Sidebar navigation
+│   ├── pages/             # Page components
+│   │   ├── Dashboard.tsx  # Main dashboard
+│   │   ├── TestCases.tsx  # Test case management
+│   │   ├── CreateTestCase.tsx # AI-powered test creation
+│   │   ├── Triage.tsx     # AI-powered defect analysis
+│   │   └── Settings.tsx   # Configuration
+│   ├── lib/               # Utility libraries
+│   │   ├── custom-llm-service.ts # AI service integration
+│   │   ├── mock-ai-service.ts    # Mock AI for development
+│   │   └── data-storage.ts       # Local data persistence
+│   ├── integrations/      # External service integrations
+│   │   └── supabase/      # Supabase client & types
+│   ├── App.tsx            # Root component with routing
+│   └── main.tsx           # Application entry point
 ├── public/                 # Static assets
-├── supabase/              # Supabase configuration
-└── package.json           # Project dependencies
-
+├── package.json           # Project dependencies
+└── README.md              # This file
 ```
 
 ## 🎨 Design System
@@ -139,72 +148,152 @@ npm run preview
 npm run lint
 ```
 
-## 🏗️ Key Features Documentation
+## 🤖 AI Features
 
-### Test Case Management
-- Create test cases with detailed steps and expected results
-- Categorize by module, priority, severity, and type
-- Link test cases to test plans
-- Track automation status
-- Add tags for easy filtering
+### Test Case Generation
+- **Input**: Feature description, test type, complexity level
+- **Output**: Complete test case with steps, preconditions, priority, and tags
+- **Variety**: Different templates for API, UI, E2E, and Performance tests
+- **Context-Aware**: Smart naming and step generation based on feature content
 
-### Defect Lifecycle
-- **New** → **Open** → **In Progress** → **Fixed** → **Retest** → **Verified** → **Closed**
-- Support for **Reopened** status
-- Severity levels: Blocker, Critical, Major, Minor, Trivial
-- Priority levels: Critical, High, Medium, Low
+### Defect Analysis
+- **Input**: Error message, test context, environment details
+- **Output**: Root cause analysis, suggested fixes, investigation steps
+- **Confidence Scoring**: AI confidence levels for analysis accuracy
+- **Similar Issues**: Identification of related problems
 
-### Test Execution
-- Run individual test cases or entire test plans
-- Real-time progress tracking
-- Detailed execution timeline
-- Pass/fail statistics
-- Test case filtering by status
+### Mock AI Service
+- **Development Ready**: Works immediately without custom LLM setup
+- **Realistic Responses**: Professional test cases and analysis
+- **Configurable**: Adjustable delay and success rates
+- **Easy Migration**: Seamless switch to real AI when ready
+
+## 🔄 Development Workflow
+
+### Using Mock AI (Default)
+The platform comes with a fully functional mock AI service that generates realistic test cases and defect analysis. No setup required!
+
+### Switching to Real AI
+When your custom LLM is ready:
+
+1. **Configure Environment Variables**:
+   ```bash
+   VITE_LLM_ENDPOINT=http://your-llm-server:port/api/v1/generate
+   VITE_LLM_API_KEY=your-actual-api-key
+   ```
+
+2. **Restart the Application**:
+   ```bash
+   npm run dev
+   ```
+
+3. **The app automatically switches to real AI!** 🎉
+
+## 📊 Data Management
+
+### Local Storage
+- **Test Cases**: Complete test case data with steps and metadata
+- **Test Plans**: Organized test suites and execution strategies
+- **Test Runs**: Execution history and results
+- **Defects**: Bug tracking with AI analysis
+
+### Sample Data
+The platform initializes with realistic sample data:
+- Pre-built test cases for common scenarios
+- Sample test runs with different statuses
+- Example defect reports with AI analysis
+
+## 🚀 Usage
+
+### Creating AI-Powered Test Cases
+
+1. Navigate to **Test Cases** → **Create Test Case**
+2. Enter a description like: "User login with valid credentials"
+3. Click **"Generate Test Case with AI"** ✨
+4. Watch as AI generates complete test case with steps, preconditions, and priority!
+5. Click **"Create Test Case"** to save
+
+### AI-Powered Defect Analysis
+
+1. Go to **Triage** page
+2. Click **"Analyze with AI"** on any issue
+3. See AI provide root cause analysis, suggested fixes, and investigation steps!
+
+### Managing Test Cases
+
+1. View all test cases in **Test Cases** page
+2. Search and filter by name, description, or tags
+3. Edit, run, or delete test cases
+4. View detailed test case information
+
+## 🔧 Configuration
+
+### AI Service Settings
+Access **Settings** → **AI Service Configuration** to:
+- Test AI connection
+- Switch between mock and real AI
+- Adjust mock AI parameters
+- View service status
+
+### Environment Variables
+
+Create a `.env` file for custom configuration:
+
+```env
+# Custom LLM Configuration (for production)
+VITE_LLM_ENDPOINT=http://your-llm-server:port/api/v1/generate
+VITE_LLM_API_KEY=your-custom-llm-api-key
+VITE_LLM_MODEL=qa-ai-model
+VITE_LLM_TEMPERATURE=0.7
+VITE_LLM_MAX_TOKENS=2000
+
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Frontend tests
+npm test
+
+# E2E tests
+npm run test:e2e
+```
+
+### Test Coverage
+
+```bash
+# Frontend coverage
+npm run test:coverage
+```
 
 ## 🚀 Deployment
 
-### Lovable Platform (Recommended)
+### Vercel (Recommended)
 
-1. Open your project in [Lovable](https://lovable.dev/projects/3a83fa07-1365-49d9-befd-ca91ddd8af04)
-2. Click Share → Publish
-3. Your app will be deployed instantly
+1. Connect your GitHub repository to Vercel
+2. Deploy automatically on every push
+3. Environment variables configured in Vercel dashboard
 
-### Custom Domain
+### Netlify
 
-To connect your own domain:
-1. Navigate to Project > Settings > Domains
-2. Click "Connect Domain"
-3. Follow the DNS configuration instructions
-
-Read more: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+1. Connect your GitHub repository to Netlify
+2. Build command: `npm run build`
+3. Publish directory: `dist`
 
 ### Self-Hosting
 
-You can deploy to any static hosting service:
-
-```sh
+```bash
 # Build the project
 npm run build
 
 # The dist/ folder contains production-ready files
 # Deploy the dist/ folder to your hosting provider
 ```
-
-Compatible with: Vercel, Netlify, AWS S3, GitHub Pages, etc.
-
-## 🔄 Development Workflow
-
-### Using Lovable (AI-Powered)
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/3a83fa07-1365-49d9-befd-ca91ddd8af04) and start prompting. Changes made via Lovable are automatically committed to this repo.
-
-### Using Your IDE
-
-Make changes locally and push to GitHub. Changes will automatically sync to Lovable.
-
-### GitHub Codespaces
-
-Launch a cloud development environment directly from GitHub for instant coding without local setup.
 
 ## 🤝 Contributing
 
@@ -214,24 +303,56 @@ Launch a cloud development environment directly from GitHub for instant coding w
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+### Development Guidelines
+
+- Use TypeScript for all new code
+- Follow the existing component patterns
+- Write comprehensive tests for new features
+- Update documentation for API changes
+- Follow conventional commit messages
+
+## 🔮 Roadmap
+
+### Upcoming Features
+
+- [ ] **Real Custom LLM Integration**: Connect to your custom AI infrastructure
+- [ ] **Multi-tenant Support**: Organization and team management
+- [ ] **Advanced Analytics**: Machine learning-based insights
+- [ ] **Integration Hub**: Third-party tool integrations
+- [ ] **Mobile App**: React Native mobile application
+- [ ] **Advanced Reporting**: Custom dashboard creation
+- [ ] **Test Data Management**: Synthetic data generation
+- [ ] **Performance Testing**: Load testing capabilities
+
 ## 📝 License
 
-This project is part of a QA management system. All rights reserved.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Resources
+## 🙏 Acknowledgments
 
-- [Lovable Documentation](https://docs.lovable.dev/)
-- [Supabase Documentation](https://supabase.com/docs)
-- [shadcn/ui Documentation](https://ui.shadcn.com/)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [React Documentation](https://react.dev/)
+- React team for the excellent frontend framework
+- Vite team for the fast build tool
+- shadcn/ui team for the beautiful component library
+- Supabase team for the backend-as-a-service platform
+- All open-source contributors
 
-## 💬 Support
+## 📞 Support
 
-For questions or issues:
-- Create an issue in this repository
-- Visit the [Lovable Discord community](https://discord.com/channels/1119885301872070706/1280461670979993613)
+For support and questions:
+
+- Create an issue in the GitHub repository
+- Check the documentation at `/docs`
+- Review the troubleshooting section above
 
 ---
 
-**Built with ❤️ using [Lovable](https://lovable.dev)**
+**Built with ❤️ for the QA community**
+
+## 🎯 Key Differentiators
+
+- **AI-First Approach**: Built from the ground up with AI integration
+- **Development Ready**: Works immediately with mock AI service
+- **Modern Stack**: React 18, TypeScript, Vite, Tailwind CSS
+- **Beautiful UI**: Professional design with shadcn/ui components
+- **Realistic Data**: Comprehensive sample data and realistic AI responses
+- **Easy Migration**: Seamless transition from mock to real AI

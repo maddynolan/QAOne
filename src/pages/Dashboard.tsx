@@ -1,10 +1,13 @@
-import { CheckCircle2, Clock, TrendingUp, AlertTriangle, FileText, Play } from "lucide-react";
+import { CheckCircle2, Clock, TrendingUp, AlertTriangle, FileText, Play, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { toast } from "sonner";
 import { MetricCard } from "@/components/MetricCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { customLLMService } from "@/lib/custom-llm-service";
 
 const recentRuns = [
   { id: 1, name: "API Integration Tests", status: "running", progress: 65, tests: "32/50" },
@@ -22,6 +25,27 @@ const statusColors = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [testingAI, setTestingAI] = useState(false);
+
+  const testAI = async () => {
+    setTestingAI(true);
+    try {
+      console.log("Testing AI service...");
+      const response = await customLLMService.generateTestCase({
+        feature: "User Login",
+        description: "Test user login functionality",
+        testType: "api",
+        complexity: "simple"
+      });
+      console.log("AI test response:", response);
+      toast.success("AI service is working! Check console for details.");
+    } catch (error) {
+      console.error("AI test failed:", error);
+      toast.error(`AI test failed: ${error.message}`);
+    } finally {
+      setTestingAI(false);
+    }
+  };
   
   return (
     <div className="space-y-8 animate-fade-in">
@@ -158,23 +182,32 @@ const Dashboard = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <Button 
-              className="gradient-primary border-0 hover:shadow-glow transition-all"
-              onClick={() => navigate("/runs")}
-            >
-              <Play className="mr-2 h-4 w-4" />
-              Run All Tests
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/plans/create")}>
-              <FileText className="mr-2 h-4 w-4" />
-              Create Test Plan
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/settings")}>
-              <Clock className="mr-2 h-4 w-4" />
-              Schedule Tests
-            </Button>
-          </div>
+                 <div className="flex flex-wrap gap-3">
+                   <Button
+                     className="gradient-primary border-0 hover:shadow-glow transition-all"
+                     onClick={() => navigate("/runs")}
+                   >
+                     <Play className="mr-2 h-4 w-4" />
+                     Run All Tests
+                   </Button>
+                   <Button variant="outline" onClick={() => navigate("/plans/create")}>
+                     <FileText className="mr-2 h-4 w-4" />
+                     Create Test Plan
+                   </Button>
+                   <Button variant="outline" onClick={() => navigate("/settings")}>
+                     <Clock className="mr-2 h-4 w-4" />
+                     Schedule Tests
+                   </Button>
+                   <Button 
+                     variant="outline" 
+                     onClick={testAI}
+                     disabled={testingAI}
+                     className="border-purple-200 text-purple-700 hover:bg-purple-50"
+                   >
+                     <Sparkles className="mr-2 h-4 w-4" />
+                     {testingAI ? "Testing AI..." : "Test AI Service"}
+                   </Button>
+                 </div>
         </CardContent>
       </Card>
     </div>
