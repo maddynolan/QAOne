@@ -10,6 +10,8 @@ import TestRuns from "./pages/TestRuns";
 import Triage from "./pages/Triage";
 import Settings from "./pages/Settings";
 import CreateTestPlan from "./pages/CreateTestPlan";
+import EditTestPlan from "./pages/EditTestPlan";
+import TestRunDetail from "./pages/TestRunDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,7 +26,9 @@ const App = () => (
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
           <Route path="/plans" element={<Layout><TestPlans /></Layout>} />
           <Route path="/plans/create" element={<Layout><CreateTestPlan /></Layout>} />
+          <Route path="/plans/edit/:id" element={<Layout><EditTestPlan /></Layout>} />
           <Route path="/runs" element={<Layout><TestRuns /></Layout>} />
+          <Route path="/runs/:id" element={<Layout><TestRunDetail /></Layout>} />
           <Route path="/triage" element={<Layout><Triage /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

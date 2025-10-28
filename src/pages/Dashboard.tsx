@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock, TrendingUp, AlertTriangle, FileText, Play } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { MetricCard } from "@/components/MetricCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ const statusColors = {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  
   return (
     <div className="space-y-8 animate-fade-in">
       <div>
@@ -156,15 +159,18 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button className="gradient-primary border-0 hover:shadow-glow transition-all">
+            <Button 
+              className="gradient-primary border-0 hover:shadow-glow transition-all"
+              onClick={() => navigate("/runs")}
+            >
               <Play className="mr-2 h-4 w-4" />
               Run All Tests
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => navigate("/plans/create")}>
               <FileText className="mr-2 h-4 w-4" />
               Create Test Plan
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => navigate("/settings")}>
               <Clock className="mr-2 h-4 w-4" />
               Schedule Tests
             </Button>

@@ -57,9 +57,27 @@ export default function TestPlans() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">Edit</Button>
-                <Button variant="outline" size="sm">Run Tests</Button>
-                <Button variant="outline" size="sm">View Results</Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate(`/plans/edit/${plan.id}`)}
+                >
+                  Edit
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate("/runs")}
+                >
+                  Run Tests
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate("/runs")}
+                >
+                  View Results
+                </Button>
               </div>
             </CardContent>
           </Card>

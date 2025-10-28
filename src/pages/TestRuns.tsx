@@ -1,8 +1,10 @@
 import { Play, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 
 const testRuns = [
   { 
@@ -38,6 +40,12 @@ const testRuns = [
 ];
 
 export default function TestRuns() {
+  const navigate = useNavigate();
+
+  const handleStopRun = (runId: number) => {
+    toast.success("Test run stopped successfully");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -45,7 +53,7 @@ export default function TestRuns() {
           <h1 className="text-3xl font-bold gradient-text">Test Runs</h1>
           <p className="text-muted-foreground mt-1">Monitor your test execution history</p>
         </div>
-        <Button className="gradient-primary">
+        <Button className="gradient-primary" onClick={() => navigate("/plans")}>
           <Play className="h-4 w-4 mr-2" />
           Start New Run
         </Button>
@@ -108,9 +116,21 @@ export default function TestRuns() {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">View Details</Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate(`/runs/${run.id}`)}
+                >
+                  View Details
+                </Button>
                 {run.status === "running" && (
-                  <Button variant="destructive" size="sm">Stop Run</Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    onClick={() => handleStopRun(run.id)}
+                  >
+                    Stop Run
+                  </Button>
                 )}
               </div>
             </CardContent>
