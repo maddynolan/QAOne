@@ -1,16 +1,25 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useState } from "react";
 import { toast } from "sonner";
+
+interface TestStep {
+  id: string;
+  action: string;
+  expectedResult: string;
+}
 
 export default function CreateTestCase() {
   const navigate = useNavigate();
+  const [testSteps, setTestSteps] = useState<TestStep[]>([
+    { id: "1", action: "", expectedResult: "" }
+  ]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +29,22 @@ export default function CreateTestCase() {
 
   const handleCancel = () => {
     navigate("/cases");
+  };
+
+  const addTestStep = () => {
+    setTestSteps([...testSteps, { id: Date.now().toString(), action: "", expectedResult: "" }]);
+  };
+
+  const removeTestStep = (id: string) => {
+    if (testSteps.length > 1) {
+      setTestSteps(testSteps.filter(step => step.id !== id));
+    }
+  };
+
+  const updateTestStep = (id: string, field: 'action' | 'expectedResult', value: string) => {
+    setTestSteps(testSteps.map(step => 
+      step.id === id ? { ...step, [field]: value } : step
+    ));
   };
 
   return (
@@ -76,6 +101,23 @@ export default function CreateTestCase() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="module">Module/Component</Label>
+                <Select>
+                  <SelectTrigger id="module">
+                    <SelectValue placeholder="Select module" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auth">Authentication</SelectItem>
+                    <SelectItem value="payment">Payment</SelectItem>
+                    <SelectItem value="user">User Management</SelectItem>
+                    <SelectItem value="api">API</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
                 <Select>
                   <SelectTrigger id="priority">
@@ -89,14 +131,54 @@ export default function CreateTestCase() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="severity">Severity</Label>
+                <Select>
+                  <SelectTrigger id="severity">
+                    <SelectValue placeholder="Select severity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="blocker">Blocker</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="major">Major</SelectItem>
+                    <SelectItem value="minor">Minor</SelectItem>
+                    <SelectItem value="trivial">Trivial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="type">Test Type</Label>
+                <Select>
+                  <SelectTrigger id="type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="automated">Automated</SelectItem>
+                    <SelectItem value="api">API</SelectItem>
+                    <SelectItem value="ui">UI</SelectItem>
+                    <SelectItem value="performance">Performance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags (comma separated)</Label>
+              <Input
+                id="tags"
+                placeholder="e.g., smoke, regression, critical-path"
+              />
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Test Steps</CardTitle>
-            <CardDescription>Define the steps to execute this test case</CardDescription>
+            <CardTitle>Test Execution Details</CardTitle>
+            <CardDescription>Define preconditions and test data</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -109,45 +191,117 @@ export default function CreateTestCase() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="steps">Test Steps</Label>
+              <Label htmlFor="testData">Test Data</Label>
               <Textarea
-                id="steps"
-                placeholder="1. Navigate to login page&#10;2. Enter valid credentials&#10;3. Click login button&#10;4. Verify successful login"
-                rows={6}
+                id="testData"
+                placeholder="Required test data (e.g., valid user credentials, test payment cards)"
+                rows={2}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expected">Expected Result</Label>
-              <Textarea
-                id="expected"
-                placeholder="What should happen when the test passes..."
-                rows={3}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="estimatedTime">Estimated Time (minutes)</Label>
+                <Input
+                  id="estimatedTime"
+                  type="number"
+                  placeholder="e.g., 15"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="automationStatus">Automation Status</Label>
+                <Select>
+                  <SelectTrigger id="automationStatus">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="to-be-automated">To Be Automated</SelectItem>
+                    <SelectItem value="automated">Automated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Test Type</CardTitle>
-            <CardDescription>Select the type of test case</CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Test Steps</CardTitle>
+                <CardDescription>Define the sequential steps and expected results</CardDescription>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addTestStep}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Step
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
-            <RadioGroup defaultValue="manual">
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="manual" id="manual" />
-                <Label htmlFor="manual">Manual Test</Label>
+          <CardContent className="space-y-4">
+            {testSteps.map((step, index) => (
+              <div key={step.id} className="border rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label className="text-base font-semibold">Step {index + 1}</Label>
+                  {testSteps.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeTestStep(step.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`action-${step.id}`}>Action</Label>
+                  <Textarea
+                    id={`action-${step.id}`}
+                    placeholder="Describe what action to perform..."
+                    rows={2}
+                    value={step.action}
+                    onChange={(e) => updateTestStep(step.id, 'action', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`expected-${step.id}`}>Expected Result</Label>
+                  <Textarea
+                    id={`expected-${step.id}`}
+                    placeholder="What should happen after this action..."
+                    rows={2}
+                    value={step.expectedResult}
+                    onChange={(e) => updateTestStep(step.id, 'expectedResult', e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="automated" id="automated" />
-                <Label htmlFor="automated">Automated Test</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="api" id="api" />
-                <Label htmlFor="api">API Test</Label>
-              </div>
-            </RadioGroup>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Additional Information</CardTitle>
+            <CardDescription>Optional metadata and attachments</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="requirements">Related Requirements/Stories</Label>
+              <Input
+                id="requirements"
+                placeholder="e.g., REQ-123, USER-456"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Additional Notes</Label>
+              <Textarea
+                id="notes"
+                placeholder="Any additional information or context..."
+                rows={3}
+              />
+            </div>
           </CardContent>
         </Card>
 

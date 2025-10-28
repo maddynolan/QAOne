@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare } from "lucide-react";
+import { LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ const items = [
   { title: "Test Plans", url: "/plans", icon: FileText },
   { title: "Test Cases", url: "/cases", icon: CheckSquare },
   { title: "Test Runs", url: "/runs", icon: Play },
+  { title: "Defects", url: "/defects", icon: Bug },
   { title: "Triage", url: "/triage", icon: AlertCircle },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

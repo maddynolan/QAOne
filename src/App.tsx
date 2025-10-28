@@ -14,6 +14,8 @@ import Settings from "./pages/Settings";
 import CreateTestPlan from "./pages/CreateTestPlan";
 import EditTestPlan from "./pages/EditTestPlan";
 import TestRunDetail from "./pages/TestRunDetail";
+import Defects from "./pages/Defects";
+import CreateDefect from "./pages/CreateDefect";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +35,8 @@ const App = () => (
           <Route path="/cases/create" element={<Layout><CreateTestCase /></Layout>} />
           <Route path="/runs" element={<Layout><TestRuns /></Layout>} />
           <Route path="/runs/:id" element={<Layout><TestRunDetail /></Layout>} />
+          <Route path="/defects" element={<Layout><Defects /></Layout>} />
+          <Route path="/defects/create" element={<Layout><CreateDefect /></Layout>} />
           <Route path="/triage" element={<Layout><Triage /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
