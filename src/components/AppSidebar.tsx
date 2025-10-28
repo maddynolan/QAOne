@@ -33,8 +33,8 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarContent className="pt-4">
+    <Sidebar collapsible="icon" className="bg-sidebar border-sidebar-border">
+      <SidebarContent className="pt-4 bg-sidebar">
         <div className={`px-4 mb-6 ${collapsed ? "text-center" : ""}`}>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-white font-bold">
@@ -42,8 +42,8 @@ export function AppSidebar() {
             </div>
             {!collapsed && (
               <div>
-                <h2 className="font-bold text-lg">QA AI</h2>
-                <p className="text-xs text-muted-foreground">Platform</p>
+                <h2 className="font-bold text-lg text-sidebar-foreground">QA AI</h2>
+                <p className="text-xs text-sidebar-foreground/60">Platform</p>
               </div>
             )}
           </div>
@@ -61,8 +61,8 @@ export function AppSidebar() {
                       end 
                       className={({ isActive }) => 
                         isActive
-                          ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-                          : "hover:bg-secondary"
+                          ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       }
                     >
                       <item.icon className="h-4 w-4" />

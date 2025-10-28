@@ -37,13 +37,19 @@ export const TopNav = () => {
               <User className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
+            <DropdownMenuLabel className="text-popover-foreground">My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <DropdownMenuItem className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Log out</DropdownMenuItem>
+            <DropdownMenuItem className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+              Log out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

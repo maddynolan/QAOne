@@ -1,4 +1,5 @@
 import { Plus, Search, Filter } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,8 @@ const testPlans = [
 ];
 
 export default function TestPlans() {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -19,7 +22,7 @@ export default function TestPlans() {
           <h1 className="text-3xl font-bold gradient-text">Test Plans</h1>
           <p className="text-muted-foreground mt-1">Manage and organize your test plans</p>
         </div>
-        <Button className="gradient-primary">
+        <Button className="gradient-primary" onClick={() => navigate("/plans/create")}>
           <Plus className="h-4 w-4 mr-2" />
           Create Plan
         </Button>
