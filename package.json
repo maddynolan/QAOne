@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "e2e": "playwright test --config=e2e.config.ts",
     "openapi:gen": "openapi-typescript api/openapi.yaml -o src/types/api.d.ts",
     "seed": "tsx scripts/seed.ts",
     "preview": "vite preview"
@@ -71,7 +70,6 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@faker-js/faker": "^9.3.0",
-    "@playwright/test": "^1.48.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",

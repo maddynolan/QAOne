@@ -1,12 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database, Tables, TablesInsert, TablesUpdate } from './types'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://fimqstvogqqnkvasorlj.supabase.co"
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpbXFzdHZvZ3Fxbmt2YXNvcmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NjAzNjgsImV4cCI6MjA3NzIzNjM2OH0.lbZ33NzOOE-eO8vj0Vg79Y1BKt0nYxz6v1g3a4aYTEk"
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseKey)
 

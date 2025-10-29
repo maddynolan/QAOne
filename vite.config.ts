@@ -14,12 +14,4 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  optimizeDeps: {
-    exclude: ["playwright-core", "playwright"]
-  },
-  build: {
-    rollupOptions: {
-      external: ["playwright-core", "playwright"]
-    }
-  }
 }));
