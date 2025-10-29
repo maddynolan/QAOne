@@ -7,6 +7,7 @@ import json
 from typing import List, Optional, Dict, Any
 import os
 import sys
+from app.services.playwright_runner import PlaywrightRunner, TestCase, TestStep
 
 # Add the parent directory to the path to import our services
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -88,6 +89,16 @@ class RunIngestRequest(BaseModel):
 
 class RunIngestResponse(BaseModel):
     run_id: str
+
+class TestExecutionRequest(BaseModel):
+    org_id: str
+    project_id: str
+    test_cases: List[Dict[str, Any]]  # Test case data from frontend
+
+class TestExecutionResponse(BaseModel):
+    run_id: str
+    results: List[Dict[str, Any]]
+    summary: Dict[str, Any]
 
 # Mock AI Service for development
 class MockAIService:
@@ -367,6 +378,99 @@ async def ingest_run(request: Request, body: RunIngestRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to ingest run: {str(e)}"
+        )
+
+@app.post("/tests/execute")
+async def execute_tests(request: Request, body: TestExecutionRequest):
+    """Execute test cases using Playwright"""
+    try:
+        # Validate required fields
+        if not body.org_id or not body.project_id or not body.test_cases:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: org_id, project_id, test_cases"
+            )
+
+        # Generate run ID
+        run_id = str(uuid.uuid4())
+        
+        # Initialize Playwright runner
+        runner = PlaywrightRunner()
+        await runner.initialize()
+        
+        results = []
+        total_tests = len(body.test_cases)
+        passed_tests = 0
+        failed_tests = 0
+        
+        try:
+            for test_case_data in body.test_cases:
+                # Convert frontend test case to backend TestCase
+                steps = [
+                    TestStep(
+                        action=step.get('action', ''),
+                        data=step.get('data', {}),
+                        expected=step.get('expected', ''),
+                        locator_hints=step.get('locator_hints', [])
+                    )
+                    for step in test_case_data.get('steps', [])
+                ]
+                
+                test_case = TestCase(
+                    case_id=test_case_data.get('id', str(uuid.uuid4())),
+                    title=test_case_data.get('title', 'Untitled Test'),
+                    description=test_case_data.get('description', ''),
+                    priority=test_case_data.get('priority', 'P2'),
+                    tags=test_case_data.get('tags', []),
+                    steps=steps
+                )
+                
+                # Execute the test case
+                result = await runner.run_test_case(test_case)
+                
+                # Convert result to dict
+                result_dict = {
+                    'case_id': result.case_id,
+                    'status': result.status,
+                    'duration': result.duration,
+                    'error': result.error,
+                    'logs': result.logs,
+                    'screenshots': result.screenshots
+                }
+                
+                results.append(result_dict)
+                
+                if result.status == 'passed':
+                    passed_tests += 1
+                else:
+                    failed_tests += 1
+                    
+        finally:
+            # Always cleanup
+            await runner.cleanup()
+        
+        # Create summary
+        summary = {
+            'total_tests': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests / total_tests * 100) if total_tests > 0 else 0,
+            'run_id': run_id
+        }
+        
+        response = TestExecutionResponse(
+            run_id=run_id,
+            results=results,
+            summary=summary
+        )
+        
+        return response
+        
+    except Exception as e:
+        print(f"Error executing tests: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to execute tests: {str(e)}"
         )
 
 @app.post("/integrations/jira/webhook")
