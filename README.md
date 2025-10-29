@@ -6,7 +6,7 @@
 
 QA AI Platform is a comprehensive testing management solution designed to streamline the entire QA lifecycle. From AI-powered test generation to intelligent defect analysis, this platform provides teams with cutting-edge tools to ensure software quality.
 
-**Live Demo**: https://lovable.dev/projects/3a83fa07-1365-49d9-befd-ca91ddd8af04
+**Live Demo**: https://qaone-platform.com
 
 ## ✨ Key Features
 
