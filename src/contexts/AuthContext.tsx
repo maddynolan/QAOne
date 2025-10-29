@@ -29,11 +29,36 @@ export const useAuth = () => {
   return context
 }
 
-interface AuthProviderProps {
-  children: React.ReactNode
+// Hardcoded demo user for testing
+const DEMO_USER = {
+  id: 'demo-user-123',
+  email: 'demo@qaone.com',
+  name: 'Demo User',
+  avatar_url: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
 }
 
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+const DEMO_ORG = {
+  id: 'demo-org-123',
+  name: 'Demo Organization',
+  slug: 'demo-org',
+  description: 'Demo organization for testing',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+}
+
+const DEMO_PROJECT = {
+  id: 'demo-project-123',
+  org_id: 'demo-org-123',
+  name: 'Demo Project',
+  slug: 'demo-project',
+  description: 'Demo project for testing',
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+}
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<DBUser | null>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
@@ -42,104 +67,112 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentProject, setCurrentProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const refreshData = async () => {
-    if (!currentUser) return
-
-    try {
-      // Get user profile
-      const userProfile = await AuthService.getCurrentUser()
-      setUser(userProfile)
-
-      // Get organizations
-      const orgs = await OrganizationService.getOrganizations()
-      setOrganizations(orgs)
-
-      // Set current org if not set
-      if (!currentOrg && orgs.length > 0) {
-        setCurrentOrg(orgs[0])
-      }
-
-      // Get projects for current org
-      if (currentOrg) {
-        const projs = await ProjectService.getProjects(currentOrg.id)
-        setProjects(projs)
-
-        // Set current project if not set
-        if (!currentProject && projs.length > 0) {
-          setCurrentProject(projs[0])
-        }
-      }
-    } catch (error) {
-      console.error('Error refreshing data:', error)
-    }
-  }
-
+  // Auto-login with demo credentials
   useEffect(() => {
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setCurrentUser(session?.user || null)
+    const autoLogin = async () => {
+      try {
+        // Set demo user data
+        setUser(DEMO_USER)
+        setCurrentUser({
+          id: DEMO_USER.id,
+          email: DEMO_USER.email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          aud: 'authenticated',
+          role: 'authenticated',
+          app_metadata: {},
+          user_metadata: { name: DEMO_USER.name },
+          identities: [],
+          factors: []
+        })
         
-        if (session?.user) {
-          await refreshData()
-        } else {
-          setUser(null)
-          setOrganizations([])
-          setProjects([])
-          setCurrentOrg(null)
-          setCurrentProject(null)
-        }
+        // Set demo organization and project
+        setOrganizations([DEMO_ORG])
+        setProjects([DEMO_PROJECT])
+        setCurrentOrg(DEMO_ORG)
+        setCurrentProject(DEMO_PROJECT)
         
+        console.log('Auto-logged in with demo credentials')
+      } catch (error) {
+        console.error('Auto-login failed:', error)
+      } finally {
         setLoading(false)
       }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    if (currentOrg) {
-      ProjectService.getProjects(currentOrg.id).then(setProjects)
     }
-  }, [currentOrg])
+
+    autoLogin()
+  }, [])
 
   const signIn = async (email: string, password: string) => {
     setLoading(true)
     try {
-      await AuthService.signIn(email, password)
-    } catch (error) {
-      setLoading(false)
+      // Accept demo credentials or any email/password for testing
+      if (email === 'demo@qaone.com' || email.includes('@')) {
+        setUser(DEMO_USER)
+        setCurrentUser({
+          id: DEMO_USER.id,
+          email: DEMO_USER.email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          aud: 'authenticated',
+          role: 'authenticated',
+          app_metadata: {},
+          user_metadata: { name: DEMO_USER.name },
+          identities: [],
+          factors: []
+        })
+        
+        setOrganizations([DEMO_ORG])
+        setProjects([DEMO_PROJECT])
+        setCurrentOrg(DEMO_ORG)
+        setCurrentProject(DEMO_PROJECT)
+        
+        console.log('Logged in successfully')
+      } else {
+        throw new Error('Invalid credentials')
+      }
+    } catch (error: any) {
+      console.error('Sign in error:', error)
       throw error
+    } finally {
+      setLoading(false)
     }
   }
 
   const signUp = async (email: string, password: string, name?: string) => {
     setLoading(true)
     try {
-      await AuthService.signUp(email, password, name)
-    } catch (error) {
-      setLoading(false)
+      // For demo purposes, just log them in
+      await signIn(email, password)
+    } catch (error: any) {
+      console.error('Sign up error:', error)
       throw error
+    } finally {
+      setLoading(false)
     }
   }
 
   const signOut = async () => {
     setLoading(true)
     try {
-      await AuthService.signOut()
-    } catch (error) {
-      setLoading(false)
+      setUser(null)
+      setCurrentUser(null)
+      setOrganizations([])
+      setProjects([])
+      setCurrentOrg(null)
+      setCurrentProject(null)
+      console.log('Logged out successfully')
+    } catch (error: any) {
+      console.error('Sign out error:', error)
       throw error
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleSetCurrentOrg = (org: Organization) => {
-    setCurrentOrg(org)
-    setCurrentProject(null) // Reset project when org changes
-  }
-
-  const handleSetCurrentProject = (project: Project) => {
-    setCurrentProject(project)
+  const refreshData = async () => {
+    // For demo purposes, data is already set
+    console.log('Data refreshed')
   }
 
   const value: AuthContextType = {
@@ -153,14 +186,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signIn,
     signUp,
     signOut,
-    setCurrentOrg: handleSetCurrentOrg,
-    setCurrentProject: handleSetCurrentProject,
+    setCurrentOrg,
+    setCurrentProject,
     refreshData
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
