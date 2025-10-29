@@ -1,4 +1,4 @@
-import { TestRunResult } from './playwright-runner';
+import { TestRunResult } from './test-execution-service';
 
 export interface SelfHealingRule {
   id: string;

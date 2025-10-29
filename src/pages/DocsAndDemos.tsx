@@ -126,18 +126,27 @@ console.log('Generated test cases:', testCases);`
     {
       title: 'Run Test Execution',
       description: 'Execute tests using Playwright runner',
-      code: `// Run test case
-const result = await playwrightRunner.runTestCase({
-  case_id: "test_001",
-  title: "User Login Test",
-  steps: [
-    { action: "Navigate to login page", expected: "Login page loads" },
-    { action: "Enter credentials", expected: "Credentials entered" },
-    { action: "Click login button", expected: "User logged in" }
-  ]
+      code: `// Execute tests via API
+const response = await fetch('/api/tests/execute', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    org_id: 'your-org-id',
+    project_id: 'your-project-id',
+    test_cases: [{
+      id: "test_001",
+      title: "User Login Test",
+      steps: [
+        { action: "Navigate to login page", expected: "Login page loads" },
+        { action: "Enter credentials", expected: "Credentials entered" },
+        { action: "Click login button", expected: "User logged in" }
+      ]
+    }]
+  })
 });
 
-console.log('Test result:', result);`
+const result = await response.json();
+console.log('Test execution result:', result);`
     },
     {
       title: 'Analyze Test Failure',
