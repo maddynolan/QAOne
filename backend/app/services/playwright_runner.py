@@ -124,12 +124,30 @@ class PlaywrightRunner:
             url = data.get('url', 'https://example.com')
             await self.page.goto(url)
         elif 'click' in action:
-            selector = data.get('selector', 'button')
-            await self.page.click(selector)
-        elif 'fill' in action:
-            selector = data.get('selector', 'input')
-            value = data.get('value', '')
-            await self.page.fill(selector, value)
+            # Handle natural language click actions
+            if 'login' in action.lower() and 'button' in action.lower():
+                await self.page.click('button[type="submit"], #login-btn, .login-button, button:has-text("Login")')
+            elif 'button' in action.lower():
+                selector = data.get('selector', 'button')
+                await self.page.click(selector)
+            else:
+                selector = data.get('selector', 'button')
+                await self.page.click(selector)
+        elif 'enter' in action or 'fill' in action:
+            # Handle "Enter valid email and password" type actions
+            if 'email' in action.lower() and 'password' in action.lower():
+                # Split email and password actions
+                await self.page.fill('input[type="email"], input[name="email"], #email', 'test@example.com')
+                await self.page.fill('input[type="password"], input[name="password"], #password', 'password123')
+            elif 'email' in action.lower():
+                await self.page.fill('input[type="email"], input[name="email"], #email', 'test@example.com')
+            elif 'password' in action.lower():
+                await self.page.fill('input[type="password"], input[name="password"], #password', 'password123')
+            else:
+                # Generic fill action
+                selector = data.get('selector', 'input')
+                value = data.get('value', '')
+                await self.page.fill(selector, value)
         elif 'wait' in action:
             timeout = data.get('timeout', 1000)
             await self.page.wait_for_timeout(timeout)
@@ -137,7 +155,7 @@ class PlaywrightRunner:
             selector = data.get('selector', 'select')
             value = data.get('value', '')
             await self.page.select_option(selector, value)
-        elif 'check' in action:
+        elif 'check' in action and 'page' not in action.lower():
             selector = data.get('selector', 'input[type="checkbox"]')
             await self.page.check(selector)
         elif 'uncheck' in action:
@@ -149,6 +167,10 @@ class PlaywrightRunner:
         elif 'press' in action:
             key = data.get('key', 'Enter')
             await self.page.press('body', key)
+        elif 'verify' in action or 'check' in action:
+            # Verification actions - these are handled by the expected verification
+            # Just wait a moment for the page to be ready
+            await self.page.wait_for_timeout(1000)
         else:
             raise Exception(f"Unknown action: {step.action}")
 
@@ -191,6 +213,14 @@ class PlaywrightRunner:
                 await self.page.wait_for_function(
                     f"document.title === '{title}'"
                 )
+            elif 'contains' in expected_lower:
+                # Handle "Title contains 'Example Domain'" pattern
+                match = re.search(r'contains\s+"([^"]+)"', expected)
+                if match:
+                    text = match.group(1)
+                    await self.page.wait_for_function(
+                        f"document.title.includes('{text}')"
+                    )
 
 # Global instance
 playwright_runner = PlaywrightRunner()

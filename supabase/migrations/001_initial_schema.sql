@@ -444,3 +444,5 @@ CREATE TRIGGER update_test_runs_updated_at BEFORE UPDATE ON test_runs
 
 CREATE TRIGGER update_defects_updated_at BEFORE UPDATE ON defects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+

@@ -18,24 +18,46 @@ export default function TestRuns() {
     loadTestRuns();
   }, []);
 
-  const loadTestRuns = () => {
-    const runs = testExecutionService.getAllTestRuns();
-    setTestRuns(runs);
+  const loadTestRuns = async () => {
+    try {
+      const runs = await dataStorageService.getTestRuns();
+      setTestRuns(runs);
+    } catch (error) {
+      console.error('Error loading test runs:', error);
+      toast.error('Failed to load test runs');
+    }
   };
 
   const createNewTestRun = async () => {
     setIsLoading(true);
     try {
-      const testCases = dataStorageService.getTestCases();
-      if (testCases.length === 0) {
+      const dataStorageTestCases = await dataStorageService.getTestCases();
+      if (dataStorageTestCases.length === 0) {
         toast.error("No test cases available. Please create some test cases first.");
         return;
       }
 
-      const run = await testExecutionService.createTestRun(
-        `Test Run ${new Date().toLocaleString()}`,
-        testCases
-      );
+      // Convert data storage test cases to test execution service format
+      const testCases = dataStorageTestCases.map(tc => ({
+        id: tc.id,
+        title: tc.name,
+        description: tc.description,
+        priority: tc.priority,
+        tags: tc.tags,
+        steps: tc.steps.map(step => ({
+          action: step.action,
+          data: {},
+          expected: step.expectedResult,
+          locator_hints: []
+        }))
+      }));
+
+      const run = await dataStorageService.createTestRun({
+        name: `Test Run ${new Date().toLocaleString()}`,
+        status: 'pending',
+        testCases: testCases,
+        results: []
+      });
       
       setTestRuns(prev => [...prev, run]);
       toast.success("Test run created successfully!");
@@ -49,10 +71,10 @@ export default function TestRuns() {
   const executeTestRun = async (runId: string) => {
     setIsLoading(true);
     try {
-      const run = await testExecutionService.executeTestRun(runId);
-      setTestRuns(prev => prev.map(r => r.id === runId ? run : r));
+      const run = await testExecutionService.executeTestRun(runId, 'demo-org', 'demo-project');
+      await loadTestRuns(); // Reload from backend
       toast.success("Test run completed!");
-    } catch (error) {
+    } catch (error: any) {
       toast.error(`Failed to execute test run: ${error.message}`);
     } finally {
       setIsLoading(false);

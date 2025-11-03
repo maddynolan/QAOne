@@ -91,7 +91,7 @@ export interface OptimizationSuggestionResponse {
 class CustomLLMService {
   private apiBaseUrl: string;
 
-  constructor(apiBaseUrl: string = 'http://localhost:8000') {
+  constructor(apiBaseUrl: string = 'http://localhost:8001') {
     this.apiBaseUrl = apiBaseUrl;
   }
 
@@ -107,9 +107,11 @@ class CustomLLMService {
           org_id: 'demo-org', // TODO: Get from auth context
           project_id: 'demo-project', // TODO: Get from auth context
           requirements: request.description,
+          test_type: request.testType === 'ui' || request.testType === 'e2e' || request.testType === 'automated' ? 'automated' : request.testType === 'api' ? 'api' : 'manual',
           context: {
             product_area: request.feature,
             acceptance_criteria: request.requirements ? [request.requirements] : [],
+            app_url: request.context || 'https://www.saucedemo.com',
             prior_flaky_cases: [],
             style: 'imperative',
             test_count_hint: 1
@@ -137,8 +139,12 @@ class CustomLLMService {
           testData: ['Test data will be provided during execution'],
           priority: mapPriorityFromAPI(testCase.priority),
           tags: testCase.tags,
-          automationScript: undefined
+          automationScript: data.generated_code || undefined  // Include generated code for review
         },
+        generatedCode: data.generated_code || undefined,
+        manualSteps: data.manual_steps || undefined,
+        codeLanguage: data.code_language || 'typescript',
+        suggestedWebsites: data.suggested_websites || [],
         suggestions: [
           'Consider edge cases for input validation',
           'Add performance checks for this flow',
@@ -282,15 +288,14 @@ function mapPriorityFromLikelihood(likelihood: number): 'low' | 'medium' | 'high
   return 'low';
 }
 
-// Import mock service for development
-import { mockAIService, aiService as mockAIServiceInstance } from './mock-ai-service';
+// Import mock service for development (not used currently)
+import { mockAIService } from './mock-ai-service';
 
-// Development mode detection
-const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// Get API base URL from environment or use default
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
-// Export the appropriate service based on environment
-export const customLLMService = isDevelopment ? mockAIServiceInstance : new CustomLLMService(apiBaseUrl);
+// Use real backend API
+export const customLLMService = new CustomLLMService(apiBaseUrl);
 
 // Export both services for manual switching if needed
 export { mockAIService };

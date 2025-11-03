@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Test Cases to QA AI Platform</title>
+</head>
+<body>
+    <h1>Add Test Cases to QA AI Platform</h1>
+    <p>Click the button below to add sample test cases to your platform:</p>
+    
+    <button onclick="addTestCases()">Add Sample Test Cases</button>
+    
+    <div id="result"></div>
+    
+    <script>
+        function addTestCases() {
+            try {
+                // Get existing data or create new
+                let data = JSON.parse(localStorage.getItem('qa-ai-platform-data') || '{"testCases":[],"testPlans":[],"testRuns":[],"defects":[]}');
+                
+                // Add sample test cases
+                const sampleTestCases = [
+                    {
+                        "id": "checkout-test-001",
+                        "name": "E-commerce Checkout Process Test",
+                        "description": "Complete checkout flow from cart to payment completion",
+                        "steps": [
+                            {"action": "Navigate to shopping cart", "expectedResult": "Cart page loads with items"},
+                            {"action": "Click checkout button", "expectedResult": "Checkout form is displayed"},
+                            {"action": "Fill shipping information", "expectedResult": "Shipping form is completed"},
+                            {"action": "Select payment method", "expectedResult": "Payment form is displayed"},
+                            {"action": "Enter payment details", "expectedResult": "Payment details are entered"},
+                            {"action": "Submit order", "expectedResult": "Order confirmation page is displayed"}
+                        ],
+                        "preconditions": ["User has access to the application"],
+                        "testData": ["Test data will be provided during execution"],
+                        "priority": "medium",
+                        "tags": ["ai-generated", "e2e", "checkout", "critical"],
+                        "testType": "automated",
+                        "complexity": "medium",
+                        "estimatedTime": 15,
+                        "createdAt": "2025-10-29T01:00:00Z",
+                        "updatedAt": "2025-10-29T01:00:00Z"
+                    },
+                    {
+                        "id": "login-test-001",
+                        "name": "User Authentication Test",
+                        "description": "Test user login with valid and invalid credentials",
+                        "steps": [
+                            {"action": "Navigate to login page", "expectedResult": "Login page loads successfully"},
+                            {"action": "Enter valid credentials", "expectedResult": "Credentials are entered"},
+                            {"action": "Click login button", "expectedResult": "User is logged in successfully"},
+                            {"action": "Verify dashboard access", "expectedResult": "Dashboard page is displayed"}
+                        ],
+                        "preconditions": ["User has access to the application"],
+                        "testData": ["Test data will be provided during execution"],
+                        "priority": "medium",
+                        "tags": ["ai-generated", "auth", "login", "security"],
+                        "testType": "automated",
+                        "complexity": "medium",
+                        "estimatedTime": 15,
+                        "createdAt": "2025-10-29T01:00:00Z",
+                        "updatedAt": "2025-10-29T01:00:00Z"
+                    },
+                    {
+                        "id": "search-test-001",
+                        "name": "Search Functionality Test",
+                        "description": "Test search functionality with various queries",
+                        "steps": [
+                            {"action": "Navigate to search page", "expectedResult": "Search page loads successfully"},
+                            {"action": "Enter search query", "expectedResult": "Search query is entered"},
+                            {"action": "Click search button", "expectedResult": "Search results are displayed"},
+                            {"action": "Verify search results", "expectedResult": "Relevant results are shown"}
+                        ],
+                        "preconditions": ["User has access to the application"],
+                        "testData": ["Test data will be provided during execution"],
+                        "priority": "medium",
+                        "tags": ["ai-generated", "search", "functional"],
+                        "testType": "automated",
+                        "complexity": "medium",
+                        "estimatedTime": 15,
+                        "createdAt": "2025-10-29T01:00:00Z",
+                        "updatedAt": "2025-10-29T01:00:00Z"
+                    }
+                ];
+                
+                // Add test cases to existing data
+                data.testCases = [...data.testCases, ...sampleTestCases];
+                
+                // Save to localStorage
+                localStorage.setItem('qa-ai-platform-data', JSON.stringify(data));
+                
+                // Show success message
+                document.getElementById('result').innerHTML = `
+                    <div style="color: green; margin-top: 20px;">
+                        <h3>✅ Success!</h3>
+                        <p>Added ${sampleTestCases.length} test cases to your platform.</p>
+                        <p>Test case names:</p>
+                        <ul>
+                            ${sampleTestCases.map(tc => `<li>${tc.name}</li>`).join('')}
+                        </ul>
+                        <p><strong>Next steps:</strong></p>
+                        <ol>
+                            <li>Go back to your QA AI Platform</li>
+                            <li>Refresh the page (F5)</li>
+                            <li>Go to Test Cases page - you should see the new test cases</li>
+                            <li>Go to Test Runs page</li>
+                            <li>Click "Create Test Run"</li>
+                            <li>Click "Execute" - you should now see progress like "1/3", "2/3", "3/3"</li>
+                        </ol>
+                    </div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <div style="color: red; margin-top: 20px;">
+                        <h3>❌ Error:</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

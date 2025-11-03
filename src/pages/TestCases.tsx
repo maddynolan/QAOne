@@ -1,4 +1,4 @@
-import { Plus, Search, Filter, Edit, Play, History, Trash2 } from "lucide-react";
+import { Plus, Search, Filter, Edit, Play, History, Trash2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -82,10 +82,46 @@ export default function TestCases() {
             Create and manage individual test cases ({testCases.length} total)
           </p>
         </div>
-        <Button className="gradient-primary" onClick={() => navigate("/cases/create")}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Test Case
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={async () => {
+              // Open a dialog to input Jira story
+              const jiraStory = prompt("Enter Jira story or requirements:");
+              if (!jiraStory) return;
+              
+              try {
+                toast.loading("Generating test cases with AI...");
+                const response = await fetch("http://localhost:8001/ai/jira-to-testcases", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ jira: jiraStory, mode: "ui" })
+                });
+                
+                const data = await response.json();
+                if (data.status === "success") {
+                  toast.dismiss();
+                  toast.success(`Generated ${data.test_cases.length} test cases!`);
+                  // Navigate to create page with pre-filled data
+                  navigate("/cases/create", { 
+                    state: { generatedTestCases: data.test_cases } 
+                  });
+                } else {
+                  toast.error("Failed to generate test cases");
+                }
+              } catch (error) {
+                toast.error(`Error: ${error.message}`);
+              }
+            }}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Generate with AI
+          </Button>
+          <Button className="gradient-primary" onClick={() => navigate("/cases/create")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Test Case
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-4">

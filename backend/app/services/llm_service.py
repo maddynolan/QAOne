@@ -297,3 +297,5 @@ Respond as an array of specific, actionable recommendations.
         except json.JSONDecodeError:
             # Fallback to splitting by lines if JSON parsing fails
             return [line.strip() for line in response.split('\n') if line.strip()]
+
+

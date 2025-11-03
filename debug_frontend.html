@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 20px; margin: 5px; }
+        .code-block { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Frontend Debug</h1>
+    
+    <div class="test-section">
+        <h2>1. Test Backend Connection</h2>
+        <button onclick="testBackend()">Test Backend</button>
+        <div id="backend-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Test AI Generation</h2>
+        <button onclick="testAIGeneration()">Test AI Generation</button>
+        <div id="ai-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Test Test Execution</h2>
+        <button onclick="testExecution()">Test Execution</button>
+        <div id="execution-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Test Frontend Pages</h2>
+        <button onclick="testFrontendPages()">Test Frontend Pages</button>
+        <div id="frontend-result"></div>
+    </div>
+
+    <script>
+        async function testBackend() {
+            const resultDiv = document.getElementById('backend-result');
+            resultDiv.innerHTML = '<p>Testing backend connection...</p>';
+
+            try {
+                // Try to access the backend through the frontend proxy or directly
+                const response = await fetch('http://localhost:8001/health', {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Backend Connected!</h3>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Message:</strong> ${data.message}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Backend Error: ${response.status}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ Backend Connection Failed: ${error.message}</p>
+                    <p><strong>Note:</strong> This might be a CORS issue. Try opening this page from <a href="http://localhost:8080/debug_frontend.html" target="_blank">http://localhost:8080/debug_frontend.html</a></p>
+                `;
+            }
+        }
+
+        async function testAIGeneration() {
+            const resultDiv = document.getElementById('ai-result');
+            resultDiv.innerHTML = '<p>Testing AI generation...</p>';
+
+            try {
+                const response = await fetch('http://localhost:8001/ai/generate-tests', {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        org_id: 'demo',
+                        project_id: 'demo',
+                        requirements: 'Test user login on saucedemo.com',
+                        test_type: 'automated',
+                        context: {
+                            app_url: 'https://www.saucedemo.com'
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ AI Generation Working!</h3>
+                        <p><strong>Generated Code:</strong></p>
+                        <div class="code-block">${data.generated_code ? data.generated_code.substring(0, 200) + '...' : 'No code generated'}</div>
+                        <p><strong>Test Cases:</strong> ${data.cases ? data.cases.length : 0}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ AI Generation Failed: ${data.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ AI Generation Error: ${error.message}</p>
+                    <p><strong>Note:</strong> This might be a CORS issue. Try opening this page from <a href="http://localhost:8080/debug_frontend.html" target="_blank">http://localhost:8080/debug_frontend.html</a></p>
+                `;
+            }
+        }
+
+        async function testExecution() {
+            const resultDiv = document.getElementById('execution-result');
+            resultDiv.innerHTML = '<p>Testing test execution...</p>';
+
+            try {
+                const testCode = `
+import { test, expect } from '@playwright/test';
+
+test.describe('Debug Test', () => {
+  test('should work', async ({ page }) => {
+    await page.goto('https://www.saucedemo.com');
+    await expect(page).toHaveTitle(/.*/);
+  });
+});
+`;
+
+                const response = await fetch('http://localhost:8001/tests/run-generated', {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_code: testCode,
+                        test_name: 'debug_test'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const passedTests = data.test_results.filter(r => r.status === 'passed').length;
+                    const totalTests = data.test_results.length;
+                    
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Test Execution Working!</h3>
+                        <p><strong>Results:</strong> ${passedTests}/${totalTests} tests passed</p>
+                        <p><strong>Duration:</strong> ${data.test_results[0]?.duration || 0}ms</p>
+                        <p><strong>Status:</strong> ${data.test_results[0]?.status || 'unknown'}</p>
+                        <p><strong>Note:</strong> Test executed successfully (simulated)</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Test Execution Failed: ${data.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ Test Execution Error: ${error.message}</p>
+                    <p><strong>Note:</strong> This might be a CORS issue. Try opening this page from <a href="http://localhost:8080/debug_frontend.html" target="_blank">http://localhost:8080/debug_frontend.html</a></p>
+                `;
+            }
+        }
+
+        async function testFrontendPages() {
+            const resultDiv = document.getElementById('frontend-result');
+            resultDiv.innerHTML = '<p>Testing frontend pages...</p>';
+
+            try {
+                // Test if frontend is running
+                const response = await fetch('http://localhost:8080');
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Frontend is Running!</h3>
+                        <p><strong>Frontend URL:</strong> <a href="http://localhost:8080" target="_blank">http://localhost:8080</a></p>
+                        <p><strong>Test Runs Page:</strong> <a href="http://localhost:8080/test-runs" target="_blank">http://localhost:8080/test-runs</a></p>
+                        <p><strong>Create Test Case:</strong> <a href="http://localhost:8080/create-test-case" target="_blank">http://localhost:8080/create-test-case</a></p>
+                        <p><strong>Test Cases:</strong> <a href="http://localhost:8080/cases" target="_blank">http://localhost:8080/cases</a></p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Frontend not running (Status: ${response.status})</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Frontend Error: ${error.message}</p>`;
+            }
+        }
+
+        // Auto-run tests on page load
+        window.onload = function() {
+            testBackend();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Execution Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        .code-block { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Execution Demo</h1>
+    
+    <div class="test-section">
+        <h2>Step 1: Generate Test Code</h2>
+        <button onclick="generateTest()">Generate Login Test</button>
+        <div id="generated-code"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Step 2: Run Generated Test</h2>
+        <button onclick="runTest()" id="run-btn" disabled>Run Test</button>
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        let generatedCode = '';
+
+        async function generateTest() {
+            const resultDiv = document.getElementById('generated-code');
+            resultDiv.innerHTML = '<p>Generating test...</p>';
+
+            try {
+                const response = await fetch('http://localhost:8001/ai/generate-tests', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        org_id: 'demo',
+                        project_id: 'demo',
+                        requirements: 'Test user login on saucedemo.com',
+                        test_type: 'automated',
+                        context: {
+                            app_url: 'https://www.saucedemo.com'
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                generatedCode = data.generated_code;
+                
+                resultDiv.innerHTML = `
+                    <h3 class="success">✅ Test Generated!</h3>
+                    <div class="code-block">${generatedCode}</div>
+                `;
+                
+                document.getElementById('run-btn').disabled = false;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function runTest() {
+            const resultDiv = document.getElementById('test-results');
+            const runBtn = document.getElementById('run-btn');
+            
+            runBtn.disabled = true;
+            runBtn.textContent = 'Running Test...';
+            resultDiv.innerHTML = '<p>Executing test...</p>';
+
+            try {
+                const response = await fetch('http://localhost:8001/tests/run-generated', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_code: generatedCode,
+                        test_name: 'login_test'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const passedTests = data.test_results.filter(r => r.status === 'passed').length;
+                    const totalTests = data.test_results.length;
+                    
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Test Execution Complete!</h3>
+                        <p><strong>Results:</strong> ${passedTests}/${totalTests} tests passed</p>
+                        <div class="code-block">${JSON.stringify(data, null, 2)}</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3 class="error">❌ Test Execution Failed</h3>
+                        <p><strong>Error:</strong> ${data.error}</p>
+                        <div class="code-block">${JSON.stringify(data, null, 2)}</div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run Test';
+            }
+        }
+    </script>
+</body>
+</html>
+
+

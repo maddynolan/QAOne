@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Routing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-link { display: block; margin: 10px 0; padding: 10px; background: #f0f0f0; text-decoration: none; color: #333; border-radius: 5px; }
+        .test-link:hover { background: #e0e0e0; }
+        .status { margin-left: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🔗 Test Frontend Routing</h1>
+    
+    <h2>Correct URLs to test:</h2>
+    
+    <a href="http://localhost:8080/" class="test-link">
+        🏠 Dashboard - http://localhost:8080/
+        <span class="status" id="dashboard-status">Testing...</span>
+    </a>
+    
+    <a href="http://localhost:8080/cases" class="test-link">
+        📋 Test Cases - http://localhost:8080/cases
+        <span class="status" id="cases-status">Testing...</span>
+    </a>
+    
+    <a href="http://localhost:8080/cases/create" class="test-link">
+        ➕ Create Test Case - http://localhost:8080/cases/create
+        <span class="status" id="create-status">Testing...</span>
+    </a>
+    
+    <a href="http://localhost:8080/runs" class="test-link">
+        ▶️ Test Runs - http://localhost:8080/runs
+        <span class="status" id="runs-status">Testing...</span>
+    </a>
+    
+    <a href="http://localhost:8080/plans" class="test-link">
+        📄 Test Plans - http://localhost:8080/plans
+        <span class="status" id="plans-status">Testing...</span>
+    </a>
+    
+    <h2>❌ Wrong URLs (these will show 404):</h2>
+    
+    <a href="http://localhost:8080/test-cases" class="test-link" style="background: #ffe6e6;">
+        ❌ /test-cases (WRONG)
+    </a>
+    
+    <a href="http://localhost:8080/create-test-case" class="test-link" style="background: #ffe6e6;">
+        ❌ /create-test-case (WRONG)
+    </a>
+    
+    <a href="http://localhost:8080/test-runs" class="test-link" style="background: #ffe6e6;">
+        ❌ /test-runs (WRONG)
+    </a>
+    
+    <h2>🔍 Instructions:</h2>
+    <ol>
+        <li>Click on the <strong>correct URLs</strong> above (green background)</li>
+        <li>Each should load the QA AI platform with the correct page</li>
+        <li>If you see 404, you're using the wrong URL format</li>
+        <li>Make sure both servers are running:
+            <ul>
+                <li>Backend: <code>cd backend && .\venv_new\Scripts\python.exe test_simple.py</code></li>
+                <li>Frontend: <code>npm run dev</code></li>
+            </ul>
+        </li>
+    </ol>
+
+    <script>
+        // Test each route
+        async function testRoute(url, statusId) {
+            try {
+                const response = await fetch(url);
+                const statusElement = document.getElementById(statusId);
+                
+                if (response.ok) {
+                    statusElement.textContent = '✅ Working';
+                    statusElement.className = 'status success';
+                } else {
+                    statusElement.textContent = `❌ Error ${response.status}`;
+                    statusElement.className = 'status error';
+                }
+            } catch (error) {
+                const statusElement = document.getElementById(statusId);
+                statusElement.textContent = `❌ ${error.message}`;
+                statusElement.className = 'status error';
+            }
+        }
+
+        // Test all routes
+        testRoute('http://localhost:8080/', 'dashboard-status');
+        testRoute('http://localhost:8080/cases', 'cases-status');
+        testRoute('http://localhost:8080/cases/create', 'create-status');
+        testRoute('http://localhost:8080/runs', 'runs-status');
+        testRoute('http://localhost:8080/plans', 'plans-status');
+    </script>
+</body>
+</html>

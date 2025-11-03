@@ -191,3 +191,5 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
     </Card>
   );
 };
+
+

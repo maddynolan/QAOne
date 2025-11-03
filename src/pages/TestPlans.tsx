@@ -1,6 +1,8 @@
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,35 @@ const testPlans = [
 
 export default function TestPlans() {
   const navigate = useNavigate();
+  const [expandingPlanId, setExpandingPlanId] = useState<number | null>(null);
+
+  const expandPlanWithAI = async (planId: number) => {
+    setExpandingPlanId(planId);
+    try {
+      toast.loading("Expanding test plan with AI...");
+      const response = await fetch(`http://localhost:8001/ai/generate-tests?planId=${planId}&mode=ui`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      
+      const data = await response.json();
+      if (data.status === "success" || data.cases) {
+        toast.dismiss();
+        toast.success("Plan expanded with additional test scenarios!");
+        // You can update the plan here or navigate to edit page
+        navigate(`/plans/edit/${planId}`, { 
+          state: { generatedCases: data.cases || [] } 
+        });
+      } else {
+        toast.error("Failed to expand plan");
+      }
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setExpandingPlanId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -57,6 +88,15 @@ export default function TestPlans() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => expandPlanWithAI(plan.id)}
+                  disabled={expandingPlanId === plan.id}
+                >
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {expandingPlanId === plan.id ? "Expanding..." : "Expand with AI"}
+                </Button>
                 <Button 
                   variant="outline" 
                   size="sm"

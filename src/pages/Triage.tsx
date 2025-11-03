@@ -63,7 +63,19 @@ export default function Triage() {
       };
 
       console.log("AI analysis request:", request);
-      const analysis = await customLLMService.analyzeDefect(request);
+      
+      // Use the new Ollama triage endpoint
+      const response = await fetch("http://localhost:8001/ai/triage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const analysis = await response.json();
       console.log("AI analysis response:", analysis);
       
       // Update the issue with AI analysis

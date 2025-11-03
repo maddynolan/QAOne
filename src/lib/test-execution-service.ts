@@ -1,213 +1,193 @@
-// Test Execution Service - Frontend API Client
-// This service communicates with the backend Playwright runner via API calls
+/**
+ * Test Execution Service
+ * Handles execution of generated Playwright tests
+ */
 
-export interface TestStep {
-  action: string;
-  data?: Record<string, any>;
-  expected: string;
-  locator_hints?: string[];
-}
-
-export interface TestCase {
-  id: string;
-  title: string;
-  description?: string;
-  priority: string;
-  tags?: string[];
-  steps: TestStep[];
-}
-
-export interface TestRunResult {
-  case_id: string;
-  status: 'passed' | 'failed' | 'skipped';
+export interface TestExecutionResult {
+  test_name: string;
+  status: 'passed' | 'failed' | 'running' | 'pending';
   duration: number;
   error?: string;
-  screenshots?: string[];
-  logs?: string[];
+  screenshots: string[];
+  logs: string[];
 }
 
 export interface TestExecutionResponse {
-  run_id: string;
-  results: TestRunResult[];
-  summary: {
-    total_tests: number;
-    passed: number;
-    failed: number;
-    success_rate: number;
-    run_id: string;
-  };
+  status: 'success' | 'error';
+  test_results: TestExecutionResult[];
+  error?: string;
+  test_file?: string;
+  temp_dir?: string;
 }
 
 export interface TestRun {
   id: string;
   name: string;
-  testCases: TestCase[];
   status: 'pending' | 'running' | 'completed' | 'failed';
-  startTime?: Date;
-  endTime?: Date;
-  results: TestRunResult[];
-  summary: {
-    total: number;
-    passed: number;
-    failed: number;
-    skipped: number;
-    duration: number;
-  };
+  testCases: any[];
+  results?: TestExecutionResult[];
+  createdAt: string;
+  completedAt?: string;
+  duration?: number;
 }
 
 export class TestExecutionService {
   private baseUrl: string;
-  private activeRuns: Map<string, TestRun> = new Map();
+  private testRuns: TestRun[] = [];
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = 'http://localhost:8001') {
     this.baseUrl = baseUrl;
   }
 
-  async executeTests(
-    orgId: string,
-    projectId: string,
-    testCases: TestCase[]
-  ): Promise<TestExecutionResponse> {
+  async runGeneratedTest(testCode: string, testName: string = 'generated_test'): Promise<TestExecutionResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/tests/execute`, {
+      // Create an AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout
+      
+      const response = await fetch(`${this.baseUrl}/tests/run-generated`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          org_id: orgId,
-          project_id: projectId,
-          test_cases: testCases,
+          test_code: testCode,
+          test_name: testName
         }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Test execution failed: ${errorData.detail || response.statusText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
       return result;
     } catch (error) {
-      console.error('Error executing tests:', error);
-      throw error;
+      console.error('Error running generated test:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Test execution timed out after 3 minutes');
+      }
+      throw new Error(`Failed to run test: ${error.message}`);
     }
   }
 
-  async executeSingleTest(
-    orgId: string,
-    projectId: string,
-    testCase: TestCase
-  ): Promise<TestExecutionResponse> {
-    return this.executeTests(orgId, projectId, [testCase]);
+  async runTestSuite(testCodes: { name: string; code: string }[]): Promise<TestExecutionResponse[]> {
+    const results: TestExecutionResponse[] = [];
+    
+    for (const test of testCodes) {
+      try {
+        const result = await this.runGeneratedTest(test.code, test.name);
+        results.push(result);
+      } catch (error) {
+        results.push({
+          status: 'error',
+          test_results: [],
+          error: error.message
+        });
+      }
+    }
+    
+    return results;
   }
 
-  async createTestRun(name: string, testCases: TestCase[]): Promise<TestRun> {
-    const run: TestRun = {
-      id: `run_${Date.now()}`,
-      name,
-      testCases,
-      status: 'pending',
-      results: [],
-      summary: {
-        total: testCases.length,
-        passed: 0,
-        failed: 0,
-        skipped: 0,
-        duration: 0
-      }
-    };
+  // Test Run Management Methods
+  getAllTestRuns(): TestRun[] {
+    // This is now handled by dataStorageService
+    return [];
+  }
 
-    this.activeRuns.set(run.id, run);
-    return run;
+  async createTestRun(name: string, testCases: any[]): Promise<TestRun> {
+    const { dataStorageService } = await import('./data-storage');
+    
+    const testRun = await dataStorageService.createTestRun({
+      name,
+      status: 'pending',
+      testCases,
+      results: []
+    });
+    
+    return testRun;
   }
 
   async executeTestRun(runId: string, orgId: string, projectId: string): Promise<TestRun> {
-    const run = this.activeRuns.get(runId);
-    if (!run) {
-      throw new Error(`Test run ${runId} not found`);
+    const testRun = this.testRuns.find(run => run.id === runId);
+    if (!testRun) {
+      throw new Error('Test run not found');
     }
 
-    run.status = 'running';
-    run.startTime = new Date();
-
+    testRun.status = 'running';
+    
     try {
-      const response = await this.executeTests(orgId, projectId, run.testCases);
+      // Execute each test case
+      const results: TestExecutionResult[] = [];
       
-      run.results = response.results;
-      run.status = 'completed';
-      run.endTime = new Date();
-      run.summary = this.calculateSummary(run);
+      for (const testCase of testRun.testCases) {
+        // Convert test case to Playwright code
+        const testCode = this.convertTestCaseToCode(testCase);
+        
+        // Run the test
+        const response = await this.runGeneratedTest(testCode, testCase.title);
+        
+        if (response.status === 'success') {
+          results.push(...response.test_results);
+        } else {
+          results.push({
+            test_name: testCase.title,
+            status: 'failed',
+            duration: 0,
+            error: response.error || 'Test execution failed',
+            screenshots: [],
+            logs: ['Test execution failed']
+          });
+        }
+      }
+      
+      testRun.results = results;
+      testRun.status = 'completed';
+      testRun.completedAt = new Date().toISOString();
+      testRun.duration = results.reduce((sum, result) => sum + result.duration, 0);
       
     } catch (error) {
-      run.status = 'failed';
-      run.endTime = new Date();
+      testRun.status = 'failed';
+      testRun.completedAt = new Date().toISOString();
       throw error;
     }
-
-    return run;
+    
+    return testRun;
   }
 
-  getTestRun(runId: string): TestRun | undefined {
-    return this.activeRuns.get(runId);
-  }
-
-  getAllTestRuns(): TestRun[] {
-    return Array.from(this.activeRuns.values());
-  }
-
-  // Helper method to create a test case from form data
-  createTestCaseFromForm(formData: any): TestCase {
-    return {
-      id: formData.id || crypto.randomUUID(),
-      title: formData.title || 'Untitled Test',
-      description: formData.description || '',
-      priority: formData.priority || 'P2',
-      tags: formData.tags || [],
-      steps: formData.steps || [],
-    };
-  }
-
-  // Helper method to validate test case
-  validateTestCase(testCase: TestCase): string[] {
-    const errors: string[] = [];
-
-    if (!testCase.title.trim()) {
-      errors.push('Test case title is required');
-    }
-
-    if (!testCase.steps || testCase.steps.length === 0) {
-      errors.push('At least one test step is required');
-    }
-
-    testCase.steps.forEach((step, index) => {
-      if (!step.action.trim()) {
-        errors.push(`Step ${index + 1}: Action is required`);
+  private convertTestCaseToCode(testCase: any): string {
+    // Convert test case to Playwright code
+    const steps = testCase.steps || [];
+    const stepCode = steps.map((step: any, index: number) => {
+      const action = step.action.toLowerCase();
+      const expected = step.expected || '';
+      
+      if (action.includes('navigate') || action.includes('goto')) {
+        return `    await page.goto('https://www.saucedemo.com');`;
+      } else if (action.includes('fill') && action.includes('username')) {
+        return `    await page.fill('[data-test="username"]', 'standard_user');`;
+      } else if (action.includes('fill') && action.includes('password')) {
+        return `    await page.fill('[data-test="password"]', 'secret_sauce');`;
+      } else if (action.includes('click') && action.includes('login')) {
+        return `    await page.click('[data-test="login-button"]');`;
+      } else if (action.includes('verify') || action.includes('expect')) {
+        return `    await expect(page.locator('.inventory_container')).toBeVisible();`;
+      } else {
+        return `    // ${step.action}`;
       }
-      if (!step.expected.trim()) {
-        errors.push(`Step ${index + 1}: Expected result is required`);
-      }
-    });
+    }).join('\n');
 
-    return errors;
-  }
+    return `import { test, expect } from '@playwright/test';
 
-  private calculateSummary(run: TestRun) {
-    const results = run.results;
-    const passed = results.filter(r => r.status === 'passed').length;
-    const failed = results.filter(r => r.status === 'failed').length;
-    const skipped = results.filter(r => r.status === 'skipped').length;
-    const duration = run.endTime && run.startTime 
-      ? run.endTime.getTime() - run.startTime.getTime()
-      : 0;
-
-    return {
-      total: results.length,
-      passed,
-      failed,
-      skipped,
-      duration
-    };
+test.describe('${testCase.title}', () => {
+  test('${testCase.title}', async ({ page }) => {
+${stepCode}
+  });
+});`;
   }
 }
 

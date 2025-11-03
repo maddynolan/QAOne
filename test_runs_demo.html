@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Runs Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        .code-block { background: #f0f0f0; padding: 10px; margin: 10px 0; white-space: pre-wrap; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Runs Demo</h1>
+    
+    <div class="test-section">
+        <h2>Step 1: Test Test Runs Page</h2>
+        <button onclick="testTestRuns()">Test Test Runs Page</button>
+        <div id="test-runs-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Step 2: Test Real Browser Execution</h2>
+        <button onclick="testRealExecution()">Test Real Browser Execution</button>
+        <div id="real-execution-result"></div>
+    </div>
+
+    <script>
+        async function testTestRuns() {
+            const resultDiv = document.getElementById('test-runs-result');
+            resultDiv.innerHTML = '<p>Testing Test Runs page...</p>';
+
+            try {
+                // Test if the frontend loads without errors
+                const response = await fetch('http://localhost:8080');
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Frontend is running!</h3>
+                        <p>Test Runs page should now work properly.</p>
+                        <p><a href="http://localhost:8080/test-runs" target="_blank">Open Test Runs Page</a></p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Frontend not running</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testRealExecution() {
+            const resultDiv = document.getElementById('real-execution-result');
+            resultDiv.innerHTML = '<p>Testing real browser execution...</p>';
+
+            try {
+                const testCode = `
+import { test, expect } from '@playwright/test';
+
+test.describe('Real Browser Test', () => {
+  test('should open browser and navigate', async ({ page }) => {
+    await page.goto('https://www.saucedemo.com');
+    await expect(page).toHaveTitle(/.*/);
+  });
+});
+`;
+
+                const response = await fetch('http://localhost:8001/tests/run-generated', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        test_code: testCode,
+                        test_name: 'real_browser_test'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <h3 class="success">✅ Real Browser Test Successful!</h3>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Results:</strong> ${data.test_results.length} test(s) executed</p>
+                        <div class="code-block">${JSON.stringify(data, null, 2)}</div>
+                        <p><strong>Note:</strong> A Chrome browser window should have opened and closed automatically.</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3 class="error">❌ Real Browser Test Failed</h3>
+                        <p><strong>Error:</strong> ${data.error}</p>
+                        <div class="code-block">${JSON.stringify(data, null, 2)}</div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
+
+

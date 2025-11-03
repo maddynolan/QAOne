@@ -36,12 +36,12 @@ export interface TestPlan {
 export interface TestRun {
   id: string;
   name: string;
-  status: 'running' | 'passed' | 'failed' | 'queued';
-  progress: number;
-  tests: string;
-  startTime: string;
-  endTime?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  testCases: any[];
   results?: any[];
+  createdAt: string;
+  completedAt?: string;
+  duration?: number;
 }
 
 export interface Defect {
@@ -59,149 +59,226 @@ export interface Defect {
 }
 
 class DataStorageService {
-  private storageKey = 'qa-ai-platform-data';
+  private baseUrl: string;
 
-  private getStorageData() {
-    try {
-      const data = localStorage.getItem(this.storageKey);
-      return data ? JSON.parse(data) : {
-        testCases: [],
-        testPlans: [],
-        testRuns: [],
-        defects: []
-      };
-    } catch (error) {
-      console.error('Error reading from localStorage:', error);
-      return {
-        testCases: [],
-        testPlans: [],
-        testRuns: [],
-        defects: []
-      };
-    }
-  }
-
-  private saveStorageData(data: any) {
-    try {
-      localStorage.setItem(this.storageKey, JSON.stringify(data));
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-    }
+  constructor(baseUrl: string = 'http://localhost:8001') {
+    this.baseUrl = baseUrl;
   }
 
   // Test Case Management
   async createTestCase(testCase: Omit<TestCase, 'id' | 'createdAt' | 'updatedAt'>): Promise<TestCase> {
-    const data = this.getStorageData();
-    const newTestCase: TestCase = {
-      ...testCase,
-      id: this.generateId(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    data.testCases.push(newTestCase);
-    this.saveStorageData(data);
-    
-    return newTestCase;
+    try {
+      const response = await fetch(`${this.baseUrl}/test-cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testCase)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create test case: ${response.statusText}`);
+      }
+      
+      const { id } = await response.json();
+      return {
+        ...testCase,
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as TestCase;
+    } catch (error) {
+      console.error('Error creating test case:', error);
+      throw error;
+    }
   }
 
   async getTestCases(): Promise<TestCase[]> {
-    const data = this.getStorageData();
-    return data.testCases.sort((a: TestCase, b: TestCase) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    try {
+      const response = await fetch(`${this.baseUrl}/test-cases`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get test cases: ${response.statusText}`);
+      }
+      
+      const { testCases } = await response.json();
+      return testCases || [];
+    } catch (error) {
+      console.error('Error getting test cases:', error);
+      return [];
+    }
   }
 
   async getTestCase(id: string): Promise<TestCase | null> {
-    const data = this.getStorageData();
-    return data.testCases.find((tc: TestCase) => tc.id === id) || null;
+    try {
+      const response = await fetch(`${this.baseUrl}/test-cases/${id}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to get test case: ${response.statusText}`);
+      }
+      
+      return await response.json() as TestCase;
+    } catch (error) {
+      console.error('Error getting test case:', error);
+      return null;
+    }
   }
 
   async updateTestCase(id: string, updates: Partial<TestCase>): Promise<TestCase | null> {
-    const data = this.getStorageData();
-    const index = data.testCases.findIndex((tc: TestCase) => tc.id === id);
-    
-    if (index === -1) return null;
-    
-    data.testCases[index] = {
-      ...data.testCases[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.saveStorageData(data);
-    return data.testCases[index];
+    try {
+      const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to update test case: ${response.statusText}`);
+      }
+      
+      const updated = await response.json();
+      return await this.getTestCase(id);
+    } catch (error) {
+      console.error('Error updating test case:', error);
+      return null;
+    }
   }
 
   async deleteTestCase(id: string): Promise<boolean> {
-    const data = this.getStorageData();
-    const index = data.testCases.findIndex((tc: TestCase) => tc.id === id);
-    
-    if (index === -1) return false;
-    
-    data.testCases.splice(index, 1);
-    this.saveStorageData(data);
-    return true;
+    try {
+      const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) return false;
+        throw new Error(`Failed to delete test case: ${response.statusText}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting test case:', error);
+      return false;
+    }
   }
 
   // Test Plan Management
   async createTestPlan(testPlan: Omit<TestPlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<TestPlan> {
-    const data = this.getStorageData();
-    const newTestPlan: TestPlan = {
-      ...testPlan,
-      id: this.generateId(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    data.testPlans.push(newTestPlan);
-    this.saveStorageData(data);
-    
-    return newTestPlan;
+    try {
+      const response = await fetch(`${this.baseUrl}/test-plans`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPlan)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create test plan: ${response.statusText}`);
+      }
+      
+      const { id } = await response.json();
+      return {
+        ...testPlan,
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as TestPlan;
+    } catch (error) {
+      console.error('Error creating test plan:', error);
+      throw error;
+    }
   }
 
   async getTestPlans(): Promise<TestPlan[]> {
-    const data = this.getStorageData();
-    return data.testPlans.sort((a: TestPlan, b: TestPlan) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    try {
+      const response = await fetch(`${this.baseUrl}/test-plans`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get test plans: ${response.statusText}`);
+      }
+      
+      const { testPlans } = await response.json();
+      return testPlans || [];
+    } catch (error) {
+      console.error('Error getting test plans:', error);
+      return [];
+    }
   }
 
   // Test Run Management
   async createTestRun(testRun: Omit<TestRun, 'id' | 'startTime'>): Promise<TestRun> {
-    const data = this.getStorageData();
-    const newTestRun: TestRun = {
-      ...testRun,
-      id: this.generateId(),
-      startTime: new Date().toISOString()
-    };
-    
-    data.testRuns.push(newTestRun);
-    this.saveStorageData(data);
-    
-    return newTestRun;
+    try {
+      const response = await fetch(`${this.baseUrl}/test-runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testRun)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create test run: ${response.statusText}`);
+      }
+      
+      const { id } = await response.json();
+      return {
+        ...testRun,
+        id,
+        createdAt: new Date().toISOString()
+      } as TestRun;
+    } catch (error) {
+      console.error('Error creating test run:', error);
+      throw error;
+    }
   }
 
   async getTestRuns(): Promise<TestRun[]> {
-    const data = this.getStorageData();
-    return data.testRuns.sort((a: TestRun, b: TestRun) => 
-      new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-    );
+    try {
+      const response = await fetch(`${this.baseUrl}/test-runs`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get test runs: ${response.statusText}`);
+      }
+      
+      const { testRuns } = await response.json();
+      return testRuns || [];
+    } catch (error) {
+      console.error('Error getting test runs:', error);
+      return [];
+    }
   }
 
   async updateTestRun(id: string, updates: Partial<TestRun>): Promise<TestRun | null> {
-    const data = this.getStorageData();
-    const index = data.testRuns.findIndex((tr: TestRun) => tr.id === id);
-    
-    if (index === -1) return null;
-    
-    data.testRuns[index] = {
-      ...data.testRuns[index],
-      ...updates
-    };
-    
-    this.saveStorageData(data);
-    return data.testRuns[index];
+    try {
+      const response = await fetch(`${this.baseUrl}/test-runs/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to update test run: ${response.statusText}`);
+      }
+      
+      return await this.getTestRun(id);
+    } catch (error) {
+      console.error('Error updating test run:', error);
+      return null;
+    }
+  }
+
+  async getTestRun(id: string): Promise<TestRun | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/test-runs/${id}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to get test run: ${response.statusText}`);
+      }
+      
+      return await response.json() as TestRun;
+    } catch (error) {
+      console.error('Error getting test run:', error);
+      return null;
+    }
   }
 
   // Defect Management
