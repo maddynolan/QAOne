@@ -38,13 +38,14 @@ async def store_ai_generation(
     mode: Optional[str] = None,
     endpoint: Optional[str] = None,
     latency_ms: Optional[int] = None,
-    org_id: Optional[str] = None
-) -> bool:
+    org_id: Optional[str] = None,
+    task_category: Optional[str] = None
+) -> Optional[str]:
     """
     Store AI generation in database for fine-tuning
     
     Returns:
-        True if stored successfully, False otherwise
+        Generation ID if stored successfully, None otherwise
     """
     try:
         from app.services.database import get_database_client
@@ -64,6 +65,23 @@ async def store_ai_generation(
                 # Keep as text if not valid JSON
                 pass
             
+            # Determine task category from endpoint
+            if not task_category and endpoint:
+                if "jira-to-testcases" in endpoint or "generate-tests" in endpoint:
+                    task_category = "manual"
+                elif "testcase-to-playwright" in endpoint or "convert-to-playwright" in endpoint:
+                    task_category = "automation"
+                elif "api" in endpoint.lower():
+                    task_category = "api"
+                elif "triage" in endpoint.lower():
+                    task_category = "triage"
+                elif "performance" in endpoint.lower() or "perf" in endpoint.lower():
+                    task_category = "performance"
+                elif "security" in endpoint.lower():
+                    task_category = "security"
+                elif "accessibility" in endpoint.lower() or "a11y" in endpoint.lower():
+                    task_category = "accessibility"
+            
             data = {
                 "project_id": project_id,
                 "org_id": org_id,
@@ -74,18 +92,21 @@ async def store_ai_generation(
                 "mode": mode,
                 "endpoint": endpoint,
                 "task": endpoint.replace("/ai/", "").replace("-", "_") if endpoint else None,  # e.g., "jira_to_testcases"
+                "task_category": task_category,
                 "latency_ms": latency_ms
             }
             
             # Try direct Postgres first
             if hasattr(client, 'getconn'):
                 # Direct Postgres connection
-                await execute_insert("ai_generations", data)
-                return True
+                generation_id = await execute_insert("ai_generations", data)
+                return generation_id
             elif hasattr(client, 'table'):
                 # Supabase client
                 result = client.table("ai_generations").insert(data).execute()
-                return True
+                if result.data and len(result.data) > 0:
+                    return result.data[0].get("id")
+                return None
         else:
             # Fallback: Log to file for later import
             log_file = os.getenv("AI_GENERATIONS_LOG", "ai_generations.jsonl")
@@ -104,9 +125,10 @@ async def store_ai_generation(
             with open(log_file, "a") as f:
                 f.write(json.dumps(log_entry) + "\n")
             
-            return True
+            # Return a placeholder ID for file logging
+            return f"log_{datetime.utcnow().timestamp()}"
     except Exception as e:
         print(f"Error storing AI generation: {str(e)}")
         # Don't fail the request if storage fails
-        return False
+        return None
 

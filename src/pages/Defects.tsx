@@ -4,53 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const defects = [
-  { 
-    id: 1, 
-    title: "Login button not responding", 
-    severity: "critical", 
-    priority: "high",
-    status: "open", 
-    assignedTo: "John Doe",
-    testCase: "User Login Flow",
-    reportedDate: "2024-01-15",
-    environment: "QA"
-  },
-  { 
-    id: 2, 
-    title: "Payment API returns 500 error", 
-    severity: "blocker", 
-    priority: "critical",
-    status: "in-progress", 
-    assignedTo: "Jane Smith",
-    testCase: "Payment Processing",
-    reportedDate: "2024-01-14",
-    environment: "Production"
-  },
-  { 
-    id: 3, 
-    title: "UI alignment issue on mobile", 
-    severity: "minor", 
-    priority: "low",
-    status: "fixed", 
-    assignedTo: "Bob Johnson",
-    testCase: "Responsive Design",
-    reportedDate: "2024-01-13",
-    environment: "Staging"
-  },
-  { 
-    id: 4, 
-    title: "Password validation missing", 
-    severity: "major", 
-    priority: "high",
-    status: "retest", 
-    assignedTo: "Alice Brown",
-    testCase: "User Registration",
-    reportedDate: "2024-01-12",
-    environment: "Dev"
-  },
-];
+import { useState, useEffect } from "react";
+import { dataStorageService, Defect } from "@/lib/data-storage";
+import { toast } from "sonner";
 
 const getSeverityColor = (severity: string) => {
   switch (severity) {
@@ -76,6 +32,38 @@ const getStatusColor = (status: string) => {
 
 export default function Defects() {
   const navigate = useNavigate();
+  const [defects, setDefects] = useState<Defect[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDefects();
+  }, []);
+
+  const loadDefects = async () => {
+    try {
+      setLoading(true);
+      const loadedDefects = await dataStorageService.getDefects();
+      setDefects(loadedDefects);
+    } catch (error) {
+      console.error("Error loading defects:", error);
+      toast.error("Failed to load defects");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">Defects</h1>
+            <p className="text-muted-foreground mt-1">Loading defects...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -101,44 +89,54 @@ export default function Defects() {
         </Button>
       </div>
 
-      <div className="grid gap-4">
-        {defects.map((defect) => (
-          <Card key={defect.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="text-xl">{defect.title}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Test Case: {defect.testCase} • Reported {defect.reportedDate} • {defect.environment}
+      {defects.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">No defects found. Create your first defect to get started.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {defects.map((defect) => (
+            <Card key={defect.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-xl">{defect.title}</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {defect.description || "No description"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Reported {new Date(defect.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <Badge variant={getSeverityColor(defect.severity)}>
+                      {defect.severity}
+                    </Badge>
+                    <Badge variant={getStatusColor(defect.status)}>
+                      {defect.status}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-muted-foreground">
+                    Priority: <span className="font-medium text-foreground">{defect.priority}</span>
                   </p>
-                </div>
-                <div className="flex gap-2 flex-wrap justify-end">
-                  <Badge variant={getSeverityColor(defect.severity)}>
-                    {defect.severity}
-                  </Badge>
-                  <Badge variant={getStatusColor(defect.status)}>
-                    {defect.status}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">
-                  Assigned to: <span className="font-medium text-foreground">{defect.assignedTo}</span>
-                </p>
-                <div className="flex gap-2">
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => navigate(`/defects/edit/${defect.id}`)}
+                    >
+                      Edit
+                    </Button>
                   <Button 
                     variant="outline" 
                     size="sm"
                     onClick={() => navigate(`/defects/edit/${defect.id}`)}
-                  >
-                    Edit
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => navigate(`/defects/${defect.id}`)}
                   >
                     View Details
                   </Button>
@@ -147,7 +145,8 @@ export default function Defects() {
             </CardContent>
           </Card>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

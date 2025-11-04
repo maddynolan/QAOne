@@ -50,7 +50,7 @@ async def store_test_run(
             "runner_version": runner_version,
             "started_at": started_at,
             "completed_at": completed_at,
-            "created_by": created_by or "system"
+            "created_by": created_by or "22222222-2222-2222-2222-222222222222"  # DEFAULT_USER_ID
         }
         
         # Try direct Postgres first
@@ -110,9 +110,16 @@ async def store_test_run_step(
         if hasattr(client, 'getconn'):
             try:
                 from app.services.postgres_direct import execute_insert
-                return await execute_insert("test_run_steps", data)
+                step_id = await execute_insert("test_run_steps", data)
+                if step_id:
+                    logger.info(f"Created test_run_step: id={step_id}, run_id={run_id}, case_id={case_id}, title={title}")
+                else:
+                    logger.warning(f"Failed to create test_run_step: execute_insert returned None")
+                return step_id
             except Exception as e:
                 logger.error(f"Postgres insert error: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return None
         elif hasattr(client, 'table'):
             result = client.table("test_run_steps").insert(data).execute()

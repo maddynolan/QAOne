@@ -65,7 +65,7 @@ export default function Triage() {
       console.log("AI analysis request:", request);
       
       // Use the new Ollama triage endpoint
-      const response = await fetch("http://localhost:8001/ai/triage", {
+      const response = await fetch("http://localhost:8000/ai/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request)

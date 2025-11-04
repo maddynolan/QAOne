@@ -91,7 +91,7 @@ export interface OptimizationSuggestionResponse {
 class CustomLLMService {
   private apiBaseUrl: string;
 
-  constructor(apiBaseUrl: string = 'http://localhost:8001') {
+  constructor(apiBaseUrl: string = 'http://localhost:8000') {
     this.apiBaseUrl = apiBaseUrl;
   }
 
@@ -292,7 +292,7 @@ function mapPriorityFromLikelihood(likelihood: number): 'low' | 'medium' | 'high
 import { mockAIService } from './mock-ai-service';
 
 // Get API base URL from environment or use default
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // Use real backend API
 export const customLLMService = new CustomLLMService(apiBaseUrl);

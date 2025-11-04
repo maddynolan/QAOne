@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { dataStorageService, TestCase } from "@/lib/data-storage";
+import { QualityRating } from "@/components/QualityRating";
+import { EditAndImprove } from "@/components/EditAndImprove";
 
 const getPriorityColor = (priority: string) => {
   switch (priority) {
@@ -22,15 +24,28 @@ export default function TestCases() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [lastGenerationId, setLastGenerationId] = useState<string | null>(null);
+  const [lastGenerationOutput, setLastGenerationOutput] = useState<string>("");
 
   useEffect(() => {
     loadTestCases();
   }, []);
 
+  // Reload when component becomes visible (e.g., after navigation)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadTestCases();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   const loadTestCases = async () => {
     try {
       setLoading(true);
-      await dataStorageService.initializeSampleData(); // Initialize sample data if needed
+      // Load test cases directly - initialization happens once on app start
       const cases = await dataStorageService.getTestCases();
       setTestCases(cases);
     } catch (error) {
@@ -50,6 +65,103 @@ export default function TestCases() {
       } catch (error) {
         console.error("Error deleting test case:", error);
         toast.error("Failed to delete test case");
+      }
+    }
+  };
+
+  const executeSingleTestRun = async (runId: string, testCase: TestCase) => {
+    try {
+      // Use default IDs that match backend constants
+      const orgId = "00000000-0000-0000-0000-000000000000"; // DEFAULT_ORG_ID
+      const projectId = "11111111-1111-1111-1111-111111111111"; // DEFAULT_PROJECT_ID
+      
+      // Show loading toast (this will be dismissed on success/error)
+      const loadingToastId = toast.loading("Executing test...");
+      
+      const response = await fetch("http://localhost:8000/tests/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          org_id: orgId,
+          project_id: projectId,
+          test_cases: [{
+            id: testCase.id,
+            title: testCase.name,
+            description: testCase.description,
+            priority: testCase.priority,
+            tags: testCase.tags,
+            steps: testCase.steps.map(step => ({
+              action: step.action,
+              data: {},
+              expected: step.expectedResult,
+              locator_hints: []
+            }))
+          }]
+        })
+      });
+      
+      toast.dismiss(loadingToastId);
+      
+      if (!response.ok) {
+        let errorMessage = "Test execution failed";
+        try {
+          const errorText = await response.text();
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorText || errorMessage;
+        } catch {
+          errorMessage = await response.text() || errorMessage;
+        }
+        
+        // Update test run status to failed
+        try {
+          await fetch(`http://localhost:8000/test-runs/${runId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: "failed",
+              completed_at: new Date().toISOString()
+            })
+          });
+        } catch (updateError) {
+          console.error("Failed to update run status:", updateError);
+        }
+        
+        toast.error(errorMessage);
+        return; // Don't throw - we've handled it
+      }
+      
+      const result = await response.json();
+      
+      // Update test run status in backend
+      await fetch(`http://localhost:8001/test-runs/${runId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: result.summary?.failed === 0 ? "completed" : "failed",
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString()
+        })
+      });
+      
+      toast.success(`Test execution completed! ${result.summary?.passed || 0} passed, ${result.summary?.failed || 0} failed`);
+      
+    } catch (error: any) {
+      console.error("Error executing test:", error);
+      // Only show error if it's not already shown
+      toast.error(`Test execution error: ${error.message || "Unknown error"}`);
+      
+      // Update test run status to failed
+      try {
+        await fetch(`http://localhost:8001/test-runs/${runId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "failed",
+            completed_at: new Date().toISOString()
+          })
+        });
+      } catch (updateError) {
+        console.error("Failed to update run status:", updateError);
       }
     }
   };
@@ -91,26 +203,64 @@ export default function TestCases() {
               if (!jiraStory) return;
               
               try {
-                toast.loading("Generating test cases with AI...");
-                const response = await fetch("http://localhost:8001/ai/jira-to-testcases", {
+                const loadingToast = toast.loading("Generating test cases with AI... This may take 60-90 seconds.");
+                const response = await fetch("http://localhost:8000/ai/jira-to-testcases", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ jira: jiraStory, mode: "ui" })
+                  body: JSON.stringify({ 
+                    jira: jiraStory, 
+                    mode: "ui",
+                    project_id: "11111111-1111-1111-1111-111111111111",
+                    org_id: "00000000-0000-0000-0000-000000000000"
+                  }),
+                  signal: AbortSignal.timeout(180000) // 3 minutes timeout
                 });
                 
+                toast.dismiss(loadingToast);
+                
+                if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                  throw new Error(errorData.detail || `Server error: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                if (data.status === "success") {
-                  toast.dismiss();
-                  toast.success(`Generated ${data.test_cases.length} test cases!`);
+                if (data.status === "success" && data.test_cases && data.test_cases.length > 0) {
+                  const latencySeconds = data.latency_ms ? Math.round(data.latency_ms / 1000) : 0;
+                  const cacheInfo = data.cache_hit ? ` (cached from ${data.cache_level})` : '';
+                  toast.success(
+                    `Generated ${data.test_cases.length} test cases in ${latencySeconds}s${cacheInfo}!`,
+                    {
+                      duration: 5000,
+                      action: data.generation_id ? {
+                        label: "Rate Quality",
+                        onClick: () => {
+                          setLastGenerationId(data.generation_id);
+                          setLastGenerationOutput(JSON.stringify(data.test_cases, null, 2));
+                        }
+                      } : undefined
+                    }
+                  );
+                  
+                  // Store generation ID for rating
+                  if (data.generation_id) {
+                    setLastGenerationId(data.generation_id);
+                    setLastGenerationOutput(JSON.stringify(data.test_cases, null, 2));
+                  }
+                  
                   // Navigate to create page with pre-filled data
                   navigate("/cases/create", { 
                     state: { generatedTestCases: data.test_cases } 
                   });
                 } else {
-                  toast.error("Failed to generate test cases");
+                  toast.error("Failed to generate test cases - no test cases returned");
                 }
-              } catch (error) {
-                toast.error(`Error: ${error.message}`);
+              } catch (error: any) {
+                if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+                  toast.error("Request timed out. The model is taking too long. Try a shorter requirement or use 'quick' mode.");
+                } else {
+                  toast.error(`Error: ${error.message || 'Failed to generate test cases'}`);
+                }
+                console.error("AI generation error:", error);
               }
             }}
           >
@@ -123,6 +273,45 @@ export default function TestCases() {
           </Button>
         </div>
       </div>
+
+      {/* Quality Rating & Edit Tools */}
+      {lastGenerationId && (
+        <div className="bg-muted/50 border rounded-lg p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Help improve AI quality</p>
+            <p className="text-xs text-muted-foreground">
+              Rate the generation or submit corrections to help train a better model
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <QualityRating 
+              generationId={lastGenerationId}
+              onRated={() => {
+                setLastGenerationId(null);
+                setLastGenerationOutput("");
+              }}
+            />
+            <EditAndImprove
+              generationId={lastGenerationId}
+              originalOutput={lastGenerationOutput}
+              onCorrected={() => {
+                setLastGenerationId(null);
+                setLastGenerationOutput("");
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setLastGenerationId(null);
+                setLastGenerationOutput("");
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-4">
         <div className="flex-1 relative">
@@ -208,7 +397,35 @@ export default function TestCases() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => navigate("/runs")}
+                    onClick={async () => {
+                      try {
+                        // Create a test run with this single test case
+                        const testRun = await dataStorageService.createTestRun({
+                          name: `Test Run: ${testCase.name}`,
+                          status: 'pending',
+                          testCases: [{
+                            id: testCase.id,
+                            title: testCase.name,
+                            description: testCase.description,
+                            priority: testCase.priority,
+                            tags: testCase.tags,
+                            steps: testCase.steps.map(step => ({
+                              action: step.action,
+                              data: {},
+                              expected: step.expectedResult,
+                              locator_hints: []
+                            }))
+                          }],
+                          results: []
+                        });
+                        
+                        toast.success("Test run created!");
+                        navigate(`/runs/${testRun.id}`);
+                      } catch (error: any) {
+                        console.error("Error creating test run:", error);
+                        toast.error(`Failed to create test run: ${error.message}`);
+                      }
+                    }}
                   >
                     <Play className="h-3 w-3 mr-1" />
                     Run Test

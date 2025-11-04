@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,14 +7,75 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { dataStorageService } from "@/lib/data-storage";
+import { useEffect, useState } from "react";
 
 export default function CreateDefect() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id?: string }>();
+  const isEditMode = !!id;
+  const [loading, setLoading] = useState(isEditMode);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [formValues, setFormValues] = useState({
+    title: '',
+    description: '',
+    severity: 'medium',
+    priority: 'medium'
+  });
+
+  useEffect(() => {
+    if (isEditMode && id) {
+      setLoading(true);
+      // Load defect data for editing
+      dataStorageService.getDefect(id).then(defect => {
+        if (defect) {
+          setFormValues({
+            title: defect.title || '',
+            description: defect.description || '',
+            severity: defect.severity || 'medium',
+            priority: defect.priority || 'medium'
+          });
+          setLoading(false);
+        } else {
+          toast.error("Defect not found");
+          navigate("/defects");
+        }
+      }).catch((error) => {
+        console.error("Error loading defect:", error);
+        toast.error("Failed to load defect");
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
+    }
+  }, [id, isEditMode, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Defect reported successfully!");
-    navigate("/defects");
+    
+    if (loading) return;
+    
+    try {
+      const defectData = {
+        title: formValues.title,
+        description: formValues.description,
+        severity: formValues.severity as any,
+        priority: formValues.priority as any,
+        status: 'open' as const
+      };
+
+      if (isEditMode && id) {
+        await dataStorageService.updateDefect(id, defectData);
+        toast.success("Defect updated successfully!");
+      } else {
+        await dataStorageService.createDefect(defectData);
+        toast.success("Defect reported successfully!");
+      }
+      navigate("/defects");
+    } catch (error: any) {
+      console.error("Error saving defect:", error);
+      toast.error(`Failed to save defect: ${error.message || 'Unknown error'}`);
+    }
   };
 
   const handleCancel = () => {
@@ -28,8 +89,8 @@ export default function CreateDefect() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Report Defect</h1>
-          <p className="text-muted-foreground mt-1">Create a new bug or issue report</p>
+          <h1 className="text-3xl font-bold gradient-text">{isEditMode ? "Edit Defect" : "Report Defect"}</h1>
+          <p className="text-muted-foreground mt-1">{isEditMode ? "Update defect details" : "Create a new bug or issue report"}</p>
         </div>
       </div>
 
@@ -44,7 +105,10 @@ export default function CreateDefect() {
               <Label htmlFor="title">Defect Title</Label>
               <Input
                 id="title"
+                name="title"
                 placeholder="e.g., Login button not responding on Chrome"
+                value={formValues.title}
+                onChange={(e) => setFormValues({...formValues, title: e.target.value})}
                 required
               />
             </div>
@@ -53,7 +117,10 @@ export default function CreateDefect() {
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
+                name="description"
                 placeholder="Provide a detailed description of the issue..."
+                value={formValues.description}
+                onChange={(e) => setFormValues({...formValues, description: e.target.value})}
                 rows={4}
                 required
               />
@@ -93,23 +160,32 @@ export default function CreateDefect() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="severity">Severity</Label>
-                <Select required>
+                <Select 
+                  name="severity"
+                  value={formValues.severity}
+                  onValueChange={(value) => setFormValues({...formValues, severity: value})}
+                  required
+                >
                   <SelectTrigger id="severity">
                     <SelectValue placeholder="Select severity" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="blocker">Blocker</SelectItem>
                     <SelectItem value="critical">Critical</SelectItem>
-                    <SelectItem value="major">Major</SelectItem>
-                    <SelectItem value="minor">Minor</SelectItem>
-                    <SelectItem value="trivial">Trivial</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
-                <Select required>
+                <Select 
+                  name="priority"
+                  value={formValues.priority}
+                  onValueChange={(value) => setFormValues({...formValues, priority: value})}
+                  required
+                >
                   <SelectTrigger id="priority">
                     <SelectValue placeholder="Select priority" />
                   </SelectTrigger>

@@ -1,80 +1,62 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Environment variables and secrets
-.env
-*.env.*
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Testing
-coverage
-.nyc_output
-test-results
-playwright-report
-playwright/.cache
-
-# Build outputs
-build
-out
-.next
-.nuxt
-.cache
-.temp
-.tmp
-
-# OS generated files
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+backend/venv/
+backend/venv_new/
+backend/env/
+backend/.env
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+dist/
+.vite/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+ai_generations.jsonl
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
-# IDE
-*.swp
-*.swo
-*~
+# Docker
+docker-compose.override.yml
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
 
 # Temporary files
 *.tmp
 *.temp
+*.bak

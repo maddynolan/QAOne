@@ -61,32 +61,84 @@ export interface Defect {
 class DataStorageService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8001') {
+  constructor(baseUrl: string = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
   }
 
   // Test Case Management
   async createTestCase(testCase: Omit<TestCase, 'id' | 'createdAt' | 'updatedAt'>): Promise<TestCase> {
+    const url = `${this.baseUrl}/test-cases`;
+    console.log('Creating test case via API:', testCase);
+    console.log('Request URL:', url);
+    console.log('Base URL:', this.baseUrl);
+    
     try {
-      const response = await fetch(`${this.baseUrl}/test-cases`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testCase)
       });
       
+      console.log('Response status:', response.status, response.statusText);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
-        throw new Error(`Failed to create test case: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Backend returned error:', errorText);
+        console.error('Error status:', response.status);
+        throw new Error(`Failed to create test case: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
-      const { id } = await response.json();
+      const responseData = await response.json();
+      console.log('Backend response data:', responseData);
+      const { id } = responseData;
+      
+      if (!id) {
+        console.error('Backend returned no ID in response:', responseData);
+        throw new Error(`Backend returned no ID in response: ${JSON.stringify(responseData)}`);
+      }
+      
+      if (id.startsWith('tc_')) {
+        console.error('Backend returned invalid fallback ID:', id);
+        console.error('Full response:', responseData);
+        throw new Error(`Backend returned invalid fallback ID (${id}). This indicates a database error. Check server logs.`);
+      }
+      
+      console.log('Successfully created test case with ID:', id);
       return {
         ...testCase,
         id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       } as TestCase;
-    } catch (error) {
-      console.error('Error creating test case:', error);
+    } catch (error: any) {
+      console.error('=== ERROR CREATING TEST CASE ===');
+      console.error('Error object:', error);
+      console.error('Error type:', error?.constructor?.name);
+      console.error('Error name:', error?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      
+      // Check for network errors
+      if (error instanceof TypeError) {
+        console.error('NETWORK ERROR DETECTED (TypeError)');
+        if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+          console.error('Failed to connect to backend at:', url);
+          console.error('This usually means:');
+          console.error('  1. Backend server is not running');
+          console.error('  2. Backend is on a different port');
+          console.error('  3. CORS issue (backend not allowing requests from frontend)');
+          console.error('  4. Network/firewall blocking the connection');
+          throw new Error(`Cannot connect to backend at ${url}. Check: 1) Is server running? 2) Is it on port 8000? 3) Check CORS settings.`);
+        }
+      }
+      
+      // Check for CORS errors
+      if (error.message && (error.message.includes('CORS') || error.message.includes('cross-origin'))) {
+        console.error('CORS ERROR: Backend is not allowing requests from this origin');
+        console.error('Check backend CORS configuration');
+      }
+      
       throw error;
     }
   }
@@ -99,8 +151,21 @@ class DataStorageService {
         throw new Error(`Failed to get test cases: ${response.statusText}`);
       }
       
-      const { testCases } = await response.json();
-      return testCases || [];
+      const data = await response.json();
+      console.log('Backend response for getTestCases:', data);
+      
+      // Handle different response formats
+      let testCases: TestCase[] = [];
+      if (Array.isArray(data)) {
+        testCases = data;
+      } else if (data.testCases && Array.isArray(data.testCases)) {
+        testCases = data.testCases;
+      } else if (data.test_cases && Array.isArray(data.test_cases)) {
+        testCases = data.test_cases;
+      }
+      
+      console.log(`Returning ${testCases.length} test cases`);
+      return testCases;
     } catch (error) {
       console.error('Error getting test cases:', error);
       return [];
@@ -283,41 +348,80 @@ class DataStorageService {
 
   // Defect Management
   async createDefect(defect: Omit<Defect, 'id' | 'createdAt' | 'updatedAt'>): Promise<Defect> {
-    const data = this.getStorageData();
-    const newDefect: Defect = {
-      ...defect,
-      id: this.generateId(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    data.defects.push(newDefect);
-    this.saveStorageData(data);
-    
-    return newDefect;
+    try {
+      const response = await fetch(`${this.baseUrl}/defects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defect)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create defect: ${response.statusText}`);
+      }
+      
+      const { id } = await response.json();
+      return {
+        ...defect,
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Defect;
+    } catch (error) {
+      console.error('Error creating defect:', error);
+      throw error;
+    }
   }
 
   async getDefects(): Promise<Defect[]> {
-    const data = this.getStorageData();
-    return data.defects.sort((a: Defect, b: Defect) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    try {
+      const response = await fetch(`${this.baseUrl}/defects`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get defects: ${response.statusText}`);
+      }
+      
+      const { defects } = await response.json();
+      return defects || [];
+    } catch (error) {
+      console.error('Error getting defects:', error);
+      return [];
+    }
   }
 
   async updateDefect(id: string, updates: Partial<Defect>): Promise<Defect | null> {
-    const data = this.getStorageData();
-    const index = data.defects.findIndex((d: Defect) => d.id === id);
-    
-    if (index === -1) return null;
-    
-    data.defects[index] = {
-      ...data.defects[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
-    
-    this.saveStorageData(data);
-    return data.defects[index];
+    try {
+      const response = await fetch(`${this.baseUrl}/defects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to update defect: ${response.statusText}`);
+      }
+      
+      return await this.getDefect(id);
+    } catch (error) {
+      console.error('Error updating defect:', error);
+      return null;
+    }
+  }
+
+  async getDefect(id: string): Promise<Defect | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/defects/${id}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`Failed to get defect: ${response.statusText}`);
+      }
+      
+      return await response.json() as Defect;
+    } catch (error) {
+      console.error('Error getting defect:', error);
+      return null;
+    }
   }
 
   // Utility methods
@@ -327,9 +431,12 @@ class DataStorageService {
 
   // Initialize with sample data
   async initializeSampleData(): Promise<void> {
-    const data = this.getStorageData();
-    
-    if (data.testCases.length === 0) {
+    try {
+      // Check if we already have test cases in the database
+      const existingTestCases = await this.getTestCases();
+      
+      // Only create sample data if database is empty
+      if (existingTestCases.length === 0) {
       // Add some sample test cases
       const sampleTestCases: Omit<TestCase, 'id' | 'createdAt' | 'updatedAt'>[] = [
         {
@@ -367,45 +474,62 @@ class DataStorageService {
         }
       ];
 
-      for (const testCase of sampleTestCases) {
-        await this.createTestCase(testCase);
-      }
-    }
-
-    if (data.testRuns.length === 0) {
-      // Add some sample test runs
-      const sampleTestRuns: Omit<TestRun, 'id' | 'startTime'>[] = [
-        {
-          name: "API Integration Tests",
-          status: "running",
-          progress: 65,
-          tests: "32/50"
-        },
-        {
-          name: "E2E User Flow Tests",
-          status: "passed",
-          progress: 100,
-          tests: "45/45",
-          endTime: new Date(Date.now() - 3600000).toISOString()
-        },
-        {
-          name: "Security Scan",
-          status: "failed",
-          progress: 100,
-          tests: "12/15",
-          endTime: new Date(Date.now() - 7200000).toISOString()
+        for (const testCase of sampleTestCases) {
+          try {
+            await this.createTestCase(testCase);
+          } catch (error) {
+            console.warn('Failed to create sample test case:', error);
+            // Continue with other test cases even if one fails
+          }
         }
-      ];
-
-      for (const testRun of sampleTestRuns) {
-        await this.createTestRun(testRun);
       }
+
+      // Check if we already have test runs in the database
+      const existingTestRuns = await this.getTestRuns();
+      
+      if (existingTestRuns.length === 0) {
+      // Add some sample test runs
+        const sampleTestRuns: Omit<TestRun, 'id' | 'startTime'>[] = [
+          {
+            name: "API Integration Tests",
+            status: "running",
+            testCases: [],
+            results: []
+          },
+          {
+            name: "E2E User Flow Tests",
+            status: "completed",
+            testCases: [],
+            results: []
+          },
+          {
+            name: "Security Scan",
+            status: "failed",
+            testCases: [],
+            results: []
+          }
+        ];
+
+        for (const testRun of sampleTestRuns) {
+          try {
+            await this.createTestRun(testRun);
+          } catch (error) {
+            console.warn('Failed to create sample test run:', error);
+            // Continue with other test runs even if one fails
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing sample data:', error);
+      // Don't throw - allow app to continue even if sample data fails
     }
   }
 
   // Clear all data (for testing)
   async clearAllData(): Promise<void> {
-    localStorage.removeItem(this.storageKey);
+    // Note: This would require DELETE endpoints on the backend
+    // For now, this is a no-op as we're using the database
+    console.warn('clearAllData not implemented for backend storage');
   }
 }
 

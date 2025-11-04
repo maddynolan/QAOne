@@ -12,11 +12,14 @@ import TestPlans from "./pages/TestPlans";
 import TestCases from "./pages/TestCases";
 import CreateTestCase from "./pages/CreateTestCase";
 import TestRuns from "./pages/TestRuns";
+import Requirements from "./pages/Requirements";
+import CreateRequirement from "./pages/CreateRequirement";
 import Triage from "./pages/Triage";
 import Settings from "./pages/Settings";
 import CreateTestPlan from "./pages/CreateTestPlan";
 import EditTestPlan from "./pages/EditTestPlan";
 import TestRunDetail from "./pages/TestRunDetail";
+import TestCaseExecution from "./pages/TestCaseExecution";
 import Defects from "./pages/Defects";
 import CreateDefect from "./pages/CreateDefect";
 import NotFound from "./pages/NotFound";
@@ -79,6 +82,11 @@ const App = () => {
                   <Layout><CreateTestCase /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/cases/edit/:id" element={
+                <ProtectedRoute>
+                  <Layout><CreateTestCase /></Layout>
+                </ProtectedRoute>
+              } />
               <Route path="/runs" element={
                 <ProtectedRoute>
                   <Layout><TestRuns /></Layout>
@@ -89,12 +97,37 @@ const App = () => {
                   <Layout><TestRunDetail /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/runs/:runId/cases/:caseId/execute" element={
+                <ProtectedRoute>
+                  <Layout><TestCaseExecution /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/requirements" element={
+                <ProtectedRoute>
+                  <Layout><Requirements /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/requirements/create" element={
+                <ProtectedRoute>
+                  <Layout><CreateRequirement /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/requirements/edit/:id" element={
+                <ProtectedRoute>
+                  <Layout><CreateRequirement /></Layout>
+                </ProtectedRoute>
+              } />
               <Route path="/defects" element={
                 <ProtectedRoute>
                   <Layout><Defects /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/defects/create" element={
+                <ProtectedRoute>
+                  <Layout><CreateDefect /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/defects/edit/:id" element={
                 <ProtectedRoute>
                   <Layout><CreateDefect /></Layout>
                 </ProtectedRoute>

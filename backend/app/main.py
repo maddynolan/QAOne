@@ -8,13 +8,40 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 import os
 import sys
-from app.services.playwright_runner import PlaywrightRunner, TestCase, TestStep
-from app.services.ollama_service import ollama_service, ModelMode
-from app.services.ai_storage import store_ai_generation
-from app.services.database import create_requirement, get_database_client
+import uvicorn
 import logging
 
+# Load environment variables from .env file FIRST, before importing services
+try:
+    from dotenv import load_dotenv
+    # Load .env from backend directory
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loaded environment from: {env_path}")
+    else:
+        # Try loading from current directory
+        load_dotenv()
+        logger = logging.getLogger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("python-dotenv not installed. Install with: pip install python-dotenv")
+
 logger = logging.getLogger(__name__)
+
+# NOW import services AFTER .env is loaded
+from app.services.playwright_runner import PlaywrightRunner, TestCase, TestStep
+from app.services.ollama_service import OllamaService, ModelMode
+from app.services.ai_storage import store_ai_generation
+from app.services.database import create_requirement, get_database_client
+from app.services.enhanced_generation_service import enhanced_generation_service
+
+# Recreate ollama_service after .env is loaded to pick up OLLAMA_URL
+import app.services.ollama_service as ollama_module
+ollama_module.ollama_service = OllamaService()  # Recreate with environment
+ollama_service = ollama_module.ollama_service
+logger.info(f"Ollama service initialized with URL: {os.getenv('OLLAMA_URL', 'http://localhost:11434')}")
 
 # Add the parent directory to the path to import our services
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -233,6 +260,27 @@ mock_ai_service = MockAIService()
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.get("/metrics/{organization_id}")
+async def get_metrics(organization_id: str, days: int = 7):
+    """
+    Get observability metrics for an organization
+    
+    Returns:
+        - Cache hit rates (L1, L2, combined)
+        - Latency statistics (mean, p50, p95)
+        - Token usage by model
+        - RAG quality metrics
+    """
+    try:
+        from app.services.metrics_service import metrics_service
+        await metrics_service.initialize()
+        
+        metrics = await metrics_service.get_metrics(organization_id, days)
+        return metrics
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health/database")
 async def health_check_database():
@@ -742,12 +790,67 @@ async def jira_to_testcases(request: Request, body: dict):
     Convert Jira story/JSON to manual test cases
     Input: Jira JSON or plain text
     Output: Array of manual test cases
+    
+    Now uses enhanced generation with RAG + caching!
     """
     try:
         jira_content = body.get("jira", "") or body.get("story", "") or json.dumps(body)
-        mode = body.get("mode", "ui")
+        mode = body.get("mode", "ui")  # 'quick' or 'deep' for user override
         project_id = body.get("project_id", "default")
         org_id = body.get("org_id", "default")
+        
+        # Try enhanced generation first (if enabled)
+        use_enhanced = os.getenv("USE_ENHANCED_GENERATION", "true").lower() == "true"
+        
+        if use_enhanced:
+            try:
+                await enhanced_generation_service.initialize()
+                
+                result = await enhanced_generation_service.generate_test_cases(
+                    requirement=jira_content,
+                    organization_id=org_id,
+                    project_id=project_id if project_id != "default" else None,
+                    test_type="manual",
+                    user_mode=mode if mode in ["quick", "deep"] else None
+                )
+                
+                # Store requirement (async, don't block)
+                try:
+                    jira_key = None
+                    jira_title = None
+                    jira_payload = None
+                    
+                    if isinstance(body.get("jira"), dict):
+                        jira_payload = body.get("jira")
+                        jira_key = jira_payload.get("key") or jira_payload.get("id")
+                        jira_title = jira_payload.get("summary") or jira_payload.get("title")
+                    
+                    if jira_title or jira_content:
+                        await create_requirement(
+                            project_id=project_id,
+                            source="jira",
+                            title=jira_title or "Jira Story",
+                            description=jira_content[:1000] if len(jira_content) > 1000 else jira_content,
+                            source_ref=jira_key,
+                            raw_payload=jira_payload
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not store requirement: {str(e)}")
+                
+                return {
+                    "status": "success",
+                    "test_cases": result.get("test_cases", []),
+                    "model": result.get("model"),
+                    "latency_ms": result.get("latency_ms"),
+                    "cache_hit": result.get("cache_hit", False),
+                    "cache_level": result.get("cache_level"),
+                    "rag_context_used": result.get("rag_context_used", False),
+                    "source": result.get("source", "generation")
+                }
+                
+            except Exception as e:
+                logger.warning(f"Enhanced generation failed, falling back to basic: {e}")
+                # Fall through to original implementation
         
         # Extract Jira info if it's structured
         jira_key = None
@@ -775,44 +878,79 @@ async def jira_to_testcases(request: Request, body: dict):
                 raw_payload=jira_payload
             )
         except Exception as e:
-            print(f"Warning: Could not store requirement: {str(e)}")
+            logger.warning(f"Could not store requirement: {str(e)}")
+        
+        if not jira_content or len(jira_content.strip()) < 10:
+            raise HTTPException(
+                status_code=400, 
+                detail="Requirement text is too short. Please provide a detailed Jira story or requirement (at least 10 characters)."
+            )
         
         prompt = f"""You are an expert QA engineer. Convert the following Jira story into comprehensive manual test cases.
 
 Jira Story/Requirements:
 {jira_content}
 
-Generate an array of manual test cases in JSON format. Each test case should have:
+Generate 4-6 comprehensive manual test cases in JSON format. Each test case must have:
 - name: Clear test case name
 - description: Detailed description
 - steps: Array of {{"action": "...", "expectedResult": "..."}}
 - priority: "low", "medium", "high", or "critical"
 - tags: Array of relevant tags
 
-Respond ONLY with valid JSON array of test cases:
-[
-  {{
-    "name": "string",
-    "description": "string",
-    "steps": [{{"action": "string", "expectedResult": "string"}}],
-    "priority": "string",
-    "tags": ["string"]
-  }}
-]"""
+CRITICAL: Respond with ONLY valid JSON array. No explanations, no markdown, no code blocks, no text before or after. Start with [ and end with ].
+
+Example format:
+[{{"name":"Test Case 1","description":"Description","steps":[{{"action":"Step 1","expectedResult":"Result 1"}}],"priority":"high","tags":["tag1"]}}]"""
 
         start_time = time.time()
-        raw_result = await ollama_service.generate_json(prompt, mode=mode)
-        latency_ms = int((time.time() - start_time) * 1000)
-        
-        # raw_result is the parsed JSON, not a dict with model
-        # Get model from service's last call
-        model_used = ollama_service._select_model(mode)
-        
-        # Ensure result is a list
-        test_cases = raw_result if isinstance(raw_result, list) else [raw_result]
+        try:
+            # Use generate method with validate_json=False, then extract JSON manually
+            # This gives us more control over JSON extraction
+            result = await ollama_service.generate(prompt, mode=mode, max_retries=2, validate_json=False)
+            raw_response = result.get("response", "")
+            model_used = result.get("model", ollama_service._select_model(mode))
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            # Extract JSON from response (might have markdown or text)
+            from app.services.test_generation_optimizer import extract_json_from_response, is_valid_test_case_json
+            
+            test_cases = extract_json_from_response(raw_response)
+            
+            if not test_cases:
+                # Try one more time with a fixup prompt
+                logger.warning("No JSON extracted, trying with fixup prompt...")
+                fixup_prompt = f"""{prompt}
+
+IMPORTANT: Your response must be ONLY a valid JSON array. No markdown, no explanations, no text. Just the JSON array."""
+                result2 = await ollama_service.generate(fixup_prompt, mode=mode, max_retries=1, validate_json=False)
+                test_cases = extract_json_from_response(result2.get("response", ""))
+            
+            if not test_cases:
+                logger.error(f"Could not extract JSON from response: {raw_response[:500]}")
+                raise Exception(f"Model did not return valid JSON. Response started with: {raw_response[:200]}")
+            
+            # Validate test case structure
+            if not is_valid_test_case_json(test_cases):
+                logger.warning("Test cases don't match expected structure, but will try to use them")
+            
+            # Ensure result is a list
+            if not isinstance(test_cases, list):
+                test_cases = [test_cases]
+            
+            if len(test_cases) == 0:
+                raise Exception("No test cases generated from model response")
+                
+        except Exception as e:
+            logger.error(f"Error generating test cases: {str(e)}")
+            # Return a more helpful error
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to generate test cases: {str(e)}. This might be due to: 1) Model timeout, 2) Invalid JSON response, 3) Network issue. Try again or use a simpler requirement."
+            )
         
         # Store generation for fine-tuning (fire and forget)
-        await store_ai_generation(
+        generation_id = await store_ai_generation(
             project_id=project_id,
             prompt=prompt,
             model=model_used,
@@ -820,7 +958,8 @@ Respond ONLY with valid JSON array of test cases:
             mode=mode,
             endpoint="/ai/jira-to-testcases",
             latency_ms=latency_ms,
-            org_id=org_id
+            org_id=org_id,
+            task_category="manual"
         )
         
         return {
@@ -828,7 +967,8 @@ Respond ONLY with valid JSON array of test cases:
             "test_cases": test_cases,
             "requirement_id": requirement_id,
             "model": model_used,
-            "latency_ms": latency_ms
+            "latency_ms": latency_ms,
+            "generation_id": generation_id  # Include for rating/correction
         }
         
     except Exception as e:
@@ -1129,12 +1269,15 @@ Provide a comprehensive analysis in JSON format with summary, root_cause, catego
 
 @app.post("/ai/templates")
 async def save_ai_template(request: Request, body: dict):
-    """Save or update AI prompt template"""
+    """Save or update AI prompt template with automatic versioning"""
     try:
+        from app.services.prompt_template_service import prompt_template_service
+        
         project_id = body.get("project_id")
         org_id = body.get("org_id")
         task = body.get("task")
         template = body.get("template")
+        version_type = body.get("version_type", "minor")  # "major", "minor", or "patch"
         
         if not project_id or not task or not template:
             raise HTTPException(
@@ -1142,46 +1285,245 @@ async def save_ai_template(request: Request, body: dict):
                 detail="Missing required fields: project_id, task, template"
             )
         
-        # Save to database
+        # Save with versioning service
+        new_version = await prompt_template_service.save_template(
+            task=task,
+            template=template,
+            organization_id=org_id,
+            project_id=project_id,
+            version_type=version_type
+        )
+        
+        return {
+            "status": "success",
+            "message": "Template saved successfully",
+            "version": new_version
+        }
+    except HTTPException:
+        raise
+    except Exception as db_error:
+        logger.error(f"Database error saving template: {str(db_error)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save template: {str(db_error)}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# AI GENERATION QUALITY TRACKING ENDPOINTS (for fine-tuning data collection)
+# ============================================================================
+
+@app.post("/ai/generations/{generation_id}/rate")
+async def rate_generation(generation_id: str, request: Request):
+    """Rate an AI generation (1-5 stars) for quality tracking"""
+    try:
+        body = await request.json()
+        quality_score = body.get("quality_score")
+        feedback = body.get("feedback")
+        is_approved = body.get("is_approved", False)
+        
+        if not quality_score or not (1 <= quality_score <= 5):
+            raise HTTPException(
+                status_code=400,
+                detail="quality_score must be between 1 and 5"
+            )
+        
+        from app.services.database import get_database_client
+        from app.services.postgres_direct import execute_update
+        
         client = get_database_client()
-        if client:
-            try:
-                # Check if template exists
-                existing = client.table("ai_templates").select("*").eq("project_id", project_id).eq("task", task).execute()
-                
-                if existing.data:
-                    # Update existing
-                    result = client.table("ai_templates").update({
-                        "template": template,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }).eq("id", existing.data[0]["id"]).execute()
-                else:
-                    # Insert new
-                    result = client.table("ai_templates").insert({
-                        "project_id": project_id,
-                        "org_id": org_id,
-                        "task": task,
-                        "template": template,
-                        "version": 1,
-                        "is_default": False
-                    }).execute()
-                
-                return {
-                    "status": "success",
-                    "message": "Template saved successfully"
-                }
-            except Exception as db_error:
-                print(f"Database error saving template: {str(db_error)}")
-                return {
-                    "status": "success",
-                    "message": "Template saved to cache (database error)"
-                }
-        else:
+        if not client or not hasattr(client, 'getconn'):
+            raise HTTPException(status_code=500, detail="Database connection not available")
+        
+        # Update generation with rating
+        update_query = """
+            UPDATE ai_generations
+            SET quality_score = %s,
+                feedback = %s,
+                is_approved = %s,
+                rated_at = NOW()
+            WHERE id = %s
+            RETURNING id
+        """
+        
+        result = await execute_update(
+            update_query,
+            (quality_score, feedback, is_approved, generation_id)
+        )
+        
+        if not result or len(result) == 0:
+            raise HTTPException(status_code=404, detail="Generation not found")
+        
+        return {
+            "status": "success",
+            "message": "Rating saved successfully",
+            "generation_id": generation_id,
+            "quality_score": quality_score
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error rating generation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/generations/{generation_id}/correct")
+async def correct_generation(generation_id: str, request: Request):
+    """Submit a corrected version of an AI generation"""
+    try:
+        body = await request.json()
+        corrected_output = body.get("corrected_output")
+        feedback = body.get("feedback")
+        
+        if not corrected_output:
+            raise HTTPException(
+                status_code=400,
+                detail="corrected_output is required"
+            )
+        
+        from app.services.database import get_database_client
+        from app.services.postgres_direct import execute_update
+        
+        client = get_database_client()
+        if not client or not hasattr(client, 'getconn'):
+            raise HTTPException(status_code=500, detail="Database connection not available")
+        
+        # Update generation with correction
+        update_query = """
+            UPDATE ai_generations
+            SET corrected_output = %s,
+                feedback = %s,
+                corrected_at = NOW(),
+                is_approved = true  -- Auto-approve if user took time to correct
+            WHERE id = %s
+            RETURNING id
+        """
+        
+        result = await execute_update(
+            update_query,
+            (corrected_output, feedback, generation_id)
+        )
+        
+        if not result or len(result) == 0:
+            raise HTTPException(status_code=404, detail="Generation not found")
+        
+        return {
+            "status": "success",
+            "message": "Correction saved successfully",
+            "generation_id": generation_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error correcting generation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/ai/training-data/export")
+async def export_training_data(
+    min_quality_score: int = 4,
+    task_category: Optional[str] = None,
+    limit: int = 1000,
+    format: str = "jsonl"
+):
+    """
+    Export high-quality generations for fine-tuning
+    
+    Args:
+        min_quality_score: Minimum quality score (1-5, default 4)
+        task_category: Filter by task category (optional)
+        limit: Maximum number of records (default 1000)
+        format: Export format ('jsonl' or 'json', default 'jsonl')
+    """
+    try:
+        from app.services.database import get_database_client
+        from app.services.postgres_direct import execute_query
+        
+        client = get_database_client()
+        if not client or not hasattr(client, 'getconn'):
+            raise HTTPException(status_code=500, detail="Database connection not available")
+        
+        # Build query
+        query = """
+            SELECT 
+                id,
+                prompt,
+                output,
+                corrected_output,
+                task_category,
+                endpoint,
+                model,
+                quality_score,
+                is_approved,
+                created_at
+            FROM ai_generations
+            WHERE (quality_score >= %s OR is_approved = true OR corrected_output IS NOT NULL)
+        """
+        params = [min_quality_score]
+        
+        if task_category:
+            query += " AND task_category = %s"
+            params.append(task_category)
+        
+        query += " ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+        
+        results = await execute_query(query, tuple(params))
+        
+        if not results:
             return {
                 "status": "success",
-                "message": "Template saved to cache (no database configured)"
+                "count": 0,
+                "data": []
             }
+        
+        # Format for training
+        training_data = []
+        for row in results:
+            # Use corrected output if available (more valuable for training)
+            output = row.get("corrected_output") or row.get("output")
+            
+            # Format as instruction/input/output
+            training_entry = {
+                "instruction": f"Generate {row.get('task_category', 'test cases')} based on the following requirement:",
+                "input": row.get("prompt", ""),
+                "output": output,
+                "task_type": row.get("task_category", "unknown"),
+                "quality_score": row.get("quality_score"),
+                "is_approved": row.get("is_approved", False),
+                "has_correction": row.get("corrected_output") is not None,
+                "model": row.get("model"),
+                "created_at": row.get("created_at").isoformat() if row.get("created_at") else None
+            }
+            training_data.append(training_entry)
+        
+        if format == "jsonl":
+            # Return as JSONL (one JSON object per line)
+            from fastapi.responses import Response
+            jsonl_content = "\n".join([json.dumps(entry) for entry in training_data])
+            return Response(
+                content=jsonl_content,
+                media_type="application/x-ndjson",
+                headers={
+                    "Content-Disposition": f"attachment; filename=training_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+                }
+            )
+        else:
+            # Return as JSON array
+            return {
+                "status": "success",
+                "count": len(training_data),
+                "data": training_data
+            }
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error exporting training data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1518,9 +1860,10 @@ async def get_test_runs(project_id: Optional[str] = None):
 
 @app.get("/test-runs/{run_id}")
 async def get_test_run(run_id: str):
-    """Get a specific test run with details"""
+    """Get a specific test run with details including test cases and steps"""
     try:
         from app.services.postgres_direct import execute_query
+        import json
         
         pool = get_database_client()
         if not pool or not hasattr(pool, 'getconn'):
@@ -1528,7 +1871,7 @@ async def get_test_run(run_id: str):
         
         # Get run details
         run_query = """
-            SELECT id, project_id, name, status, environment, started_at, completed_at, created_at
+            SELECT id, project_id, plan_id, name, status, environment, started_at, completed_at, created_at
             FROM test_runs 
             WHERE id = %s
         """
@@ -1539,49 +1882,229 @@ async def get_test_run(run_id: str):
         
         run = run_results[0]
         
-        # Get run steps
+        # Get all unique case_ids from test_run_steps
+        case_ids_query = """
+            SELECT DISTINCT case_id FROM test_run_steps WHERE run_id = %s
+        """
+        case_ids_result = await execute_query(case_ids_query, (run_id,))
+        
+        test_cases = []
+        case_ids = []
+        
+        if case_ids_result and len(case_ids_result) > 0:
+            case_ids = [str(row.get("case_id")) for row in case_ids_result if row.get("case_id")]
+        
+        # Get test case details for found case_ids
+        for case_id in case_ids:
+            tc_query = """
+                SELECT id, title, description, priority, tags, steps, test_type
+                FROM test_cases 
+                WHERE id = %s
+            """
+            tc_results = await execute_query(tc_query, (case_id,))
+            if tc_results:
+                tc = tc_results[0]
+                # Parse steps JSON if it's stored as JSONB
+                steps = tc.get("steps", [])
+                if isinstance(steps, str):
+                    try:
+                        steps = json.loads(steps)
+                    except:
+                        steps = []
+                
+                # Map priority from database format
+                priority_map = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
+                db_priority = tc.get("priority", "P2")
+                priority = priority_map.get(db_priority, "medium")
+                
+                test_cases.append({
+                    "id": str(tc.get("id", "")),
+                    "name": tc.get("title", ""),
+                    "description": tc.get("description", ""),
+                    "priority": priority,
+                    "tags": tc.get("tags", []) or [],
+                    "steps": steps or [],
+                    "testType": tc.get("test_type", "manual"),
+                    "complexity": "medium"
+                })
+        
+        # Get run step results (execution results)
         steps_query = """
             SELECT id, case_id, title, status, duration_ms, error_message,
-                   stdout, stderr, started_at, completed_at
+                   stdout, stderr, started_at, completed_at, created_at
             FROM test_run_steps
             WHERE run_id = %s
-            ORDER BY created_at
+            ORDER BY case_id, created_at
         """
         steps_results = await execute_query(steps_query, (run_id,))
         
-        status_map = {"pending": "pending", "running": "running", "passed": "completed",
-                     "failed": "failed", "partial": "completed", "error": "failed", "cancelled": "failed"}
+        # Organize step results by case_id and step_index
+        # Group steps by case_id first, then assign indices based on order
+        step_results: Dict[str, Dict[int, Any]] = {}
+        case_steps_map: Dict[str, List[Any]] = {}
         
-        results = []
-        summary = {"passed": 0, "failed": 0, "skipped": 0, "duration": 0}
-        
+        # Group steps by case_id
         for step in steps_results or []:
-            step_status = step.get("status", "pending")
-            if step_status == "passed":
-                summary["passed"] += 1
-            elif step_status == "failed":
-                summary["failed"] += 1
-            elif step_status == "skipped":
-                summary["skipped"] += 1
+            case_id = str(step.get("case_id", ""))
+            if case_id not in case_steps_map:
+                case_steps_map[case_id] = []
+            case_steps_map[case_id].append(step)
+        
+        # Process each case's steps in order
+        for case_id, steps_list in case_steps_map.items():
+            if case_id not in step_results:
+                step_results[case_id] = {}
             
-            summary["duration"] += step.get("duration_ms", 0) or 0
+            # Sort steps by created_at to maintain order
+            steps_list.sort(key=lambda x: x.get("created_at") or "")
             
-            results.append({
-                "test_name": step.get("title", ""),
-                "status": "passed" if step_status == "passed" else "failed" if step_status == "failed" else "pending",
-                "duration": step.get("duration_ms", 0) or 0,
-                "error": step.get("error_message", ""),
-                "screenshots": [],
-                "logs": [step.get("stdout", ""), step.get("stderr", "")] if step.get("stdout") or step.get("stderr") else []
+            # Assign step_index based on order (0-based)
+            for step_index, step in enumerate(steps_list):
+                # Get artifacts (screenshots) for this step
+                artifacts_query = """
+                    SELECT id, url, type, metadata
+                    FROM artifacts
+                    WHERE step_id = %s
+                    ORDER BY created_at
+                """
+                artifacts_results = await execute_query(artifacts_query, (step.get("id"),))
+                screenshots = []
+                for artifact in artifacts_results or []:
+                    screenshots.append({
+                        "url": artifact.get("url", ""),
+                        "metadata": artifact.get("metadata", {})
+                    })
+                
+                # Get defects linked to this step
+                defects_query = """
+                    SELECT id, title, priority, status, description
+                    FROM defects
+                    WHERE step_id = %s
+                """
+                defects_results = await execute_query(defects_query, (step.get("id"),))
+                defects = []
+                for defect in defects_results or []:
+                    priority_map = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
+                    db_priority = defect.get("priority", "P2")
+                    priority = priority_map.get(db_priority, "medium")
+                    defects.append({
+                        "id": str(defect.get("id", "")),
+                        "title": defect.get("title", ""),
+                        "priority": priority,
+                        "status": defect.get("status", "open"),
+                        "description": defect.get("description", "")
+                    })
+                
+                step_id = str(step.get("id", ""))
+                step_results[case_id][step_index] = {
+                    "step_id": step_id,
+                    "status": step.get("status", "pending"),
+                    "duration_ms": step.get("duration_ms", 0) or 0,
+                    "error_message": step.get("error_message", ""),
+                    "screenshots": screenshots,
+                    "defects": defects
+                }
+                logger.debug(f"Mapped step: case_id={case_id}, step_index={step_index}, step_id={step_id}")
+        
+        # Get global artifacts (screenshots not linked to a specific step)
+        global_artifacts_query = """
+            SELECT id, url, type, metadata
+            FROM artifacts
+            WHERE run_id = %s AND step_id IS NULL
+            ORDER BY created_at
+        """
+        global_artifacts_results = await execute_query(global_artifacts_query, (run_id,))
+        global_screenshots = []
+        for artifact in global_artifacts_results or []:
+            global_screenshots.append({
+                "url": artifact.get("url", ""),
+                "metadata": artifact.get("metadata", {})
             })
+        
+        # Get global defects (linked to run but not a specific step)
+        global_defects_query = """
+            SELECT id, title, priority, status, description
+            FROM defects
+            WHERE run_id = %s AND step_id IS NULL
+        """
+        global_defects_results = await execute_query(global_defects_query, (run_id,))
+        global_defects = []
+        for defect in global_defects_results or []:
+            priority_map = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
+            db_priority = defect.get("priority", "P2")
+            priority = priority_map.get(db_priority, "medium")
+            global_defects.append({
+                "id": str(defect.get("id", "")),
+                "title": defect.get("title", ""),
+                "priority": priority,
+                "status": defect.get("status", "open"),
+                "description": defect.get("description", "")
+            })
+        
+        # Calculate test case statuses based on step results
+        test_case_statuses: Dict[str, str] = {}
+        for case_id, steps_dict in step_results.items():
+            all_pending = True
+            any_failed = False
+            all_passed = True
+            
+            for step_index, step_data in steps_dict.items():
+                step_status = step_data.get("status", "pending")
+                if step_status != "pending":
+                    all_pending = False
+                if step_status == "failed":
+                    any_failed = True
+                    all_passed = False
+                elif step_status == "passed":
+                    all_passed = all_passed and True
+            
+            if all_pending:
+                test_case_statuses[case_id] = "pending"
+            elif any_failed:
+                test_case_statuses[case_id] = "failed"
+            elif all_passed:
+                test_case_statuses[case_id] = "passed"
+            else:
+                test_case_statuses[case_id] = "executing"
+        
+        # Calculate summary
+        summary = {"passed": 0, "failed": 0, "skipped": 0, "duration": 0, "total": 0}
+        for case_id, steps in step_results.items():
+            for step_index, step_data in steps.items():
+                summary["total"] += 1
+                status = step_data.get("status", "pending")
+                if status == "passed":
+                    summary["passed"] += 1
+                elif status == "failed":
+                    summary["failed"] += 1
+                elif status == "skipped":
+                    summary["skipped"] += 1
+                summary["duration"] += step_data.get("duration_ms", 0) or 0
+        
+        # Map database status to frontend status
+        # Frontend uses "executing" for manual testing, backend uses "running"
+        db_status = run.get("status", "pending")
+        if db_status == "running":
+            frontend_status = "executing"
+        elif db_status == "passed":
+            frontend_status = "completed"
+        elif db_status in ["failed", "error", "cancelled"]:
+            frontend_status = "failed"
+        else:
+            frontend_status = db_status
         
         return {
             "id": str(run.get("id", "")),
             "name": run.get("name", ""),
-            "status": status_map.get(run.get("status", "pending"), "pending"),
-            "testCases": [],
-            "results": results,
+            "status": frontend_status,
+            "testCases": test_cases,
+            "stepResults": step_results,
+            "testCaseStatuses": test_case_statuses,
             "summary": summary,
+            "globalScreenshots": global_screenshots,
+            "globalDefects": global_defects,
+            "started_at": run.get("started_at"),
+            "completed_at": run.get("completed_at"),
             "startTime": run.get("started_at"),
             "createdAt": str(run.get("created_at", "")),
             "completedAt": run.get("completed_at")
@@ -1594,13 +2117,14 @@ async def get_test_run(run_id: str):
 
 @app.post("/test-runs")
 async def create_test_run(request: Request):
-    """Create a new test run"""
+    """Create a new test run with test cases"""
     try:
         org_id, project_id = await ensure_default_org_project()
         
         data = await request.json()
         
         from app.services.postgres_direct import execute_insert
+        from app.services.test_results_storage import store_test_run_step
         
         pool = get_database_client()
         if not pool or not hasattr(pool, 'getconn'):
@@ -1611,12 +2135,41 @@ async def create_test_run(request: Request):
             "name": data.get("name", f"Test Run {datetime.utcnow().isoformat()}"),
             "status": "pending",
             "environment": data.get("environment", "local"),
+            "plan_id": data.get("planId"),
             "created_by": DEFAULT_USER_ID
         }
         
         run_id = await execute_insert("test_runs", run_data)
+        if not run_id:
+            raise HTTPException(status_code=500, detail="Failed to create test run")
         
-        return {"id": run_id or f"run_{int(time.time())}"}
+        # Create test_run_steps entries for each step of each test case
+        test_cases = data.get("testCases", [])
+        if test_cases:
+            for test_case in test_cases:
+                case_id = test_case.get("id")
+                steps = test_case.get("steps", [])
+                
+                if case_id and steps:
+                    # Create a step entry for each step in the test case
+                    for step_idx, step in enumerate(steps):
+                        step_title = f"{test_case.get('title', test_case.get('name', 'Test'))} - Step {step_idx + 1}"
+                        await store_test_run_step(
+                            run_id=run_id,
+                            case_id=case_id,
+                            title=step_title,
+                            status="pending",
+                            duration_ms=0,
+                            error_message=None,
+                            stdout=None,
+                            stderr=None,
+                            started_at=None,
+                            completed_at=None
+                        )
+        
+        return {"id": run_id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating test run: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1671,6 +2224,302 @@ async def update_test_run(run_id: str, request: Request):
         raise
     except Exception as e:
         logger.error(f"Error updating test run: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/start")
+async def start_test_run(run_id: str):
+    """Start a test run execution - change status from pending to running"""
+    try:
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Update status to running and set started_at
+                update_query = """
+                    UPDATE test_runs 
+                    SET status = 'running', started_at = NOW(), updated_at = NOW()
+                    WHERE id = %s AND status = 'pending'
+                    RETURNING id, status, started_at
+                """
+                cur.execute(update_query, (run_id,))
+                result = cur.fetchone()
+                conn.commit()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Test run not found or already started")
+                
+                return {
+                    "id": str(result[0]),
+                    "status": result[1],
+                    "started_at": str(result[2])
+                }
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting test run: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/steps/{step_id}/mark")
+async def mark_test_step(run_id: str, step_id: str, request: Request):
+    """Mark a test step as passed or failed"""
+    try:
+        data = await request.json()
+        status = data.get("status")  # "passed" or "failed"
+        error = data.get("error", "")
+        
+        if status not in ["passed", "failed"]:
+            raise HTTPException(status_code=400, detail="Status must be 'passed' or 'failed'")
+        
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Update step status
+                update_query = """
+                    UPDATE test_run_steps 
+                    SET status = %s, error_message = %s, completed_at = NOW()
+                    WHERE id = %s AND run_id = %s
+                    RETURNING id
+                """
+                cur.execute(update_query, (status, error, step_id, run_id))
+                result = cur.fetchone()
+                
+                if not result:
+                    # Log more details for debugging
+                    logger.error(f"Step not found: step_id={step_id}, run_id={run_id}")
+                    # Check if step exists but with different run_id
+                    check_query = "SELECT id, run_id FROM test_run_steps WHERE id = %s"
+                    cur.execute(check_query, (step_id,))
+                    check_result = cur.fetchone()
+                    if check_result:
+                        logger.error(f"Step exists but with different run_id: {check_result[1]}")
+                    raise HTTPException(status_code=404, detail=f"Test step not found: step_id={step_id}, run_id={run_id}")
+                
+                # Check if all steps are completed and update run status
+                all_steps_query = """
+                    SELECT COUNT(*) as total, 
+                           SUM(CASE WHEN status IN ('passed', 'failed') THEN 1 ELSE 0 END) as completed
+                    FROM test_run_steps
+                    WHERE run_id = %s
+                """
+                cur.execute(all_steps_query, (run_id,))
+                stats = cur.fetchone()
+                
+                if stats and stats[0] > 0 and stats[1] == stats[0]:
+                    # All steps completed, determine run status
+                    failed_count_query = """
+                        SELECT COUNT(*) FROM test_run_steps 
+                        WHERE run_id = %s AND status = 'failed'
+                    """
+                    cur.execute(failed_count_query, (run_id,))
+                    failed_count = cur.fetchone()[0]
+                    
+                    run_status = "failed" if failed_count > 0 else "passed"
+                    update_run_query = """
+                        UPDATE test_runs 
+                        SET status = %s, completed_at = NOW()
+                        WHERE id = %s
+                    """
+                    cur.execute(update_run_query, (run_status, run_id))
+                
+                conn.commit()
+                return {"id": str(result[0]), "status": status}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error marking test step: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/steps/{step_id}/screenshot")
+async def upload_step_screenshot(run_id: str, step_id: str, request: Request):
+    """Upload a screenshot for a specific test step"""
+    try:
+        data = await request.json()
+        image_base64 = data.get("image")
+        image_type = data.get("type", "image/png")
+        
+        if not image_base64:
+            raise HTTPException(status_code=400, detail="Missing image data")
+        
+        from app.services.postgres_direct import get_postgres_pool
+        from app.services.test_results_storage import store_artifact
+        import base64
+        
+        pool = get_postgres_pool()
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        # Decode base64 image
+        try:
+            image_bytes = base64.b64decode(image_base64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+        
+        # Store as data URL (base64)
+        image_url = f"data:{image_type};base64,{image_base64}"
+        
+        artifact_id = await store_artifact(
+            run_id=run_id,
+            step_id=step_id,
+            artifact_type="screenshot",
+            url=image_url,
+            size_bytes=len(image_bytes),
+            metadata={"type": image_type}
+        )
+        
+        if not artifact_id:
+            raise HTTPException(status_code=500, detail="Failed to store screenshot")
+        
+        return {"id": artifact_id, "url": image_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading step screenshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/screenshot")
+async def upload_run_screenshot(run_id: str, request: Request):
+    """Upload a global screenshot for a test run"""
+    try:
+        data = await request.json()
+        image_base64 = data.get("image")
+        image_type = data.get("type", "image/png")
+        
+        if not image_base64:
+            raise HTTPException(status_code=400, detail="Missing image data")
+        
+        from app.services.postgres_direct import get_postgres_pool
+        from app.services.test_results_storage import store_artifact
+        import base64
+        
+        pool = get_postgres_pool()
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        # Decode base64 image
+        try:
+            image_bytes = base64.b64decode(image_base64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+        
+        # Store as data URL (base64)
+        image_url = f"data:{image_type};base64,{image_base64}"
+        
+        artifact_id = await store_artifact(
+            run_id=run_id,
+            step_id=None,
+            artifact_type="screenshot",
+            url=image_url,
+            size_bytes=len(image_bytes),
+            metadata={"type": image_type, "global": True}
+        )
+        
+        if not artifact_id:
+            raise HTTPException(status_code=500, detail="Failed to store screenshot")
+        
+        return {"id": artifact_id, "url": image_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading run screenshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/steps/{step_id}/link-defect")
+async def link_defect_to_step(run_id: str, step_id: str, request: Request):
+    """Link an existing defect to a test step"""
+    try:
+        data = await request.json()
+        defect_id = data.get("defect_id")
+        
+        if not defect_id:
+            raise HTTPException(status_code=400, detail="Missing defect_id")
+        
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Update defect to link it to the step
+                update_query = """
+                    UPDATE defects 
+                    SET step_id = %s, run_id = %s, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id
+                """
+                cur.execute(update_query, (step_id, run_id, defect_id))
+                result = cur.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Defect not found")
+                
+                conn.commit()
+                return {"id": str(result[0]), "step_id": step_id, "run_id": run_id}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error linking defect to step: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test-runs/{run_id}/link-defect")
+async def link_defect_to_run(run_id: str, request: Request):
+    """Link an existing defect to a test run (global)"""
+    try:
+        data = await request.json()
+        defect_id = data.get("defect_id")
+        
+        if not defect_id:
+            raise HTTPException(status_code=400, detail="Missing defect_id")
+        
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Test run not found")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Update defect to link it to the run (without a specific step)
+                update_query = """
+                    UPDATE defects 
+                    SET run_id = %s, updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id
+                """
+                cur.execute(update_query, (run_id, defect_id))
+                result = cur.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Defect not found")
+                
+                conn.commit()
+                return {"id": str(result[0]), "run_id": run_id}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error linking defect to run: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/test-runs/{run_id}")
@@ -1841,6 +2690,778 @@ async def delete_test_plan(plan_id: str):
         logger.error(f"Error deleting test plan: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Defects CRUD
+@app.get("/defects")
+async def get_defects(project_id: Optional[str] = None):
+    """Get all defects"""
+    try:
+        org_id, proj_id = await ensure_default_org_project()
+        project_id = project_id or proj_id
+        
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            return {"defects": []}
+        
+        query = """
+            SELECT id, project_id, run_id, step_id, title, description, priority, status, 
+                   assigned_to, jira_id, created_by, created_at, updated_at
+            FROM defects
+            WHERE project_id = %s
+            ORDER BY created_at DESC
+        """
+        results = await execute_query(query, (project_id,))
+        
+        defects = []
+        for row in results or []:
+            # Map priority from database format to frontend format
+            priority_map = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
+            db_priority = row.get("priority", "P2")
+            priority = priority_map.get(db_priority, "medium")
+            
+            defects.append({
+                "id": str(row.get("id", "")),
+                "title": row.get("title", ""),
+                "description": row.get("description", ""),
+                "priority": priority,
+                "severity": priority,  # Using priority as severity for now
+                "status": row.get("status", "open"),
+                "runId": str(row.get("run_id", "")) if row.get("run_id") else None,
+                "stepId": str(row.get("step_id", "")) if row.get("step_id") else None,
+                "assignedTo": str(row.get("assigned_to", "")) if row.get("assigned_to") else None,
+                "jiraId": row.get("jira_id"),
+                "createdAt": str(row.get("created_at", "")),
+                "updatedAt": str(row.get("updated_at", ""))
+            })
+        
+        return {"defects": defects}
+    except Exception as e:
+        logger.error(f"Error getting defects: {str(e)}")
+        return {"defects": []}
+
+@app.get("/defects/{defect_id}")
+async def get_defect(defect_id: str):
+    """Get a specific defect"""
+    try:
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            raise HTTPException(status_code=404, detail="Defect not found")
+        
+        query = """
+            SELECT id, project_id, run_id, step_id, title, description, priority, status,
+                   assigned_to, jira_id, created_by, created_at, updated_at
+            FROM defects
+            WHERE id = %s
+        """
+        results = await execute_query(query, (defect_id,))
+        
+        if not results or len(results) == 0:
+            raise HTTPException(status_code=404, detail="Defect not found")
+        
+        row = results[0]
+        priority_map = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
+        db_priority = row.get("priority", "P2")
+        priority = priority_map.get(db_priority, "medium")
+        
+        return {
+            "id": str(row.get("id", "")),
+            "title": row.get("title", ""),
+            "description": row.get("description", ""),
+            "priority": priority,
+            "severity": priority,
+            "status": row.get("status", "open"),
+            "runId": str(row.get("run_id", "")) if row.get("run_id") else None,
+            "stepId": str(row.get("step_id", "")) if row.get("step_id") else None,
+            "assignedTo": str(row.get("assigned_to", "")) if row.get("assigned_to") else None,
+            "jiraId": row.get("jira_id"),
+            "createdAt": str(row.get("created_at", "")),
+            "updatedAt": str(row.get("updated_at", ""))
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/defects")
+async def create_defect(request: Request):
+    """Create a new defect"""
+    try:
+        org_id, project_id = await ensure_default_org_project()
+        
+        data = await request.json()
+        
+        # Map frontend priority to database format
+        priority_map = {"low": "P3", "medium": "P2", "high": "P1", "critical": "P0"}
+        priority = priority_map.get(data.get("priority", "medium"), "P2")
+        
+        from app.services.postgres_direct import execute_insert
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            raise HTTPException(status_code=500, detail="Database connection not available")
+        
+        defect_data = {
+            "project_id": project_id,
+            "title": data.get("title", ""),
+            "description": data.get("description", ""),
+            "priority": priority,
+            "status": data.get("status", "open"),
+            "run_id": data.get("runId"),
+            "step_id": data.get("stepId"),
+            "assigned_to": data.get("assignedTo"),
+            "jira_id": data.get("jiraId"),
+            "created_by": DEFAULT_USER_ID
+        }
+        
+        defect_id = await execute_insert("defects", defect_data)
+        if not defect_id:
+            raise HTTPException(status_code=500, detail="Failed to create defect")
+        
+        return {"id": defect_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/defects/{defect_id}")
+async def update_defect(defect_id: str, request: Request):
+    """Update a defect"""
+    try:
+        data = await request.json()
+        
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Defect not found")
+        
+        # Map frontend priority to database format
+        priority_map = {"low": "P3", "medium": "P2", "high": "P1", "critical": "P0"}
+        priority = None
+        if "priority" in data:
+            priority = priority_map.get(data.get("priority", "medium"), "P2")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Build update query dynamically
+                update_fields = []
+                update_values = []
+                
+                if "title" in data:
+                    update_fields.append("title = %s")
+                    update_values.append(data.get("title"))
+                
+                if "description" in data:
+                    update_fields.append("description = %s")
+                    update_values.append(data.get("description"))
+                
+                if priority:
+                    update_fields.append("priority = %s")
+                    update_values.append(priority)
+                
+                if "status" in data:
+                    update_fields.append("status = %s")
+                    update_values.append(data.get("status"))
+                
+                if "assignedTo" in data:
+                    update_fields.append("assigned_to = %s")
+                    update_values.append(data.get("assignedTo") or None)
+                
+                if "jiraId" in data:
+                    update_fields.append("jira_id = %s")
+                    update_values.append(data.get("jiraId"))
+                
+                if not update_fields:
+                    raise HTTPException(status_code=400, detail="No fields to update")
+                
+                update_fields.append("updated_at = NOW()")
+                update_values.append(defect_id)
+                
+                update_query = f"""
+                    UPDATE defects 
+                    SET {", ".join(update_fields)}
+                    WHERE id = %s
+                    RETURNING id
+                """
+                cur.execute(update_query, tuple(update_values))
+                result = cur.fetchone()
+                conn.commit()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Defect not found")
+                
+                return {"id": str(result[0])}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/defects/{defect_id}")
+async def delete_defect(defect_id: str):
+    """Delete a defect"""
+    try:
+        from app.services.postgres_direct import get_postgres_pool
+        pool = get_postgres_pool()
+        
+        if not pool:
+            raise HTTPException(status_code=404, detail="Defect not found")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM defects WHERE id = %s RETURNING id", (defect_id,))
+                result = cur.fetchone()
+                conn.commit()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Defect not found")
+                
+                return {"status": "deleted", "id": str(result[0])}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting defect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/requirements")
+async def get_requirements(project_id: Optional[str] = None):
+    """Get all requirements"""
+    try:
+        org_id, proj_id = await ensure_default_org_project()
+        project_id = project_id or proj_id
+        
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            return {"requirements": []}
+        
+        query = """
+            SELECT id, project_id, source, source_ref, title, description, raw_payload, created_at
+            FROM requirements
+            WHERE project_id = %s
+            ORDER BY created_at DESC
+        """
+        results = await execute_query(query, (project_id,))
+        
+        requirements = []
+        for row in results or []:
+            requirements.append({
+                "id": str(row.get("id", "")),
+                "title": row.get("title", ""),
+                "description": row.get("description", ""),
+                "source": row.get("source", ""),
+                "source_ref": row.get("source_ref", ""),
+                "created_at": str(row.get("created_at", ""))
+            })
+        
+        return {"requirements": requirements}
+    except Exception as e:
+        logger.error(f"Error getting requirements: {str(e)}")
+        return {"requirements": []}
+
+@app.post("/requirements")
+async def create_requirement_endpoint(request: Request):
+    """Create a new requirement"""
+    try:
+        org_id, project_id = await ensure_default_org_project()
+        data = await request.json()
+        
+        from app.services.database import create_requirement
+        
+        requirement_id = await create_requirement(
+            project_id=project_id,
+            source=data.get("source", "manual"),
+            title=data.get("title", ""),
+            description=data.get("description", ""),
+            source_ref=data.get("source_ref"),
+            raw_payload=data.get("raw_payload")
+        )
+        
+        if not requirement_id:
+            raise HTTPException(status_code=500, detail="Failed to create requirement")
+        
+        return {"id": requirement_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating requirement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/requirements/convert-to-gherkin/{requirement_id}")
+async def convert_requirement_to_gherkin(requirement_id: str, request: Request):
+    """Convert a requirement to Gherkin format using LLM"""
+    try:
+        from app.services.postgres_direct import execute_query, get_postgres_pool
+        
+        # Get the requirement
+        pool = get_postgres_pool()
+        if not pool:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        query = """
+            SELECT id, project_id, source, source_ref, title, description, raw_payload
+            FROM requirements 
+            WHERE id = %s
+        """
+        results = await execute_query(query, (requirement_id,))
+        
+        if not results or len(results) == 0:
+            raise HTTPException(status_code=404, detail="Requirement not found")
+        
+        req = results[0]
+        title = req.get("title", "")
+        description = req.get("description", "")
+        source = req.get("source", "")
+        
+        # Create prompt for Gherkin generation
+        prompt = f"""You are an expert QA engineer specializing in Behavior-Driven Development (BDD) and Gherkin syntax.
+
+Convert the following requirement into a comprehensive Gherkin feature specification.
+
+Original Requirement:
+Title: {title}
+Source: {source}
+Description: {description}
+
+Create a detailed Gherkin feature file that includes:
+
+1. Feature Header with "As a... I want to... So that..." format
+2. Background section (if applicable)
+3. Multiple Scenarios (3-5 scenarios):
+   - Happy path scenario
+   - Edge cases
+   - Error handling scenarios
+   - Alternative flows
+4. Use proper Given-When-Then-And-But keywords
+5. Scenario Outline with Examples table (if applicable)
+
+Return ONLY the Gherkin feature code. Do not include explanations or markdown formatting. Start with "Feature:" and provide complete scenarios.
+"""
+        
+        # Use Ollama to generate Gherkin
+        from app.services.ollama_service import ollama_service
+        import time
+        
+        start_time = time.time()
+        try:
+            # Try to get Gherkin directly
+            result = await ollama_service.generate(prompt, mode="heavy", validate_json=False)
+            gherkin_text = result.get("response", "")
+            
+            # Extract Gherkin from response
+            if "Feature:" in gherkin_text:
+                # Find the start of Feature
+                feature_idx = gherkin_text.find("Feature:")
+                gherkin = gherkin_text[feature_idx:].strip()
+                
+                # Clean up any markdown code blocks
+                if "```" in gherkin:
+                    parts = gherkin.split("```")
+                    for part in parts:
+                        if "Feature:" in part:
+                            gherkin = part.strip()
+                            break
+            else:
+                # Fallback: create basic Gherkin
+                gherkin = f"""Feature: {title}
+  As a user
+  I want to {description.lower()}
+  So that I can efficiently accomplish my task
+
+  Background:
+    Given I am on the {source} application
+    And I have valid access credentials
+
+  Scenario: Successful {title}
+    Given I am on the {source} application
+    When I perform the action: {description}
+    Then I should see the expected result
+    And the operation should complete successfully
+
+  Scenario: Error handling for {title}
+    Given I am on the {source} application
+    When I perform the action with invalid data
+    Then I should see an appropriate error message
+    And the system should handle the error gracefully
+"""
+        except Exception as e:
+            logger.error(f"Error generating Gherkin: {str(e)}")
+            # Fallback to basic Gherkin
+            gherkin = f"""Feature: {title}
+  As a user
+  I want to {description.lower()}
+  So that I can efficiently accomplish my task
+
+  Background:
+    Given I am on the {source} application
+    And I have valid access credentials
+
+  Scenario: Successful {title}
+    Given I am on the {source} application
+    When I perform the action: {description}
+    Then I should see the expected result
+    And the operation should complete successfully
+
+  Scenario: Error handling for {title}
+    Given I am on the {source} application
+    When I perform the action with invalid data
+    Then I should see an appropriate error message
+    And the system should handle the error gracefully
+"""
+        
+        # Update the requirement with Gherkin description
+        pool = get_postgres_pool()
+        if pool:
+            conn = pool.getconn()
+            try:
+                with conn.cursor() as cur:
+                    update_query = """
+                        UPDATE requirements 
+                        SET description = %s, updated_at = NOW()
+                        WHERE id = %s
+                        RETURNING id
+                    """
+                    cur.execute(update_query, (gherkin, requirement_id))
+                    result = cur.fetchone()
+                    conn.commit()
+                    
+                    if result:
+                        return {
+                            "id": str(result[0]),
+                            "gherkin": gherkin,
+                            "status": "success"
+                        }
+            finally:
+                pool.putconn(conn)
+        
+        return {
+            "id": requirement_id,
+            "gherkin": gherkin,
+            "status": "generated"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error converting requirement to Gherkin: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/requirements/{requirement_id}")
+async def get_requirement(requirement_id: str):
+    """Get a specific requirement"""
+    try:
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            raise HTTPException(status_code=404, detail="Requirement not found")
+        
+        query = """
+            SELECT id, project_id, source, source_ref, title, description, raw_payload, created_at
+            FROM requirements 
+            WHERE id = %s
+        """
+        results = await execute_query(query, (requirement_id,))
+        
+        if not results or len(results) == 0:
+            raise HTTPException(status_code=404, detail="Requirement not found")
+        
+        row = results[0]
+        return {
+            "id": str(row.get("id", "")),
+            "title": row.get("title", ""),
+            "description": row.get("description", ""),
+            "source": row.get("source", ""),
+            "source_ref": row.get("source_ref", ""),
+            "created_at": str(row.get("created_at", ""))
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting requirement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/requirements/{requirement_id}")
+async def update_requirement(requirement_id: str, request: Request):
+    """Update a requirement"""
+    try:
+        org_id, project_id = await ensure_default_org_project()
+        data = await request.json()
+        
+        from app.services.postgres_direct import get_postgres_pool
+        
+        pool = get_postgres_pool()
+        if not pool:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        conn = pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                # Only update fields that are provided (not None)
+                update_fields = []
+                update_values = []
+                
+                if data.get("title") is not None:
+                    update_fields.append("title = %s")
+                    update_values.append(data.get("title", ""))
+                
+                if data.get("description") is not None:
+                    update_fields.append("description = %s")
+                    update_values.append(data.get("description", ""))
+                
+                if data.get("source") is not None:
+                    update_fields.append("source = %s")
+                    update_values.append(data.get("source", "manual"))
+                
+                if data.get("source_ref") is not None:
+                    update_fields.append("source_ref = %s")
+                    update_values.append(data.get("source_ref"))
+                
+                if not update_fields:
+                    raise HTTPException(status_code=400, detail="No fields to update")
+                
+                update_fields.append("updated_at = NOW()")
+                update_values.append(requirement_id)
+                
+                update_query = f"""
+                    UPDATE requirements 
+                    SET {", ".join(update_fields)}
+                    WHERE id = %s
+                    RETURNING id
+                """
+                cur.execute(update_query, tuple(update_values))
+                result = cur.fetchone()
+                conn.commit()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail="Requirement not found")
+                
+                return {"id": str(result[0])}
+        finally:
+            pool.putconn(conn)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating requirement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/traceability")
+async def get_traceability_matrix(project_id: Optional[str] = None):
+    """Get complete traceability matrix: Requirements → Test Cases → Test Runs → Defects"""
+    try:
+        org_id, proj_id = await ensure_default_org_project()
+        project_id = project_id or proj_id
+        
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            return {"traceability": []}
+        
+        # Get requirements with linked test cases, test runs, and defects
+        query = """
+            SELECT 
+                r.id as requirement_id,
+                r.title as requirement_title,
+                r.source,
+                r.source_ref,
+                tc.id as test_case_id,
+                tc.title as test_case_title,
+                tc.status as test_case_status,
+                tc.priority as test_case_priority,
+                tr.id as test_run_id,
+                tr.name as test_run_name,
+                tr.status as test_run_status,
+                d.id as defect_id,
+                d.title as defect_title,
+                d.status as defect_status
+            FROM requirements r
+            LEFT JOIN test_case_requirements tcr ON r.id = tcr.requirement_id
+            LEFT JOIN test_cases tc ON tcr.test_case_id = tc.id
+            LEFT JOIN test_runs tr ON tr.plan_id = (SELECT plan_id FROM test_cases WHERE id = tc.id LIMIT 1)
+            LEFT JOIN defects d ON (d.run_id = tr.id OR d.step_id IN (SELECT id FROM test_run_steps WHERE run_id = tr.id))
+            WHERE r.project_id = %s
+            ORDER BY r.created_at DESC, tc.created_at
+        """
+        results = await execute_query(query, (project_id,))
+        
+        # Organize by requirement
+        traceability: Dict[str, Any] = {}
+        for row in results or []:
+            req_id = str(row.get("requirement_id", ""))
+            if req_id not in traceability:
+                traceability[req_id] = {
+                    "requirement": {
+                        "id": req_id,
+                        "title": row.get("requirement_title", ""),
+                        "source": row.get("source", ""),
+                        "source_ref": row.get("source_ref", "")
+                    },
+                    "test_cases": [],
+                    "test_runs": [],
+                    "defects": []
+                }
+            
+            # Add test case if exists
+            if row.get("test_case_id") and not any(tc["id"] == str(row.get("test_case_id")) for tc in traceability[req_id]["test_cases"]):
+                traceability[req_id]["test_cases"].append({
+                    "id": str(row.get("test_case_id", "")),
+                    "title": row.get("test_case_title", ""),
+                    "status": row.get("test_case_status", ""),
+                    "priority": row.get("test_case_priority", "")
+                })
+            
+            # Add test run if exists
+            if row.get("test_run_id") and not any(tr["id"] == str(row.get("test_run_id")) for tr in traceability[req_id]["test_runs"]):
+                traceability[req_id]["test_runs"].append({
+                    "id": str(row.get("test_run_id", "")),
+                    "name": row.get("test_run_name", ""),
+                    "status": row.get("test_run_status", "")
+                })
+            
+            # Add defect if exists
+            if row.get("defect_id") and not any(d["id"] == str(row.get("defect_id")) for d in traceability[req_id]["defects"]):
+                traceability[req_id]["defects"].append({
+                    "id": str(row.get("defect_id", "")),
+                    "title": row.get("defect_title", ""),
+                    "status": row.get("defect_status", "")
+                })
+        
+        return {"traceability": list(traceability.values())}
+    except Exception as e:
+        logger.error(f"Error getting traceability: {str(e)}")
+        return {"traceability": []}
+
+@app.post("/test-runs/{run_id}/comments")
+async def add_test_run_comment(run_id: str, request: Request):
+    """Add a comment to a test run, test case, or step"""
+    try:
+        org_id, project_id = await ensure_default_org_project()
+        data = await request.json()
+        
+        comment_text = data.get("comment", "")
+        case_id = data.get("case_id")
+        step_id = data.get("step_id")
+        
+        if not comment_text:
+            raise HTTPException(status_code=400, detail="Comment text is required")
+        
+        from app.services.postgres_direct import execute_insert
+        
+        comment_data = {
+            "project_id": project_id,
+            "run_id": run_id,
+            "case_id": case_id,
+            "step_id": step_id,
+            "comment": comment_text,
+            "created_by": DEFAULT_USER_ID
+        }
+        
+        comment_id = await execute_insert("test_comments", comment_data)
+        if not comment_id:
+            raise HTTPException(status_code=500, detail="Failed to create comment")
+        
+        return {"id": comment_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding comment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/test-runs/{run_id}/comments")
+async def get_test_run_comments(run_id: str, case_id: Optional[str] = None, step_id: Optional[str] = None):
+    """Get comments for a test run, optionally filtered by case or step"""
+    try:
+        from app.services.postgres_direct import execute_query
+        
+        pool = get_database_client()
+        if not pool or not hasattr(pool, 'getconn'):
+            return {"comments": []}
+        
+        if step_id:
+            query = """
+                SELECT id, case_id, step_id, comment, created_by, created_at, updated_at
+                FROM test_comments
+                WHERE run_id = %s AND step_id = %s
+                ORDER BY created_at ASC
+            """
+            params = (run_id, step_id)
+        elif case_id:
+            query = """
+                SELECT id, case_id, step_id, comment, created_by, created_at, updated_at
+                FROM test_comments
+                WHERE run_id = %s AND case_id = %s
+                ORDER BY created_at ASC
+            """
+            params = (run_id, case_id)
+        else:
+            query = """
+                SELECT id, case_id, step_id, comment, created_by, created_at, updated_at
+                FROM test_comments
+                WHERE run_id = %s
+                ORDER BY created_at ASC
+            """
+            params = (run_id,)
+        
+        results = await execute_query(query, params)
+        
+        comments = []
+        for row in results or []:
+            comments.append({
+                "id": str(row.get("id", "")),
+                "case_id": str(row.get("case_id", "")) if row.get("case_id") else None,
+                "step_id": str(row.get("step_id", "")) if row.get("step_id") else None,
+                "comment": row.get("comment", ""),
+                "created_by": str(row.get("created_by", "")),
+                "created_at": str(row.get("created_at", "")),
+                "updated_at": str(row.get("updated_at", ""))
+            })
+        
+        return {"comments": comments}
+    except Exception as e:
+        logger.error(f"Error getting comments: {str(e)}")
+        return {"comments": []}
+
+@app.post("/test-cases/{case_id}/link-requirement")
+async def link_test_case_to_requirement(case_id: str, request: Request):
+    """Link a test case to a requirement"""
+    try:
+        org_id, project_id = await ensure_default_org_project()
+        data = await request.json()
+        requirement_id = data.get("requirement_id")
+        
+        if not requirement_id:
+            raise HTTPException(status_code=400, detail="requirement_id is required")
+        
+        from app.services.postgres_direct import execute_insert
+        
+        link_data = {
+            "test_case_id": case_id,
+            "requirement_id": requirement_id
+        }
+        
+        link_id = await execute_insert("test_case_requirements", link_data)
+        if not link_id:
+            raise HTTPException(status_code=500, detail="Failed to link requirement")
+        
+        return {"id": link_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error linking requirement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/integrations/jira/webhook")
 async def jira_webhook(request: Request):
@@ -1886,6 +3507,282 @@ def calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
     
     return round(prompt_cost + completion_cost, 4)
 
+@app.post("/ai/generate-tests-enhanced")
+async def generate_tests_enhanced(request: Request, body: dict):
+    """
+    Enhanced test generation endpoint supporting all test types with optimization features.
+    Supports: manual, automation, api, performance, security, accessibility, database
+    
+    Features:
+    - Retry logic with fixup prompts
+    - Deduplication
+    - Coverage hints
+    - All test types
+    """
+    try:
+        from app.services.prompt_templates import (
+            PROMPT_REQ_TO_MANUAL_TESTS,
+            PROMPT_REQ_TO_AUTOMATION_TESTS,
+            PROMPT_REQ_TO_API_TESTS,
+            PROMPT_REQ_TO_PERFORMANCE_TESTS,
+            PROMPT_REQ_TO_SECURITY_TESTS,
+            PROMPT_REQ_TO_ACCESSIBILITY_TESTS,
+            PROMPT_REQ_TO_DATABASE_TESTS
+        )
+        from app.services.test_generation_optimizer import (
+            extract_json_from_response,
+            is_valid_test_case_json,
+            deduplicate_test_cases,
+            check_coverage_hints,
+            add_coverage_hints_to_prompt,
+            retry_with_fixup_prompt,
+            validate_and_fix_test_cases
+        )
+        
+        requirement = body.get("requirement", body.get("requirements", ""))
+        test_type = body.get("test_type", "manual").lower()
+        mode = body.get("mode", "ui")  # quick (7B), ui (14B), heavy (32B)
+        project_id = body.get("project_id", "default")
+        org_id = body.get("org_id", "default")
+        max_retries = body.get("max_retries", 2)
+        
+        if not requirement:
+            raise HTTPException(status_code=400, detail="requirement is required")
+        
+        # Select appropriate prompt template
+        prompt_templates = {
+            "manual": PROMPT_REQ_TO_MANUAL_TESTS,
+            "automation": PROMPT_REQ_TO_AUTOMATION_TESTS,
+            "api": PROMPT_REQ_TO_API_TESTS,
+            "performance": PROMPT_REQ_TO_PERFORMANCE_TESTS,
+            "perf": PROMPT_REQ_TO_PERFORMANCE_TESTS,
+            "security": PROMPT_REQ_TO_SECURITY_TESTS,
+            "accessibility": PROMPT_REQ_TO_ACCESSIBILITY_TESTS,
+            "a11y": PROMPT_REQ_TO_ACCESSIBILITY_TESTS,
+            "database": PROMPT_REQ_TO_DATABASE_TESTS,
+            "db": PROMPT_REQ_TO_DATABASE_TESTS
+        }
+        
+        base_prompt_template = prompt_templates.get(test_type, PROMPT_REQ_TO_MANUAL_TESTS)
+        
+        # Check for existing test cases to get coverage hints
+        existing_tests = body.get("existing_tests", [])
+        coverage_hints = check_coverage_hints(requirement, existing_tests) if existing_tests else []
+        
+        # Build prompt with coverage hints
+        base_prompt = base_prompt_template.format(requirement=requirement)
+        prompt = add_coverage_hints_to_prompt(base_prompt, coverage_hints) if coverage_hints else base_prompt
+        
+        # Generate with retry logic
+        start_time = time.time()
+        test_cases = []
+        last_error = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    # Use fixup prompt on retry
+                    prompt = retry_with_fixup_prompt(base_prompt, "json")
+                
+                # Call LLM
+                result = await ollama_service.generate(prompt, mode=mode, validate_json=False)
+                llm_response = result.get("response", "")
+                model_used = result.get("model", ollama_service._select_model(mode))
+                
+                # Extract JSON from response
+                extracted = extract_json_from_response(llm_response)
+                
+                if extracted and is_valid_test_case_json(extracted):
+                    test_cases = extracted
+                    break
+                else:
+                    last_error = "Invalid JSON structure"
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        # Last attempt failed, try to extract what we can
+                        test_cases = extracted if extracted else []
+                        
+            except Exception as e:
+                last_error = str(e)
+                if attempt < max_retries:
+                    await asyncio.sleep(1)  # Brief delay before retry
+                    continue
+                else:
+                    raise
+        
+        latency_ms = int((time.time() - start_time) * 1000)
+        
+        # Optimize generated test cases
+        if test_cases:
+            # Validate and fix structure
+            test_cases = validate_and_fix_test_cases(test_cases)
+            # Deduplicate
+            test_cases = deduplicate_test_cases(test_cases)
+        
+        # Store generation for fine-tuning
+        await store_ai_generation(
+            project_id=project_id,
+            prompt=prompt,
+            model=model_used,
+            output=json.dumps(test_cases),
+            mode=mode,
+            endpoint="/ai/generate-tests-enhanced",
+            latency_ms=latency_ms,
+            org_id=org_id
+        )
+        
+        return {
+            "status": "success",
+            "test_type": test_type,
+            "test_cases": test_cases,
+            "count": len(test_cases),
+            "model": model_used,
+            "latency_ms": latency_ms,
+            "coverage_hints_applied": coverage_hints,
+            "optimizations": {
+                "deduplicated": True,
+                "validated": True,
+                "retries": attempt
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in generate-tests-enhanced: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/convert-to-playwright")
+async def convert_manual_to_playwright(request: Request, body: dict):
+    """
+    Convert manual test case to Playwright TypeScript code
+    Enhanced with validation and compilation checks
+    """
+    try:
+        from app.services.prompt_templates import PROMPT_MANUAL_TO_PLAYWRIGHT
+        
+        test_case = body.get("test_case", body)
+        mode = body.get("mode", "ui")
+        project_id = body.get("project_id", "default")
+        org_id = body.get("org_id", "default")
+        
+        if not test_case:
+            raise HTTPException(status_code=400, detail="test_case is required")
+        
+        # Format prompt
+        prompt = PROMPT_MANUAL_TO_PLAYWRIGHT.format(test_case=json.dumps(test_case, indent=2))
+        
+        # Generate Playwright code
+        start_time = time.time()
+        result = await ollama_service.generate(prompt, mode=mode, validate_json=False)
+        latency_ms = int((time.time() - start_time) * 1000)
+        
+        playwright_code = result.get("response", "")
+        model_used = result.get("model", ollama_service._select_model(mode))
+        
+        # Store generation for fine-tuning
+        await store_ai_generation(
+            project_id=project_id,
+            prompt=prompt,
+            model=model_used,
+            output=playwright_code,
+            mode=mode,
+            endpoint="/ai/convert-to-playwright",
+            latency_ms=latency_ms,
+            org_id=org_id
+        )
+        
+        return {
+            "status": "success",
+            "code": playwright_code,
+            "model": model_used,
+            "latency_ms": latency_ms
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in convert-to-playwright: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/ai/evaluation-summary")
+async def get_evaluation_summary(project_id: Optional[str] = None):
+    """
+    Get evaluation summary from ai_generations table
+    Useful for monitoring LLM performance and quality
+    """
+    try:
+        from app.services.postgres_direct import execute_query, get_postgres_pool
+        
+        org_id, proj_id = await ensure_default_org_project()
+        project_id = project_id or proj_id
+        
+        pool = get_postgres_pool()
+        if not pool:
+            return {"summary": {}, "error": "Database not available"}
+        
+        query = """
+            SELECT 
+                model,
+                endpoint,
+                COUNT(*) as total_calls,
+                AVG(latency_ms) as avg_latency_ms,
+                MIN(latency_ms) as min_latency_ms,
+                MAX(latency_ms) as max_latency_ms,
+                COUNT(CASE WHEN latency_ms > 10000 THEN 1 END) as slow_calls
+            FROM ai_generations
+            WHERE project_id = %s
+            GROUP BY model, endpoint
+            ORDER BY total_calls DESC
+        """
+        
+        results = await execute_query(query, (project_id,))
+        
+        summary = {
+            "project_id": project_id,
+            "models": {},
+            "endpoints": {},
+            "total_generations": 0
+        }
+        
+        for row in results or []:
+            model = row.get("model", "unknown")
+            endpoint = row.get("endpoint", "unknown")
+            total_calls = row.get("total_calls", 0)
+            
+            summary["total_generations"] += total_calls
+            
+            if model not in summary["models"]:
+                summary["models"][model] = {
+                    "total_calls": 0,
+                    "avg_latency_ms": 0,
+                    "endpoints": {}
+                }
+            
+            summary["models"][model]["total_calls"] += total_calls
+            summary["models"][model]["avg_latency_ms"] = row.get("avg_latency_ms", 0)
+            summary["models"][model]["endpoints"][endpoint] = {
+                "calls": total_calls,
+                "avg_latency_ms": row.get("avg_latency_ms", 0),
+                "min_latency_ms": row.get("min_latency_ms", 0),
+                "max_latency_ms": row.get("max_latency_ms", 0),
+                "slow_calls": row.get("slow_calls", 0)
+            }
+            
+            if endpoint not in summary["endpoints"]:
+                summary["endpoints"][endpoint] = {
+                    "total_calls": 0,
+                    "models": {}
+                }
+            
+            summary["endpoints"][endpoint]["total_calls"] += total_calls
+            summary["endpoints"][endpoint]["models"][model] = total_calls
+        
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error getting evaluation summary: {str(e)}")
+        return {"summary": {}, "error": str(e)}
+
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

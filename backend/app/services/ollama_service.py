@@ -28,7 +28,7 @@ class OllamaService:
         self.ollama_base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         self.ollama_api_url = f"{self.ollama_base_url}/api/generate"
         self.session: Optional[aiohttp.ClientSession] = None
-        self.timeout = 120  # 2 minutes timeout for large models
+        self.timeout = 180  # 3 minutes timeout for large models (14B can take 60-90s)
         
         # Model mapping based on mode
         self.model_map = {
@@ -106,25 +106,48 @@ class OllamaService:
                     
                     # Validate JSON if requested
                     if validate_json:
+                        # Try to extract JSON from response (might have markdown or text)
+                        json_text = response_text.strip()
+                        
+                        # Remove markdown code blocks
+                        if "```json" in json_text:
+                            parts = json_text.split("```json")
+                            if len(parts) > 1:
+                                json_text = parts[1].split("```")[0].strip()
+                        elif "```" in json_text:
+                            parts = json_text.split("```")
+                            for part in parts:
+                                part = part.strip()
+                                if part.startswith("[") or part.startswith("{"):
+                                    json_text = part
+                                    break
+                        
+                        # Find JSON array boundaries
+                        start_idx = json_text.find('[')
+                        end_idx = json_text.rfind(']')
+                        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                            json_text = json_text[start_idx:end_idx+1]
+                        
                         try:
-                            json.loads(response_text)
+                            parsed = json.loads(json_text)
                             # If we get here, JSON is valid
                             return {
-                                "response": response_text,
+                                "response": json_text,  # Return cleaned JSON
                                 "model": model,
                                 "raw_response": data
                             }
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
                             if attempt < max_retries - 1:
                                 # Retry with instruction to fix JSON
                                 logger.warning(f"Invalid JSON on attempt {attempt + 1}, retrying...")
+                                logger.warning(f"Response snippet: {response_text[:200]}")
                                 prompt = f"""{prompt}
 
-Your previous answer was not valid JSON. Please fix it and respond with valid JSON only."""
+Your previous answer was not valid JSON. Please respond with ONLY a valid JSON array. No explanations, no markdown, no text. Just the JSON array starting with [ and ending with ]."""
                                 continue
                             else:
-                                logger.error("Failed to get valid JSON after retries")
-                                raise Exception("Failed to get valid JSON response from model")
+                                logger.error(f"Failed to get valid JSON after retries. Response: {response_text[:500]}")
+                                raise Exception(f"Failed to get valid JSON response from model. Last response: {response_text[:200]}")
                     else:
                         return {
                             "response": response_text,
@@ -159,10 +182,31 @@ Your previous answer was not valid JSON. Please fix it and respond with valid JS
         Returns:
             Parsed JSON as dict
         """
-        result = await self.generate(prompt, mode, max_retries, validate_json=True)
-        return json.loads(result["response"])
+        result = None
+        try:
+            result = await self.generate(prompt, mode, max_retries, validate_json=True)
+            parsed = json.loads(result["response"])
+            return parsed
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            if result:
+                logger.error(f"Response was: {result.get('response', '')[:500]}")
+            raise Exception(f"Failed to parse JSON from model response: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error in generate_json: {str(e)}")
+            raise
 
 
-# Global instance
+# Global instance - will be initialized after .env is loaded
+_ollama_service_instance = None
+
+def get_ollama_service() -> OllamaService:
+    """Get or create OllamaService instance (lazy initialization)"""
+    global _ollama_service_instance
+    if _ollama_service_instance is None:
+        _ollama_service_instance = OllamaService()
+    return _ollama_service_instance
+
+# For backward compatibility, create instance but allow recreation
 ollama_service = OllamaService()
 

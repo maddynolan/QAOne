@@ -1,28 +1,41 @@
 import { Plus, Search, Filter, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-
-const testPlans = [
-  { id: 1, name: "Regression Test Suite", status: "active", tests: 45, lastRun: "2024-01-15" },
-  { id: 2, name: "API Integration Tests", status: "active", tests: 32, lastRun: "2024-01-14" },
-  { id: 3, name: "E2E User Flows", status: "draft", tests: 28, lastRun: "2024-01-10" },
-  { id: 4, name: "Performance Tests", status: "active", tests: 15, lastRun: "2024-01-13" },
-];
+import { dataStorageService, TestPlan } from "@/lib/data-storage";
 
 export default function TestPlans() {
   const navigate = useNavigate();
-  const [expandingPlanId, setExpandingPlanId] = useState<number | null>(null);
+  const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandingPlanId, setExpandingPlanId] = useState<string | null>(null);
 
-  const expandPlanWithAI = async (planId: number) => {
+  useEffect(() => {
+    loadTestPlans();
+  }, []);
+
+  const loadTestPlans = async () => {
+    try {
+      setIsLoading(true);
+      const plans = await dataStorageService.getTestPlans();
+      setTestPlans(plans);
+    } catch (error) {
+      console.error('Error loading test plans:', error);
+      toast.error('Failed to load test plans');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const expandPlanWithAI = async (planId: string) => {
     setExpandingPlanId(planId);
     try {
       toast.loading("Expanding test plan with AI...");
-      const response = await fetch(`http://localhost:8001/ai/generate-tests?planId=${planId}&mode=ui`, {
+      const response = await fetch(`http://localhost:8000/ai/generate-tests?planId=${planId}&mode=ui`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({})
@@ -32,7 +45,7 @@ export default function TestPlans() {
       if (data.status === "success" || data.cases) {
         toast.dismiss();
         toast.success("Plan expanded with additional test scenarios!");
-        // You can update the plan here or navigate to edit page
+        await loadTestPlans(); // Reload plans
         navigate(`/plans/edit/${planId}`, { 
           state: { generatedCases: data.cases || [] } 
         });
@@ -70,59 +83,64 @@ export default function TestPlans() {
         </Button>
       </div>
 
-      <div className="grid gap-4">
-        {testPlans.map((plan) => (
-          <Card key={plan.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-xl">{plan.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {plan.tests} tests • Last run {plan.lastRun}
-                  </p>
+      {isLoading ? (
+        <div className="text-center py-8 text-muted-foreground">Loading test plans...</div>
+      ) : testPlans.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          No test plans found. Create your first test plan to get started.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {testPlans.map((plan) => (
+            <Card key={plan.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-xl">{plan.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {plan.testCases?.length || 0} test cases
+                      {plan.createdAt && ` • Created ${new Date(plan.createdAt).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  <Badge variant={plan.status === "active" ? "default" : "secondary"}>
+                    {plan.status || "draft"}
+                  </Badge>
                 </div>
-                <Badge variant={plan.status === "active" ? "default" : "secondary"}>
-                  {plan.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => expandPlanWithAI(plan.id)}
-                  disabled={expandingPlanId === plan.id}
-                >
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  {expandingPlanId === plan.id ? "Expanding..." : "Expand with AI"}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate(`/plans/edit/${plan.id}`)}
-                >
-                  Edit
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/runs")}
-                >
-                  Run Tests
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/runs")}
-                >
-                  View Results
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardHeader>
+              <CardContent>
+                {plan.description && (
+                  <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => expandPlanWithAI(plan.id)}
+                    disabled={expandingPlanId === plan.id}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    {expandingPlanId === plan.id ? "Expanding..." : "Expand with AI"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate(`/plans/edit/${plan.id}`)}
+                  >
+                    Edit
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => navigate("/runs")}
+                  >
+                    Run Tests
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

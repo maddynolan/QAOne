@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Sparkles, Loader2, Code, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { customLLMService } from "@/lib/custom-llm-service";
-import { dataStorageService } from "@/lib/data-storage";
+import { dataStorageService, TestPlan } from "@/lib/data-storage";
 import { testExecutionService } from "@/lib/test-execution-service";
 
 interface TestStep {
@@ -21,6 +21,9 @@ interface TestStep {
 
 export default function CreateTestCase() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id } = useParams<{ id?: string }>();
+  const isEditMode = !!id;
   const [testSteps, setTestSteps] = useState<TestStep[]>([
     { id: "1", action: "", expectedResult: "" }
   ]);
@@ -37,11 +40,180 @@ export default function CreateTestCase() {
     requirements: "",
     testType: "",
     complexity: "",
-    context: ""
+    context: "",
+    planId: ""
   });
+  const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
+  const [loading, setLoading] = useState(isEditMode);
+  const [allGeneratedTestCases, setAllGeneratedTestCases] = useState<any[]>([]);
+  const [showGeneratedDialog, setShowGeneratedDialog] = useState(false);
+  const [currentGeneratedIndex, setCurrentGeneratedIndex] = useState(0);
+  const [isCreatingAll, setIsCreatingAll] = useState(false);
+
+  // Handle generated test cases from AI generation
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.generatedTestCases && Array.isArray(state.generatedTestCases) && state.generatedTestCases.length > 0) {
+      console.log("Received generated test cases:", state.generatedTestCases);
+      
+      // Store all generated test cases
+      setAllGeneratedTestCases(state.generatedTestCases);
+      setCurrentGeneratedIndex(0);
+      
+      // Load first test case into form
+      loadGeneratedTestCaseIntoForm(state.generatedTestCases[0]);
+      
+      // Show dialog if multiple test cases
+      if (state.generatedTestCases.length > 1) {
+        setShowGeneratedDialog(true);
+        toast.success(`Generated ${state.generatedTestCases.length} test cases! Review and create them.`);
+      } else {
+        toast.success("Generated test case loaded. Review and save it.");
+      }
+      
+      // Clear state to prevent re-loading on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, navigate, location.pathname]);
+
+  // Helper function to load a generated test case into the form
+  const loadGeneratedTestCaseIntoForm = (testCase: any) => {
+    setFormData({
+      name: testCase.name || testCase.title || "",
+      description: testCase.description || "",
+      requirements: "",
+      testType: "manual", // Default for AI-generated from jira-to-testcases
+      complexity: "",
+      context: "",
+      planId: ""
+    });
+    
+    // Convert steps format
+    if (testCase.steps && Array.isArray(testCase.steps)) {
+      const steps = testCase.steps.map((step: any, idx: number) => ({
+        id: String(idx + 1),
+        action: step.action || "",
+        expectedResult: step.expectedResult || ""
+      }));
+      if (steps.length > 0) {
+        setTestSteps(steps);
+      } else {
+        setTestSteps([{ id: "1", action: "", expectedResult: "" }]);
+      }
+    } else {
+      setTestSteps([{ id: "1", action: "", expectedResult: "" }]);
+    }
+  };
+
+  // Load test plans for dropdown
+  useEffect(() => {
+    const loadTestPlans = async () => {
+      try {
+        const plans = await dataStorageService.getTestPlans();
+        setTestPlans(plans);
+      } catch (error) {
+        console.error("Error loading test plans:", error);
+      }
+    };
+    loadTestPlans();
+  }, []);
+
+  // Load test case data if in edit mode
+  useEffect(() => {
+    if (isEditMode && id) {
+      setLoading(true);
+      dataStorageService.getTestCase(id).then(testCase => {
+        if (testCase) {
+          setFormData({
+            name: testCase.name || "",
+            description: testCase.description || "",
+            requirements: "",
+            testType: testCase.testType || "",
+            complexity: "",
+            context: "",
+            planId: testCase.planId || "" // Get plan ID from backend
+          });
+          // Set test steps if available
+          if (testCase.steps && testCase.steps.length > 0) {
+            setTestSteps(testCase.steps.map((step, idx) => ({
+              id: String(idx + 1),
+              action: step.action || "",
+              expectedResult: step.expectedResult || ""
+            })));
+          }
+          setLoading(false);
+        } else {
+          toast.error("Test case not found");
+          navigate("/cases");
+        }
+      }).catch((error) => {
+        console.error("Error loading test case:", error);
+        toast.error("Failed to load test case");
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
+    }
+  }, [id, isEditMode, navigate]);
+
+  // Create all generated test cases at once
+  const handleCreateAllGenerated = async () => {
+    if (allGeneratedTestCases.length === 0) return;
+    
+    setIsCreatingAll(true);
+    let successCount = 0;
+    let errorCount = 0;
+    
+    try {
+      for (const generatedCase of allGeneratedTestCases) {
+        try {
+          const testCaseData = {
+            name: generatedCase.name || generatedCase.title || "",
+            description: generatedCase.description || "",
+            steps: (generatedCase.steps || []).map((step: any) => ({
+              action: step.action || "",
+              expectedResult: step.expectedResult || ""
+            })),
+            preconditions: [],
+            testData: [],
+            priority: "medium" as const,
+            tags: [],
+            testType: "manual",
+            complexity: "medium",
+            estimatedTime: 15
+          };
+          
+          await dataStorageService.createTestCase(testCaseData);
+          successCount++;
+        } catch (error) {
+          console.error("Error creating test case:", error);
+          errorCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`Successfully created ${successCount} test case${successCount > 1 ? 's' : ''}!`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to create ${errorCount} test case${errorCount > 1 ? 's' : ''}.`);
+      }
+      
+      // Clear generated test cases and navigate back
+      setAllGeneratedTestCases([]);
+      setShowGeneratedDialog(false);
+      navigate("/cases");
+    } catch (error) {
+      console.error("Error creating all test cases:", error);
+      toast.error("Failed to create test cases");
+    } finally {
+      setIsCreatingAll(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (loading || isCreatingAll) return;
     
     try {
       const testCaseData = {
@@ -60,12 +232,65 @@ export default function CreateTestCase() {
         estimatedTime: 15 // You can calculate this based on steps
       };
 
-      await dataStorageService.createTestCase(testCaseData);
-      toast.success("Test case created and saved successfully!");
-      navigate("/cases");
-    } catch (error) {
+      if (isEditMode && id) {
+        await dataStorageService.updateTestCase(id, testCaseData);
+        // Assign to plan if selected
+        if (formData.planId) {
+          await fetch(`http://localhost:8000/test-cases/${id}/assign-plan`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: formData.planId })
+          });
+        }
+        toast.success("Test case updated successfully!");
+        navigate("/cases");
+      } else {
+        const created = await dataStorageService.createTestCase(testCaseData);
+        
+        // Check if we got a real UUID or fallback ID
+        if (created.id && created.id.startsWith("tc_")) {
+          toast.error("Test case creation failed - received fallback ID. Check server logs.");
+          console.error("Backend returned fallback ID:", created.id);
+          return;
+        }
+        
+        // Assign to plan if selected
+        if (formData.planId) {
+          await fetch(`http://localhost:8000/test-cases/${created.id}/assign-plan`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: formData.planId })
+          });
+        }
+        
+        // If this was a generated test case, remove it from the list and move to next
+        if (allGeneratedTestCases.length > 0) {
+          // Remove the current test case from the list
+          const updatedList = allGeneratedTestCases.filter((_, idx) => idx !== currentGeneratedIndex);
+          setAllGeneratedTestCases(updatedList);
+          
+          if (updatedList.length > 0) {
+            // Move to next test case (or first if we deleted the last one)
+            const nextIndex = currentGeneratedIndex < updatedList.length ? currentGeneratedIndex : 0;
+            setCurrentGeneratedIndex(nextIndex);
+            loadGeneratedTestCaseIntoForm(updatedList[nextIndex]);
+            toast.success(`Test case created! ${updatedList.length} remaining.`);
+          } else {
+            // All test cases created
+            setShowGeneratedDialog(false);
+            setAllGeneratedTestCases([]);
+            toast.success("All test cases created successfully!");
+            navigate("/cases");
+          }
+        } else {
+          // Regular create (not from generated list)
+          toast.success("Test case created and saved successfully!");
+          navigate("/cases");
+        }
+      }
+    } catch (error: any) {
       console.error("Error saving test case:", error);
-      toast.error("Failed to save test case. Please try again.");
+      toast.error(`Failed to save test case: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -202,6 +427,24 @@ export default function CreateTestCase() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/cases")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold gradient-text">
+              {isEditMode ? "Edit Test Case" : "Create Test Case"}
+            </h1>
+            <p className="text-muted-foreground mt-1">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -209,8 +452,12 @@ export default function CreateTestCase() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-3xl font-bold gradient-text">Create Test Case</h1>
-          <p className="text-muted-foreground mt-1">Define a new test case</p>
+          <h1 className="text-3xl font-bold gradient-text">
+            {isEditMode ? "Edit Test Case" : "Create Test Case"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isEditMode ? "Update test case details" : "Define a new test case"}
+          </p>
         </div>
       </div>
 
@@ -267,15 +514,20 @@ export default function CreateTestCase() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="plan">Associated Test Plan</Label>
-                <Select>
+                <Select 
+                  value={formData.planId || undefined} 
+                  onValueChange={(value) => setFormData({ ...formData, planId: value === "none" ? "" : value })}
+                >
                   <SelectTrigger id="plan">
-                    <SelectValue placeholder="Select a test plan" />
+                    <SelectValue placeholder="Select a test plan (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="regression">Regression Test Suite</SelectItem>
-                    <SelectItem value="api">API Integration Tests</SelectItem>
-                    <SelectItem value="e2e">E2E User Flows</SelectItem>
-                    <SelectItem value="performance">Performance Tests</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                    {testPlans.map((plan) => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -656,6 +908,198 @@ export default function CreateTestCase() {
             >
               <Check className="h-4 w-4 mr-2" />
               Approve & Use Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generated Test Cases Review Dialog */}
+      <Dialog open={showGeneratedDialog} onOpenChange={setShowGeneratedDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Review Generated Test Cases ({allGeneratedTestCases.length})
+            </DialogTitle>
+            <DialogDescription>
+              {allGeneratedTestCases.length > 1 
+                ? `You have ${allGeneratedTestCases.length} generated test cases. Review them and choose to create all or individual ones.`
+                : "Review the generated test case below."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {allGeneratedTestCases.length > 1 && (
+              <div className="flex items-center gap-2 justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const prev = currentGeneratedIndex > 0 ? currentGeneratedIndex - 1 : allGeneratedTestCases.length - 1;
+                      setCurrentGeneratedIndex(prev);
+                      loadGeneratedTestCaseIntoForm(allGeneratedTestCases[prev]);
+                    }}
+                  >
+                    ← Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Test Case {currentGeneratedIndex + 1} of {allGeneratedTestCases.length}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const next = currentGeneratedIndex < allGeneratedTestCases.length - 1 ? currentGeneratedIndex + 1 : 0;
+                      setCurrentGeneratedIndex(next);
+                      loadGeneratedTestCaseIntoForm(allGeneratedTestCases[next]);
+                    }}
+                  >
+                    Next →
+                  </Button>
+                </div>
+                <Button
+                  onClick={handleCreateAllGenerated}
+                  disabled={isCreatingAll}
+                  className="gradient-primary"
+                >
+                  {isCreatingAll ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating All...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create All {allGeneratedTestCases.length} Test Cases
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {allGeneratedTestCases.length > 0 && (
+              <div className="space-y-2">
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-semibold mb-2">
+                    {allGeneratedTestCases[currentGeneratedIndex]?.name || allGeneratedTestCases[currentGeneratedIndex]?.title || "Test Case"}
+                  </h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {allGeneratedTestCases[currentGeneratedIndex]?.description || "No description"}
+                  </p>
+                  {allGeneratedTestCases[currentGeneratedIndex]?.steps && (
+                    <div className="space-y-2">
+                      <h5 className="font-medium text-sm">Steps:</h5>
+                      <ol className="list-decimal list-inside space-y-1 text-sm">
+                        {allGeneratedTestCases[currentGeneratedIndex].steps.map((step: any, idx: number) => (
+                          <li key={idx} className="text-muted-foreground">
+                            <span className="font-medium">{step.action || "Action"}</span>
+                            {step.expectedResult && (
+                              <span className="block ml-4 text-xs">Expected: {step.expectedResult}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {allGeneratedTestCases.length > 1 && (
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                {allGeneratedTestCases.map((tc, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-2 rounded border cursor-pointer transition-colors ${
+                      idx === currentGeneratedIndex ? "border-primary bg-primary/10" : "border-muted"
+                    }`}
+                    onClick={() => {
+                      setCurrentGeneratedIndex(idx);
+                      loadGeneratedTestCaseIntoForm(tc);
+                    }}
+                  >
+                    <div className="text-sm font-medium truncate">
+                      {tc.name || tc.title || `Test Case ${idx + 1}`}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {tc.steps?.length || 0} steps
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowGeneratedDialog(false);
+                setAllGeneratedTestCases([]);
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={async () => {
+                // Create the current test case using the same logic as form submit
+                if (allGeneratedTestCases.length === 0) {
+                  setShowGeneratedDialog(false);
+                  return;
+                }
+                
+                const currentCase = allGeneratedTestCases[currentGeneratedIndex];
+                try {
+                  const testCaseData = {
+                    name: currentCase.name || currentCase.title || "",
+                    description: currentCase.description || "",
+                    steps: (currentCase.steps || []).map((step: any) => ({
+                      action: step.action || "",
+                      expectedResult: step.expectedResult || ""
+                    })),
+                    preconditions: [],
+                    testData: [],
+                    priority: "medium" as const,
+                    tags: [],
+                    testType: "manual",
+                    complexity: "medium",
+                    estimatedTime: 15
+                  };
+                  
+                  const created = await dataStorageService.createTestCase(testCaseData);
+                  
+                  // Check if we got a real UUID or fallback ID
+                  if (created.id && created.id.startsWith("tc_")) {
+                    toast.error("Test case creation failed - received fallback ID. Check server logs.");
+                    return;
+                  }
+                  
+                  // Remove the created test case from the list
+                  const updatedList = allGeneratedTestCases.filter((_, idx) => idx !== currentGeneratedIndex);
+                  setAllGeneratedTestCases(updatedList);
+                  
+                  if (updatedList.length > 0) {
+                    // Move to next test case (or first if we deleted the last one)
+                    const nextIndex = currentGeneratedIndex < updatedList.length ? currentGeneratedIndex : 0;
+                    setCurrentGeneratedIndex(nextIndex);
+                    loadGeneratedTestCaseIntoForm(updatedList[nextIndex]);
+                    toast.success(`Test case created! ${updatedList.length} remaining.`);
+                  } else {
+                    // All test cases created
+                    setShowGeneratedDialog(false);
+                    setAllGeneratedTestCases([]);
+                    toast.success("All test cases created successfully!");
+                    navigate("/cases");
+                  }
+                } catch (error: any) {
+                  console.error("Error creating test case:", error);
+                  toast.error(`Failed to create test case: ${error.message || 'Unknown error'}`);
+                }
+              }}
+              className="gradient-primary"
+            >
+              Create Current Test Case
             </Button>
           </DialogFooter>
         </DialogContent>

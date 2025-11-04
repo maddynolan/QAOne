@@ -35,7 +35,7 @@ export class TestExecutionService {
   private baseUrl: string;
   private testRuns: TestRun[] = [];
 
-  constructor(baseUrl: string = 'http://localhost:8001') {
+  constructor(baseUrl: string = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
   }
 

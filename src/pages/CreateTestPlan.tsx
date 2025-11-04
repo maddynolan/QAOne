@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { dataStorageService } from "@/lib/data-storage";
 
 export default function CreateTestPlan() {
   const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     planName: "",
     description: "",
@@ -22,10 +24,28 @@ export default function CreateTestPlan() {
     specificationContent: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Test plan created successfully!");
-    navigate("/plans");
+    setIsSubmitting(true);
+    
+    try {
+      await dataStorageService.createTestPlan({
+        name: formData.planName,
+        description: formData.description,
+        testCases: [],
+        estimatedDuration: 0,
+        coverage: "",
+        riskAssessment: ""
+      });
+      
+      toast.success("Test plan created successfully!");
+      navigate("/plans");
+    } catch (error: any) {
+      console.error("Error creating test plan:", error);
+      toast.error(error.message || "Failed to create test plan. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
@@ -190,11 +210,11 @@ export default function CreateTestPlan() {
         </Card>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={handleCancel}>
+          <Button type="button" variant="outline" onClick={handleCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" className="gradient-primary">
-            Create Test Plan
+          <Button type="submit" className="gradient-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Creating..." : "Create Test Plan"}
           </Button>
         </div>
       </form>

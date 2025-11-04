@@ -34,7 +34,7 @@ export default function Settings() {
     setLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:8001/ai/templates?project_id=default&task=${selectedTask}`
+        `http://localhost:8000/ai/templates?project_id=default&task=${selectedTask}`
       );
       const data = await response.json();
       setTemplate(data.template || "");
@@ -49,7 +49,7 @@ export default function Settings() {
   const saveTemplate = async () => {
     setSaving(true);
     try {
-      const response = await fetch("http://localhost:8001/ai/templates", {
+      const response = await fetch("http://localhost:8000/ai/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

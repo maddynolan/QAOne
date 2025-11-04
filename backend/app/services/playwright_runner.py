@@ -43,9 +43,27 @@ class PlaywrightRunner:
 
     async def initialize(self):
         """Initialize Playwright browser"""
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=True)
-        self.page = await self.browser.new_page()
+        try:
+            import platform
+            if platform.system() == "Windows":
+                # Use ProactorEventLoop on Windows to avoid NotImplementedError
+                import asyncio
+                if isinstance(asyncio.get_event_loop(), asyncio.ProactorEventLoop):
+                    pass  # Already using ProactorEventLoop
+                else:
+                    # Try to set ProactorEventLoop
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.launch(headless=True)
+            self.page = await self.browser.new_page()
+        except NotImplementedError:
+            # Re-raise with helpful message
+            raise NotImplementedError(
+                "Playwright cannot initialize on Windows with the current asyncio setup. "
+                "This is a known limitation. Try running the server with ProactorEventLoop or on Linux/Mac."
+            )
 
     async def cleanup(self):
         """Clean up browser resources"""
