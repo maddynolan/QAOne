@@ -117,3 +117,4 @@ Your hybrid setup is working:
 - **Ready for** → Supabase auth/storage when needed
 - **Enterprise ready** → Pure Postgres option available
 
+

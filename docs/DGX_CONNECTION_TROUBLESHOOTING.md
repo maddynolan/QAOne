@@ -367,3 +367,4 @@ If connection still fails after all checks:
    docker logs ollama
    ```
 
+

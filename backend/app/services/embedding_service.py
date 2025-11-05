@@ -212,3 +212,4 @@ class EmbeddingService:
 # Global instance
 embedding_service = EmbeddingService()
 
+

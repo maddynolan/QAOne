@@ -24,3 +24,4 @@ CREATE INDEX IF NOT EXISTS idx_ai_generations_output_jsonb ON ai_generations USI
 -- 3. After verification, drop output column: ALTER TABLE ai_generations DROP COLUMN output;
 -- 4. Rename: ALTER TABLE ai_generations RENAME COLUMN output_jsonb TO output;
 
+

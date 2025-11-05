@@ -96,3 +96,4 @@ Acceptance Criteria:
 - Verify tunnel is connected: `curl http://localhost:31143/api/tags`
 - Restart backend if needed
 
+

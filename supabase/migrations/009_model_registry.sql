@@ -74,3 +74,4 @@ COMMENT ON TABLE model_registry IS 'Stores fine-tuned model versions and deploym
 COMMENT ON TABLE ab_tests IS 'Tracks A/B tests between model versions';
 COMMENT ON TABLE model_usage IS 'Tracks model usage for analytics and A/B testing';
 
+

@@ -154,3 +154,4 @@ export function QualityRating({ generationId, onRated }: QualityRatingProps) {
   );
 }
 
+

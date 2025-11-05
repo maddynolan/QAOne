@@ -103,3 +103,4 @@ Write-Host "  2. Set DATABASE_URL in .env file" -ForegroundColor White
 Write-Host "  3. Test connection: GET http://localhost:8001/health/database" -ForegroundColor White
 Write-Host ""
 
+

@@ -292,3 +292,4 @@ class PromptTemplateService:
 # Global instance
 prompt_template_service = PromptTemplateService()
 
+

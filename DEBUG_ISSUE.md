@@ -36,3 +36,4 @@ docker exec qa-postgres psql -U qaai -d qaai -c "SELECT COUNT(*) FROM test_cases
 curl -X POST http://localhost:8001/test-cases -H "Content-Type: application/json" -d '{"name":"Test","description":"Test","steps":[],"priority":"medium","tags":[],"testType":"manual"}'
 ```
 
+

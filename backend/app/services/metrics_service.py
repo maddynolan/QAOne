@@ -318,3 +318,4 @@ class MetricsService:
 # Global instance
 metrics_service = MetricsService()
 
+

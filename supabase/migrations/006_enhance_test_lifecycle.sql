@@ -59,3 +59,4 @@ CREATE INDEX IF NOT EXISTS idx_test_runs_assigned_to ON test_runs(assigned_to);
 CREATE TRIGGER update_test_comments_updated_at BEFORE UPDATE ON test_comments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+

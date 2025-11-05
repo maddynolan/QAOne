@@ -31,3 +31,4 @@ COMMENT ON COLUMN ai_generations.task_category IS 'Category of QA task (manual, 
 COMMENT ON COLUMN ai_generations.complexity_level IS 'Complexity of the input requirement';
 COMMENT ON COLUMN ai_generations.tags IS 'Tags for filtering and organizing training data';
 
+

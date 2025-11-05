@@ -140,3 +140,4 @@ All data is now persisted in PostgreSQL:
 - `ai_templates` - AI prompt templates
 - `requirements` - Requirements from Jira
 
+

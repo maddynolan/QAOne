@@ -22,3 +22,4 @@ CREATE INDEX idx_requirements_source_ref ON requirements(source_ref) WHERE sourc
 CREATE TRIGGER update_requirements_updated_at BEFORE UPDATE ON requirements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+
