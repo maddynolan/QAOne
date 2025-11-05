@@ -67,7 +67,7 @@ Generate comprehensive test cases covering:
             "mode": "ui"  # Use 14B model for better quality
         }
         
-            try:
+        try:
             response = requests.post(f"{BASE_URL}{endpoint}", json=payload, timeout=180)
             if response.ok:
                 result = response.json()
