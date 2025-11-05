@@ -30,6 +30,9 @@ class OllamaService:
         self.session: Optional[aiohttp.ClientSession] = None
         self.timeout = 180  # 3 minutes timeout for large models (14B can take 60-90s)
         
+        # Log which Ollama instance we're using
+        logger.info(f"OllamaService initialized - Using Ollama at: {self.ollama_base_url}")
+        
         # Model mapping based on mode
         self.model_map = {
             ModelMode.QUICK: "qwen2.5:7b-instruct",

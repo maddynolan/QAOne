@@ -50,14 +50,50 @@ class AutomatedDataCollector:
         # Use enhanced endpoint which supports all test types
         endpoint = "/ai/generate-tests-enhanced"
         
+        # Enhanced prompt with best practices
         requirement_text = f"""Title: {requirement['title']}
 Description: {requirement['description']}
 
-Generate comprehensive test cases covering:
-- Positive test cases
-- Negative test cases  
-- Edge cases
-- Boundary conditions"""
+Generate comprehensive test cases following QA best practices:
+
+TEST CASE NAMING CONVENTION:
+- Use descriptive names: "TC_[Feature]_[Scenario]_[ExpectedResult]"
+- Example: "TC_Login_ValidCredentials_ShouldAccessDashboard"
+- Include test type: "TC_Login_InvalidPassword_ShouldShowError"
+
+TEST CASE STRUCTURE:
+- Name: Clear, descriptive test case name
+- Description: Detailed scenario description (2-3 sentences)
+- Steps: 3-7 steps maximum (focused and actionable)
+- Expected Result: Specific, measurable outcome
+
+COVERAGE REQUIREMENTS:
+1. Happy Path (Positive): Valid inputs, successful flow
+2. Negative Cases: Invalid inputs, error handling
+3. Edge Cases: Boundary values, limits, extremes
+4. Boundary Conditions: Min/max values, empty/null inputs
+
+STEP DESCRIPTION BEST PRACTICES:
+- Start with action verb (Navigate, Click, Enter, Verify)
+- Be specific and unambiguous
+- Include data values when relevant
+- One action per step
+- Expected result should be measurable
+
+Example format:
+{{
+  "name": "TC_Login_ValidEmailPassword_ShouldAuthenticateUser",
+  "description": "Verify user can successfully log in with valid email and password credentials",
+  "steps": [
+    {{"action": "Navigate to login page", "expectedResult": "Login page displays with email and password fields"}},
+    {{"action": "Enter valid email 'user@example.com'", "expectedResult": "Email field populated"}},
+    {{"action": "Enter valid password 'SecurePass123!'", "expectedResult": "Password field populated"}},
+    {{"action": "Click Login button", "expectedResult": "User redirected to dashboard"}},
+    {{"action": "Verify user is authenticated", "expectedResult": "User session active, welcome message displayed"}}
+  ],
+  "priority": "high",
+  "tags": ["login", "authentication", "positive"]
+}}"""
         
         payload = {
             "org_id": org_id,

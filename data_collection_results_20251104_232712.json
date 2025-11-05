@@ -1,0 +1,193 @@
+{
+  "timestamp": "2025-11-04T23:27:12.404036",
+  "stats": {
+    "total_generated": 10,
+    "successful": 10,
+    "failed": 0,
+    "high_quality": 9,
+    "medium_quality": 1,
+    "low_quality": 0
+  },
+  "results": [
+    {
+      "generation_id": "45cf1b37-ae86-406e-a1dd-74792a1690dc",
+      "requirement": {
+        "title": "User Login",
+        "description": "User should log in with email and password",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 0.7999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Successful Login with Valid Credentials\",\n    \"description\": \"Verify that a user can successfully log in using valid email and password.\",\n    \"preconditions\": [\n      \"User has re..."
+    },
+    {
+      "generation_id": "52f0af89-d065-419d-b4e2-67ca843bce3d",
+      "requirement": {
+        "title": "API Authentication",
+        "description": "API requires valid authentication token",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.625,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Valid GET request with authorization token\",\n    \"description\": \"Retrieve data using a valid authentication token.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/api/data\",\n    \"headers\"..."
+    },
+    {
+      "generation_id": "4e0fd4d2-de9e-479c-b879-ab4059636700",
+      "requirement": {
+        "title": "Shopping Cart",
+        "description": "User can add items to cart and checkout",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 1.0,
+        "code_quality": 0.7
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Add Item to Cart Successfully\",\n    \"description\": \"User adds a single item to the cart and verifies that it is added successfully.\",\n    \"preconditions\": [\n      \"The user is logg..."
+    },
+    {
+      "generation_id": "631786c1-907d-4ee0-b6be-8adc5704587a",
+      "requirement": {
+        "title": "Password Reset",
+        "description": "User can reset password via email",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 0.8999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Valid Email Address - Password Reset Request\",\n    \"description\": \"Test to verify that a password reset request can be successfully initiated using a valid email address.\",\n    \"pr..."
+    },
+    {
+      "generation_id": "b6a9afb8-4556-4311-aa67-8d8260247f01",
+      "requirement": {
+        "title": "API Rate Limiting",
+        "description": "API enforces rate limits per user",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.5666666666666667,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Get Resource with Valid Rate Limit\",\n    \"description\": \"Verifies that a GET request retrieves the resource within rate limit.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/api/resource..."
+    },
+    {
+      "generation_id": "93558707-b40a-45c2-930d-64db50e61387",
+      "requirement": {
+        "title": "Form Validation",
+        "description": "Forms validate required fields",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.7,
+        "structure_quality": 1.0,
+        "test_coverage": 0.575,
+        "code_quality": 0.7
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Form Submission with Valid Data\",\n    \"description\": \"Automates the process of filling out and submitting a form with valid data.\",\n    \"preconditions\": [\n      \"The form page is a..."
+    },
+    {
+      "generation_id": "426f9c39-5c8f-4f15-ab71-0c8279490b36",
+      "requirement": {
+        "title": "Search Functionality",
+        "description": "Users can search for products",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 3,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.4,
+        "structure_quality": 1.0,
+        "test_coverage": 0.6,
+        "code_quality": 0.4
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Search for a valid product\",\n    \"description\": \"User searches for an existing product in the search bar and verifies that the product appears in the results.\",\n    \"preconditions\"..."
+    },
+    {
+      "generation_id": "7676a4d6-4d72-4792-8cc8-80b8dc906b25",
+      "requirement": {
+        "title": "Payment Processing",
+        "description": "Payment gateway integration works",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.475,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Retrieve Payment Details - Positive Case\",\n    \"description\": \"Verify successful retrieval of payment details by valid payment ID.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/payments..."
+    },
+    {
+      "generation_id": "78a84b65-f846-4369-a628-c2f45c06fc25",
+      "requirement": {
+        "title": "User Profile",
+        "description": "Users can update profile information",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.7,
+        "structure_quality": 1.0,
+        "test_coverage": 1.0,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Update Profile with Valid Information\",\n    \"description\": \"Ensure that a user can successfully update their profile information with valid data.\",\n    \"preconditions\": [\n      \"Us..."
+    },
+    {
+      "generation_id": "1842a34f-ac9a-47aa-8aa5-fc342984e5a8",
+      "requirement": {
+        "title": "Data Export",
+        "description": "Users can export their data",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 0.7999999999999999,
+        "code_quality": 0.7
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Export Data Successfully\",\n    \"description\": \"User successfully exports their data in CSV format.\",\n    \"preconditions\": [\n      \"User is logged in and has data to export\"\n    ],\n..."
+    }
+  ]
+}

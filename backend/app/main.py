@@ -1111,6 +1111,48 @@ Respond with valid {tool} script code (no markdown, no explanations):"""
 @app.post("/ai/a11y-tests")
 async def generate_a11y_tests(request: Request, body: dict):
     """
+    Generate accessibility tests (WCAG 2.1 AA compliance)
+    Uses hardcoded templates - NO inference needed for compliance requirements
+    """
+    try:
+        from app.services.accessibility_compliance import get_accessibility_test_cases
+        
+        # Get all WCAG 2.1 AA compliance test cases (hardcoded, no inference)
+        test_cases = get_accessibility_test_cases()
+        
+        # Store generation for tracking (even though no inference)
+        project_id = body.get("project_id", "11111111-1111-1111-1111-111111111111")
+        org_id = body.get("org_id", "00000000-0000-0000-0000-000000000000")
+        
+        await store_ai_generation(
+            project_id=project_id,
+            prompt="WCAG 2.1 AA Compliance Test Cases (Hardcoded Templates)",
+            model="template-based",
+            output=json.dumps(test_cases),
+            mode="template",
+            endpoint="/ai/a11y-tests",
+            latency_ms=0,  # No inference, instant
+            org_id=org_id,
+            task_category="accessibility"
+        )
+        
+        return {
+            "status": "success",
+            "test_type": "accessibility",
+            "test_cases": test_cases,
+            "count": len(test_cases),
+            "wcag_level": "AA",
+            "wcag_version": "2.1",
+            "source": "hardcoded_templates",
+            "latency_ms": 0
+        }
+    except Exception as e:
+        logger.error(f"Error in a11y-tests: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/ai/a11y-tests-old")
+async def generate_a11y_tests_old(request: Request, body: dict):
+    """
     Generate accessibility tests from DOM dump or URL
     Input: DOM dump or URL
     Output: Playwright + Axe run results
