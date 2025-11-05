@@ -2,7 +2,7 @@
 ## Complete Guide for DGX Spark Model Setup
 
 **Current:** Qwen 7B + 14B on DGX Spark  
-**Goal:** Optimize model selection for billion-dollar product
+**Goal:** Optimize model selection for scaling to market leadership
 
 ---
 
