@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 class CacheService:
-    """Two-tier caching service for LLM responses"""
+    """Four-tier caching service for LLM responses (L1/L2/L3/L4)"""
     
     def __init__(self):
         # Redis connection (L1 cache)
@@ -33,6 +33,23 @@ class CacheService:
         
         # L2 semantic similarity threshold
         self.l2_similarity_threshold = float(os.getenv("L2_SIMILARITY_THRESHOLD", "0.92"))
+        
+        # L3: In-memory model cache (common patterns)
+        self.model_cache: Dict[str, Dict[str, Any]] = {}
+        self.model_cache_max_size = 1000
+        
+        # L4: Static templates
+        self.static_templates = {
+            "test_case_template": {
+                "structure": {
+                    "name": "string",
+                    "description": "string",
+                    "steps": [{"action": "string", "expectedResult": "string"}],
+                    "priority": "low|medium|high|critical",
+                    "tags": ["string"]
+                }
+            }
+        }
     
     async def initialize(self):
         """Initialize Redis and Postgres connections"""

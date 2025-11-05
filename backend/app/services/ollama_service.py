@@ -49,8 +49,24 @@ class OllamaService:
             await self.session.close()
             self.session = None
     
-    def _select_model(self, mode: Optional[str] = None) -> str:
-        """Select model based on mode"""
+    def _select_model(self, mode: Optional[str] = None, task_type: Optional[str] = None) -> str:
+        """Select model based on mode and task type, checking registry for fine-tuned models"""
+        # Check if we have a fine-tuned model for this task type
+        if task_type:
+            try:
+                from app.services.model_registry import model_registry
+                # Try to get fine-tuned model for task type
+                fine_tuned_model_id = f"qa-{task_type}"
+                version = model_registry.get_model_for_request(fine_tuned_model_id, user_id=None)
+                if version:
+                    # Construct model path (assuming Ollama format)
+                    model_path = f"{fine_tuned_model_id}:{version}"
+                    logger.info(f"Using fine-tuned model: {model_path}")
+                    return model_path
+            except Exception as e:
+                logger.debug(f"Could not get fine-tuned model: {e}, falling back to base model")
+        
+        # Fallback to base model selection
         if not mode:
             mode = ModelMode.UI.value
         
@@ -62,7 +78,8 @@ class OllamaService:
         prompt: str,
         mode: Optional[str] = None,
         max_retries: int = 3,
-        validate_json: bool = True
+        validate_json: bool = True,
+        task_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate response from Ollama with JSON validation and retry logic
@@ -79,7 +96,7 @@ class OllamaService:
         if not self.session:
             await self.initialize()
         
-        model = self._select_model(mode)
+        model = self._select_model(mode, task_type=task_type)
         
         for attempt in range(max_retries):
             try:
