@@ -1,0 +1,103 @@
+{
+  "timestamp": "2025-11-04T22:25:10.848166",
+  "stats": {
+    "total_generated": 5,
+    "successful": 5,
+    "failed": 0,
+    "high_quality": 5,
+    "medium_quality": 0,
+    "low_quality": 0
+  },
+  "results": [
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "User Login",
+        "description": "User should log in with email and password",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.7,
+        "structure_quality": 1.0,
+        "test_coverage": 0.7999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Successful Login with Valid Email and Password\",\n    \"description\": \"Test the successful login scenario using a valid email address and password.\",\n    \"preconditions\": [],\n    \"st..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Authentication",
+        "description": "API requires valid authentication token",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.625,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Test Successful Authentication with Valid Token (GET)\",\n    \"description\": \"Verify that a GET request retrieves data successfully with a valid authentication token.\",\n    \"method\":..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Shopping Cart",
+        "description": "User can add items to cart and checkout",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.6000000000000001,
+        "structure_quality": 1.0,
+        "test_coverage": 1.0,
+        "code_quality": 0.7
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Add Item to Cart Successfully\",\n    \"description\": \"User adds a single item to the shopping cart.\",\n    \"preconditions\": [\n      \"The user is logged in.\",\n      \"The product page f..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Password Reset",
+        "description": "User can reset password via email",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 0.8999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Reset Password with Valid Email\",\n    \"description\": \"User is able to successfully reset password using a valid registered email address.\",\n    \"preconditions\": [\n      \"User has f..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Rate Limiting",
+        "description": "API enforces rate limits per user",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.4,
+        "structure_quality": 0.8,
+        "test_coverage": 0.5666666666666667,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"GET Request - Retrieve Data Within Rate Limit\",\n    \"description\": \"Verify successful retrieval of data within the allowed rate limit.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/api/..."
+    }
+  ]
+}

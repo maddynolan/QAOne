@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-11-04T22:13:52.750094",
+  "stats": {
+    "total_generated": 3,
+    "successful": 3,
+    "failed": 2,
+    "high_quality": 0,
+    "medium_quality": 0,
+    "low_quality": 3
+  },
+  "results": [
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Authentication",
+        "description": "API requires valid authentication token",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 1,
+      "detailed_scores": {
+        "json_validity": 0.0,
+        "completeness": 0.0,
+        "structure_quality": 0.0,
+        "test_coverage": 0.0,
+        "code_quality": 1.0
+      },
+      "output_preview": ""
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Shopping Cart",
+        "description": "User can add items to cart and checkout",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 1,
+      "detailed_scores": {
+        "json_validity": 0.0,
+        "completeness": 0.0,
+        "structure_quality": 0.0,
+        "test_coverage": 0.0,
+        "code_quality": 0.0
+      },
+      "output_preview": ""
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Rate Limiting",
+        "description": "API enforces rate limits per user",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 1,
+      "detailed_scores": {
+        "json_validity": 0.0,
+        "completeness": 0.0,
+        "structure_quality": 0.0,
+        "test_coverage": 0.0,
+        "code_quality": 1.0
+      },
+      "output_preview": ""
+    }
+  ]
+}

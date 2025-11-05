@@ -3805,7 +3805,7 @@ async def generate_tests_enhanced(request: Request, body: dict):
             test_cases = deduplicate_test_cases(test_cases)
         
         # Store generation for fine-tuning
-        await store_ai_generation(
+        generation_id = await store_ai_generation(
             project_id=project_id,
             prompt=prompt,
             model=model_used,
@@ -3813,7 +3813,8 @@ async def generate_tests_enhanced(request: Request, body: dict):
             mode=mode,
             endpoint="/ai/generate-tests-enhanced",
             latency_ms=latency_ms,
-            org_id=org_id
+            org_id=org_id,
+            task_category=test_type
         )
         
         return {
@@ -3823,6 +3824,7 @@ async def generate_tests_enhanced(request: Request, body: dict):
             "count": len(test_cases),
             "model": model_used,
             "latency_ms": latency_ms,
+            "generation_id": generation_id,  # Return generation_id for rating
             "coverage_hints_applied": coverage_hints,
             "optimizations": {
                 "deduplicated": True,

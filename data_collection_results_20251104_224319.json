@@ -1,0 +1,121 @@
+{
+  "timestamp": "2025-11-04T22:43:19.306824",
+  "stats": {
+    "total_generated": 6,
+    "successful": 6,
+    "failed": 4,
+    "high_quality": 5,
+    "medium_quality": 1,
+    "low_quality": 0
+  },
+  "results": [
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "User Login",
+        "description": "User should log in with email and password",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 1.0,
+        "test_coverage": 0.8999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Valid Email and Password Login\",\n    \"description\": \"User should be able to log in using a valid email and password.\",\n    \"preconditions\": [\n      \"A user account exists with a kn..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Authentication",
+        "description": "API requires valid authentication token",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.625,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Valid GET Request with Authentication Token\",\n    \"description\": \"Retrieve data with a valid authentication token.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/api/data/123\",\n    \"head..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Rate Limiting",
+        "description": "API enforces rate limits per user",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.5666666666666667,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Test Rate Limiting with Valid GET Request\",\n    \"description\": \"Verify that a valid GET request is processed within the rate limit.\",\n    \"method\": \"GET\",\n    \"endpoint\": \"/api/res..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Form Validation",
+        "description": "Forms validate required fields",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.6000000000000001,
+        "structure_quality": 1.0,
+        "test_coverage": 0.6499999999999999,
+        "code_quality": 0.7
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Positive Test Case: Submitting a Form with All Required Fields Filled\",\n    \"description\": \"Automates the submission of a form where all required fields are filled out correctly.\",..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Search Functionality",
+        "description": "Users can search for products",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 3,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.30000000000000004,
+        "structure_quality": 1.0,
+        "test_coverage": 0.7,
+        "code_quality": 0.4
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Search for a valid product\",\n    \"description\": \"User searches for an existing product and verifies search results.\",\n    \"preconditions\": [\n      \"The user is logged in to the app..."
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Payment Processing",
+        "description": "Payment gateway integration works",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.5,
+        "structure_quality": 0.8,
+        "test_coverage": 0.475,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"Retrieve Payment Details by ID - Positive Case\",\n    \"description\": \"Verify successful retrieval of payment details using a valid payment ID.\",\n    \"method\": \"GET\",\n    \"endpoint\":..."
+    }
+  ]
+}

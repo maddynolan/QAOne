@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-11-04T22:17:23.976449",
+  "stats": {
+    "total_generated": 2,
+    "successful": 2,
+    "failed": 1,
+    "high_quality": 0,
+    "medium_quality": 0,
+    "low_quality": 2
+  },
+  "results": [
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "API Authentication",
+        "description": "API requires valid authentication token",
+        "test_type": "api"
+      },
+      "test_type": "api",
+      "quality_score": 2,
+      "detailed_scores": {
+        "json_validity": 0.5,
+        "completeness": 0.0,
+        "structure_quality": 0.3,
+        "test_coverage": 0.0,
+        "code_quality": 1.0
+      },
+      "output_preview": "[]"
+    },
+    {
+      "generation_id": null,
+      "requirement": {
+        "title": "Shopping Cart",
+        "description": "User can add items to cart and checkout",
+        "test_type": "automation"
+      },
+      "test_type": "automation",
+      "quality_score": 1,
+      "detailed_scores": {
+        "json_validity": 0.5,
+        "completeness": 0.0,
+        "structure_quality": 0.3,
+        "test_coverage": 0.0,
+        "code_quality": 0.0
+      },
+      "output_preview": "[]"
+    }
+  ]
+}
