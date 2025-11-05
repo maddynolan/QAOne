@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-11-05T03:59:20.569794",
+  "stats": {
+    "total_generated": 2,
+    "successful": 2,
+    "failed": 758,
+    "high_quality": 2,
+    "medium_quality": 0,
+    "low_quality": 0
+  },
+  "results": [
+    {
+      "generation_id": "6cb16f36-fba7-4673-ab39-8dcbbdb1c499",
+      "requirement": {
+        "title": "User Login",
+        "description": "User should log in with email and password",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.6000000000000001,
+        "structure_quality": 1.0,
+        "test_coverage": 1.0,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"TC_Login_ValidCredentials_ShouldAccessDashboard\",\n    \"description\": \"Verify that a user can successfully log in using valid email and password, leading to access of the dashboard...."
+    },
+    {
+      "generation_id": "0e737640-d93a-4a1c-8e5b-b9d8c9ca1870",
+      "requirement": {
+        "title": "Password Reset",
+        "description": "User can reset password via email",
+        "test_type": "manual"
+      },
+      "test_type": "manual",
+      "quality_score": 4,
+      "detailed_scores": {
+        "json_validity": 1.0,
+        "completeness": 0.6000000000000001,
+        "structure_quality": 1.0,
+        "test_coverage": 0.8999999999999999,
+        "code_quality": 1.0
+      },
+      "output_preview": "[\n  {\n    \"title\": \"TC_PasswordReset_ValidEmail_ShouldSendResetLink\",\n    \"description\": \"Verify that a valid email address triggers the password reset process and sends a reset link to the user.\",\n  ..."
+    }
+  ]
+}

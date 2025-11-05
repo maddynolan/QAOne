@@ -8,7 +8,7 @@ import os
 import sys
 import time
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from automated_data_collection import AutomatedDataCollector, SAMPLE_REQUIREMENTS
 
