@@ -28,7 +28,8 @@ class OllamaService:
         self.ollama_base_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
         self.ollama_api_url = f"{self.ollama_base_url}/api/generate"
         self.session: Optional[aiohttp.ClientSession] = None
-        self.timeout = 180  # 3 minutes timeout for large models (14B can take 60-90s)
+        # Increased timeout for 14B model on DGX (can take 2-3 minutes, need buffer)
+        self.timeout = 360  # 6 minutes timeout for 14B model (actual takes 114-117s, but need buffer)
         
         # Log which Ollama instance we're using
         logger.info(f"OllamaService initialized - Using Ollama at: {self.ollama_base_url}")

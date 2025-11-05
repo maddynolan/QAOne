@@ -104,7 +104,8 @@ Example format:
         }
         
         try:
-            response = requests.post(f"{BASE_URL}{endpoint}", json=payload, timeout=180)
+            # Increased timeout for 14B model on DGX (can take 2-3 minutes)
+            response = requests.post(f"{BASE_URL}{endpoint}", json=payload, timeout=300)  # 5 minutes
             if response.ok:
                 result = response.json()
                 
