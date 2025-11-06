@@ -105,6 +105,50 @@ STEPS: 3-7 steps, action verbs, specific data values
         print(f"Delay: {DELAY_BETWEEN_REQUESTS}s between requests")
         print(f"Timeout: {REQUEST_TIMEOUT}s per request\n")
         
+        # Verify backend is working before starting
+        print("🔍 Verifying backend is working...")
+        try:
+            health = requests.get(f"{BASE_URL}/health", timeout=5)
+            if not health.ok:
+                print("  ❌ Backend health check failed!")
+                print("  💡 Please restart backend and try again")
+                return
+        except Exception as e:
+            print(f"  ❌ Backend not reachable: {e}")
+            print("  💡 Please start backend and try again")
+            return
+        
+        # Test a single request to verify no errors
+        print("  ⏳ Testing single request...")
+        test_payload = {
+            "org_id": "00000000-0000-0000-0000-000000000000",
+            "project_id": "11111111-1111-1111-1111-111111111111",
+            "requirement": "Test verification",
+            "test_type": "manual",
+            "mode": "quick"
+        }
+        try:
+            test_response = requests.post(
+                f"{BASE_URL}/ai/generate-tests-enhanced",
+                json=test_payload,
+                timeout=180
+            )
+            if not test_response.ok:
+                error_text = test_response.text[:200]
+                if "asyncio" in error_text:
+                    print("  ❌ Backend still has asyncio error!")
+                    print("  💡 Please RESTART backend to apply fix")
+                    return
+                else:
+                    print(f"  ⚠️  Backend error: {error_text}")
+                    print("  💡 Check backend logs")
+                    return
+            print("  ✅ Backend is working correctly!\n")
+        except Exception as e:
+            print(f"  ❌ Backend test failed: {e}")
+            print("  💡 Please restart backend and try again")
+            return
+        
         collected = 0
         batch_num = 0
         
@@ -124,7 +168,16 @@ STEPS: 3-7 steps, action verbs, specific data values
                 result = self.generate_test_case(req, test_type)
                 
                 if not result or not result.get("success"):
-                    print(f"  ❌ Failed: {result.get('error', 'unknown') if result else 'no result'}")
+                    error_msg = result.get('error', 'unknown') if result else 'no result'
+                    print(f"  ❌ Failed: {error_msg}")
+                    
+                    # Check for critical errors that require backend restart
+                    if "asyncio" in str(error_msg).lower():
+                        print(f"\n  🚨 CRITICAL: Backend has asyncio error!")
+                        print(f"  💡 Please RESTART backend and try again")
+                        print(f"\n  📊 Progress before stopping: {collected}/{target_count} examples")
+                        return
+                    
                     self.stats["failed"] += 1
                     if i < len(batch_requirements):
                         print(f"  ⏸️  Waiting {DELAY_BETWEEN_REQUESTS}s before next...\n")
