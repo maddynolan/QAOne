@@ -4013,5 +4013,515 @@ async def get_evaluation_summary(project_id: Optional[str] = None):
         return {"summary": {}, "error": str(e)}
 
 
+# ============================================================================
+# New Architecture Endpoints - Orchestrator, Run Matrix, Style Codes, etc.
+# ============================================================================
+
+@app.post("/workflows/create")
+async def create_workflow(request: Request, body: dict):
+    """Create a new workflow"""
+    try:
+        from app.services.orchestrator import orchestrator, WORKFLOW_TEMPLATES
+        
+        org_id = body.get("org_id", "00000000-0000-0000-0000-000000000000")
+        project_id = body.get("project_id", "11111111-1111-1111-1111-111111111111")
+        workflow_type = body.get("workflow_type", "test_execution")
+        steps = body.get("steps")
+        metadata = body.get("metadata", {})
+        
+        if not steps:
+            # Use template if available
+            template = WORKFLOW_TEMPLATES.get(workflow_type)
+            if template:
+                steps = template["steps"]
+            else:
+                raise HTTPException(status_code=400, detail="No steps provided and no template found")
+        
+        workflow_id = await orchestrator.create_workflow(
+            org_id=org_id,
+            project_id=project_id,
+            workflow_type=workflow_type,
+            steps=steps,
+            metadata=metadata
+        )
+        
+        return {"workflow_id": workflow_id, "status": "created"}
+        
+    except Exception as e:
+        logger.error(f"Error creating workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/workflows/{workflow_id}/execute")
+async def execute_workflow(request: Request, workflow_id: str):
+    """Execute a workflow"""
+    try:
+        from app.services.orchestrator import orchestrator
+        
+        result = await orchestrator.execute_workflow(workflow_id)
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/workflows/{workflow_id}")
+async def get_workflow(request: Request, workflow_id: str):
+    """Get workflow by ID"""
+    try:
+        from app.services.orchestrator import orchestrator
+        from dataclasses import asdict
+        
+        workflow = orchestrator.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        return asdict(workflow)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/run-matrix/route")
+async def route_test(request: Request, body: dict):
+    """Route a test case to executor and environment"""
+    try:
+        from app.services.run_matrix import run_matrix_service
+        
+        test_case = body.get("test_case", {})
+        test_path = body.get("test_path")
+        
+        route = run_matrix_service.route_test(test_case, test_path)
+        return route
+        
+    except Exception as e:
+        logger.error(f"Error routing test: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/style-codes/profile")
+async def profile_style(request: Request, body: dict):
+    """Profile style from test examples"""
+    try:
+        from app.services.style_codes import style_profiler
+        
+        examples = body.get("examples", [])
+        min_samples = body.get("min_samples", 5)
+        max_samples = body.get("max_samples", 50)
+        
+        codex = style_profiler.profile_from_examples(examples, min_samples, max_samples)
+        
+        from dataclasses import asdict
+        return asdict(codex)
+        
+    except Exception as e:
+        logger.error(f"Error profiling style: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/style-codes/enforce")
+async def enforce_style(request: Request, body: dict):
+    """Enforce style codex on generated test"""
+    try:
+        from app.services.style_codes import StyleCodex, StyleEnforcer, StyleFormat, NamingConvention
+        from dataclasses import asdict
+        
+        generated_test = body.get("test", {})
+        codex_data = body.get("codex", {})
+        
+        # Convert dict to StyleCodex
+        codex = StyleCodex(
+            format=StyleFormat(codex_data.get("format", "gherkin")),
+            naming_convention=NamingConvention(codex_data.get("naming_convention", "PascalCase")),
+            use_tags=codex_data.get("use_tags", True),
+            tag_patterns=codex_data.get("tag_patterns", []),
+            max_steps_per_test=codex_data.get("max_steps_per_test", 7),
+            min_steps_per_test=codex_data.get("min_steps_per_test", 3)
+        )
+        
+        enforcer = StyleEnforcer(codex)
+        enforced_test = enforcer.enforce_style(generated_test)
+        
+        return enforced_test
+        
+    except Exception as e:
+        logger.error(f"Error enforcing style: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/planner/prioritize")
+async def prioritize_tests(request: Request, body: dict):
+    """Prioritize tests using risk-based planning"""
+    try:
+        from app.services.planner import risk_based_planner
+        from dataclasses import asdict
+        
+        test_cases = body.get("test_cases", [])
+        context = body.get("context", {})
+        
+        priorities = risk_based_planner.plan_test_suite(test_cases, context)
+        
+        return {
+            "priorities": [asdict(p) for p in priorities],
+            "total_tests": len(priorities)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error prioritizing tests: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/q-index/{project_id}")
+async def get_q_index(request: Request, project_id: str):
+    """Calculate Q-Index for a project"""
+    try:
+        from app.services.q_index import q_index_service
+        from dataclasses import asdict
+        
+        metrics_data = {}  # TODO: Query from database
+        metrics = q_index_service.calculate_q_index(project_id, metrics_data)
+        
+        return asdict(metrics)
+        
+    except Exception as e:
+        logger.error(f"Error calculating Q-Index: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/q-index/{project_id}/gates")
+async def check_quality_gates(request: Request, project_id: str, body: dict):
+    """Check quality gates for a project"""
+    try:
+        from app.services.q_index import q_index_service, QualityGate
+        from dataclasses import asdict
+        
+        gates_data = body.get("gates", {})
+        gates = QualityGate(**gates_data) if gates_data else None
+        
+        metrics_data = {}  # TODO: Query from database
+        metrics = q_index_service.calculate_q_index(project_id, metrics_data)
+        
+        gate_result = q_index_service.check_quality_gates(metrics, gates)
+        
+        return {
+            "passed": gate_result["passed"],
+            "violations": gate_result["violations"],
+            "metrics": asdict(gate_result["metrics"])
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking quality gates: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/self-healing/repair-selectors")
+async def repair_selectors(request: Request, body: dict):
+    """Generate candidate selectors for repair"""
+    try:
+        from app.services.self_healing import self_healing_service
+        from dataclasses import asdict
+        
+        failed_step = body.get("failed_step", {})
+        page_context = body.get("page_context", {})
+        
+        candidates = self_healing_service.repair_selectors(failed_step, page_context)
+        
+        return {
+            "candidates": [asdict(c) for c in candidates],
+            "recommended": asdict(candidates[0]) if candidates else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error repairing selectors: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/self-healing/classify-flake")
+async def classify_flake(request: Request, body: dict):
+    """Classify a test failure as flaky or legitimate"""
+    try:
+        from app.services.self_healing import self_healing_service
+        from dataclasses import asdict
+        
+        test_run = body.get("test_run", {})
+        historical_runs = body.get("historical_runs", [])
+        
+        analysis = self_healing_service.classify_flake(test_run, historical_runs)
+        
+        return asdict(analysis)
+        
+    except Exception as e:
+        logger.error(f"Error classifying flake: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/github/webhook")
+async def github_webhook(request: Request):
+    """Handle GitHub webhook events"""
+    try:
+        from app.services.github_connector import github_connector
+        
+        # Get signature header
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        event_type = request.headers.get("X-GitHub-Event", "")
+        
+        # Read raw body for signature verification
+        body_bytes = await request.body()
+        
+        # Verify signature
+        if not await github_connector.verify_webhook_signature(body_bytes, signature):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+        
+        # Parse payload
+        payload = await request.json()
+        
+        # Handle webhook
+        result = await github_connector.handle_webhook(event_type, payload)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error handling GitHub webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/artifacts/upload")
+async def upload_artifact(request: Request, body: dict):
+    """Upload test artifact to object store"""
+    try:
+        from app.services.object_store import object_store_service
+        import base64
+        
+        artifact_type = body.get("artifact_type")
+        artifact_data_b64 = body.get("artifact_data")  # Base64 encoded
+        org_id = body.get("org_id")
+        project_id = body.get("project_id")
+        run_id = body.get("run_id")
+        step_id = body.get("step_id")
+        filename = body.get("filename")
+        metadata = body.get("metadata", {})
+        
+        # Decode base64 data
+        artifact_data = base64.b64decode(artifact_data_b64)
+        
+        key = object_store_service.upload_artifact(
+            artifact_type=artifact_type,
+            artifact_data=artifact_data,
+            org_id=org_id,
+            project_id=project_id,
+            run_id=run_id,
+            step_id=step_id,
+            filename=filename,
+            metadata=metadata
+        )
+        
+        return {"key": key, "status": "uploaded"}
+        
+    except Exception as e:
+        logger.error(f"Error uploading artifact: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/artifacts/{org_id}/{project_id}/{run_id}")
+async def list_artifacts(request: Request, org_id: str, project_id: str, run_id: str):
+    """List artifacts for a test run"""
+    try:
+        from app.services.object_store import object_store_service
+        
+        artifact_type = request.query_params.get("type")
+        
+        artifacts = object_store_service.list_artifacts(
+            org_id=org_id,
+            project_id=project_id,
+            run_id=run_id,
+            artifact_type=artifact_type
+        )
+        
+        return {"artifacts": artifacts, "count": len(artifacts)}
+        
+    except Exception as e:
+        logger.error(f"Error listing artifacts: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/artifacts/presigned/{key:path}")
+async def get_presigned_url(request: Request, key: str):
+    """Get presigned URL for artifact access"""
+    try:
+        from app.services.object_store import object_store_service
+        
+        expiration = int(request.query_params.get("expiration", 3600))
+        
+        url = object_store_service.get_presigned_url(key, expiration)
+        
+        return {"url": url, "expiration_seconds": expiration}
+        
+    except Exception as e:
+        logger.error(f"Error generating presigned URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CI/CD and Executor Endpoints
+# ============================================================================
+
+@app.post("/cicd/webhook")
+async def cicd_webhook(request: Request):
+    """Handle CI/CD webhook events (GitHub Actions, Jenkins, GitLab CI)"""
+    try:
+        from app.services.cicd_connector import cicd_connector, CICDProvider
+        
+        # Detect provider from headers
+        github_event = request.headers.get("X-GitHub-Event")
+        jenkins_auth = request.headers.get("Authorization")
+        gitlab_token = request.headers.get("X-Gitlab-Token")
+        
+        payload = await request.json()
+        result = None
+
+        if github_event:
+            # GitHub Actions
+            signature = request.headers.get("X-Hub-Signature-256", "")
+            body_bytes = await request.body()
+            
+            # Verify signature would be done here
+            result = await cicd_connector.handle_github_actions_webhook(payload, signature)
+            provider = CICDProvider.GITHUB_ACTIONS
+
+        elif jenkins_auth:
+            # Jenkins
+            result = await cicd_connector.handle_jenkins_webhook(payload, jenkins_auth)
+            provider = CICDProvider.JENKINS
+
+        elif gitlab_token:
+            # GitLab CI
+            result = await cicd_connector.handle_gitlab_ci_webhook(payload, gitlab_token)
+            provider = CICDProvider.GITLAB_CI
+
+        else:
+            raise HTTPException(status_code=400, detail="Unknown CI/CD provider")
+
+        # Trigger test run if needed
+        if result.get("action") == "trigger_tests":
+            test_run_result = await cicd_connector.trigger_test_run(provider, payload)
+            result["test_run"] = test_run_result
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error handling CI/CD webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/executors/k6/execute")
+async def execute_k6_test(request: Request, body: dict):
+    """Execute k6 performance test"""
+    try:
+        from app.services.k6_executor import k6_executor
+        
+        test_script = body.get("test_script")
+        options = body.get("options", {})
+        
+        if not test_script:
+            # Generate script from endpoints
+            endpoints = body.get("endpoints", [])
+            if not endpoints:
+                raise HTTPException(status_code=400, detail="Either test_script or endpoints required")
+            
+            test_script = k6_executor.generate_test_script(endpoints, options)
+        
+        result = await k6_executor.execute_test(test_script, options)
+        
+        return result
+
+    except Exception as e:
+        logger.error(f"Error executing k6 test: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/executors/k6/generate")
+async def generate_k6_script(request: Request, body: dict):
+    """Generate k6 test script from endpoint definitions"""
+    try:
+        from app.services.k6_executor import k6_executor
+        
+        endpoints = body.get("endpoints", [])
+        options = body.get("options", {})
+        
+        if not endpoints:
+            raise HTTPException(status_code=400, detail="endpoints required")
+        
+        script = k6_executor.generate_test_script(endpoints, options)
+        
+        return {
+            "script": script,
+            "status": "generated"
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating k6 script: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/executors/zap/scan")
+async def execute_zap_scan(request: Request, body: dict):
+    """Execute ZAP security scan"""
+    try:
+        from app.services.zap_executor import zap_executor
+        
+        target_url = body.get("target_url")
+        scan_type = body.get("scan_type", "spider")
+        options = body.get("options", {})
+        
+        if not target_url:
+            raise HTTPException(status_code=400, detail="target_url required")
+        
+        result = await zap_executor.execute_scan(target_url, scan_type, options)
+        
+        return result
+
+    except Exception as e:
+        logger.error(f"Error executing ZAP scan: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/synthetic-requirements/generate")
+async def generate_synthetic_requirements(request: Request, body: dict):
+    """Generate synthetic requirements for pre-approval mode"""
+    try:
+        from app.services.synthetic_requirements import synthetic_requirements_generator
+        from dataclasses import asdict
+        
+        count = body.get("count", 5)
+        style_codex = body.get("style_codex")
+        categories = body.get("categories")
+        
+        requirements = synthetic_requirements_generator.generate_requirements(
+            count=count,
+            style_codex=style_codex,
+            categories=categories
+        )
+        
+        return {
+            "requirements": [asdict(r) for r in requirements],
+            "count": len(requirements),
+            "status": "generated"
+        }
+
+    except Exception as e:
+        logger.error(f"Error generating synthetic requirements: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

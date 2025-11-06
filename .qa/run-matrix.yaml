@@ -1,0 +1,114 @@
+# Run Matrix Configuration
+# Defines how tests are routed to executors and environments
+
+executors:
+  ui:
+    image: "playwright:latest"
+    browsers:
+      - "chrome-latest"
+      - "firefox-latest"
+    resources:
+      memory: "2Gi"
+      cpu: "1000m"
+  
+  api:
+    image: "pytest:latest"
+    resources:
+      memory: "1Gi"
+      cpu: "500m"
+  
+  perf:
+    image: "k6:latest"
+    resources:
+      memory: "2Gi"
+      cpu: "1000m"
+  
+  ally:
+    image: "axe-core:latest"
+    resources:
+      memory: "1Gi"
+      cpu: "500m"
+  
+  sec:
+    image: "zap:latest"
+    resources:
+      memory: "2Gi"
+      cpu: "1000m"
+
+environments:
+  dev:
+    base_url: "http://localhost:3000"
+    metadata:
+      description: "Local development environment"
+  
+  staging:
+    base_url: "https://staging.example.com"
+    metadata:
+      description: "Staging environment"
+  
+  preprod:
+    base_url: "https://preprod.example.com"
+    metadata:
+      description: "Pre-production environment"
+
+routing:
+  # Route UI tests to UI executor
+  - when:
+      tags: ["ui"]
+    use:
+      executor: "ui"
+    priority: 10
+  
+  # Route API tests to API executor
+  - when:
+      tags: ["api"]
+    use:
+      executor: "api"
+    priority: 10
+  
+  # Route security-critical tests to security executor
+  - when:
+      path: "sec/critical/**"
+    use:
+      executor: "sec"
+    priority: 20
+  
+  # Route performance tests
+  - when:
+      tags: ["perf"]
+    use:
+      executor: "perf"
+    priority: 10
+  
+  # Route accessibility tests
+  - when:
+      tags: ["ally", "accessibility"]
+    use:
+      executor: "ally"
+    priority: 10
+  
+  # Route demo tests to staging
+  - when:
+      tags: ["demo-staging"]
+    use:
+      executor: "ui"
+      env: "staging"
+    priority: 5
+
+# Default route (used when no rules match)
+default:
+  executor: "ui"
+  env: "dev"
+
+# Scheduled test runs
+schedules:
+  - cron: "0 * * * *"  # Every hour
+    tags: ["hourly"]
+    executor: "ui"
+    env: "staging"
+  
+  - cron: "0 0 * * *"  # Daily at midnight
+    tags: ["regression"]
+    executor: "ui"
+    env: "preprod"
+
