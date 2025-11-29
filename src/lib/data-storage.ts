@@ -143,12 +143,21 @@ class DataStorageService {
     }
   }
 
-  async getTestCases(): Promise<TestCase[]> {
+  async getTestCases(planId?: string): Promise<TestCase[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-cases`);
+      let url = `${this.baseUrl}/test-cases`;
+      if (planId) {
+        url += `?plan_id=${planId}`;
+      }
+      console.log('Fetching test cases from:', url);
+      
+      const response = await fetch(url);
+      console.log('Response status:', response.status, response.statusText);
       
       if (!response.ok) {
-        throw new Error(`Failed to get test cases: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Failed to get test cases:', response.status, errorText);
+        throw new Error(`Failed to get test cases: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
       const data = await response.json();
@@ -162,13 +171,21 @@ class DataStorageService {
         testCases = data.testCases;
       } else if (data.test_cases && Array.isArray(data.test_cases)) {
         testCases = data.test_cases;
+      } else {
+        console.warn('Unexpected response format:', data);
       }
       
       console.log(`Returning ${testCases.length} test cases`);
       return testCases;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error getting test cases:', error);
-      return [];
+      // Check for network errors
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('Network error - backend may not be running');
+        throw new Error(`Cannot connect to backend at ${this.baseUrl}. Is the server running?`);
+      }
+      // Re-throw to let the UI handle it
+      throw error;
     }
   }
 

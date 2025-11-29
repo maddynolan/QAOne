@@ -35,7 +35,7 @@ export default function TestPlans() {
     setExpandingPlanId(planId);
     try {
       toast.loading("Expanding test plan with AI...");
-      const response = await fetch(`http://localhost:8000/ai/generate-tests?planId=${planId}&mode=ui`, {
+      const response = await fetch(`http://localhost:8000/ai/generate-tests?planId=${planId}&mode=quick`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({})

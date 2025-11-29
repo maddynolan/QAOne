@@ -1,0 +1,31 @@
+# Dockerfile for Test Runner Worker
+# Phase 4.2: On-Prem Packaging
+
+FROM mcr.microsoft.com/playwright/python:v1.40.0-focal
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Run worker
+CMD ["python", "-m", "app.workers.test_worker"]
+
+
+

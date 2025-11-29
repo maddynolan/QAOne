@@ -60,3 +60,127 @@ playwright/.cache/
 *.tmp
 *.temp
 *.bak
+
+# Data collection results
+data_collection_results_*.json
+
+# Exploration screenshots (can be large)
+exploration_screenshots/
+backend/exploration_screenshots/
+
+# Test outputs
+test_output.txt
+*.spec.ts
+
+# Archive/temp docs (keep organized ones)
+*_FIX*.md
+*_STATUS*.md
+*_GUIDE.md
+*_COMPLETE*.md
+*_PROGRESS*.md
+*_PLAN*.md
+*_SUMMARY*.md
+*_ROADMAP*.md
+*_CHECK*.md
+*_VERIFICATION*.md
+*_DIAGNOSIS*.md
+*_EXPLANATION*.md
+*_INSTRUCTIONS*.md
+*_MONITORING*.md
+*_SETUP*.md
+*_TRAINING*.md
+*_DEPLOY*.md
+*_CONNECTION*.md
+*_PIPELINE*.md
+*_OPTIMIZATION*.md
+*_REVIEW*.md
+*_ANALYSIS*.md
+*_ANSWER*.md
+*_CLARIFICATION*.md
+*_SOLUTION*.md
+*_REFERENCE*.md
+*_TROUBLESHOOTING*.md
+*_WORKAROUND*.md
+*_STRATEGY*.md
+*_IMPLEMENTATION*.md
+*_INTEGRATION*.md
+*_ENHANCEMENT*.md
+*_ALIGNMENT*.md
+*_FEATURES*.md
+*_COMPARISON*.md
+*_REQUIREMENT*.md
+*_EXTRACTION*.md
+*_DIAGNOSIS*.md
+*_CAPTURE*.md
+*_SESSION*.md
+*_SCREENSHOT*.md
+*_NEXT_STEPS*.md
+*_QUICK*.md
+*_AUTOMATION*.md
+*_TESTING*.md
+*_AUTOMATED*.md
+*_COLLECTION*.md
+*_RESULTS*.md
+
+# Keep only essential docs in root
+!README.md
+!ARCHITECTURE*.md
+!IMPLEMENTATION*.md
+!TESTING_GUIDE.md
+!REFACTORING*.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+backend/logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/

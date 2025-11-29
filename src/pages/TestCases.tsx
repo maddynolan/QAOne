@@ -24,6 +24,9 @@ export default function TestCases() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterPriority, setFilterPriority] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [lastGenerationId, setLastGenerationId] = useState<string | null>(null);
   const [lastGenerationOutput, setLastGenerationOutput] = useState<string>("");
 
@@ -45,12 +48,20 @@ export default function TestCases() {
   const loadTestCases = async () => {
     try {
       setLoading(true);
+      console.log("Loading test cases...");
       // Load test cases directly - initialization happens once on app start
       const cases = await dataStorageService.getTestCases();
+      console.log(`Loaded ${cases.length} test cases`);
       setTestCases(cases);
-    } catch (error) {
+      if (cases.length === 0) {
+        console.warn("No test cases found. Check backend logs and database.");
+      }
+    } catch (error: any) {
       console.error("Error loading test cases:", error);
-      toast.error("Failed to load test cases");
+      const errorMsg = error?.message || "Failed to load test cases";
+      toast.error(errorMsg);
+      // Set empty array on error so page doesn't break
+      setTestCases([]);
     } finally {
       setLoading(false);
     }
@@ -133,7 +144,7 @@ export default function TestCases() {
       const result = await response.json();
       
       // Update test run status in backend
-      await fetch(`http://localhost:8001/test-runs/${runId}`, {
+      await fetch(`http://localhost:8000/test-runs/${runId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -152,7 +163,7 @@ export default function TestCases() {
       
       // Update test run status to failed
       try {
-        await fetch(`http://localhost:8001/test-runs/${runId}`, {
+        await fetch(`http://localhost:8000/test-runs/${runId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -166,11 +177,21 @@ export default function TestCases() {
     }
   };
 
-  const filteredTestCases = testCases.filter(testCase =>
-    testCase.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    testCase.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    testCase.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredTestCases = testCases.filter(testCase => {
+    // Search filter
+    const matchesSearch = 
+      testCase.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      testCase.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      testCase.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // Priority filter
+    const matchesPriority = filterPriority === "all" || testCase.priority === filterPriority;
+    
+    // Type filter
+    const matchesType = filterType === "all" || testCase.testType === filterType;
+    
+    return matchesSearch && matchesPriority && matchesType;
+  });
 
   if (loading) {
     return (
@@ -209,7 +230,7 @@ export default function TestCases() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ 
                     jira: jiraStory, 
-                    mode: "ui",
+                    mode: "quick",  // Use "quick" mode to leverage trained model (qa-expert:7b)
                     project_id: "11111111-1111-1111-1111-111111111111",
                     org_id: "00000000-0000-0000-0000-000000000000"
                   }),
@@ -323,22 +344,69 @@ export default function TestCases() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <Button variant="outline">
+        <Button 
+          variant="outline"
+          onClick={() => setShowFilters(!showFilters)}
+        >
           <Filter className="h-4 w-4 mr-2" />
           Filter
         </Button>
       </div>
 
-      {filteredTestCases.length === 0 ? (
+      {showFilters && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Priority</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Test Type</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                >
+                  <option value="all">All Types</option>
+                  <option value="manual">Manual</option>
+                  <option value="automated">Automated</option>
+                  <option value="api">API</option>
+                  <option value="ui">UI</option>
+                  <option value="performance">Performance</option>
+                  <option value="accessibility">Accessibility</option>
+                  <option value="security">Security</option>
+                </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && filteredTestCases.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
             <div className="space-y-4">
               <div className="text-6xl">📝</div>
               <h3 className="text-xl font-semibold">No test cases found</h3>
               <p className="text-muted-foreground">
-                {searchTerm ? "No test cases match your search criteria." : "Create your first test case to get started."}
+                {searchTerm || filterPriority !== "all" || filterType !== "all" 
+                  ? "No test cases match your search/filter criteria. Try adjusting your filters." 
+                  : testCases.length === 0 
+                    ? "No test cases found. Create your first test case to get started."
+                    : "No test cases match your filters. Try adjusting your search or filter criteria."}
               </p>
-              {!searchTerm && (
+              {testCases.length === 0 && !searchTerm && filterPriority === "all" && filterType === "all" && (
                 <Button className="gradient-primary" onClick={() => navigate("/cases/create")}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Test Case
@@ -347,7 +415,7 @@ export default function TestCases() {
             </div>
           </CardContent>
         </Card>
-      ) : (
+      ) : !loading ? (
         <div className="grid gap-4">
           {filteredTestCases.map((testCase) => (
             <Card key={testCase.id} className="hover:shadow-lg transition-shadow">
@@ -452,7 +520,7 @@ export default function TestCases() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

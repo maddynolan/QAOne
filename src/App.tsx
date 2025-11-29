@@ -20,12 +20,25 @@ import CreateTestPlan from "./pages/CreateTestPlan";
 import EditTestPlan from "./pages/EditTestPlan";
 import TestRunDetail from "./pages/TestRunDetail";
 import TestCaseExecution from "./pages/TestCaseExecution";
+import CreateTestRun from "./pages/CreateTestRun";
+import SelectTestCases from "./pages/SelectTestCases";
 import Defects from "./pages/Defects";
 import CreateDefect from "./pages/CreateDefect";
+import RunAutomation from "./pages/RunAutomation";
+import Flowstral from "./pages/Flowstral";
+import Exploration from "./pages/Exploration";
+import JiraIntegration from "./pages/JiraIntegration";
+import GitHubIntegration from "./pages/GitHubIntegration";
+import AzureDevOpsIntegration from "./pages/AzureDevOpsIntegration";
+import ConfluenceIntegration from "./pages/ConfluenceIntegration";
+import CICDIntegration from "./pages/CICDIntegration";
+import Integrations from "./pages/Integrations";
 import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/AuthPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { dataStorageService } from "./lib/data-storage";
+import APIImport from "./pages/APIImport";
+import GherkinConverter from "./pages/GherkinConverter";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +105,16 @@ const App = () => {
                   <Layout><TestRuns /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/runs/create" element={
+                <ProtectedRoute>
+                  <Layout><CreateTestRun /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/runs/create/select-cases" element={
+                <ProtectedRoute>
+                  <Layout><SelectTestCases /></Layout>
+                </ProtectedRoute>
+              } />
               <Route path="/runs/:id" element={
                 <ProtectedRoute>
                   <Layout><TestRunDetail /></Layout>
@@ -100,6 +123,21 @@ const App = () => {
               <Route path="/runs/:runId/cases/:caseId/execute" element={
                 <ProtectedRoute>
                   <Layout><TestCaseExecution /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/runs/automation" element={
+                <ProtectedRoute>
+                  <Layout><RunAutomation /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/flowstral" element={
+                <ProtectedRoute>
+                  <Layout><Flowstral /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/exploration" element={
+                <ProtectedRoute>
+                  <Layout><Exploration /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/requirements" element={
@@ -140,6 +178,46 @@ const App = () => {
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <Layout><Settings /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations" element={
+                <ProtectedRoute>
+                  <Layout><Integrations /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations/jira" element={
+                <ProtectedRoute>
+                  <Layout><JiraIntegration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations/github" element={
+                <ProtectedRoute>
+                  <Layout><GitHubIntegration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations/azure-devops" element={
+                <ProtectedRoute>
+                  <Layout><AzureDevOpsIntegration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations/confluence" element={
+                <ProtectedRoute>
+                  <Layout><ConfluenceIntegration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/integrations/cicd" element={
+                <ProtectedRoute>
+                  <Layout><CICDIntegration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/api-import" element={
+                <ProtectedRoute>
+                  <Layout><APIImport /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/gherkin" element={
+                <ProtectedRoute>
+                  <Layout><GherkinConverter /></Layout>
                 </ProtectedRoute>
               } />
               

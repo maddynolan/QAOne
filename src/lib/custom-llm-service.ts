@@ -114,7 +114,8 @@ class CustomLLMService {
             app_url: request.context || 'https://www.saucedemo.com',
             prior_flaky_cases: [],
             style: 'imperative',
-            test_count_hint: 1
+            test_count_hint: 1,
+            mode: 'quick'  // Use quick mode to leverage trained model (qa-expert:7b)
           }
         }),
       });

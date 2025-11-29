@@ -1,0 +1,289 @@
+{
+  "page_types": [
+    {
+      "id": "home",
+      "match": ["^https://www.walmart.com/$", "^https://www.walmart.com$"],
+      "label": "Walmart home page"
+    },
+    {
+      "id": "category_car_tires",
+      "match": ["/browse/auto-tires/car-tires", "/auto-tires/car-tires"],
+      "label": "car tires browse page"
+    },
+    {
+      "id": "cart",
+      "match": ["/cart"],
+      "label": "cart page"
+    },
+    {
+      "id": "login",
+      "match": ["/account/login", "identity.walmart.com/account/login", "/login"],
+      "label": "Walmart login page"
+    },
+    {
+      "id": "checkout",
+      "match": ["/checkout"],
+      "label": "checkout page"
+    },
+    {
+      "id": "product_detail",
+      "match": ["/ip/", "/product/"],
+      "label": "product detail page"
+    },
+    {
+      "id": "search_results",
+      "match": ["/search/", "/s/"],
+      "label": "search results page"
+    }
+  ],
+  "controls": [
+    {
+      "id": "services_menu",
+      "selector_contains": ["secondary-nav-flyout-button-v2", "services"],
+      "text_contains": ["Services"],
+      "label": "Services header menu item",
+      "element_name": "Services",
+      "type": "nav_menu"
+    },
+    {
+      "id": "buy_tires_link",
+      "selector_contains": ["subcategory-item-link"],
+      "text_contains": ["Buy Tires", "Schedule Installation"],
+      "label": "Buy Tires & Schedule Installation link",
+      "element_name": "Buy Tires & Schedule Installation",
+      "type": "nav_link"
+    },
+    {
+      "id": "add_to_cart",
+      "selector_contains": [".mr2", "add-to-cart", "addToCart"],
+      "text_contains": ["Add", "Add to Cart"],
+      "label": "Add button",
+      "element_name": "Add",
+      "type": "primary_cta"
+    },
+    {
+      "id": "cart_total_link",
+      "selector_contains": ["cart-total", "cartTotal"],
+      "label": "cart total value",
+      "element_name": "Cart total",
+      "type": "nav_link"
+    },
+    {
+      "id": "remove_item",
+      "selector_contains": [".w_hhLG.w_DZvO", "remove", "remove-item"],
+      "text_contains": ["Remove"],
+      "label": "Remove button",
+      "element_name": "Remove",
+      "type": "primary_cta"
+    },
+    {
+      "id": "checkout_button",
+      "selector_exact": ["#Continue to checkout button", "checkout", "proceed-to-checkout"],
+      "text_contains": ["Continue to checkout", "Checkout", "Proceed"],
+      "label": "Continue to checkout button",
+      "element_name": "Continue to checkout",
+      "type": "primary_cta"
+    },
+    {
+      "id": "search_input",
+      "selector_contains": ["search", "search-input"],
+      "type": "input"
+    },
+    {
+      "id": "search_button",
+      "selector_contains": ["search-button", "search-submit"],
+      "text_contains": ["Search"],
+      "type": "button"
+    },
+    {
+      "id": "login_submit",
+      "selector_contains": ["login", "sign-in", "submit"],
+      "text_contains": ["Sign In", "Log In", "Login"],
+      "type": "primary_cta"
+    }
+  ],
+  "action_phrases": {
+    "click_nav_menu": [
+      "Click on the '{element_name}' header menu item.",
+      "Select the '{element_name}' option from the top navigation.",
+      "Open the '{element_name}' menu from the navigation bar."
+    ],
+    "click_nav_link": [
+      "Click on '{element_name}'.",
+      "Choose '{element_name}' from the list.",
+      "Navigate to '{element_name}' by clicking the link.",
+      "Select '{element_name}' to proceed."
+    ],
+    "click_add_to_cart": [
+      "Click the '{element_name}' button on a {product_type} product.",
+      "Add a {product_type} item to the cart by clicking '{element_name}'.",
+      "Select '{element_name}' to add the {product_type} to your cart."
+    ],
+    "click_cart_total": [
+      "Click on the cart total value (for example, '{target_text}') to open the cart.",
+      "Open the cart by clicking the displayed total amount (e.g., '{target_text}').",
+      "Navigate to the cart page by clicking the cart total showing '{target_text}'."
+    ],
+    "click_remove": [
+      "On the cart page, click the '{element_name}' button for one tire item.",
+      "Remove a tire item from the cart by clicking '{element_name}'.",
+      "Click '{element_name}' to remove the selected item from the cart."
+    ],
+    "click_checkout": [
+      "Click the 'Continue to checkout' button.",
+      "Proceed by clicking 'Continue to checkout'.",
+      "Initiate checkout by selecting 'Continue to checkout'."
+    ],
+    "click_search": [
+      "Click the search button to submit the search query.",
+      "Initiate the search by clicking the search button.",
+      "Submit the search by clicking the search button."
+    ],
+    "fill_input": [
+      "Enter '{target_text}' in the {element_name} field.",
+      "Type '{target_text}' into the {element_name} input field.",
+      "Fill in the {element_name} field with '{target_text}'."
+    ],
+    "scroll": [
+      "Scroll down the page until the {context_target} is visible.",
+      "Scroll the page to bring the {context_target} into view.",
+      "Navigate down the page to locate the {context_target}."
+    ],
+    "open_url": [
+      "Open the {page_label} in a supported browser.",
+      "Navigate to the {page_label}.",
+      "Load the {page_label} in the browser."
+    ],
+    "wcag_scan": [
+      "Trigger an accessibility (WCAG) scan on the {page_label}.",
+      "Run a WCAG accessibility scan on the {page_label}.",
+      "Execute an accessibility check on the {page_label}."
+    ],
+    "login": [
+      "Enter credentials and click the sign in button.",
+      "Log in by entering username and password, then clicking sign in.",
+      "Authenticate by providing login credentials and submitting the form."
+    ]
+  },
+  "expected_phrases": {
+    "nav_to_page": [
+      "The {page_label} loads successfully.",
+      "User is navigated to the {page_label}.",
+      "The browser displays the {page_label}."
+    ],
+    "add_to_cart": [
+      "The selected {product_type} is added to the cart and the cart count or subtotal updates.",
+      "The cart is updated to include the chosen {product_type} item.",
+      "The {product_type} appears in the cart and the total is recalculated."
+    ],
+    "remove_from_cart": [
+      "The selected {product_type} item is removed from the cart and the total updates.",
+      "The cart no longer shows the removed {product_type} and the total reflects the change.",
+      "The item is removed and the cart total is updated accordingly."
+    ],
+    "open_cart": [
+      "The cart page opens, showing the added items and the total price (e.g., {target_text}).",
+      "The cart displays all items with the total amount ({target_text}).",
+      "The cart page is displayed with the current items and total ({target_text})."
+    ],
+    "checkout_redirect_to_login": [
+      "User is redirected to the Walmart login page because they are not signed in.",
+      "The application navigates to the login page to complete checkout as the user is unauthenticated.",
+      "The system redirects to the login page for authentication before checkout."
+    ],
+    "checkout_success": [
+      "User proceeds to the checkout page to complete the purchase.",
+      "The checkout page loads with order summary and payment options.",
+      "User is taken to checkout to finalize the order."
+    ],
+    "wcag_scan_ok": [
+      "The WCAG scan completes successfully and reports no critical accessibility issues.",
+      "Accessibility scan results are generated without critical blocking violations.",
+      "The accessibility check completes and shows compliance status."
+    ],
+    "search_results": [
+      "Search results page displays items matching the query.",
+      "The page shows relevant search results for the entered query.",
+      "Search results are displayed with matching products."
+    ],
+    "login_success": [
+      "User is successfully logged in and redirected to the home page.",
+      "Authentication succeeds and user is taken to the main page.",
+      "Login is successful and the user session is established."
+    ],
+    "menu_opened": [
+      "The {element_name} menu opens showing available options.",
+      "The navigation menu expands to display {element_name} options.",
+      "The {element_name} dropdown menu is displayed."
+    ]
+  },
+  "scenario_templates": [
+    {
+      "id": "navigate_home_to_category",
+      "when": {
+        "includes_page_types": ["home", "category_car_tires"],
+        "includes_controls_any": ["services_menu", "buy_tires_link"],
+        "excludes_controls_any": ["checkout_button", "add_to_cart"]
+      },
+      "title": "Navigate to Car Tires via Services Menu",
+      "description": "Verify that a user can open the Walmart home page, open the Services menu, and navigate to the 'Buy Tires & Schedule Installation' car tires browse page.",
+      "test_type": "functional",
+      "priority": "high"
+    },
+    {
+      "id": "category_add_to_cart_and_cart_view",
+      "when": {
+        "includes_page_types": ["category_car_tires", "cart"],
+        "includes_controls_any": ["add_to_cart", "cart_total_link"]
+      },
+      "title": "Add Car Tires from Browse Page and View Cart Total",
+      "description": "Verify that a user can add car tires from the browse page and open the cart to view the updated total.",
+      "test_type": "functional",
+      "priority": "high"
+    },
+    {
+      "id": "cart_remove_and_checkout_redirect",
+      "when": {
+        "includes_page_types": ["cart", "login"],
+        "includes_controls_any": ["remove_item", "checkout_button"]
+      },
+      "title": "Remove Tire from Cart and Proceed to Checkout (Unauthenticated User)",
+      "description": "Verify that a user can remove a tire from the cart and that clicking 'Continue to checkout' redirects to the login page when they are not signed in.",
+      "test_type": "functional",
+      "priority": "high"
+    },
+    {
+      "id": "wcag_scans",
+      "when": {
+        "includes_event_types": ["wcag_scan"]
+      },
+      "title": "Run WCAG Accessibility Scans on Key Pages",
+      "description": "Verify that WCAG accessibility scans can be run on the main user journey pages without critical issues.",
+      "test_type": "accessibility",
+      "priority": "medium"
+    },
+    {
+      "id": "search_flow",
+      "when": {
+        "includes_page_types": ["search_results"],
+        "includes_controls_any": ["search_input", "search_button"]
+      },
+      "title": "Search for Products",
+      "description": "Verify that a user can search for products and view search results.",
+      "test_type": "functional",
+      "priority": "medium"
+    },
+    {
+      "id": "login_flow",
+      "when": {
+        "includes_page_types": ["login"],
+        "includes_controls_any": ["login_submit"]
+      },
+      "title": "User Login",
+      "description": "Verify that a user can successfully log in with valid credentials.",
+      "test_type": "functional",
+      "priority": "critical"
+    }
+  ]
+}
+

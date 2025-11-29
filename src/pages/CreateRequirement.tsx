@@ -17,6 +17,7 @@ export default function CreateRequirement() {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
+    acceptance_criteria: "",
     source: "manual",
     source_ref: ""
   });
@@ -36,6 +37,7 @@ export default function CreateRequirement() {
           setFormData({
             title: requirement.title || "",
             description: requirement.description || "",
+            acceptance_criteria: requirement.acceptance_criteria || "",
             source: requirement.source || "manual",
             source_ref: requirement.source_ref || ""
           });
@@ -155,6 +157,20 @@ export default function CreateRequirement() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={6}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="acceptance_criteria">Acceptance Criteria</Label>
+              <Textarea
+                id="acceptance_criteria"
+                placeholder="Enter acceptance criteria, one per line...&#10;Example:&#10;1. User can enter email address&#10;2. System validates email format&#10;3. User can click Login button"
+                value={formData.acceptance_criteria}
+                onChange={(e) => setFormData({ ...formData, acceptance_criteria: e.target.value })}
+                rows={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter each acceptance criterion on a new line. This will be used when generating test cases.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
   // Requirements
   REQUIREMENTS: `${API_BASE_URL}/requirements`,
   REQUIREMENT: (id: string) => `${API_BASE_URL}/requirements/${id}`,
+  REQUIREMENTS_JIRA_TO_TESTCASES: `${API_BASE_URL}/requirements/jira-to-testcases`,
   
   // Defects
   DEFECTS: `${API_BASE_URL}/defects`,
@@ -55,6 +56,19 @@ export const API_ENDPOINTS = {
   
   // Health
   HEALTH: `${API_BASE_URL}/health`,
+  
+  // Flowstral
+  FLOWSTRAL_START: `${API_BASE_URL}/api/flowstral/start`,
+  FLOWSTRAL_CAPTURE_EVENT: `${API_BASE_URL}/api/flowstral/capture-event`,
+  FLOWSTRAL_STOP: `${API_BASE_URL}/api/flowstral/stop`,
+  FLOWSTRAL_SESSION_STATUS: (sessionId: string) => `${API_BASE_URL}/api/flowstral/session/${sessionId}/status`,
+  FLOWSTRAL_ARTIFACTS: (sessionId: string) => `${API_BASE_URL}/api/flowstral/session/${sessionId}/artifacts`,
+  FLOWSTRAL_SESSIONS: `${API_BASE_URL}/api/flowstral/sessions`,
+  FLOWSTRAL_SESSION_SUMMARY: (sessionId: string) => `${API_BASE_URL}/api/flowstral/session/${sessionId}/summary`,
+  FLOWSTRAL_WS: (sessionId: string) => {
+    const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+    return `${wsUrl}/api/flowstral/ws/${sessionId}`;
+  },
 };
 
 

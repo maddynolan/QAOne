@@ -7,10 +7,14 @@
 QA AI Platform is a full-stack testing management solution that combines modern web technologies with AI-powered capabilities. The platform streamlines the entire QA lifecycle from test case generation to defect triage, all backed by a robust PostgreSQL database and integrated with local LLM models via Ollama.
 
 **Key Highlights:**
-- **AI-Powered**: Integrated with Ollama serving Qwen models (7B, 14B, 32B) for intelligent test generation
+- **Multi-Agent Architecture**: Specialized agents for requirements, automation, performance, accessibility, and security
+- **AI-Powered**: Model Gateway with local Qwen 30B (fine-tuned) + cloud API support
 - **Full-Stack**: React frontend + FastAPI backend + PostgreSQL database
-- **Hybrid Architecture**: Direct PostgreSQL for core data, ready for Supabase SaaS features
+- **Multi-Tenant**: Full tenant isolation for enterprise deployments
+- **On-Prem Ready**: Docker/Helm packaging for self-hosted deployments
 - **Production Ready**: Complete CRUD APIs, database persistence, and error handling
+
+**🚀 Architecture Status:** Currently implementing v2.0 multi-agent architecture. See [`docs/FINAL_ARCHITECTURE.md`](docs/FINAL_ARCHITECTURE.md) for details.
 
 ---
 
@@ -98,13 +102,13 @@ QA AI Platform is a full-stack testing management solution that combines modern 
 - **CORS**: Configured for frontend access
 
 ### AI/LLM
-- **Local LLMs**: Ollama serving Qwen models
-  - Qwen 7B (fast, UI tasks)
-  - Qwen 14B (balanced, general tasks)
-  - Qwen 32B (complex, analysis tasks)
+- **Model Gateway**: Unified LLM access layer
+  - Local: Qwen 3-Coder-30B (fine-tuned for QA) via vLLM/Ollama
+  - Cloud: OpenAI, Anthropic (optional)
+  - Token & cost tracking
 - **Model Routing**: Automatic selection based on task complexity
 - **JSON Validation**: Retry logic for structured outputs
-- **Fine-tuning Ready**: All prompts/outputs stored for training
+- **Fine-tuning Ready**: All prompts/outputs stored for training (LoRA fine-tuning on DGX)
 
 ### Database
 - **Primary**: PostgreSQL 16 (Docker container)
@@ -124,6 +128,8 @@ QA AI Platform is a full-stack testing management solution that combines modern 
 
 ## 🏗️ Architecture
 
+### Current Architecture (v1.0)
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   React Frontend │    │   FastAPI Backend│    │   PostgreSQL    │
@@ -136,13 +142,59 @@ QA AI Platform is a full-stack testing management solution that combines modern 
                         └─────────────────┘
 ```
 
+### Target Architecture (v2.0) - Multi-Agent Platform
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Frontend (React)                            │
+│  Dashboard | Test Cases | Runs | Requirements | Performance | Sec   │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    API Gateway (FastAPI)                             │
+└──────────────────────────────┬──────────────────────────────────────┘
+                ┌──────────────┴──────────────┐
+                ▼                             ▼
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│    Agent Orchestrator        │  │     Model Gateway            │
+│  • Workflow Engine           │  │  • Local LLM (Qwen 30B)     │
+│  • Agent Coordination        │  │  • Cloud APIs (OpenAI/etc)  │
+└──────────────┬───────────────┘  └──────────────┬───────────────┘
+               │                                  │
+               └──────────────┬───────────────────┘
+                              ▼
+        ┌─────────────────────────────────────┐
+        │      Specialized Agents              │
+        ├─────────────────────────────────────┤
+        │ 1. Requirements Intelligence Agent   │
+        │ 2. Functional Automation Agent       │
+        │ 3. Performance Testing Agent         │
+        │ 4. Accessibility Agent               │
+        │ 5. Security Agent                    │
+        └──────────────┬───────────────────────┘
+                       │
+        ┌──────────────┴───────────────────────┐
+        ▼                                      ▼
+┌──────────────────┐              ┌──────────────────┐
+│  Test Runner     │              │  External Tools  │
+│  Service         │              │  • Playwright    │
+│  • Docker Workers│              │  • k6/Locust     │
+│  • Queue System  │              │  • ZAP           │
+└──────────────────┘              └──────────────────┘
+```
+
+**📖 For detailed architecture documentation, see:**
+- [`docs/FINAL_ARCHITECTURE.md`](docs/FINAL_ARCHITECTURE.md) - Complete architecture specification
+- [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) - Implementation plan
+
 ### Data Flow
 
 1. **Frontend** → Makes API calls to FastAPI backend
-2. **Backend** → Queries PostgreSQL database
-3. **Backend** → Calls Ollama API for AI features
-4. **Backend** → Stores AI generations for fine-tuning
-5. **Database** → Persists all data (test cases, runs, AI outputs)
+2. **Backend** → Routes to Agent Orchestrator or Model Gateway
+3. **Agents** → Use Model Gateway for LLM access (Qwen 30B or cloud)
+4. **Test Runner** → Executes tests in Docker workers
+5. **Database** → Persists all data (test cases, runs, AI outputs) with multi-tenant isolation
 
 ---
 
@@ -477,7 +529,7 @@ docker-compose up -d
 
 ## 🔮 Roadmap
 
-### Completed ✅
+### Completed ✅ (v1.0)
 - ✅ Full CRUD APIs for test cases, runs, plans
 - ✅ PostgreSQL database with migrations
 - ✅ Ollama integration with model routing
@@ -485,15 +537,28 @@ docker-compose up -d
 - ✅ Requirements tracking from Jira
 - ✅ Test run execution and storage
 - ✅ Prompt template management
+- ✅ Orchestrator service
+- ✅ Run Matrix system
+- ✅ Object Store (S3/MinIO)
+- ✅ Self-healing service
+- ✅ Q-Index quality scoring
+- ✅ k6 and ZAP executors
 
-### Future Enhancements
-- [ ] Authentication and authorization
-- [ ] Multi-tenant organization support
-- [ ] Advanced analytics dashboard
-- [ ] CI/CD integrations
-- [ ] Webhook integrations
-- [ ] Real-time collaboration
-- [ ] Mobile app
+### In Progress 🚧 (v2.0 - Multi-Agent Architecture)
+- [ ] **Model Gateway** - Unified LLM access (Qwen 30B + cloud)
+- [ ] **Agent Orchestrator Enhancement** - Standard agent interface
+- [ ] **Multi-Tenant Data Model** - Full tenant isolation
+- [ ] **Requirements Intelligence Agent** - Jira/Confluence connectors + RAG
+- [ ] **Automation Agent Enhancement** - DOM recorder + self-healing
+- [ ] **Test Runner Service** - Docker-based workers
+- [ ] **Performance Testing Agent** - Metrics store + SLA tracking
+- [ ] **Accessibility Agent** - WCAG compliance + reports
+- [ ] **Security Agent** - Intelligent triage + SAST
+- [ ] **Plugin API** - IDE/browser extensions
+- [ ] **On-Prem Packaging** - Docker/Helm deployment
+- [ ] **Observability & RBAC** - Logging, metrics, access control
+
+**📖 See [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) for detailed timeline.**
 
 ---
 

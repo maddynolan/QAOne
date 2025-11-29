@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { dataStorageService } from "@/lib/data-storage";
@@ -24,6 +25,7 @@ export default function TestRunDetail() {
   const [newComment, setNewComment] = useState<{ [key: string]: string }>({});
   const [showCommentBox, setShowCommentBox] = useState<{ [key: string]: boolean }>({});
   const [expandedTestCases, setExpandedTestCases] = useState<{ [key: string]: boolean }>({});
+  const [selectedTestCases, setSelectedTestCases] = useState<Set<string>>(new Set());
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const globalScreenshotInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,6 +56,14 @@ export default function TestRunDetail() {
   const loadTestRun = async (runId: string) => {
     try {
       const run = await dataStorageService.getTestRun(runId);
+      console.log("🔍 Test Run Data:", run);
+      console.log("🔍 Test Cases:", run?.testCases);
+      if (run?.testCases) {
+        run.testCases.forEach((tc: any, idx: number) => {
+          console.log(`🔍 Test Case ${idx}:`, tc);
+          console.log(`🔍 Test Case ${idx} Steps:`, tc.steps);
+        });
+      }
       setTestRun(run);
     } catch (error: any) {
       console.error("Error loading test run:", error);
@@ -297,6 +307,59 @@ export default function TestRunDetail() {
     return testRun.testCaseStatuses[caseId] || "pending";
   };
 
+  const toggleTestCaseSelection = (caseId: string) => {
+    const newSelected = new Set(selectedTestCases);
+    if (newSelected.has(caseId)) {
+      newSelected.delete(caseId);
+    } else {
+      newSelected.add(caseId);
+    }
+    setSelectedTestCases(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (!testRun?.testCases) return;
+    if (selectedTestCases.size === testRun.testCases.length) {
+      setSelectedTestCases(new Set());
+    } else {
+      setSelectedTestCases(new Set(testRun.testCases.map((tc: any) => tc.id)));
+    }
+  };
+
+  const executeSelectedTestCases = async () => {
+    if (selectedTestCases.size === 0) {
+      toast.error("Please select at least one test case");
+      return;
+    }
+
+    if (testRun.status === "pending") {
+      await startExecution();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await loadTestRun(testRun.id);
+    }
+
+    try {
+      const caseIds = Array.from(selectedTestCases);
+      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/execute-selected`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ case_ids: caseIds })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to execute selected test cases");
+      }
+
+      toast.success(`Executing ${caseIds.length} test case(s)...`);
+      await loadTestRun(testRun.id);
+      setSelectedTestCases(new Set());
+    } catch (error: any) {
+      toast.error(`Failed to execute test cases: ${error.message}`);
+      console.error("Error executing selected test cases:", error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -361,6 +424,17 @@ export default function TestRunDetail() {
             <Badge variant={testRun.status === "completed" ? "default" : testRun.status === "failed" ? "destructive" : "secondary"}>
               {testRun.status}
             </Badge>
+            {testRun.planId && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => navigate(`/plans/${testRun.planId}`)}
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                View Test Plan
+              </Button>
+            )}
             {testRun.started_at && <span>• Started: {new Date(testRun.started_at).toLocaleString()}</span>}
             {testRun.completed_at && <span>• Completed: {new Date(testRun.completed_at).toLocaleString()}</span>}
           </div>
@@ -372,7 +446,7 @@ export default function TestRunDetail() {
             className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
             title="Start execution for all test cases"
           >
-            {isLoading ? "Starting..." : "Start All Test Cases"}
+            {isLoading ? "Starting..." : "Start Execution"}
           </Button>
         )}
       </div>
@@ -557,7 +631,33 @@ export default function TestRunDetail() {
 
         {/* Execution Tab */}
         <TabsContent value="execution" className="space-y-6">
-          <h2 className="text-2xl font-semibold">Test Cases</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold">Test Cases</h2>
+            {testRun.testCases && testRun.testCases.length > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedTestCases.size === testRun.testCases.length && testRun.testCases.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                  <label className="text-sm text-muted-foreground cursor-pointer" onClick={toggleSelectAll}>
+                    Select All ({testRun.testCases.length})
+                  </label>
+                </div>
+                {selectedTestCases.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={executeSelectedTestCases}
+                    disabled={testRun.status === "completed"}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Run Selected ({selectedTestCases.size})
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         {!testRun.testCases || testRun.testCases.length === 0 ? (
           <Card>
             <CardContent className="flex items-center justify-center py-12">
@@ -579,6 +679,11 @@ export default function TestRunDetail() {
                   <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex-1 flex items-center gap-3">
+                      <Checkbox
+                        checked={selectedTestCases.has(testCase.id)}
+                        onCheckedChange={() => toggleTestCaseSelection(testCase.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -620,7 +725,7 @@ export default function TestRunDetail() {
                           className="text-green-600 hover:text-green-700"
                         >
                           <Play className="h-3 w-3 mr-1" />
-                          Start Execution
+                          Start
                         </Button>
                       )}
                     </div>
@@ -630,7 +735,8 @@ export default function TestRunDetail() {
                   <CardContent className="space-y-4">
                     <h3 className="font-semibold">Test Steps</h3>
                     <div className="space-y-3">
-                    {testCase.steps?.map((step: any, stepIndex: number) => {
+                    {testCase.steps && testCase.steps.length > 0 ? (
+                      testCase.steps.map((step: any, stepIndex: number) => {
                       const stepStatus = getStepStatus(testCase.id, stepIndex);
                       const stepResultId = getStepResultId(testCase.id, stepIndex);
                       const screenshots = getStepScreenshots(testCase.id, stepIndex);
@@ -656,7 +762,7 @@ export default function TestRunDetail() {
                               <div className="space-y-1">
                                 <p className="font-medium">Action: {step.action}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  Expected: {step.expectedResult}
+                                  Expected: {step.expectedResult || step.expected || "N/A"}
                                 </p>
                               </div>
                             </div>
@@ -695,9 +801,39 @@ export default function TestRunDetail() {
                                 </Button>
                               </div>
                             ) : testRun.status === "executing" && stepStatus === "pending" && !stepResultId ? (
-                              <div className="text-xs text-muted-foreground italic">
-                                Step not initialized - please refresh the page
-                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  // Initialize step by starting execution
+                                  if (testRun.status === "pending") {
+                                    await startExecution();
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                    await loadTestRun(testRun.id);
+                                  } else {
+                                    // Create step result manually
+                                    try {
+                                      const response = await fetch(`http://localhost:8000/test-runs/${testRun.id}/steps/initialize`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          case_id: testCase.id,
+                                          step_index: stepIndex
+                                        })
+                                      });
+                                      if (response.ok) {
+                                        await loadTestRun(testRun.id);
+                                        toast.success("Step initialized");
+                                      }
+                                    } catch (error) {
+                                      toast.error("Failed to initialize step");
+                                    }
+                                  }
+                                }}
+                              >
+                                <Play className="h-3 w-3 mr-1" />
+                                Start Step
+                              </Button>
                             ) : null}
                       </div>
                           
@@ -908,7 +1044,13 @@ export default function TestRunDetail() {
                     )}
                     </div>
               );
-            })}
+            })
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No test steps available for this test case.</p>
+                <p className="text-sm mt-2">Steps will appear here once the test case is executed.</p>
+              </div>
+            )}
           </div>
             </CardContent>
           )}

@@ -1,4 +1,4 @@
-import { Plus, Search, Filter, FileText, ExternalLink, Edit } from "lucide-react";
+import { Plus, Search, Filter, FileText, ExternalLink, Edit, Sparkles, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,17 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { API_ENDPOINTS } from "@/lib/api-config";
 
 interface Requirement {
   id: string;
   title: string;
   description: string;
+  acceptance_criteria?: string;
   source: string;
   source_ref: string;
   created_at: string;
@@ -21,6 +27,11 @@ export default function Requirements() {
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationResult, setGenerationResult] = useState<any>(null);
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<string>("");
 
   useEffect(() => {
     loadRequirements();
@@ -29,7 +40,7 @@ export default function Requirements() {
   const loadRequirements = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/requirements");
+      const response = await fetch(API_ENDPOINTS.REQUIREMENTS);
       if (!response.ok) {
         throw new Error("Failed to load requirements");
       }
@@ -145,6 +156,28 @@ export default function Requirements() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => {
+                      setSelectedRequirement(requirement);
+                      setShowGenerateDialog(true);
+                      // Try to extract acceptance criteria from description
+                      const desc = requirement.description || "";
+                      const acMatch = desc.match(/Acceptance Criteria:?\s*([\s\S]*?)(?:\n\n|\n[A-Z]|$)/i);
+                      if (acMatch) {
+                        const acText = acMatch[1].trim();
+                        // Split by numbered list or bullets
+                        const acList = acText.split(/\n(?=\d+\.|\-|\*)/).map(line => line.replace(/^[\d\-\*\.\s]+/, "").trim()).filter(Boolean);
+                        setAcceptanceCriteria(acList.join("\n"));
+                      } else {
+                        setAcceptanceCriteria("");
+                      }
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    Generate Test Cases
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => navigate(`/requirements/edit/${requirement.id}`)}
                   >
                     <Edit className="h-4 w-4 mr-1" />
@@ -164,7 +197,249 @@ export default function Requirements() {
           ))}
         </div>
       )}
+
+      {/* Generate Test Cases Dialog */}
+      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Generate Test Cases from Requirement</DialogTitle>
+            <DialogDescription>
+              Generate comprehensive test cases using the full requirement-to-testcase pipeline
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedRequirement && (
+            <div className="space-y-4">
+              <div>
+                <Label>Requirement ID</Label>
+                <Input value={selectedRequirement.source_ref || selectedRequirement.id} disabled />
+              </div>
+              <div>
+                <Label>Title</Label>
+                <Input value={selectedRequirement.title} disabled />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea value={selectedRequirement.description} rows={4} disabled />
+              </div>
+              <div>
+                <Label>Acceptance Criteria (one per line)</Label>
+                <Textarea
+                  value={acceptanceCriteria}
+                  onChange={(e) => setAcceptanceCriteria(e.target.value)}
+                  placeholder="Enter acceptance criteria, one per line..."
+                  rows={6}
+                />
+              </div>
+
+              {isGenerating && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Generating test cases... This may take 30-60 seconds.</span>
+                </div>
+              )}
+
+              {generationResult && (
+                <Tabs defaultValue="test-cases" className="w-full">
+                  <TabsList>
+                    <TabsTrigger value="test-cases">Test Cases ({generationResult.test_cases?.length || 0})</TabsTrigger>
+                    <TabsTrigger value="context">Requirement Context</TabsTrigger>
+                    <TabsTrigger value="app-model">Synthetic App Model</TabsTrigger>
+                    <TabsTrigger value="skeletons">Scenario Skeletons ({generationResult.scenario_skeletons?.length || 0})</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="test-cases" className="space-y-4">
+                    {generationResult.test_cases?.map((tc: any, idx: number) => (
+                      <Card key={idx}>
+                        <CardHeader>
+                          <CardTitle className="text-lg">{tc.title}</CardTitle>
+                          <div className="flex gap-2">
+                            <Badge>{tc.kind || "functional"}</Badge>
+                            <Badge variant="outline">{tc.priority || "medium"}</Badge>
+                            {tc.tags?.map((tag: string) => (
+                              <Badge key={tag} variant="secondary">{tag}</Badge>
+                            ))}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground mb-4">{tc.objective || tc.description}</p>
+                          <div className="space-y-2">
+                            <Label>Steps:</Label>
+                            {tc.steps?.map((step: any, stepIdx: number) => (
+                              <div key={stepIdx} className="border-l-2 border-primary pl-3 py-2">
+                                <div className="font-medium">Step {step.step_number}: {step.action}</div>
+                                {step.expected_result && (
+                                  <div className="text-sm text-muted-foreground mt-1">
+                                    Expected: {step.expected_result}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </TabsContent>
+                  
+                  <TabsContent value="context">
+                    <pre className="bg-muted p-4 rounded text-xs overflow-auto max-h-96">
+                      {JSON.stringify(generationResult.requirement_context, null, 2)}
+                    </pre>
+                  </TabsContent>
+                  
+                  <TabsContent value="app-model">
+                    <pre className="bg-muted p-4 rounded text-xs overflow-auto max-h-96">
+                      {JSON.stringify(generationResult.synthetic_app_model, null, 2)}
+                    </pre>
+                  </TabsContent>
+                  
+                  <TabsContent value="skeletons">
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {generationResult.scenario_skeletons?.map((skeleton: any, idx: number) => (
+                        <Card key={idx}>
+                          <CardHeader>
+                            <CardTitle className="text-sm">{skeleton.title}</CardTitle>
+                            <Badge>{skeleton.kind}</Badge>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-sm space-y-1">
+                              <div><strong>Steps:</strong></div>
+                              {skeleton.steps?.map((step: string, stepIdx: number) => (
+                                <div key={stepIdx} className="pl-4">• {step}</div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowGenerateDialog(false);
+              setGenerationResult(null);
+              setAcceptanceCriteria("");
+            }}>
+              Close
+            </Button>
+            {!isGenerating && !generationResult && (
+              <Button
+                onClick={async () => {
+                  if (!selectedRequirement) return;
+                  
+                  setIsGenerating(true);
+                  setGenerationResult(null);
+                  
+                  try {
+                    const acList = acceptanceCriteria.split("\n").filter(line => line.trim()).map(line => line.trim());
+                    
+                    const response = await fetch(API_ENDPOINTS.REQUIREMENTS_JIRA_TO_TESTCASES, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        requirement_id: selectedRequirement.source_ref || selectedRequirement.id,
+                        title: selectedRequirement.title,
+                        description: selectedRequirement.description,
+                        acceptance_criteria: acList.length > 0 ? acList : undefined
+                      })
+                    });
+                    
+                    if (!response.ok) {
+                      const error = await response.json().catch(() => ({ detail: response.statusText }));
+                      throw new Error(error.detail || "Failed to generate test cases");
+                    }
+                    
+                    const data = await response.json();
+                    setGenerationResult(data);
+                    toast.success(`Generated ${data.test_cases?.length || 0} test cases!`);
+                  } catch (error: any) {
+                    console.error("Generation error:", error);
+                    toast.error(`Failed to generate: ${error.message}`);
+                  } finally {
+                    setIsGenerating(false);
+                  }
+                }}
+                className="gradient-primary"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                Generate Test Cases
+              </Button>
+            )}
+            {generationResult && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!selectedRequirement) return;
+                    
+                    setIsGenerating(true);
+                    setGenerationResult(null);
+                    
+                    try {
+                      const acList = acceptanceCriteria.split("\n").filter(line => line.trim()).map(line => line.trim());
+                      
+                      const response = await fetch(API_ENDPOINTS.REQUIREMENTS_JIRA_TO_TESTCASES, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          requirement_id: selectedRequirement.source_ref || selectedRequirement.id,
+                          title: selectedRequirement.title,
+                          description: selectedRequirement.description,
+                          acceptance_criteria: acList.length > 0 ? acList : undefined
+                        })
+                      });
+                      
+                      if (!response.ok) {
+                        const error = await response.json().catch(() => ({ detail: response.statusText }));
+                        throw new Error(error.detail || "Failed to generate test cases");
+                      }
+                      
+                      const data = await response.json();
+                      setGenerationResult(data);
+                      toast.success(`Regenerated ${data.test_cases?.length || 0} test cases!`);
+                    } catch (error: any) {
+                      console.error("Generation error:", error);
+                      toast.error(`Failed to regenerate: ${error.message}`);
+                    } finally {
+                      setIsGenerating(false);
+                    }
+                  }}
+                  disabled={isGenerating}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {isGenerating ? "Regenerating..." : "Regenerate"}
+                </Button>
+                <Button
+                  onClick={() => {
+                    // Navigate to create test case page with generated data
+                    navigate("/cases/create", {
+                      state: {
+                        generatedTestCases: generationResult.test_cases.map((tc: any) => ({
+                          name: tc.title,
+                          title: tc.title,
+                          description: tc.objective || tc.description,
+                          steps: tc.steps?.map((step: any) => ({
+                            action: step.action,
+                            expectedResult: step.expected_result
+                          })) || []
+                        }))
+                      }
+                    });
+                    setShowGenerateDialog(false);
+                  }}
+                  className="gradient-primary"
+                >
+                  Create Test Cases ({generationResult.test_cases?.length || 0})
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

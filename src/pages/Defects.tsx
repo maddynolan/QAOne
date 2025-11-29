@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { dataStorageService, Defect } from "@/lib/data-storage";
 import { toast } from "sonner";
+import { API_BASE_URL } from "@/lib/api-config";
 
 const getSeverityColor = (severity: string) => {
   switch (severity) {
@@ -42,6 +43,31 @@ export default function Defects() {
   const loadDefects = async () => {
     try {
       setLoading(true);
+      // Try API first, fallback to dataStorageService
+      try {
+        const response = await fetch(`${API_BASE_URL}/defects`);
+        if (response.ok) {
+          const data = await response.json();
+          // Transform API response to match Defect interface
+          const apiDefects = (data.defects || []).map((d: any) => ({
+            id: d.id,
+            title: d.title,
+            description: d.description,
+            severity: d.severity || d.priority || "medium",
+            status: d.status || "open",
+            priority: d.priority || d.severity || "medium",
+            createdAt: d.createdAt || d.created_at,
+            updatedAt: d.updatedAt || d.updated_at,
+            defectType: d.defect_type,
+            pageUrl: d.page_url,
+          }));
+          setDefects(apiDefects);
+          return;
+        }
+      } catch (apiError) {
+        console.warn("API fetch failed, using local storage:", apiError);
+      }
+      // Fallback to local storage
       const loadedDefects = await dataStorageService.getDefects();
       setDefects(loadedDefects);
     } catch (error) {
