@@ -135,12 +135,18 @@ program
           console.log(chalk.gray(`  Passed: ${results.passed_count || 0}`));
           console.log(chalk.gray(`  Failed: ${results.failed_count || 0}`));
           console.log(chalk.gray(`  Duration: ${results.duration_ms || 0}ms`));
-          
-          if (status === 'failed' && options.exitCodeOnFail) {
-            process.exit(1);
-          }
         } else if (status === 'failed') {
           spinner.fail(`Test run failed`);
+          
+          // Get detailed results
+          const detailsResponse = await apiRequest('GET', `/api/test-runs/${testRunId}`);
+          const results = detailsResponse.test_run;
+          
+          console.log(chalk.red('\nTest Run Results:'));
+          console.log(chalk.gray(`  Status: ${results.status}`));
+          console.log(chalk.gray(`  Passed: ${results.passed_count || 0}`));
+          console.log(chalk.gray(`  Failed: ${results.failed_count || 0}`));
+          console.log(chalk.gray(`  Duration: ${results.duration_ms || 0}ms`));
           
           if (options.exitCodeOnFail) {
             process.exit(1);
