@@ -7044,6 +7044,10 @@ app.include_router(metrics_router)
 from app.routers.integrations.jira_webhook import router as jira_webhook_router
 app.include_router(jira_webhook_router)
 
+# Compliance and competitive optimizations
+from app.routers.compliance_api import router as compliance_router
+app.include_router(compliance_router)
+
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
     import sys

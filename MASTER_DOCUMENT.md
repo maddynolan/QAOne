@@ -42,7 +42,44 @@
 
 > **Update this section with every change made to the platform**
 
-### Version 2.0.1 - 2025-01-XX (Current)
+### Version 2.0.2 - 2025-01-XX (Current)
+
+#### Competitive Optimizations Added
+- ✅ **Semantic Test Data Generation**
+  - Auto-generates test data payloads when creating test cases
+  - LLM analyzes test steps and generates appropriate test data
+  - Eliminates manual test data population step
+  - Files: `backend/app/services/core/test_data_service.py`, `supabase/migrations/029_test_data_management.sql`
+
+- ✅ **Compliance Framework Mapping**
+  - Maps security tests to compliance frameworks (PCI DSS, HIPAA, SOC 2, GDPR, ISO 27001)
+  - Security Agent automatically tags tests with compliance requirements
+  - Generates compliance reports with validation statements
+  - Files: `backend/app/services/compliance/framework_mapper.py`, `backend/app/services/compliance/compliance_reporter.py`, `backend/app/routers/compliance_api.py`, `supabase/migrations/030_compliance_mappings.sql`
+
+- ✅ **Dynamic Least Privilege for Runners**
+  - HashiCorp Vault integration (optional)
+  - Short-lived tokens for test runner secret access
+  - Per-test-case secret injection (only required secrets)
+  - Files: `backend/app/services/core/vault_service.py`
+
+#### Files Created
+- `COMPETITIVE_OPTIMIZATIONS.md` - Implementation plan and strategy
+- `backend/app/services/core/test_data_service.py`
+- `backend/app/services/compliance/framework_mapper.py`
+- `backend/app/services/compliance/compliance_reporter.py`
+- `backend/app/services/core/vault_service.py`
+- `backend/app/routers/compliance_api.py`
+- `supabase/migrations/029_test_data_management.sql`
+- `supabase/migrations/030_compliance_mappings.sql`
+
+#### Files Modified
+- `backend/app/services/agents/requirements_agent.py` - Integrated test data generation
+- `backend/app/services/agents/security_agent.py` - Added compliance mapping
+- `backend/app/main.py` - Registered compliance router
+- `backend/requirements.txt` - Added `hvac` for Vault integration
+
+### Version 2.0.1 - 2025-01-XX
 
 #### Enterprise Features Added
 - ✅ **Flowstral 5-Layer Selector Strategy**
@@ -257,6 +294,7 @@
 
 ### 5. AI-Powered Features
 - Test case generation from requirements
+- **Semantic test data generation** (auto-generates test data payloads)
 - Test plan expansion
 - Test case to Playwright conversion
 - API test generation
@@ -268,6 +306,7 @@
 - **GitHub**: PR gating, webhook support
 - **Azure DevOps**: Work item sync
 - **CI/CD**: CLI tool, webhook support
+- **HashiCorp Vault**: Optional integration for dynamic secret management
 
 ---
 
@@ -321,6 +360,11 @@
 - `POST /integrations/jira/webhook` - Jira webhook handler
 - `GET /integrations/jira/webhook/test` - Test webhook endpoint
 
+### Compliance Endpoints
+- `POST /api/compliance/report` - Generate compliance report
+- `GET /api/compliance/report/{report_id}` - Get compliance report
+- `GET /api/compliance/frameworks` - List supported frameworks
+
 ### Metrics Endpoints
 - `GET /metrics` - Prometheus metrics
 
@@ -346,6 +390,10 @@
 - `roles` - RBAC roles
 - `permissions` - RBAC permissions
 - `user_roles` - User role assignments
+- `test_data` - Test data payloads (auto-generated)
+- `test_data_templates` - Reusable test data templates
+- `compliance_mappings` - Security test to compliance framework mappings
+- `compliance_reports` - Generated compliance reports
 
 ### AI Tables
 - `ai_generations` - AI generation history with quality scores
@@ -429,6 +477,8 @@ npm link  # For global installation
 - `AIR_GAPPED_MODE` - Block external LLM calls (true/false)
 - `OLLAMA_URL` - Ollama server URL
 - `REDIS_URL` - Redis connection string
+- `VAULT_ADDR` - HashiCorp Vault address (optional)
+- `VAULT_TOKEN` - HashiCorp Vault token (optional)
 
 See `env.example` for complete list.
 
@@ -488,13 +538,18 @@ See `docs/AIR_GAPPED_DEPLOYMENT.md`
 ## Roadmap
 
 ### Tier-1 Features (Next 4-8 weeks)
-- [ ] Kubernetes Helm chart + operator pattern
+- [x] Semantic Test Data Generation ✅
+- [x] Compliance Framework Mapping ✅
+- [x] Dynamic Least Privilege for Runners ✅
+- [ ] Kubernetes Helm chart + operator pattern (Adaptive Resource Scaling)
 - [ ] Nexus "Red Team Mode" + OWASP ZAP integration
 - [ ] Self-healing Playwright engine (98%+ reliability)
 - [ ] Bi-directional Jira sync with custom field mapping
 - [ ] GitHub/Azure DevOps PR gating workflow
 - [ ] PDF/Excel executive reports
 - [ ] White-label mode
+- [ ] Agent Marketplace Module Licensing
+- [ ] Fine-Tuning Certification Service
 
 ### Tier-2 Features (Future)
 - [ ] Mobile agent (Appium/Maestro)
@@ -533,6 +588,26 @@ See `docs/AIR_GAPPED_DEPLOYMENT.md`
 ---
 
 **Last Updated:** 2025-01-XX  
-**Next Review:** [Set review date]  
+**Next Review:** Weekly  
 **Maintained By:** Development Team
+
+---
+
+## Competitive Positioning
+
+### Market Position
+**Target Market**: Enterprise QA platforms (Tricentis, Testim, Virtuoso, mabl)  
+**NOT Competing With**: Google Antigravity (Dev IDE - different market)
+
+### Competitive Advantages
+1. **Air-Gapped/Hybrid Deployment**: Only platform that works in banks, defense, healthcare
+2. **Multi-Agent Architecture**: Specialized agents > general-purpose AI for niche tasks
+3. **Full QA Lifecycle**: Manual, Performance, Security, Accessibility (not just Dev/Code)
+4. **Superior Governance**: RLS + Immutable Audit Trail > competitors
+5. **Compliance-First**: Built-in compliance framework mapping (PCI DSS, HIPAA, SOC 2)
+
+### Go-to-Market Strategy
+- **Lead with Governance**: "Risk Reduction through Unprecedented Auditability"
+- **Compliance Story**: "Turn security tests into compliance artifacts"
+- **Module-Based Pricing**: Core + Flowstral + Security Agent + Performance Agent modules
 

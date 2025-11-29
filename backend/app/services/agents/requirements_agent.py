@@ -238,12 +238,35 @@ Respond ONLY with valid JSON array of test cases."""
         import json
         test_cases = json.loads(result.response)
         
+        # Generate test data for each test case (semantic test data generation)
+        from app.services.core.test_data_service import get_test_data_service
+        test_data_service = get_test_data_service()
+        
+        requirement_text = f"{requirement.get('title', '')}\n{requirement.get('description', '')}"
+        test_cases_with_data = []
+        
+        for test_case in test_cases:
+            # Generate test data for this test case
+            test_data = await test_data_service.generate_test_data_for_test_case(
+                test_case=test_case,
+                requirement_text=requirement_text,
+                tenant_id=tenant_id
+            )
+            
+            # Attach test data to test case
+            if test_data:
+                test_case["test_data"] = test_data.get("payload", {})
+                test_case["test_data_generated"] = test_data.get("generated_by_llm", False)
+            
+            test_cases_with_data.append(test_case)
+        
         return {
             "status": "success",
             "requirement_id": requirement_id,
-            "test_cases": test_cases,
+            "test_cases": test_cases_with_data,
             "similar_requirements_count": len(similar_reqs),
-            "model": result.model
+            "model": result.model,
+            "test_data_generated": True  # Indicates test data was auto-generated
         }
     
     async def get_traceability_matrix(

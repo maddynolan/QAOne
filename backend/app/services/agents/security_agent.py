@@ -14,6 +14,7 @@ from app.schemas.agent_schemas import (
 )
 from app.services.llm.model_gateway import get_model_gateway, GenerationRequest
 from app.services.executors.zap_executor import ZAPExecutor
+from app.services.compliance.framework_mapper import get_compliance_mapper
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class SecurityAgent:
     def __init__(self):
         self.zap_executor = ZAPExecutor()
         self.model_gateway = get_model_gateway()
+        self.compliance_mapper = get_compliance_mapper()
     
     async def scan_application(
         self,
@@ -63,11 +65,24 @@ class SecurityAgent:
         # Generate risk explanations
         explained_findings = await self._explain_risks(findings, tenant_id)
         
+        # Map findings to compliance frameworks
+        compliance_mappings = []
+        for finding in explained_findings:
+            test_type = self._determine_test_type_from_finding(finding)
+            mappings = self.compliance_mapper.map_test_to_compliance(
+                test_type=test_type,
+                test_name=finding.get("name", "Security Finding"),
+                test_description=finding.get("description", "")
+            )
+            finding["compliance_mappings"] = mappings
+            compliance_mappings.extend(mappings)
+        
         return {
             "status": "success",
             "scan_id": scan_id,
             "target_url": target_url,
             "findings": explained_findings,
+            "compliance_mappings": compliance_mappings,
             "summary": {
                 "total": len(findings),
                 "high": sum(1 for f in findings if f.get("risk") == "High"),
