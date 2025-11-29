@@ -1,0 +1,26 @@
+apiVersion: v2
+name: qaai
+description: QA-AI Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - qa
+  - testing
+  - ai
+  - automation
+maintainers:
+  - name: QA-AI Team
+dependencies:
+  - name: postgresql
+    version: 12.1.2
+    repository: https://charts.bitnami.com/bitnami
+  - name: minio
+    version: 12.8.0
+    repository: https://charts.bitnami.com/bitnami
+  - name: redis
+    version: 17.15.0
+    repository: https://charts.bitnami.com/bitnami
+
+
+

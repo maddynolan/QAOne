@@ -1,0 +1,69 @@
+# LoRA Fine-Tuning Configuration for QA Expert Model
+# Using Qwen3-Coder-30B (Maximum quality, code-focused)
+# WARNING: Requires 60-80GB GPU memory for training, 40GB+ for inference
+# Only use if 7B and 14B don't meet quality requirements
+
+base_model: "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+model_name: "qa-expert-30b-coder"
+
+# LoRA Configuration
+lora_r: 32
+lora_alpha: 32
+lora_dropout: 0.05
+target_modules:
+  - "q_proj"
+  - "v_proj"
+  - "k_proj"
+  - "o_proj"
+  - "gate_proj"
+  - "up_proj"
+
+# Data Paths
+train_file: "data/train.jsonl"
+val_file: "data/val.jsonl"
+
+# Training Configuration
+output_dir: "outputs/qa-expert-30b-coder-v1"
+per_device_train_batch_size: 1  # Must be 1 for 30B
+gradient_accumulation_steps: 16  # High accumulation to maintain batch size
+learning_rate: 5e-6  # Lower learning rate for larger model
+num_train_epochs: 3  # Fewer epochs (training takes 8-16 hours)
+warmup_steps: 200
+logging_steps: 10
+save_steps: 50  # Save more frequently (training is long)
+eval_steps: 50
+evaluation_strategy: "steps"
+
+# Optimization (Critical for 30B)
+fp16: true
+bf16: false  # Use fp16, not bf16
+gradient_checkpointing: true  # REQUIRED for memory efficiency
+optim: "adamw_torch"
+lr_scheduler_type: "cosine"
+
+# Memory Optimization (REQUIRED)
+dataloader_num_workers: 0  # Set to 0 to save memory (no multiprocessing overhead)
+max_length: 512  # Aggressively reduced to 512 to prevent OOM - can increase after successful training
+use_8bit_quantization: true  # CRITICAL: Use 8-bit quantization (QLoRA) to reduce memory by 4x
+# Note: With 8-bit quantization, model memory goes from ~60GB to ~15GB
+
+# Additional Memory Saving
+# If you still get OOM errors, try:
+# 1. Reduce max_length to 1024
+# 2. Use 8-bit quantization (add to model loading)
+# 3. Use DeepSpeed ZeRO (advanced)
+
+# Hardware Requirements:
+# - Training: 60-80GB GPU memory (A100 80GB or multiple GPUs)
+# - Inference: 40GB+ GPU memory
+# - Training Time: 8-16 hours
+# - Inference Speed: 60-120 seconds per request (single)
+# - With vLLM: 256+ concurrent requests, 5,800+ tokens/second throughput
+
+# vLLM Integration:
+# This model is optimized for vLLM deployment:
+# - Longer context (4096 tokens) for better parallel processing
+# - Code-focused base model (Qwen3-Coder) for QA automation
+# - FP8 quantization supported in vLLM for 2x speed boost
+# - Parallel request handling (256+ concurrent requests)
+

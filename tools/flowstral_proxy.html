@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowstral - Recording</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #flowstral-overlay {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 400px;
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            z-index: 999999;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        iframe {
+            width: 100%;
+            height: 100vh;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="targetFrame" src="about:blank"></iframe>
+    <div id="flowstral-overlay"></div>
+    
+    <script>
+        // Get URL and session from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetUrl = urlParams.get('url');
+        const sessionId = urlParams.get('sessionId');
+        const projectId = urlParams.get('projectId');
+        const apiEndpoint = urlParams.get('apiEndpoint') || 'http://localhost:8000/api/flowstral/start';
+        const apiKey = urlParams.get('apiKey') || '';
+        
+        if (!targetUrl || !sessionId) {
+            document.body.innerHTML = '<div style="padding: 20px;">Error: Missing parameters. Please go back and try again.</div>';
+        } else {
+            // Load target URL in iframe
+            document.getElementById('targetFrame').src = targetUrl;
+            
+            // Wait for iframe to load, then inject Flowstral
+            const iframe = document.getElementById('targetFrame');
+            iframe.onload = function() {
+                try {
+                    injectFlowstral(iframe.contentWindow, iframe.contentDocument);
+                } catch (e) {
+                    // Cross-origin - can't inject directly
+                    showInstructions();
+                }
+            };
+            
+            // Also try after a delay
+            setTimeout(() => {
+                try {
+                    if (iframe.contentWindow && iframe.contentDocument) {
+                        injectFlowstral(iframe.contentWindow, iframe.contentDocument);
+                    } else {
+                        showInstructions();
+                    }
+                } catch (e) {
+                    showInstructions();
+                }
+            }, 2000);
+        }
+        
+        function injectFlowstral(targetWindow, targetDoc) {
+            // Load injection script
+            fetch('http://localhost:8081/flowstral_inject.js')
+                .then(response => response.text())
+                .then(script => {
+                    // Save session to target window's sessionStorage
+                    try {
+                        targetWindow.sessionStorage.setItem('flowstral_session', JSON.stringify({
+                            sessionId: sessionId,
+                            isActive: true,
+                            nodes: [],
+                            projectId: projectId,
+                            apiEndpoint: apiEndpoint,
+                            apiKey: apiKey
+                        }));
+                    } catch (e) {
+                        console.error('Flowstral: Cannot set sessionStorage (cross-origin)', e);
+                    }
+                    
+                    // Inject script
+                    const scriptEl = targetDoc.createElement('script');
+                    scriptEl.textContent = script;
+                    targetDoc.head.appendChild(scriptEl);
+                    
+                    console.log('Flowstral: Successfully injected!');
+                })
+                .catch(error => {
+                    console.error('Flowstral: Failed to load injection script', error);
+                    showInstructions();
+                });
+        }
+        
+        function showInstructions() {
+            const overlay = document.getElementById('flowstral-overlay');
+            overlay.innerHTML = `
+                <div style="text-align: center;">
+                    <h3 style="color: #4CAF50; margin-bottom: 15px;">⭐ Flowstral</h3>
+                    <p style="color: #666; margin-bottom: 15px;">
+                        Due to browser security, Flowstral cannot auto-inject into external sites.
+                    </p>
+                    <p style="color: #666; margin-bottom: 20px; font-size: 12px;">
+                        Please open the browser console (F12) on the page below and paste:
+                    </p>
+                    <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                        <code style="font-size: 11px; word-break: break-all;">
+                            fetch('http://localhost:8081/flowstral_inject.js').then(r=>r.text()).then(eval)
+                        </code>
+                    </div>
+                    <button onclick="copyCode()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Copy Code
+                    </button>
+                </div>
+            `;
+        }
+        
+        function copyCode() {
+            const code = "fetch('http://localhost:8081/flowstral_inject.js').then(r=>r.text()).then(eval)";
+            navigator.clipboard.writeText(code).then(() => {
+                alert('Code copied! Paste it in the console (F12) on the page below.');
+            });
+        }
+    </script>
+</body>
+</html>
+
+
+

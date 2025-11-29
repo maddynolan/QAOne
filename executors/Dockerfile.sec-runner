@@ -1,0 +1,14 @@
+# Security Test Runner Container
+# Runs OWASP ZAP security scans
+
+FROM owasp/zap2docker-stable:latest
+
+WORKDIR /zap
+
+# ZAP is pre-installed in base image
+# Run security scan
+CMD ["zap-baseline.py", "-t", "${TARGET_URL}"]
+
+
+
+

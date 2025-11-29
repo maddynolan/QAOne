@@ -56,17 +56,17 @@ def preprocess_dataset(examples: Dict, tokenizer, max_length: int = 2048):
     """Preprocess dataset for training"""
     prompts = [format_prompt(ex) for ex in examples]
     
-    # Tokenize
+    # Tokenize (return as lists, not tensors, for dataset.map)
     tokenized = tokenizer(
         prompts,
         truncation=True,
         max_length=max_length,
         padding="max_length",
-        return_tensors="pt"
+        return_tensors=None  # Return lists, not tensors
     )
     
     # Labels are the same as input_ids (for causal LM)
-    tokenized["labels"] = tokenized["input_ids"].clone()
+    tokenized["labels"] = tokenized["input_ids"].copy()
     
     return tokenized
 
@@ -111,11 +111,15 @@ def train_model(config_path: str):
     # Load tokenizer and model
     print(f"\n📥 Loading model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(base_model)
+    
+    # Use cuda:0 explicitly to avoid meta device offloading issue
+    # device_map="auto" can sometimes offload parameters to meta device
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         torch_dtype=torch.float16,
-        device_map="auto",
-        trust_remote_code=True
+        device_map="cuda:0",  # Explicit GPU placement - avoids meta device issue
+        trust_remote_code=True,
+        low_cpu_mem_usage=True  # Memory optimization
     )
     
     # Apply LoRA
@@ -123,6 +127,29 @@ def train_model(config_path: str):
     lora_config = create_lora_config(config)
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+    
+    # Verify GPU usage
+    print(f"\n🔍 Verifying GPU usage...")
+    if hasattr(model, 'hf_device_map'):
+        print(f"  Model device map: {model.hf_device_map}")
+    else:
+        # Check which device model parameters are on
+        first_param = next(model.parameters())
+        device = first_param.device
+        print(f"  Model device: {device}")
+        if device.type != 'cuda':
+            print(f"  ⚠️  WARNING: Model is not on GPU! Current device: {device}")
+        else:
+            print(f"  ✅ Model is on GPU: {device}")
+    
+    # Print GPU memory info
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+            print(f"    Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.1f} GB")
+            if torch.cuda.memory_allocated(i) > 0:
+                print(f"    Allocated: {torch.cuda.memory_allocated(i) / 1e9:.2f} GB")
+                print(f"    Reserved: {torch.cuda.memory_reserved(i) / 1e9:.2f} GB")
     
     # Load dataset
     print(f"\n📊 Loading dataset...")
@@ -132,15 +159,54 @@ def train_model(config_path: str):
     print(f"  Train examples: {len(train_dataset)}")
     print(f"  Val examples: {len(val_dataset)}")
     
-    # Preprocess
+    # Preprocess - use batched=True to avoid Encoding object issue
     print(f"\n🔄 Preprocessing dataset...")
+    max_length = config.get("max_length", 2048)
+    print(f"  Using max_length: {max_length}")
+    
+    def preprocess_function(examples):
+        """Preprocess function for dataset.map - processes batches"""
+        # Format prompts - examples is a dict with lists of values
+        prompts = [format_prompt({"instruction": inst, "input": inp, "output": out}) 
+                  for inst, inp, out in zip(examples.get("instruction", []), 
+                                            examples.get("input", []), 
+                                            examples.get("output", []))]
+        
+        # Tokenize batch - this returns dict, not Encoding
+        tokenized = tokenizer(
+            prompts,
+            truncation=True,
+            max_length=max_length,  # Use from config
+            padding="max_length",
+            return_tensors=None  # Return lists, not tensors
+        )
+        
+        # Labels are the same as input_ids (for causal LM)
+        tokenized["labels"] = tokenized["input_ids"].copy()
+        
+        # Ensure all are lists (not tensors)
+        if not isinstance(tokenized["input_ids"][0], list):
+            # If it's already a list of lists, we're good
+            pass
+        else:
+            # Ensure each element is a list
+            tokenized["input_ids"] = [list(x) if not isinstance(x, list) else x for x in tokenized["input_ids"]]
+            tokenized["attention_mask"] = [list(x) if not isinstance(x, list) else x for x in tokenized["attention_mask"]]
+            tokenized["labels"] = [list(x) if not isinstance(x, list) else x for x in tokenized["labels"]]
+        
+        return tokenized
+    
     train_dataset = train_dataset.map(
-        lambda x: preprocess_dataset([x], tokenizer)[0],
-        remove_columns=train_dataset.column_names
+        preprocess_function,
+        remove_columns=train_dataset.column_names,
+        batched=True,  # Process in batches - avoids Encoding object!
+        batch_size=100  # Process 100 examples at a time for memory efficiency
     )
     val_dataset = val_dataset.map(
-        lambda x: preprocess_dataset([x], tokenizer)[0],
-        remove_columns=val_dataset.column_names
+        preprocess_function,
+        remove_columns=val_dataset.column_names,
+        batched=True,  # Process in batches - avoids Encoding object!
+        batch_size=100  # Process 100 examples at a time for memory efficiency
     )
     
     # Data collator
@@ -169,6 +235,7 @@ def train_model(config_path: str):
         lr_scheduler_type=config.get("lr_scheduler_type", "cosine"),
         report_to="none",  # Change to "wandb" if using WandB
         dataloader_num_workers=config.get("dataloader_num_workers", 4),
+        dataloader_pin_memory=True,  # Pin memory for faster GPU transfer
         remove_unused_columns=False
     )
     
@@ -183,7 +250,13 @@ def train_model(config_path: str):
     
     # Train
     print(f"\n🚀 Starting training...")
-    print(f"  Training steps: {len(train_dataset) // (training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps) * training_args.num_train_epochs}")
+    steps_per_epoch = len(train_dataset) // (training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps)
+    total_steps = steps_per_epoch * training_args.num_train_epochs
+    print(f"  Training steps: {total_steps}")
+    print(f"  Steps per epoch: {steps_per_epoch}")
+    print(f"  Epochs: {training_args.num_train_epochs}")
+    print(f"  Effective batch size: {training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps}")
+    print(f"  Max length: {max_length} tokens (reduced from 4096 for faster training)")
     
     train_result = trainer.train()
     

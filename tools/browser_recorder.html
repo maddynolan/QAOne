@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA AI Browser Recorder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .recorder-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 10000;
+            min-width: 300px;
+        }
+        .recorder-panel h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        .status {
+            padding: 8px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.recording {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status.stopped {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        .btn-export {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-upload {
+            background: #FF9800;
+            color: white;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .snapshots-count {
+            margin: 10px 0;
+            color: #666;
+        }
+        .config {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .config input {
+            width: 100%;
+            padding: 5px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .log {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="recorder-panel">
+        <h3>🎥 QA AI Recorder</h3>
+        <div id="status" class="status stopped">⏹ Stopped</div>
+        
+        <div class="config">
+            <label>API Endpoint:</label>
+            <input type="text" id="apiEndpoint" value="http://localhost:8000/api/app-first/record-and-generate" placeholder="API endpoint">
+            <label>API Key (optional):</label>
+            <input type="text" id="apiKey" placeholder="Bearer token or API key">
+            <label>Project ID (optional):</label>
+            <input type="text" id="projectId" placeholder="Project ID">
+        </div>
+        
+        <div>
+            <button id="btnStart" class="btn-start" onclick="startRecording()">▶ Start Recording</button>
+            <button id="btnStop" class="btn-stop" onclick="stopRecording()" disabled>⏹ Stop</button>
+        </div>
+        
+        <div class="snapshots-count">
+            Snapshots: <span id="snapshotCount">0</span>
+        </div>
+        
+        <div>
+            <button id="btnExport" class="btn-export" onclick="exportRecording()" disabled>📥 Export JSON</button>
+            <button id="btnUpload" class="btn-upload" onclick="uploadRecording()" disabled>☁️ Upload & Generate</button>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let isRecording = false;
+        let snapshots = [];
+        let currentSnapshot = null;
+        let startTime = null;
+        let interactionCount = 0;
+
+        // Initialize
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function startRecording() {
+            if (isRecording) return;
+            
+            isRecording = true;
+            snapshots = [];
+            currentSnapshot = null;
+            startTime = Date.now();
+            interactionCount = 0;
+            
+            document.getElementById('status').className = 'status recording';
+            document.getElementById('status').textContent = '🔴 Recording';
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStop').disabled = false;
+            document.getElementById('btnExport').disabled = true;
+            document.getElementById('btnUpload').disabled = true;
+            
+            // Capture initial page state
+            captureSnapshot('page_load');
+            
+            // Add event listeners
+            document.addEventListener('click', handleClick, true);
+            document.addEventListener('input', handleInput, true);
+            document.addEventListener('change', handleChange, true);
+            document.addEventListener('submit', handleSubmit, true);
+            
+            log('Recording started');
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+            
+            isRecording = false;
+            document.getElementById('status').className = 'status stopped';
+            document.getElementById('status').textContent = '⏹ Stopped';
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('btnExport').disabled = false;
+            document.getElementById('btnUpload').disabled = false;
+            
+            // Remove event listeners
+            document.removeEventListener('click', handleClick, true);
+            document.removeEventListener('input', handleInput, true);
+            document.removeEventListener('change', handleChange, true);
+            document.removeEventListener('submit', handleSubmit, true);
+            
+            // Capture final snapshot
+            captureSnapshot('page_final');
+            
+            log(`Recording stopped. Captured ${snapshots.length} snapshots`);
+            document.getElementById('snapshotCount').textContent = snapshots.length;
+        }
+
+        function captureSnapshot(eventType) {
+            const timestamp = Date.now() - startTime;
+            
+            // Capture DOM snapshot
+            const domSnapshot = {
+                html: document.documentElement.outerHTML.substring(0, 10000), // Limit size
+                url: window.location.href,
+                title: document.title,
+                timestamp: timestamp
+            };
+            
+            // Capture screenshot (if available)
+            let screenshot = null;
+            try {
+                // Note: Full screenshot capture requires browser extension APIs
+                // For now, we'll capture a basic representation
+                screenshot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+            } catch (e) {
+                log('Screenshot capture not available');
+            }
+            
+            const snapshot = {
+                timestamp: timestamp,
+                event_type: eventType,
+                dom: domSnapshot,
+                screenshot: screenshot,
+                interactions: []
+            };
+            
+            if (currentSnapshot) {
+                snapshots.push(currentSnapshot);
+            }
+            
+            currentSnapshot = snapshot;
+            log(`Snapshot captured: ${eventType}`);
+        }
+
+        function handleClick(event) {
+            if (!isRecording) return;
+            
+            const element = event.target;
+            const selector = generateSelector(element);
+            
+            currentSnapshot.interactions.push({
+                type: 'click',
+                selector: selector,
+                timestamp: Date.now() - startTime,
+                element: {
+                    tag: element.tagName,
+                    text: element.textContent?.substring(0, 50),
+                    id: element.id,
+                    classes: Array.from(element.classList)
+                }
+            });
+            
+            interactionCount++;
+            document.getElementById('snapshotCount').textContent = snapshots.length + 1;
+            log(`Click captured: ${selector}`);
+        }
+
+        function handleInput(event) {
+            if (!isRecording) return;
+            
+            const element = event.target;
+            const selector = generateSelector(element);
+            
+            currentSnapshot.interactions.push({
+                type: 'type',
+                selector: selector,
+                value: element.value,
+                timestamp: Date.now() - startTime,
+                element: {
+                    tag: element.tagName,
+                    type: element.type,
+                    id: element.id
+                }
+            });
+            
+            log(`Input captured: ${selector}`);
+        }
+
+        function handleChange(event) {
+            if (!isRecording) return;
+            
+            const element = event.target;
+            const selector = generateSelector(element);
+            
+            currentSnapshot.interactions.push({
+                type: 'select',
+                selector: selector,
+                value: element.value,
+                timestamp: Date.now() - startTime,
+                element: {
+                    tag: element.tagName,
+                    id: element.id
+                }
+            });
+            
+            log(`Change captured: ${selector}`);
+        }
+
+        function handleSubmit(event) {
+            if (!isRecording) return;
+            
+            captureSnapshot('form_submit');
+            log('Form submit captured');
+        }
+
+        function generateSelector(element) {
+            // Try ID first
+            if (element.id) {
+                return `#${element.id}`;
+            }
+            
+            // Try data-testid
+            if (element.getAttribute('data-testid')) {
+                return `[data-testid="${element.getAttribute('data-testid')}"]`;
+            }
+            
+            // Try name
+            if (element.name) {
+                return `[name="${element.name}"]`;
+            }
+            
+            // Try class
+            if (element.className && typeof element.className === 'string') {
+                const classes = element.className.split(' ').filter(c => c).join('.');
+                if (classes) {
+                    return `${element.tagName.toLowerCase()}.${classes}`;
+                }
+            }
+            
+            // Fallback to tag + nth-child
+            const parent = element.parentElement;
+            if (parent) {
+                const siblings = Array.from(parent.children);
+                const index = siblings.indexOf(element);
+                return `${element.tagName.toLowerCase()}:nth-child(${index + 1})`;
+            }
+            
+            return element.tagName.toLowerCase();
+        }
+
+        function exportRecording() {
+            if (snapshots.length === 0) {
+                alert('No recording to export');
+                return;
+            }
+            
+            // Add final snapshot
+            if (currentSnapshot) {
+                snapshots.push(currentSnapshot);
+            }
+            
+            const recording = {
+                url: window.location.href,
+                title: document.title,
+                snapshots: snapshots,
+                metadata: {
+                    browser: navigator.userAgent,
+                    viewport: {
+                        width: window.innerWidth,
+                        height: window.innerHeight
+                    },
+                    recorded_at: new Date().toISOString(),
+                    duration_ms: Date.now() - startTime
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(recording, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `recording-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log('Recording exported');
+        }
+
+        async function uploadRecording() {
+            if (snapshots.length === 0) {
+                alert('No recording to upload');
+                return;
+            }
+            
+            // Add final snapshot
+            if (currentSnapshot) {
+                snapshots.push(currentSnapshot);
+            }
+            
+            const recording = {
+                url: window.location.href,
+                title: document.title || 'Recorded Flow',
+                snapshots: snapshots,
+                metadata: {
+                    browser: navigator.userAgent,
+                    viewport: {
+                        width: window.innerWidth,
+                        height: window.innerHeight
+                    },
+                    recorded_at: new Date().toISOString(),
+                    duration_ms: Date.now() - startTime
+                }
+            };
+            
+            const apiEndpoint = document.getElementById('apiEndpoint').value;
+            const apiKey = document.getElementById('apiKey').value;
+            const projectId = document.getElementById('projectId').value;
+            
+            const requestBody = {
+                url: recording.url,
+                title: recording.title,
+                snapshots: recording.snapshots,
+                metadata: recording.metadata,
+                project_id: projectId || null
+            };
+            
+            try {
+                log('Uploading recording...');
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (apiKey) {
+                    headers['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+                }
+                
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(`Upload failed: ${response.status} - ${error}`);
+                }
+                
+                const result = await response.json();
+                log('✅ Upload successful!');
+                log(`Flow ID: ${result.flow_id}`);
+                log(`Recording ID: ${result.recording_id}`);
+                
+                // Show Playwright script in new window
+                if (result.playwright_script) {
+                    const newWindow = window.open('', '_blank');
+                    newWindow.document.write(`
+                        <html>
+                            <head><title>Generated Playwright Script</title></head>
+                            <body>
+                                <h2>Generated Playwright Script</h2>
+                                <pre style="background: #f5f5f5; padding: 20px; overflow: auto;">${escapeHtml(result.playwright_script)}</pre>
+                                <h3>Test Cases</h3>
+                                <pre style="background: #f5f5f5; padding: 20px; overflow: auto;">${escapeHtml(JSON.stringify(result.test_cases, null, 2))}</pre>
+                            </body>
+                        </html>
+                    `);
+                }
+                
+                alert(`✅ Success! Flow ID: ${result.flow_id}\n\nCheck the new window for the generated Playwright script.`);
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                alert(`Upload failed: ${error.message}`);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-start on page load (optional)
+        // startRecording();
+    </script>
+</body>
+</html>
+
+
+

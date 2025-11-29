@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug, BookOpen, Sparkles, Plug, Code, FileCode, Map } from "lucide-react";
+import { LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug, BookOpen, Sparkles, Plug, Code, FileCode, Map, Zap } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -15,6 +15,7 @@ import {
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Flowstral", url: "/flowstral", icon: Sparkles },
+  { title: "Nexus", url: "/nexus", icon: Zap },
   { title: "Exploration", url: "/exploration", icon: Map },
   { title: "Test Plans", url: "/plans", icon: FileText },
   { title: "Test Cases", url: "/cases", icon: CheckSquare },

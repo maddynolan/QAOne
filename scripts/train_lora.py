@@ -17,9 +17,10 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling,
+    BitsAndBytesConfig
 )
-from peft import LoraConfig, get_peft_model, TaskType
+from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 from datasets import load_dataset
 
 
@@ -56,17 +57,17 @@ def preprocess_dataset(examples: Dict, tokenizer, max_length: int = 2048):
     """Preprocess dataset for training"""
     prompts = [format_prompt(ex) for ex in examples]
     
-    # Tokenize
+    # Tokenize (return as lists, not tensors, for dataset.map)
     tokenized = tokenizer(
         prompts,
         truncation=True,
         max_length=max_length,
         padding="max_length",
-        return_tensors="pt"
+        return_tensors=None  # Return lists, not tensors - saves memory
     )
     
     # Labels are the same as input_ids (for causal LM)
-    tokenized["labels"] = tokenized["input_ids"].clone()
+    tokenized["labels"] = tokenized["input_ids"].copy()
     
     return tokenized
 
@@ -111,18 +112,89 @@ def train_model(config_path: str):
     # Load tokenizer and model
     print(f"\n📥 Loading model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(base_model)
+    
+    # CRITICAL: Use 8-bit quantization (QLoRA) for 30B models to prevent OOM
+    # This reduces memory from ~60GB to ~15GB for model weights
+    use_8bit = config.get("use_8bit_quantization", True)  # Default to True for 30B
+    quantization_config = None
+    
+    if use_8bit:
+        print("  Using 8-bit quantization (QLoRA) for memory efficiency...")
+        try:
+            # Check if bitsandbytes is available
+            import bitsandbytes as bnb
+            print(f"  bitsandbytes version: {bnb.__version__}")
+            
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                llm_int8_threshold=6.0,
+                llm_int8_has_fp16_weight=False,
+            )
+            print("  ✅ 8-bit quantization enabled")
+        except ImportError:
+            print("  ❌ ERROR: bitsandbytes not installed!")
+            print("  Install with: pip install bitsandbytes")
+            print("  Falling back to FP16 (WILL LIKELY CAUSE OOM with 30B model)")
+            quantization_config = None
+        except Exception as e:
+            print(f"  ⚠️  Warning: Could not enable 8-bit quantization: {e}")
+            print("  Falling back to FP16 (may cause OOM with 30B model)")
+            quantization_config = None
+    
+    # Use cuda:0 explicitly to avoid meta device offloading issue
+    # device_map="auto" can sometimes offload parameters to meta device
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
-        torch_dtype=torch.float16,
-        device_map="auto",
-        trust_remote_code=True
+        quantization_config=quantization_config,
+        torch_dtype=torch.float16 if not quantization_config else None,
+        device_map="cuda:0",  # Explicit GPU placement - avoids meta device issue
+        trust_remote_code=True,
+        low_cpu_mem_usage=True  # Memory optimization
     )
+    
+    # Prepare model for k-bit training if using quantization
+    if quantization_config:
+        print("  Preparing model for 8-bit training...")
+        model = prepare_model_for_kbit_training(model)
+        print("  ✅ Model prepared for 8-bit training")
     
     # Apply LoRA
     print(f"\n🔧 Applying LoRA...")
     lora_config = create_lora_config(config)
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+    
+    # CRITICAL: Enable gradient checkpointing at model level for 30B models
+    # This is essential for memory efficiency
+    if config.get("gradient_checkpointing", True):
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        if hasattr(model, "base_model") and hasattr(model.base_model, "gradient_checkpointing_enable"):
+            model.base_model.gradient_checkpointing_enable()
+        print("  ✅ Gradient checkpointing enabled at model level")
+    
+    # Verify GPU usage
+    print(f"\n🔍 Verifying GPU usage...")
+    if hasattr(model, 'hf_device_map'):
+        print(f"  Model device map: {model.hf_device_map}")
+    else:
+        # Check which device model parameters are on
+        first_param = next(model.parameters())
+        device = first_param.device
+        print(f"  Model device: {device}")
+        if device.type != 'cuda':
+            print(f"  ⚠️  WARNING: Model is not on GPU! Current device: {device}")
+        else:
+            print(f"  ✅ Model is on GPU: {device}")
+    
+    # Print GPU memory info
+    if torch.cuda.is_available():
+        for i in range(torch.cuda.device_count()):
+            print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+            print(f"    Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.1f} GB")
+            if torch.cuda.memory_allocated(i) > 0:
+                print(f"    Allocated: {torch.cuda.memory_allocated(i) / 1e9:.2f} GB")
+                print(f"    Reserved: {torch.cuda.memory_reserved(i) / 1e9:.2f} GB")
     
     # Load dataset
     print(f"\n📊 Loading dataset...")
@@ -132,15 +204,51 @@ def train_model(config_path: str):
     print(f"  Train examples: {len(train_dataset)}")
     print(f"  Val examples: {len(val_dataset)}")
     
-    # Preprocess
+    # Preprocess - use batched=True for memory efficiency
     print(f"\n🔄 Preprocessing dataset...")
+    max_length = config.get("max_length", 512)  # Reduced to 512 for 30B model to prevent OOM
+    print(f"  Using max_length: {max_length} (aggressively reduced for memory efficiency)")
+    
+    def preprocess_function(examples):
+        """Preprocess function for dataset.map - processes batches"""
+        # Format prompts - examples is a dict with lists of values when batched=True
+        prompts = []
+        for i in range(len(examples.get("instruction", []))):
+            example = {
+                "instruction": examples["instruction"][i] if "instruction" in examples else "",
+                "input": examples["input"][i] if "input" in examples else "",
+                "output": examples["output"][i] if "output" in examples else ""
+            }
+            # Use corrected_output if available
+            if "corrected_output" in examples and i < len(examples["corrected_output"]) and examples["corrected_output"][i]:
+                example["output"] = examples["corrected_output"][i]
+            prompts.append(format_prompt(example))
+        
+        # Tokenize batch - returns dict with lists, not tensors
+        tokenized = tokenizer(
+            prompts,
+            truncation=True,
+            max_length=max_length,
+            padding="max_length",
+            return_tensors=None  # Return lists, not tensors - saves memory
+        )
+        
+        # Labels are the same as input_ids (for causal LM)
+        tokenized["labels"] = tokenized["input_ids"].copy()
+        
+        return tokenized
+    
     train_dataset = train_dataset.map(
-        lambda x: preprocess_dataset([x], tokenizer)[0],
-        remove_columns=train_dataset.column_names
+        preprocess_function,
+        remove_columns=train_dataset.column_names,
+        batched=True,  # Process in batches - more memory efficient
+        batch_size=100  # Process 100 examples at a time
     )
     val_dataset = val_dataset.map(
-        lambda x: preprocess_dataset([x], tokenizer)[0],
-        remove_columns=val_dataset.column_names
+        preprocess_function,
+        remove_columns=val_dataset.column_names,
+        batched=True,  # Process in batches - more memory efficient
+        batch_size=100  # Process 100 examples at a time
     )
     
     # Data collator
@@ -149,27 +257,33 @@ def train_model(config_path: str):
         mlm=False
     )
     
-    # Training arguments
+    # Training arguments - optimized for 30B model memory efficiency
+    # CRITICAL: Disable FP16 when using 8-bit quantization (they're incompatible)
+    use_fp16 = config.get("fp16", True) and not quantization_config
+    
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=config.get("per_device_train_batch_size", 2),
-        gradient_accumulation_steps=config.get("gradient_accumulation_steps", 4),
-        learning_rate=config.get("learning_rate", 2e-5),
+        per_device_train_batch_size=config.get("per_device_train_batch_size", 1),  # Must be 1 for 30B
+        gradient_accumulation_steps=config.get("gradient_accumulation_steps", 16),
+        learning_rate=config.get("learning_rate", 5e-6),
         num_train_epochs=config.get("num_train_epochs", 3),
-        warmup_steps=config.get("warmup_steps", 50),
+        warmup_steps=config.get("warmup_steps", 200),
         logging_steps=config.get("logging_steps", 10),
-        save_steps=config.get("save_steps", 100),
+        save_steps=config.get("save_steps", 50),
         evaluation_strategy=config.get("evaluation_strategy", "steps"),
-        eval_steps=config.get("eval_steps", 100),
+        eval_steps=config.get("eval_steps", 50),
         save_total_limit=3,
         load_best_model_at_end=True,
-        fp16=config.get("fp16", True),
-        gradient_checkpointing=config.get("gradient_checkpointing", True),
-        optim=config.get("optim", "adamw_torch"),
+        fp16=use_fp16,  # Disabled when using 8-bit quantization
+        gradient_checkpointing=config.get("gradient_checkpointing", True),  # CRITICAL: Must be True for 30B
+        optim=config.get("optim", "adamw_torch"),  # Use 8-bit optimizer if OOM persists
         lr_scheduler_type=config.get("lr_scheduler_type", "cosine"),
         report_to="none",  # Change to "wandb" if using WandB
-        dataloader_num_workers=config.get("dataloader_num_workers", 4),
-        remove_unused_columns=False
+        dataloader_num_workers=config.get("dataloader_num_workers", 0),  # 0 to save memory
+        dataloader_pin_memory=False,  # Disable pin_memory to save memory
+        remove_unused_columns=False,
+        max_grad_norm=1.0,  # Gradient clipping for stability
+        ddp_find_unused_parameters=False  # Speed optimization
     )
     
     # Trainer
@@ -183,7 +297,36 @@ def train_model(config_path: str):
     
     # Train
     print(f"\n🚀 Starting training...")
-    print(f"  Training steps: {len(train_dataset) // (training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps) * training_args.num_train_epochs}")
+    steps_per_epoch = len(train_dataset) // (training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps)
+    total_steps = steps_per_epoch * training_args.num_train_epochs
+    print(f"  Training steps: {total_steps}")
+    print(f"  Steps per epoch: {steps_per_epoch}")
+    print(f"  Epochs: {training_args.num_train_epochs}")
+    print(f"  Effective batch size: {training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps}")
+    print(f"  Max length: {max_length} tokens (optimized for memory)")
+    print(f"  Gradient checkpointing: {training_args.gradient_checkpointing}")
+    print(f"  8-bit quantization: {quantization_config is not None} (reduces memory by ~4x)")
+    print(f"  FP16: {use_fp16} (disabled when using 8-bit quantization)")
+    
+    # Clear cache before training to free up memory
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        allocated = torch.cuda.memory_allocated(0) / 1e9
+        reserved = torch.cuda.memory_reserved(0) / 1e9
+        total = torch.cuda.get_device_properties(0).total_memory / 1e9
+        print(f"  GPU memory before training:")
+        print(f"    Allocated: {allocated:.2f} GB")
+        print(f"    Reserved: {reserved:.2f} GB")
+        print(f"    Total: {total:.1f} GB")
+        print(f"    Available: {total - reserved:.2f} GB")
+        
+        # Warn if memory usage is already high
+        if reserved > total * 0.85:
+            print(f"  ⚠️  WARNING: GPU memory usage is already at {reserved/total*100:.1f}%!")
+            print(f"     Training may fail with OOM. Consider:")
+            print(f"     1. Reducing max_length further (currently {max_length})")
+            print(f"     2. Ensuring 8-bit quantization is enabled (currently: {quantization_config is not None})")
+            print(f"     3. Reducing gradient_accumulation_steps")
     
     train_result = trainer.train()
     

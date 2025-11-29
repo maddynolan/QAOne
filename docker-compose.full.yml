@@ -1,0 +1,161 @@
+# Docker Compose for Full On-Prem Deployment
+# Phase 4.2: On-Prem Packaging
+
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: qaai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-qaai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qaai_password}
+      POSTGRES_DB: ${POSTGRES_DB:-qaai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qaai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qaai-network
+
+  # MinIO (S3-compatible object store)
+  minio:
+    image: minio/minio:latest
+    container_name: qaai-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - qaai-network
+
+  # Redis (for queues and caching)
+  redis:
+    image: redis:7-alpine
+    container_name: qaai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qaai-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qaai-backend
+    environment:
+      DATABASE_URL: postgresql://qaai:qaai_password@postgres:5432/qaai
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET_NAME: qa-artifacts
+      REDIS_URL: redis://redis:6379
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-local_qwen}
+      TRACK_LLM_USAGE: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - backend_logs:/app/logs
+    networks:
+      - qaai-network
+    restart: unless-stopped
+
+  # Ollama (for local LLM inference)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: qaai-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - qaai-network
+    restart: unless-stopped
+    # Note: Models need to be pulled separately:
+    # docker exec qaai-ollama ollama pull qwen2.5-coder:14b
+    # docker exec qaai-ollama ollama pull qwen2.5-coder:30b
+
+  # Frontend (if needed)
+  frontend:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: qaai-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - qaai-network
+    restart: unless-stopped
+
+  # Test Runner Workers (Playwright)
+  test-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: qaai-test-worker
+    environment:
+      DATABASE_URL: postgresql://qaai:qaai_password@postgres:5432/qaai
+      REDIS_URL: redis://redis:6379
+      WORKER_ID: worker-1
+      WORKER_CAPACITY: 5
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - qaai-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Run 2 worker instances
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
+  ollama_data:
+  backend_logs:
+
+networks:
+  qaai-network:
+    driver: bridge
+
+
+

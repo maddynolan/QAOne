@@ -1,0 +1,22 @@
+# UI Test Runner Container
+# Runs Playwright tests in isolated environment
+
+FROM mcr.microsoft.com/playwright:v1.40.0-focal
+
+WORKDIR /app
+
+# Install Node.js dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
+
+# Copy test files
+COPY tests/ ./tests/
+COPY playwright.config.ts ./
+
+# Browsers are pre-installed in base image
+# Run tests
+CMD ["npx", "playwright", "test"]
+
+
+
+

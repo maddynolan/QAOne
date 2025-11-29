@@ -1,0 +1,19 @@
+# Accessibility Test Runner Container
+# Runs axe-core and Lighthouse audits
+
+FROM node:18-slim
+
+WORKDIR /app
+
+# Install accessibility testing tools
+RUN npm install -g @axe-core/cli lighthouse
+
+# Copy test scripts
+COPY scripts/ ./scripts/
+
+# Run accessibility checks
+CMD ["node", "scripts/a11y_check.js"]
+
+
+
+

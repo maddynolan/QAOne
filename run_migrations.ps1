@@ -11,18 +11,15 @@ Write-Host ""
 # Check if psql is available
 $psqlPath = Get-Command psql -ErrorAction SilentlyContinue
 
+# Auto-discover all migration files in order
+$migrationsDir = "supabase\migrations"
+$migrationFiles = Get-ChildItem -Path $migrationsDir -Filter "*.sql" | Sort-Object Name | ForEach-Object { $_.Name }
+
+Write-Host "Found $($migrationFiles.Count) migration files" -ForegroundColor Cyan
+Write-Host ""
+
 if (-not $psqlPath) {
     Write-Host "psql not found. Using Docker exec instead..." -ForegroundColor Yellow
-    
-    # Use Docker exec to run migrations
-    $migrationsDir = "supabase\migrations"
-    $migrationFiles = @(
-        "001_initial_schema.sql",
-        "002_ai_generations.sql",
-        "003_ai_templates.sql",
-        "004_requirements_table.sql",
-        "005_fix_ai_generations.sql"
-    )
     
     foreach ($file in $migrationFiles) {
         $filePath = Join-Path $migrationsDir $file
@@ -42,14 +39,6 @@ if (-not $psqlPath) {
     Write-Host "Using psql..." -ForegroundColor Green
     
     $env:PGPASSWORD = "qaai123"
-    $migrationsDir = "supabase\migrations"
-    $migrationFiles = @(
-        "001_initial_schema.sql",
-        "002_ai_generations.sql",
-        "003_ai_templates.sql",
-        "004_requirements_table.sql",
-        "005_fix_ai_generations.sql"
-    )
     
     foreach ($file in $migrationFiles) {
         $filePath = Join-Path $migrationsDir $file

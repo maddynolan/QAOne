@@ -19,3 +19,5 @@ pyyaml>=6.0.1
 k6>=0.0.0  # Note: k6 is installed separately, not via pip
 PyJWT>=2.8.0  # JWT token handling
 prometheus-client>=0.19.0  # Prometheus metrics
+croniter>=2.0.0  # Cron expression parsing for scheduling
+cryptography>=41.0.0  # Encryption for secrets management

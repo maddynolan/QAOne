@@ -252,7 +252,15 @@ export default function Flowstral() {
 
     console.log(`Flowstral: Capturing ${eventType} event for session ${currentSession.sessionId}`);
     const element = (event.target || event) as HTMLElement;
-    const selector = generateSelector(element);
+    const multiLayerSelectors = generateMultiLayerSelectors(element);
+    const primarySelector = multiLayerSelectors.all_layers[0] || element.tagName.toLowerCase();
+
+    // Extract accessibility attributes
+    const role = element.getAttribute("role");
+    const ariaLabel = element.getAttribute("aria-label");
+    const ariaLabelledBy = element.getAttribute("aria-labelledby");
+    const name = (element as any).name;
+    const type = (element as any).type;
 
     const eventData = {
       html: document.documentElement.outerHTML.substring(0, 50000),
@@ -262,7 +270,24 @@ export default function Flowstral() {
         id: element.id,
         class_name: element.className,
         text_content: element.textContent?.substring(0, 100),
-        selector: selector
+        selector: primarySelector, // Primary selector for backward compatibility
+        // 5-Layer Selector Strategy
+        selectors: {
+          layer1_gold: multiLayerSelectors.layer1_gold,      // data-testid, id
+          layer2_silver: multiLayerSelectors.layer2_silver,  // role + name/aria-label
+          layer3_bronze: multiLayerSelectors.layer3_bronze,  // text content
+          layer4_iron: multiLayerSelectors.layer4_iron,      // CSS attributes
+          layer5_clay: multiLayerSelectors.layer5_clay,     // XPath/CSS path
+          all_layers: multiLayerSelectors.all_layers         // All in priority order
+        },
+        // Accessibility attributes
+        accessibility: {
+          role: role,
+          aria_label: ariaLabel,
+          aria_labelledby: ariaLabelledBy,
+          name: name,
+          type: type
+        }
       },
       action_description: `${eventType}: ${element.tagName}${element.id ? "#" + element.id : ""}`,
       value: eventType === "input" && "value" in element ? (element as HTMLInputElement).value : undefined,
@@ -895,15 +920,143 @@ export default function Flowstral() {
     }));
   };
 
-  const generateSelector = (element: HTMLElement): string => {
-    if (element.id) return `#${element.id}`;
-    if (element.getAttribute("data-testid")) return `[data-testid="${element.getAttribute("data-testid")}"]`;
-    if ("name" in element && (element as any).name) return `[name="${(element as any).name}"]`;
-    if (element.className) {
-      const classes = element.className.split(" ").filter(c => c).join(".");
-      if (classes) return `${element.tagName.toLowerCase()}.${classes}`;
+  /**
+   * 5-Layer Selector Strategy (Enterprise-Grade)
+   * Layer 1 (Gold): data-testid, id (if stable)
+   * Layer 2 (Silver): Accessibility Role (role="button", name="Submit")
+   * Layer 3 (Bronze): Text Content (text="Log In")
+   * Layer 4 (Iron): CSS Attributes (input[type="submit"])
+   * Layer 5 (Clay): XPath/Full CSS Path (The brittle fallback)
+   */
+  const generateMultiLayerSelectors = (element: HTMLElement): {
+    layer1_gold?: string;      // data-testid, id
+    layer2_silver?: string;     // role + name/aria-label
+    layer3_bronze?: string;     // text content
+    layer4_iron?: string;       // CSS attributes
+    layer5_clay?: string;       // XPath/CSS path
+    all_layers: string[];       // All selectors in priority order
+  } => {
+    const selectors: {
+      layer1_gold?: string;
+      layer2_silver?: string;
+      layer3_bronze?: string;
+      layer4_iron?: string;
+      layer5_clay?: string;
+      all_layers: string[];
+    } = { all_layers: [] };
+
+    // Layer 1 (Gold): data-testid, id
+    const testId = element.getAttribute("data-testid");
+    const elementId = element.id;
+    if (testId) {
+      selectors.layer1_gold = `[data-testid="${testId}"]`;
+      selectors.all_layers.push(selectors.layer1_gold);
+    } else if (elementId && !elementId.includes("react") && !elementId.includes("generated")) {
+      // Only use ID if it's not auto-generated
+      selectors.layer1_gold = `#${elementId}`;
+      selectors.all_layers.push(selectors.layer1_gold);
     }
-    return element.tagName.toLowerCase();
+
+    // Layer 2 (Silver): Accessibility Role + Name
+    const role = element.getAttribute("role");
+    const ariaLabel = element.getAttribute("aria-label");
+    const ariaLabelledBy = element.getAttribute("aria-labelledby");
+    const name = (element as any).name;
+    const type = (element as any).type;
+    
+    if (role) {
+      if (ariaLabel) {
+        selectors.layer2_silver = `[role="${role}"][aria-label="${ariaLabel}"]`;
+      } else if (name) {
+        selectors.layer2_silver = `[role="${role}"][name="${name}"]`;
+      } else {
+        selectors.layer2_silver = `[role="${role}"]`;
+      }
+      if (!selectors.all_layers.includes(selectors.layer2_silver)) {
+        selectors.all_layers.push(selectors.layer2_silver);
+      }
+    } else if (ariaLabel) {
+      selectors.layer2_silver = `[aria-label="${ariaLabel}"]`;
+      if (!selectors.all_layers.includes(selectors.layer2_silver)) {
+        selectors.all_layers.push(selectors.layer2_silver);
+      }
+    } else if (name && type) {
+      selectors.layer2_silver = `${element.tagName.toLowerCase()}[name="${name}"][type="${type}"]`;
+      if (!selectors.all_layers.includes(selectors.layer2_silver)) {
+        selectors.all_layers.push(selectors.layer2_silver);
+      }
+    }
+
+    // Layer 3 (Bronze): Text Content
+    const textContent = element.textContent?.trim();
+    if (textContent && textContent.length > 0 && textContent.length < 50) {
+      // Only use text if it's short and meaningful
+      const escapedText = textContent.replace(/"/g, '\\"');
+      selectors.layer3_bronze = `text="${escapedText}"`;
+      if (!selectors.all_layers.includes(selectors.layer3_bronze)) {
+        selectors.all_layers.push(selectors.layer3_bronze);
+      }
+    }
+
+    // Layer 4 (Iron): CSS Attributes
+    if (type) {
+      selectors.layer4_iron = `${element.tagName.toLowerCase()}[type="${type}"]`;
+      if (!selectors.all_layers.includes(selectors.layer4_iron)) {
+        selectors.all_layers.push(selectors.layer4_iron);
+      }
+    } else if (element.className) {
+      const classes = element.className.split(" ").filter(c => c && !c.includes("react") && !c.includes("generated"));
+      if (classes.length > 0 && classes.length <= 3) {
+        // Only use class if it's not auto-generated and not too many
+        const classSelector = `.${classes.join(".")}`;
+        selectors.layer4_iron = `${element.tagName.toLowerCase()}${classSelector}`;
+        if (!selectors.all_layers.includes(selectors.layer4_iron)) {
+          selectors.all_layers.push(selectors.layer4_iron);
+        }
+      }
+    }
+
+    // Layer 5 (Clay): XPath/Full CSS Path (fallback)
+    if (element.parentElement) {
+      const path: string[] = [];
+      let current: HTMLElement | null = element;
+      while (current && current !== document.body && path.length < 5) {
+        let selector = current.tagName.toLowerCase();
+        if (current.id) {
+          selector += `#${current.id}`;
+          path.unshift(selector);
+          break;
+        }
+        if (current.className) {
+          const classes = current.className.split(" ").filter(c => c).slice(0, 1);
+          if (classes.length > 0) {
+            selector += `.${classes[0]}`;
+          }
+        }
+        path.unshift(selector);
+        current = current.parentElement;
+      }
+      if (path.length > 0) {
+        selectors.layer5_clay = path.join(" > ");
+        if (!selectors.all_layers.includes(selectors.layer5_clay)) {
+          selectors.all_layers.push(selectors.layer5_clay);
+        }
+      }
+    }
+
+    // Fallback: at least return tag name
+    if (selectors.all_layers.length === 0) {
+      selectors.layer5_clay = element.tagName.toLowerCase();
+      selectors.all_layers.push(selectors.layer5_clay);
+    }
+
+    return selectors;
+  };
+
+  // Legacy function for backward compatibility
+  const generateSelector = (element: HTMLElement): string => {
+    const multiLayer = generateMultiLayerSelectors(element);
+    return multiLayer.all_layers[0] || element.tagName.toLowerCase();
   };
 
   // Calculate statistics from sessions

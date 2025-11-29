@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flowstral Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .status { padding: 10px; margin: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Flowstral Connection Test</h1>
+    <div id="status"></div>
+    <button onclick="testBackend()">Test Backend Connection</button>
+    <button onclick="testStart()">Test Start Flowstral</button>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        function showStatus(message, isError = false) {
+            const div = document.getElementById('status');
+            div.className = 'status ' + (isError ? 'error' : 'success');
+            div.textContent = message;
+            console.log(message);
+        }
+        
+        async function testBackend() {
+            try {
+                const response = await fetch(`${API_BASE}/docs`);
+                if (response.ok) {
+                    showStatus('✅ Backend is running!');
+                } else {
+                    showStatus(`❌ Backend returned: ${response.status}`, true);
+                }
+            } catch (error) {
+                showStatus(`❌ Backend not reachable: ${error.message}`, true);
+            }
+        }
+        
+        async function testStart() {
+            try {
+                const response = await fetch(`${API_BASE}/api/flowstral/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_id: 'test',
+                        user_id: 'test',
+                        initial_url: window.location.href,
+                        initial_dom: document.documentElement.outerHTML.substring(0, 1000)
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus(`✅ Flowstral started! Session: ${result.session.session_id.substring(0, 8)}...`);
+                } else {
+                    const error = await response.text();
+                    showStatus(`❌ Failed: ${response.status} - ${error}`, true);
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, true);
+            }
+        }
+        
+        // Auto-test on load
+        window.onload = () => {
+            testBackend();
+        };
+    </script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Flowstral Recorder",
+  "version": "1.0.0",
+  "description": "Record user flows, accessibility, and performance data for QA AI. Action Graph Intelligence Engine.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "debugger",
+    "webNavigation",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Flowstral Recorder"
+  },
+  "side_panel": {
+    "default_path": "side_panel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
+

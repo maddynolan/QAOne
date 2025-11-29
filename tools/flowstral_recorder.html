@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowstral - Action Graph Intelligence Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .flowstral-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 400px;
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            z-index: 999999;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .flowstral-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .flowstral-logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-active {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .status-stopped {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin: 15px 0;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-start:hover {
+            background: #45a049;
+        }
+        
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-stop:hover {
+            background: #da190b;
+        }
+        
+        .btn-export {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .btn-export:hover {
+            background: #0b7dda;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin: 15px 0;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+        
+        .tab.active {
+            color: #4CAF50;
+            border-bottom-color: #4CAF50;
+            font-weight: 600;
+        }
+        
+        .tab-content {
+            display: none;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+        
+        .issue-item {
+            padding: 10px;
+            margin: 8px 0;
+            border-left: 4px solid #f44336;
+            background: #fff3e0;
+            border-radius: 4px;
+        }
+        
+        .issue-critical {
+            border-left-color: #c62828;
+            background: #ffebee;
+        }
+        
+        .issue-serious {
+            border-left-color: #f44336;
+            background: #fff3e0;
+        }
+        
+        .issue-moderate {
+            border-left-color: #ff9800;
+            background: #fff8e1;
+        }
+        
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin: 4px 0;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .metric-value {
+            font-weight: 600;
+        }
+        
+        .metric-good {
+            color: #4CAF50;
+        }
+        
+        .metric-warning {
+            color: #ff9800;
+        }
+        
+        .config-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        
+        .config-section label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .config-section input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .log {
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 11px;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="flowstral-panel" id="flowstralPanel">
+        <div class="flowstral-header">
+            <div class="flowstral-logo">⭐ Flowstral</div>
+            <div class="status-badge stopped" id="statusBadge">⏹ Stopped</div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="nodeCount">0</div>
+                <div class="stat-label">Nodes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="edgeCount">0</div>
+                <div class="stat-label">Edges</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="wcagCount">0</div>
+                <div class="stat-label">WCAG Issues</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="perfScore">-</div>
+                <div class="stat-label">Perf Score</div>
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-start" id="btnStart" onclick="startFlowstral()">▶ Start</button>
+            <button class="btn-stop" id="btnStop" onclick="stopFlowstral()" disabled>⏹ Stop</button>
+        </div>
+        
+        <div class="config-section">
+            <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 10px; margin-bottom: 15px; border-radius: 4px; font-size: 11px;">
+                <strong style="color: #1565C0;">🌐 Navigate to Any Website:</strong>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <input type="text" id="navigateUrl" placeholder="https://www.saucedemo.com" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+                    <button onclick="navigateToUrl()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;">Go</button>
+                </div>
+                <div style="color: #1565C0; margin-top: 5px; font-size: 10px;">
+                    Enter URL and click Go. Opens in new window/tab.
+                </div>
+                <div style="color: #f57c00; margin-top: 5px; font-size: 9px; padding: 8px; background: #fff3e0; border-radius: 3px; border-left: 3px solid #ff9800;">
+                    <div style="margin-bottom: 5px;">⚠️ After opening new window, paste this in console (F12):</div>
+                    <div style="background: #f5f5f5; padding: 6px; border-radius: 3px; font-family: monospace; font-size: 8px; word-break: break-all; margin-bottom: 5px;" id="reconnectCode">
+                        fetch('http://localhost:8081/flowstral_inject.js').then(r=>r.text()).then(eval)
+                    </div>
+                    <button onclick="copyReconnectCode()" style="width: 100%; padding: 4px; background: #ff9800; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 9px; font-weight: 600;">
+                        📋 Copy Reconnection Code
+                    </button>
+                </div>
+            </div>
+            <label>API Endpoint:</label>
+            <input type="text" id="apiEndpoint" value="http://localhost:8000/api/flowstral/start" placeholder="API endpoint">
+            <label style="margin-top: 10px;">API Key (optional):</label>
+            <input type="text" id="apiKey" placeholder="Bearer token or API key">
+            <label style="margin-top: 10px;">Project ID:</label>
+            <input type="text" id="projectId" placeholder="Project ID">
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('playwright')">Playwright</button>
+            <button class="tab" onclick="showTab('test-steps')">Test Steps</button>
+            <button class="tab" onclick="showTab('accessibility')">A11y</button>
+            <button class="tab" onclick="showTab('performance')">Perf</button>
+        </div>
+        
+        <div id="playwrightTab" class="tab-content active">
+            <div class="code-block" id="playwrightCode">// Playwright code will appear here as you interact...</div>
+        </div>
+        
+        <div id="test-stepsTab" class="tab-content">
+            <div id="testSteps">// Test steps will appear here...</div>
+        </div>
+        
+        <div id="accessibilityTab" class="tab-content">
+            <div id="accessibilityIssues">// Accessibility issues will appear here...</div>
+        </div>
+        
+        <div id="performanceTab" class="tab-content">
+            <div id="performanceMetrics">// Performance metrics will appear here...</div>
+        </div>
+        
+        <div class="button-group" style="margin-top: 15px;">
+            <button class="btn-export" onclick="exportArtifacts()" id="btnExport" disabled>📥 Export</button>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let flowstralSession = {
+            sessionId: null,
+            isActive: false,
+            nodes: [],
+            edges: [],
+            playwrightCode: [],
+            testSteps: [],
+            wcagIssues: [],
+            performanceMetrics: []
+        };
+        
+        let eventListeners = [];
+        
+        // Check if Flowstral should auto-resume after navigation
+        function checkAutoResume() {
+            // Check if we're on a different page and should inject Flowstral
+            const shouldInject = localStorage.getItem('flowstral_should_inject');
+            if (shouldInject === 'true') {
+                // We're on a new page - inject Flowstral panel
+                injectFlowstralPanel();
+                localStorage.removeItem('flowstral_should_inject');
+            }
+            
+            // Check for saved session
+            const saved = sessionStorage.getItem('flowstral_session');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    if (data.isActive && data.sessionId) {
+                        console.log('Flowstral: Auto-resuming session after navigation', data);
+                        flowstralSession = data;
+                        // Re-inject panel and reconnect
+                        setTimeout(() => {
+                            reconnectFlowstral(data);
+                        }, 1000);
+                    }
+                } catch (e) {
+                    console.error('Flowstral: Failed to restore session', e);
+                }
+            }
+        }
+        
+        // Inject Flowstral panel into current page (for when navigating to external sites)
+        function injectFlowstralPanel() {
+            if (document.getElementById('flowstral-panel')) {
+                console.log('Flowstral: Panel already exists');
+                return;
+            }
+            
+            console.log('Flowstral: Injecting panel into page...');
+            
+            // Load the Flowstral panel HTML
+            fetch('http://localhost:8081/flowstral_panel.html')
+                .then(response => response.text())
+                .then(html => {
+                    // Create container
+                    const container = document.createElement('div');
+                    container.innerHTML = html;
+                    document.body.appendChild(container);
+                    
+                    // Execute any scripts in the panel
+                    const scripts = container.querySelectorAll('script');
+                    scripts.forEach(oldScript => {
+                        const newScript = document.createElement('script');
+                        Array.from(oldScript.attributes).forEach(attr => {
+                            newScript.setAttribute(attr.name, attr.value);
+                        });
+                        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    });
+                    
+                    console.log('Flowstral: Panel injected successfully');
+                })
+                .catch(error => {
+                    console.error('Flowstral: Failed to load panel HTML', error);
+                    // Fallback: create minimal panel
+                    createMinimalPanel();
+                });
+        }
+        
+        // Create minimal Flowstral panel as fallback
+        function createMinimalPanel() {
+            const panel = document.createElement('div');
+            panel.id = 'flowstral-panel';
+            panel.style.cssText = 'position:fixed;top:10px;right:10px;width:350px;background:white;border:2px solid #4CAF50;border-radius:12px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999999;font-family:Arial,sans-serif;';
+            panel.innerHTML = `
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;">
+                    <div style="font-size:20px;font-weight:bold;color:#4CAF50;">⭐ Flowstral</div>
+                    <div id="flowstral-status" style="padding:6px 12px;border-radius:20px;font-size:12px;background:#e8f5e9;color:#2e7d32;">Reconnecting...</div>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <div style="font-size:12px;color:#666;margin-bottom:10px;">
+                        Flowstral is reconnecting to your session...
+                    </div>
+                    <div style="font-size:11px;color:#999;">
+                        If this doesn't work, visit: <a href="http://localhost:8081/flowstral_recorder.html" target="_blank">Flowstral Recorder</a>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(panel);
+            console.log('Flowstral: Minimal panel created');
+        }
+        
+        // Save session state before navigation
+        function saveSessionState() {
+            if (flowstralSession.isActive && flowstralSession.sessionId) {
+                sessionStorage.setItem('flowstral_session', JSON.stringify({
+                    sessionId: flowstralSession.sessionId,
+                    isActive: flowstralSession.isActive,
+                    nodes: flowstralSession.nodes,
+                    projectId: document.getElementById('projectId').value,
+                    apiEndpoint: document.getElementById('apiEndpoint').value,
+                    apiKey: document.getElementById('apiKey').value
+                }));
+                console.log('Flowstral: Session state saved for navigation');
+            }
+        }
+        
+        // Reconnect Flowstral after navigation
+        async function reconnectFlowstral(savedData) {
+            console.log('Flowstral: Reconnecting to session...');
+            
+            // Restore UI state
+            flowstralSession = {
+                sessionId: savedData.sessionId,
+                isActive: savedData.isActive,
+                nodes: savedData.nodes || []
+            };
+            
+            document.getElementById('projectId').value = savedData.projectId || '';
+            document.getElementById('apiEndpoint').value = savedData.apiEndpoint || 'http://localhost:8000/api/flowstral/start';
+            document.getElementById('apiKey').value = savedData.apiKey || '';
+            
+            // Update UI
+            document.getElementById('statusBadge').className = 'status-badge status-active';
+            document.getElementById('statusBadge').textContent = '🔴 Active';
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStop').disabled = false;
+            document.getElementById('btnExport').disabled = true;
+            
+            // Verify session is still active on backend
+            try {
+                const statusEndpoint = document.getElementById('apiEndpoint').value.replace('/start', '/session/' + flowstralSession.sessionId + '/status');
+                const response = await fetch(statusEndpoint);
+                if (response.ok) {
+                    const status = await response.json();
+                    if (status.status === 'active') {
+                        log('✅ Flowstral reconnected! Continue recording...');
+                        startEventCapture();
+                    } else {
+                        log('⚠️ Session expired. Please start a new session.');
+                        flowstralSession.isActive = false;
+                    }
+                } else {
+                    log('⚠️ Could not verify session. Please start a new session.');
+                    flowstralSession.isActive = false;
+                }
+            } catch (error) {
+                log(`⚠️ Error reconnecting: ${error.message}. Please start a new session.`);
+                flowstralSession.isActive = false;
+            }
+        }
+        
+        // Navigate to URL while preserving Flowstral session
+        function navigateToUrl() {
+            const url = document.getElementById('navigateUrl').value.trim();
+            if (!url) {
+                alert('Please enter a URL');
+                return;
+            }
+            
+            // Add https:// if missing
+            let fullUrl = url;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                fullUrl = 'https://' + url;
+            }
+            
+            if (flowstralSession.isActive) {
+                // Save session state before navigating
+                saveSessionState();
+                
+                log(`🌐 Opening ${fullUrl} in new window...`);
+                
+                // Create a simple bookmarklet URL that will inject Flowstral
+                const bookmarkletCode = encodeURIComponent(`
+                    (function(){
+                        fetch('http://localhost:8081/flowstral_inject.js')
+                            .then(r=>r.text())
+                            .then(eval)
+                            .catch(()=>alert('Flowstral: Failed to load. Make sure tools server is running on port 8081.'));
+                    })();
+                `);
+                
+                // Open target URL in new window
+                const newWindow = window.open(fullUrl, '_blank');
+                
+                if (!newWindow) {
+                    alert('Popup blocked! Please allow popups, or:\n\n1. Navigate to the site manually\n2. Open console (F12)\n3. Paste: fetch("http://localhost:8081/flowstral_inject.js").then(r=>r.text()).then(eval)');
+                    return;
+                }
+                
+                // Wait a moment for page to start loading, then try to inject
+                setTimeout(() => {
+                    try {
+                        // Try to inject script into new window
+                        const script = newWindow.document.createElement('script');
+                        script.textContent = `
+                            (function(){
+                                if (window.flowstralPanelInjected) return;
+                                window.flowstralPanelInjected = true;
+                                
+                                // Check for saved session
+                                const saved = sessionStorage.getItem('flowstral_session');
+                                if (!saved) {
+                                    console.log('Flowstral: No session found. Please start Flowstral first.');
+                                    return;
+                                }
+                                
+                                // Load injection script
+                                fetch('http://localhost:8081/flowstral_inject.js')
+                                    .then(r=>r.text())
+                                    .then(eval)
+                                    .catch(e=>console.error('Flowstral: Failed to load', e));
+                            })();
+                        `;
+                        newWindow.document.head.appendChild(script);
+                        log('✅ Flowstral injection attempted. Check the new window!');
+                    } catch (e) {
+                        // Cross-origin - can't inject directly
+                        console.log('Flowstral: Cross-origin restriction. Showing instructions...');
+                        log('⚠️ Cannot auto-inject due to browser security.');
+                        log('💡 In the new window, open console (F12) and paste:');
+                        log('   fetch("http://localhost:8081/flowstral_inject.js").then(r=>r.text()).then(eval)');
+                        
+                        // Try to show alert in new window
+                        try {
+                            newWindow.alert('Flowstral: Please open browser console (F12) and paste:\n\nfetch("http://localhost:8081/flowstral_inject.js").then(r=>r.text()).then(eval)');
+                        } catch (alertError) {
+                            // Can't show alert (cross-origin)
+                        }
+                    }
+                }, 1500);
+                
+            } else {
+                // No active session - just open URL
+                window.open(fullUrl, '_blank');
+                log(`🌐 Opened ${fullUrl} in new window`);
+            }
+        }
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        async function startFlowstral() {
+            if (flowstralSession.isActive) return;
+            
+            const apiEndpoint = document.getElementById('apiEndpoint').value;
+            const apiKey = document.getElementById('apiKey').value;
+            const projectId = document.getElementById('projectId').value;
+            
+            if (!projectId) {
+                alert('Please enter a Project ID');
+                return;
+            }
+            
+            try {
+                log('Starting Flowstral session...');
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (apiKey) {
+                    headers['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+                }
+                
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        project_id: projectId,
+                        user_id: 'browser_user',
+                        initial_url: window.location.href,
+                        initial_dom: document.documentElement.outerHTML
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to start session: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                flowstralSession.sessionId = result.session.session_id;
+                flowstralSession.isActive = true;
+                
+                document.getElementById('statusBadge').className = 'status-badge status-active';
+                document.getElementById('statusBadge').textContent = '🔴 Active';
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('btnStop').disabled = false;
+                document.getElementById('btnExport').disabled = true;
+                
+                // Start capturing events
+                startEventCapture();
+                
+                // Save session state for navigation
+                saveSessionState();
+                
+                log(`✅ Flowstral session started: ${flowstralSession.sessionId}`);
+                log('💡 Tip: Use the URL navigation box above to navigate to any website!');
+                console.log('✅ Flowstral is ready! Use the URL navigation box to go to any website.');
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+                alert(`Failed to start Flowstral: ${error.message}`);
+            }
+        }
+        
+        function startEventCapture() {
+            // Capture clicks
+            const clickHandler = async (e) => {
+                if (!flowstralSession.isActive) {
+                    console.log('Flowstral: Click ignored - session not active');
+                    return;
+                }
+                console.log('Flowstral: Click captured', e.target);
+                await captureEvent('click', e);
+            };
+            document.addEventListener('click', clickHandler, true);
+            eventListeners.push({type: 'click', handler: clickHandler});
+            
+            // Capture input
+            const inputHandler = async (e) => {
+                if (!flowstralSession.isActive) {
+                    console.log('Flowstral: Input ignored - session not active');
+                    return;
+                }
+                console.log('Flowstral: Input captured', e.target);
+                await captureEvent('input', e);
+            };
+            document.addEventListener('input', inputHandler, true);
+            eventListeners.push({type: 'input', handler: inputHandler});
+            
+            // Capture navigation (SPA routes)
+            const originalPushState = history.pushState;
+            history.pushState = function(...args) {
+                if (flowstralSession.isActive) {
+                    console.log('Flowstral: Navigation detected (pushState)', args[2]);
+                    captureEvent('navigate', {url: args[2]});
+                }
+                return originalPushState.apply(history, args);
+            };
+            
+            // Capture full page navigation
+            window.addEventListener('beforeunload', () => {
+                if (flowstralSession.isActive) {
+                    console.log('Flowstral: Page unloading - will reattach on new page');
+                }
+            });
+            
+            // Re-attach listeners after page load (for full page navigations)
+            window.addEventListener('load', () => {
+                if (flowstralSession.isActive) {
+                    console.log('Flowstral: Page loaded - reattaching listeners');
+                    // Remove old listeners
+                    eventListeners.forEach(({type, handler}) => {
+                        document.removeEventListener(type, handler, true);
+                    });
+                    eventListeners = [];
+                    // Re-attach
+                    startEventCapture();
+                }
+            });
+            
+            log('Event capture started - listening for clicks and inputs');
+            console.log('Flowstral: Event listeners attached to current page');
+        }
+        
+        async function captureEvent(eventType, event) {
+            if (!flowstralSession.sessionId) {
+                console.log('Flowstral: Cannot capture - no session ID');
+                return;
+            }
+            
+            if (!flowstralSession.isActive) {
+                console.log('Flowstral: Cannot capture - session not active');
+                return;
+            }
+            
+            console.log(`Flowstral: Capturing ${eventType} event for session ${flowstralSession.sessionId.substring(0, 8)}...`);
+            
+            const apiEndpoint = document.getElementById('apiEndpoint').value.replace('/start', '/capture-event');
+            const apiKey = document.getElementById('apiKey').value;
+            
+            const element = event && event.target ? event.target : (typeof event === 'object' && event.url ? null : document.activeElement);
+            const selector = element ? generateSelector(element) : 'unknown';
+            
+            const eventData = {
+                html: document.documentElement.outerHTML.substring(0, 50000), // Limit size
+                url: window.location.href,
+                interacted_element: element ? {
+                    tag_name: element.tagName,
+                    id: element.id,
+                    class_name: element.className,
+                    text_content: element.textContent?.substring(0, 100),
+                    selector: selector
+                } : null,
+                action_description: eventType === 'navigate' ? `Navigate to ${event.url || window.location.href}` : 
+                                   `${eventType}: ${element ? (element.tagName + (element.id ? '#' + element.id : '')) : 'unknown'}`,
+                value: eventType === 'input' && element ? element.value : undefined,
+                page_metrics: {
+                    // In production, would use Performance API
+                    lcp: 0,
+                    fcp: 0,
+                    cls: 0
+                }
+            };
+            
+            try {
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (apiKey) {
+                    headers['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+                }
+                
+                console.log(`Flowstral: Sending ${eventType} to ${apiEndpoint}`);
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        session_id: flowstralSession.sessionId,
+                        event_type: eventType,
+                        event_data: eventData
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Flowstral: Event captured successfully', result);
+                    updateUI(result.result);
+                    flowstralSession.nodes.push(result.result.node_id);
+                    log(`✅ Captured ${eventType}`);
+                } else {
+                    const errorText = await response.text();
+                    console.error(`Flowstral: API error ${response.status}:`, errorText);
+                    log(`❌ Failed to capture: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Flowstral: Capture error', error);
+                log(`❌ Error capturing event: ${error.message}`);
+            }
+        }
+        
+        function updateUI(result) {
+            const outputs = result.real_time_outputs;
+            
+            // Update Playwright code
+            if (outputs.playwright_code) {
+                const codeDiv = document.getElementById('playwrightCode');
+                const currentCode = codeDiv.textContent;
+                codeDiv.textContent = currentCode + '\n' + outputs.playwright_code;
+            }
+            
+            // Update test steps
+            if (outputs.test_step) {
+                const stepsDiv = document.getElementById('testSteps');
+                const stepHtml = `<div style="padding: 8px; margin: 4px 0; background: #f9f9f9; border-radius: 4px;">
+                    <strong>Step ${outputs.test_step.step_number}:</strong> ${outputs.test_step.action}<br>
+                    <small>Expected: ${outputs.test_step.expected_result}</small>
+                </div>`;
+                stepsDiv.innerHTML += stepHtml;
+            }
+            
+            // Update accessibility panel
+            if (outputs.accessibility_panel) {
+                const a11yDiv = document.getElementById('accessibilityIssues');
+                const panel = outputs.accessibility_panel;
+                let html = `<div style="margin-bottom: 10px;">
+                    <strong>Total Issues:</strong> ${panel.total_issues} 
+                    (Critical: ${panel.critical}, Serious: ${panel.serious})
+                </div>`;
+                
+                panel.issues.forEach(issue => {
+                    html += `<div class="issue-item issue-${issue.impact}">
+                        <strong>${issue.rule_name}</strong> (${issue.count}x)<br>
+                        <small>${issue.description}</small><br>
+                        <small style="color: #666;">Fix: ${issue.suggested_fix}</small>
+                    </div>`;
+                });
+                
+                a11yDiv.innerHTML = html;
+                document.getElementById('wcagCount').textContent = panel.total_issues;
+            }
+            
+            // Update performance panel
+            if (outputs.performance_panel) {
+                const perfDiv = document.getElementById('performanceMetrics');
+                const panel = outputs.performance_panel;
+                let html = `<div style="margin-bottom: 10px;">
+                    <strong>Performance Score:</strong> ${panel.page_score}/100
+                </div>`;
+                
+                panel.metrics.forEach(metric => {
+                    html += `<div class="metric-item">
+                        <span>${metric.name}</span>
+                        <span class="metric-value metric-${metric.status}">${metric.value}</span>
+                    </div>`;
+                });
+                
+                perfDiv.innerHTML = html;
+                document.getElementById('perfScore').textContent = panel.page_score;
+            }
+            
+            // Update stats
+            document.getElementById('nodeCount').textContent = flowstralSession.nodes.length;
+            document.getElementById('edgeCount').textContent = flowstralSession.nodes.length - 1;
+        }
+        
+        async function stopFlowstral() {
+            if (!flowstralSession.isActive || !flowstralSession.sessionId) {
+                alert('No active session to stop');
+                return;
+            }
+            
+            const apiEndpoint = document.getElementById('apiEndpoint').value.replace('/start', '/stop');
+            const apiKey = document.getElementById('apiKey').value;
+            const projectId = document.getElementById('projectId').value;
+            
+            try {
+                log('Stopping Flowstral session...');
+                console.log(`Flowstral: Stopping session ${flowstralSession.sessionId}`);
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (apiKey) {
+                    headers['Authorization'] = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+                }
+                
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        session_id: flowstralSession.sessionId,
+                        project_id: projectId
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Flowstral: Stop failed', response.status, errorText);
+                    throw new Error(`Failed to stop session: ${response.status} - ${errorText}`);
+                }
+                
+                const result = await response.json();
+                console.log('Flowstral: Session stopped successfully', result);
+                
+                // Remove event listeners
+                eventListeners.forEach(({type, handler}) => {
+                    document.removeEventListener(type, handler, true);
+                });
+                eventListeners = [];
+                
+                flowstralSession.isActive = false;
+                document.getElementById('statusBadge').className = 'status-badge status-stopped';
+                document.getElementById('statusBadge').textContent = '⏹ Stopped';
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('btnStop').disabled = true;
+                document.getElementById('btnExport').disabled = false;
+                
+                // Clear saved session
+                sessionStorage.removeItem('flowstral_session');
+                console.log('Flowstral: Session cleared from storage');
+                
+                log(`✅ Flowstral session stopped. Generated ${Object.keys(result.artifacts || {}).length} artifacts.`);
+                
+                // Show artifacts in new window
+                showArtifacts(result.artifacts || {});
+                
+            } catch (error) {
+                console.error('Flowstral: Stop error', error);
+                log(`❌ Error: ${error.message}`);
+                alert(`Failed to stop Flowstral: ${error.message}\n\nCheck browser console (F12) for details.`);
+            }
+        }
+        
+        function showArtifacts(artifacts) {
+            const newWindow = window.open('', '_blank');
+            newWindow.document.write(`
+                <html>
+                    <head><title>Flowstral Artifacts</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        pre { background: #f5f5f5; padding: 15px; overflow: auto; }
+                        h2 { margin-top: 30px; }
+                    </style>
+                    </head>
+                    <body>
+                        <h1>⭐ Flowstral Artifacts</h1>
+                        <h2>1. Action Graph</h2>
+                        <pre>${JSON.stringify(artifacts.action_graph, null, 2)}</pre>
+                        <h2>2. Playwright Script</h2>
+                        <pre>${artifacts.playwright_script?.code || 'N/A'}</pre>
+                        <h2>3. Test Cases</h2>
+                        <pre>${JSON.stringify(artifacts.test_cases, null, 2)}</pre>
+                        <h2>4. Accessibility Report</h2>
+                        <pre>${JSON.stringify(artifacts.accessibility_report, null, 2)}</pre>
+                        <h2>5. Performance Report</h2>
+                        <pre>${JSON.stringify(artifacts.performance_report, null, 2)}</pre>
+                        <h2>6. Defects</h2>
+                        <pre>${JSON.stringify(artifacts.defects, null, 2)}</pre>
+                    </body>
+                </html>
+            `);
+        }
+        
+        function exportArtifacts() {
+            // Export current state
+            const data = {
+                session: flowstralSession,
+                playwright_code: document.getElementById('playwrightCode').textContent,
+                timestamp: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `flowstral-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log('Artifacts exported');
+        }
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function generateSelector(element) {
+            if (element.id) return `#${element.id}`;
+            if (element.getAttribute('data-testid')) return `[data-testid="${element.getAttribute('data-testid')}"]`;
+            if (element.name) return `[name="${element.name}"]`;
+            if (element.className) {
+                const classes = element.className.split(' ').filter(c => c).join('.');
+                if (classes) return `${element.tagName.toLowerCase()}.${classes}`;
+            }
+            return element.tagName.toLowerCase();
+        }
+        
+        // Copy reconnection code to clipboard
+        function copyReconnectCode() {
+            const code = "fetch('http://localhost:8081/flowstral_inject.js').then(r=>r.text()).then(eval)";
+            navigator.clipboard.writeText(code).then(() => {
+                log('✅ Reconnection code copied to clipboard!');
+                alert('Code copied! After opening new window, press F12 and paste (Ctrl+V) in console.');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = code;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                log('✅ Reconnection code copied!');
+                alert('Code copied! After opening new window, press F12 and paste (Ctrl+V) in console.');
+            });
+        }
+        
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const urlInput = document.getElementById('navigateUrl');
+            if (urlInput) {
+                urlInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        navigateToUrl();
+                    }
+                });
+            }
+            
+            // Check for auto-resume on page load
+            checkAutoResume();
+        });
+    </script>
+</body>
+</html>
+

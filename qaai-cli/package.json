@@ -1,0 +1,34 @@
+{
+  "name": "qaai-cli",
+  "version": "1.0.0",
+  "description": "QA AI Platform CLI tool for CI/CD integration",
+  "main": "dist/index.js",
+  "bin": {
+    "qaai-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "qa",
+    "testing",
+    "automation",
+    "ci-cd"
+  ],
+  "author": "QA AI Platform",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.0.0",
+    "axios": "^1.6.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
+

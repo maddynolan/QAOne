@@ -1,0 +1,16 @@
+# Performance Test Runner Container
+# Runs k6 load tests
+
+FROM grafana/k6:latest
+
+WORKDIR /app
+
+# Copy k6 scripts
+COPY scripts/ ./scripts/
+
+# Run k6 test
+CMD ["k6", "run", "scripts/load_test.js"]
+
+
+
+

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flowstral Extension Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        button { padding: 10px 20px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .status { margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Flowstral Extension Test Page</h1>
+    
+    <div class="test-section">
+        <h2>1. Check Content Script</h2>
+        <button onclick="checkContentScript()">Check if Content Script Loaded</button>
+        <div id="contentScriptStatus" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Test Click Capture</h2>
+        <button onclick="testClick()">Click Me to Test</button>
+        <div id="clickStatus" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Check Extension Storage</h2>
+        <button onclick="checkStorage()">Check Storage</button>
+        <div id="storageStatus" class="status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. Manual Test</h2>
+        <p>Open browser console (F12) and look for:</p>
+        <ul>
+            <li><code>Flowstral Content: Script loaded on...</code></li>
+            <li><code>Flowstral Content: Starting recording</code></li>
+            <li><code>Flowstral Content: Recording initialized and active!</code></li>
+        </ul>
+        <p>You should also see a GREEN indicator in the top-right corner when recording.</p>
+    </div>
+    
+    <script>
+        function checkContentScript() {
+            const status = document.getElementById('contentScriptStatus');
+            if (window.chrome && chrome.runtime) {
+                status.innerHTML = '✅ Extension API available<br>✅ Content script should be loaded';
+            } else {
+                status.innerHTML = '❌ Extension API not available';
+            }
+        }
+        
+        function testClick() {
+            const status = document.getElementById('clickStatus');
+            status.innerHTML = 'Click detected! Check console for "Flowstral Content: Capturing event click"';
+        }
+        
+        async function checkStorage() {
+            const status = document.getElementById('storageStatus');
+            if (window.chrome && chrome.storage) {
+                chrome.storage.local.get('flowstral_session', (result) => {
+                    if (result.flowstral_session) {
+                        status.innerHTML = `✅ Session found:<br>Active: ${result.flowstral_session.isActive}<br>Session ID: ${result.flowstral_session.sessionId?.substring(0, 8)}...`;
+                    } else {
+                        status.innerHTML = '⚠️ No session found. Start recording from extension popup.';
+                    }
+                });
+            } else {
+                status.innerHTML = '❌ Storage API not available';
+            }
+        }
+        
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                checkContentScript();
+                checkStorage();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
+
+
+
