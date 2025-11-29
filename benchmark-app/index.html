@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA AI Platform - Benchmark Application</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .scenario { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .scenario h2 { color: #333; margin-bottom: 15px; }
+        .scenario p { color: #666; margin-bottom: 10px; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+        .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 500px; }
+        .sidebar { width: 250px; background: #f8f9fa; padding: 20px; position: fixed; left: 0; top: 0; height: 100vh; }
+        .main-content { margin-left: 270px; padding: 20px; }
+        .table-container { max-height: 400px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        .drag-zone { border: 2px dashed #ccc; padding: 40px; text-align: center; margin: 20px 0; border-radius: 8px; }
+        .drag-zone.drag-over { border-color: #007bff; background: #e7f3ff; }
+        iframe { width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 4px; }
+        .popup { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 2000; }
+        .chat-message { padding: 10px; margin: 10px 0; background: #f0f0f0; border-radius: 4px; }
+        .timestamp { color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Benchmark App</h2>
+        <nav>
+            <a href="#scenario1" onclick="showScenario(1)">Scenario 1: Trading</a><br>
+            <a href="#scenario2" onclick="showScenario(2)">Scenario 2: CMS</a><br>
+            <a href="#scenario3" onclick="showScenario(3)">Scenario 3: CRM</a><br>
+            <a href="#scenario4" onclick="showScenario(4)">Scenario 4: Insurance</a><br>
+            <a href="#scenario5" onclick="showScenario(5)">Scenario 5: iFrame</a><br>
+            <a href="#scenario6" onclick="showScenario(6)">Scenario 6: Analytics</a><br>
+            <a href="#scenario7" onclick="showScenario(7)">Scenario 7: E-Commerce</a><br>
+            <a href="#scenario8" onclick="showScenario(8)">Scenario 8: File Upload</a><br>
+            <a href="#scenario9" onclick="showScenario(9)">Scenario 9: Chat</a><br>
+            <a href="#scenario10" onclick="showScenario(10)">Scenario 10: Profile</a><br>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <!-- Scenario 1: Financial Trading Portal -->
+        <div id="scenario1" class="scenario">
+            <h2>Scenario 1: Financial Trading Portal - Buy Limit Order</h2>
+            <p>This form re-renders on price change, causing dynamic IDs to change.</p>
+            <button onclick="openOrderModal()">Open Order Modal</button>
+            <div id="orderModal" class="modal">
+                <div class="modal-content">
+                    <h3>Buy Limit Order</h3>
+                    <label>Asset:</label>
+                    <select id="asset-select" onchange="updateOrderForm()">
+                        <option value="AAPL">AAPL</option>
+                        <option value="GOOGL">GOOGL</option>
+                        <option value="MSFT">MSFT</option>
+                    </select><br>
+                    <label>Price:</label>
+                    <input type="number" id="order-price" onchange="updateOrderForm()" placeholder="Enter price"><br>
+                    <label>Duration:</label>
+                    <select id="order-duration">
+                        <option value="day">Day</option>
+                        <option value="week">Week</option>
+                        <option value="month">Month</option>
+                    </select><br>
+                    <button id="submit-btn-dynamic" role="button" name="Submit Order" onclick="submitOrder()">Submit Order</button>
+                    <button onclick="closeOrderModal()">Cancel</button>
+                </div>
+            </div>
+            <div id="order-result"></div>
+        </div>
+
+        <!-- Scenario 2: CMS Drag and Drop -->
+        <div id="scenario2" class="scenario">
+            <h2>Scenario 2: CMS - Drag and Drop Image Block</h2>
+            <p>Drag from sidebar to canvas (not pixel coordinates).</p>
+            <div style="display: flex; gap: 20px;">
+                <div style="width: 200px;">
+                    <h3>Blocks</h3>
+                    <div class="drag-zone" data-testid="image-block" draggable="true" ondragstart="handleDragStart(event)">
+                        Image Block
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <h3>Document Canvas</h3>
+                    <div class="drag-zone" data-testid="document-body" ondrop="handleDrop(event)" ondragover="handleDragOver(event)">
+                        Drop blocks here
+                    </div>
+                </div>
+            </div>
+            <div id="drop-result"></div>
+        </div>
+
+        <!-- Scenario 3: CRM Virtualized Table -->
+        <div id="scenario3" class="scenario">
+            <h2>Scenario 3: CRM - Virtualized Table</h2>
+            <p>Table uses virtualization - only visible rows exist in DOM.</p>
+            <label>Filter by Status:</label>
+            <select id="status-filter" onchange="filterTable()">
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+            </select>
+            <div class="table-container" id="customer-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Scenario 4: Insurance Multi-Step Form -->
+        <div id="scenario4" class="scenario">
+            <h2>Scenario 4: Insurance Quote - Multi-Step Form</h2>
+            <p>Next button is disabled during validation (race condition).</p>
+            <div id="form-step">Step 3 of 7</div>
+            <div>
+                <label>Coverage Amount:</label>
+                <input type="number" id="coverage-amount" onchange="validateStep3()" placeholder="Enter amount">
+            </div>
+            <button id="next-btn" role="button" name="Next" onclick="goToNextStep()" disabled>Next</button>
+            <div id="validation-status"></div>
+        </div>
+
+        <!-- Scenario 5: iFrame Consent Form -->
+        <div id="scenario5" class="scenario">
+            <h2>Scenario 5: Healthcare Portal - iFrame Consent</h2>
+            <p>Consent form in dynamically loaded iframe.</p>
+            <iframe id="frame-async" title="User Consent Agreement" src="about:blank"></iframe>
+            <button onclick="loadConsentFrame()">Load Consent Form</button>
+        </div>
+
+        <!-- Scenario 6: Analytics Chart Type -->
+        <div id="scenario6" class="scenario">
+            <h2>Scenario 6: Analytics - Chart Type Change</h2>
+            <p>Button has only SVG icon (unstable class names).</p>
+            <div>
+                <button role="button" aria-label="Bar Chart" onclick="changeChartType('bar')">
+                    <svg width="20" height="20"><rect width="20" height="20" fill="#007bff"/></svg>
+                </button>
+                <button role="button" aria-label="Line Chart" onclick="changeChartType('line')">
+                    <svg width="20" height="20"><line x1="0" y1="10" x2="20" y2="10" stroke="#007bff"/></svg>
+                </button>
+            </div>
+            <div id="chart-display">Current Chart: Bar</div>
+        </div>
+
+        <!-- Scenario 7: E-Commerce Pop-up -->
+        <div id="scenario7" class="scenario">
+            <h2>Scenario 7: E-Commerce - Promotional Pop-up</h2>
+            <p>Pop-up appears after random delay, blocking interactions.</p>
+            <div>
+                <p>Product Price: <span id="product-price">$99.99</span></p>
+                <button onclick="checkPrice()">Check Final Price</button>
+            </div>
+            <div id="popup-modal" class="popup" style="display: none;">
+                <h3>Special Offer!</h3>
+                <p>Get 20% off today only!</p>
+                <button role="button" name="Close" onclick="closePopup()">Close</button>
+            </div>
+        </div>
+
+        <!-- Scenario 8: File Upload -->
+        <div id="scenario8" class="scenario">
+            <h2>Scenario 8: Job Portal - File Upload</h2>
+            <p>Hidden file input with drag-and-drop zone.</p>
+            <label for="resume-upload">Upload Resume:</label>
+            <div class="drag-zone" ondrop="handleFileDrop(event)" ondragover="handleDragOver(event)">
+                <p>Drag and drop your resume here</p>
+                <input type="file" id="resume-upload" style="display: none;" onchange="handleFileSelect(event)" accept=".pdf,.doc,.docx">
+            </div>
+            <button onclick="document.getElementById('resume-upload').click()">Browse Files</button>
+            <div id="upload-status"></div>
+        </div>
+
+        <!-- Scenario 9: Async Chat -->
+        <div id="scenario9" class="scenario">
+            <h2>Scenario 9: Collaboration Tool - Async Chat</h2>
+            <p>Message appears asynchronously with dynamic timestamp.</p>
+            <div id="chat-messages"></div>
+            <input type="text" id="chat-input" placeholder="Type a message">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+
+        <!-- Scenario 10: Dynamic Profile Name -->
+        <div id="scenario10" class="scenario">
+            <h2>Scenario 10: Cloud Console - Dynamic Profile</h2>
+            <p>Profile name capitalization changes based on role.</p>
+            <div class="sidebar" style="position: relative; width: auto; height: auto;">
+                <div id="user-profile" onclick="showProfile()" style="cursor: pointer; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                    <span id="profile-name">John Doe</span>
+                </div>
+            </div>
+            <button onclick="toggleUserRole()">Toggle Role (Admin/User)</button>
+            <div id="profile-details"></div>
+        </div>
+    </div>
+
+    <script src="benchmark-app.js"></script>
+</body>
+</html>
+
