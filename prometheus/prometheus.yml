@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'qa-ai-backend'
+    static_configs:
+      - targets: ['host.docker.internal:8000']  # Backend API
+        labels:
+          service: 'qa-ai-backend'
+          environment: 'production'
+
+  - job_name: 'qa-ai-frontend'
+    static_configs:
+      - targets: ['host.docker.internal:8080']  # Frontend (if it exposes metrics)
+        labels:
+          service: 'qa-ai-frontend'
+          environment: 'production'
+

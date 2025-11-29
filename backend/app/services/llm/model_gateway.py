@@ -151,9 +151,22 @@ class ModelGateway:
     
     def _select_provider(self, request_provider: Optional[LLMProvider] = None) -> LLMProvider:
         """Select provider for request"""
-        if request_provider:
-            return request_provider
-        return self.default_provider
+        from app.config.llm_config import AIR_GAPPED_MODE, validate_provider
+        
+        provider = request_provider or self.default_provider
+        
+        # Validate provider (checks air-gapped mode)
+        try:
+            validate_provider(provider.value if isinstance(provider, LLMProvider) else provider)
+        except ValueError as e:
+            logger.error(f"Provider validation failed: {e}")
+            # In air-gapped mode, fallback to local
+            if AIR_GAPPED_MODE:
+                logger.warning("Air-gapped mode: Falling back to local_qwen")
+                return LLMProvider.LOCAL_QWEN
+            raise
+        
+        return provider
     
     # ==================== Generation Methods ====================
     

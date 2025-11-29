@@ -26,6 +26,7 @@ import Defects from "./pages/Defects";
 import CreateDefect from "./pages/CreateDefect";
 import RunAutomation from "./pages/RunAutomation";
 import Flowstral from "./pages/Flowstral";
+import Nexus from "./pages/Nexus";
 import Exploration from "./pages/Exploration";
 import JiraIntegration from "./pages/JiraIntegration";
 import GitHubIntegration from "./pages/GitHubIntegration";
@@ -133,6 +134,11 @@ const App = () => {
               <Route path="/flowstral" element={
                 <ProtectedRoute>
                   <Layout><Flowstral /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/nexus" element={
+                <ProtectedRoute>
+                  <Layout><Nexus /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/exploration" element={

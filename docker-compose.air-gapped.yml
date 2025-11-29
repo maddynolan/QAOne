@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: qa-ai-postgres
+    environment:
+      POSTGRES_DB: qaai
+      POSTGRES_USER: qaai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qaai123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - qa-ai-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qa-ai-backend
+    environment:
+      # Database
+      DATABASE_URL: postgres://qaai:${POSTGRES_PASSWORD:-qaai123}@postgres:5432/qaai
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: qaai
+      POSTGRES_USER: qaai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qaai123}
+      
+      # Air-Gapped Mode
+      AIR_GAPPED_MODE: "true"
+      OLLAMA_URL: http://ollama:11434
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-change-in-production}
+      JWT_ALGORITHM: HS256
+      
+      # No external API keys (air-gapped)
+      # OPENAI_API_KEY: ""  # Not set
+      # ANTHROPIC_API_KEY: ""  # Not set
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - ollama
+    networks:
+      - qa-ai-network
+
+  # Ollama (Local LLM)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: qa-ai-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - qa-ai-network
+    # Note: Models need to be pulled manually after container starts
+    # docker exec qa-ai-ollama ollama pull qwen2.5-coder:7b
+
+  # Frontend (optional - can be served separately)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: qa-ai-frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - qa-ai-network
+
+volumes:
+  postgres_data:
+  ollama_data:
+
+networks:
+  qa-ai-network:
+    driver: bridge
+

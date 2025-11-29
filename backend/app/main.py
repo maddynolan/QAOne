@@ -142,6 +142,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Tenant Context Middleware (for RLS enforcement)
+from app.middleware.tenant_middleware import TenantContextMiddleware
+app.add_middleware(TenantContextMiddleware)
+
+# RBAC Middleware (for permission checking)
+from app.middleware.rbac_middleware import RBACMiddleware
+app.add_middleware(RBACMiddleware)
+
 # Pydantic models
 class GenerateTestsRequest(BaseModel):
     org_id: str
@@ -7020,9 +7028,17 @@ app.include_router(exploration_test_generation_router)
 from app.routers.exploration_reporting_api import router as exploration_reporting_router
 app.include_router(exploration_reporting_router)
 
+# Nexus Autonomous Exploratory Testing API
+from app.routers.nexus_exploratory_api import router as nexus_exploratory_router
+app.include_router(nexus_exploratory_router)
+
 # Exploration Complete Workflow API
 from app.routers.exploration_workflow_api import router as exploration_workflow_router
 app.include_router(exploration_workflow_router)
+
+# Prometheus Metrics API
+from app.routers.metrics_api import router as metrics_router
+app.include_router(metrics_router)
 
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
