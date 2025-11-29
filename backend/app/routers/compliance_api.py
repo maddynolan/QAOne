@@ -89,7 +89,7 @@ async def list_compliance_frameworks():
         {
             "framework": f.value,
             "name": f.value.replace("_", " ").title(),
-            "description": self._get_framework_description(f.value)
+            "description": _get_framework_description(f.value)
         }
         for f in ComplianceFramework
     ]

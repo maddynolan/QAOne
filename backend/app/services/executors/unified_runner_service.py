@@ -209,10 +209,13 @@ class UnifiedRunnerService:
         test_code: str,
         test_name: str,
         framework: str = None,
-        options: Optional[Dict[str, Any]] = None
+        options: Optional[Dict[str, Any]] = None,
+        test_case_id: Optional[str] = None,
+        org_id: Optional[str] = None,
+        project_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Execute a test based on type
+        Execute a test based on type with dynamic least privilege secret injection
         
         Args:
             test_type: ui, api, performance, accessibility, security
@@ -220,6 +223,9 @@ class UnifiedRunnerService:
             test_name: Name of the test
             framework: Optional framework override
             options: Additional execution options
+            test_case_id: Test case ID (for secret injection)
+            org_id: Organization ID (for secret injection)
+            project_id: Project ID (for secret injection)
             
         Returns:
             Execution results with status, logs, artifacts
@@ -227,14 +233,47 @@ class UnifiedRunnerService:
         options = options or {}
         start_time = datetime.now()
         
+        # Inject secrets with dynamic least privilege (if test_case_id provided)
+        secrets_env = {}
+        if test_case_id:
+            from app.services.core.vault_service import get_vault_service
+            vault_service = get_vault_service()
+            
+            # Get secret names from test code or options
+            secret_names = options.get("required_secrets", [])
+            
+            if secret_names:
+                try:
+                    injection_result = await vault_service.inject_secrets_into_runner(
+                        test_case_id=test_case_id,
+                        runner_container_id=f"runner-{test_case_id}",
+                        secret_names=secret_names,
+                        org_id=org_id,
+                        project_id=project_id
+                    )
+                    secrets_env = injection_result.get("secrets", {})
+                    logger.info(f"Injected {len(secrets_env)} secrets for test case {test_case_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to inject secrets via Vault: {e}, continuing without secrets")
+        
         try:
             if test_type == "ui" or test_type == "automation":
                 # Use Playwright runner
+                # Inject secrets into environment
+                if secrets_env:
+                    # Merge secrets into options for environment variable injection
+                    options["env_vars"] = {**options.get("env_vars", {}), **secrets_env}
                 # Convert code to TestCase if needed, or execute directly
                 result = await self._execute_playwright_code(test_code, test_name, options)
             
             elif test_type == "api":
                 # Use pytest runner
+                # Inject secrets into environment for API tests
+                if secrets_env:
+                    import os
+                    # Set environment variables for API test execution
+                    for key, value in secrets_env.items():
+                        os.environ[key] = value
                 result = await self.api_runner.execute_test(test_code, test_name)
             
             elif test_type == "performance" or test_type == "perf":
