@@ -6,10 +6,19 @@ This ensures all downstream code has access to tenant context for RLS enforcemen
 
 import logging
 from typing import Optional
+from contextvars import ContextVar
 from fastapi import Request, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
-import jwt
+try:
+    import jwt
+except ImportError:
+    # PyJWT package name
+    from jwt import PyJWT
+    import jwt
 import os
+
+# Context variable for current request (set by middleware)
+_current_request: ContextVar[Optional[Request]] = ContextVar('current_request', default=None)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +38,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
     """
     
     async def dispatch(self, request: Request, call_next):
+        # Set current request in context
+        _current_request.set(request)
+        
         # Initialize tenant context
         request.state.tenant_id = None
         request.state.user_id = None
@@ -58,7 +70,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if tenant_id or user_id:
             logger.debug(f"Tenant context: tenant_id={tenant_id}, user_id={user_id}")
         
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            # Clear context after request
+            _current_request.set(None)
     
     def _extract_from_jwt(self, request: Request) -> tuple[Optional[str], Optional[str], list, list]:
         """Extract tenant_id and user_id from JWT token"""
@@ -143,4 +159,26 @@ def require_user(request: Request) -> str:
             detail="User context required. Provide JWT token or X-User-ID header."
         )
     return user_id
+
+
+def get_current_tenant_id() -> Optional[str]:
+    """
+    Get tenant_id from current request context.
+    Returns None if called outside of a request context.
+    """
+    request = _current_request.get()
+    if request:
+        return get_tenant_id(request)
+    return None
+
+
+def get_current_user_id() -> Optional[str]:
+    """
+    Get user_id from current request context.
+    Returns None if called outside of a request context.
+    """
+    request = _current_request.get()
+    if request:
+        return get_user_id(request)
+    return None
 

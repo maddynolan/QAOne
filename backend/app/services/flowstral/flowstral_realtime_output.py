@@ -28,22 +28,42 @@ class RealTimeOutputGenerator:
         event_type: str,
         selector: Optional[str],
         value: Optional[str] = None,
-        url: Optional[str] = None
+        url: Optional[str] = None,
+        element_data: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate a Playwright code line for an event"""
+        """
+        Generate a Playwright code line for an event using best practices.
+        
+        Best Practices:
+        - Use semantic locators (getByRole, getByText, getByTestId)
+        - No fixed waits (rely on Playwright's auto-waiting)
+        - Use web-first assertions
+        """
         line = ""
         
         if event_type == "navigate" and url:
             line = f'  await page.goto("{url}");'
+            line += '\n  await page.waitForLoadState("networkidle");'
         
         elif event_type == "click" and selector:
-            line = f'  await page.click("{selector}");'
+            # Convert to semantic locator if possible
+            locator = self._convert_to_semantic_locator(selector, element_data)
+            line = f'  await {locator}.click();'
+            # No fixed wait - Playwright auto-waits
         
         elif event_type == "type" and selector and value:
-            line = f'  await page.fill("{selector}", "{value}");'
+            # Convert to semantic locator if possible
+            locator = self._convert_to_semantic_locator(selector, element_data)
+            escaped_value = value.replace("'", "\\'").replace("\n", "\\n")
+            line = f'  await {locator}.fill("{escaped_value}");'
+            # No fixed wait - Playwright auto-waits
         
         elif event_type == "select" and selector and value:
-            line = f'  await page.selectOption("{selector}", "{value}");'
+            # Convert to semantic locator if possible
+            locator = self._convert_to_semantic_locator(selector, element_data)
+            escaped_value = value.replace("'", "\\'")
+            line = f'  await {locator}.selectOption("{escaped_value}");'
+            # No fixed wait - Playwright auto-waits
         
         elif event_type == "scroll":
             line = f'  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));'
@@ -55,6 +75,68 @@ class RealTimeOutputGenerator:
             self.playwright_lines.append(line)
         
         return line
+    
+    def _convert_to_semantic_locator(
+        self,
+        selector: str,
+        element_data: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Convert CSS selector to Playwright semantic locator.
+        
+        Priority:
+        1. data-testid -> getByTestId
+        2. Role + Name -> getByRole
+        3. Label -> getByLabel
+        4. Text -> getByText
+        5. Fallback to locator()
+        """
+        if not selector:
+            return "page.locator('div')"
+        
+        # If already a Playwright locator, return as-is
+        if selector.startswith("page."):
+            return selector
+        
+        # Extract from element_data if available
+        if element_data:
+            # Priority 1: data-testid
+            test_id = element_data.get("data_testid") or element_data.get("data-testid")
+            if test_id:
+                return f"page.getByTestId('{test_id}')"
+            
+            # Priority 2: Role + Name
+            role = element_data.get("role")
+            name = element_data.get("aria_label") or element_data.get("text_content")
+            if role and name:
+                # Normalize role
+                role_map = {"button": "button", "link": "link", "input": "textbox", "a": "link"}
+                clean_role = role_map.get(role.lower(), role.lower())
+                return f"page.getByRole('{clean_role}', {{ name: '{name[:50]}' }})"
+            
+            # Priority 3: Label
+            label = element_data.get("label_text")
+            if label:
+                return f"page.getByLabel('{label}')"
+            
+            # Priority 4: Text
+            text = element_data.get("text_content")
+            if text:
+                return f"page.getByText('{text[:50]}')"
+        
+        # Extract from selector string
+        # data-testid
+        if '[data-testid="' in selector:
+            test_id = selector.split('[data-testid="')[1].split('"')[0]
+            return f"page.getByTestId('{test_id}')"
+        
+        # ID
+        if selector.startswith('#'):
+            element_id = selector[1:]
+            return f"page.locator('#{element_id}')"
+        
+        # Fallback: use locator with original selector
+        return f"page.locator('{selector}')"
     
     def generate_test_step(
         self,

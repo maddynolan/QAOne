@@ -536,3 +536,6 @@ class DomainSpecificFlowGenerator:
         unsafe_patterns = ['payment', 'order', 'subscription', 'delete', 'cancel']
         return not any(pattern in form_name or pattern in action for pattern in unsafe_patterns)
 
+
+
+

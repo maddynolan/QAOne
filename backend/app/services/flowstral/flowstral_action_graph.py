@@ -232,13 +232,37 @@ class ActionGraph:
         return self
     
     def _normalize_events_deterministic(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Normalize events using rules (no LLM)"""
+        """Normalize events using rules (no LLM) - FILTER OUT NOISY EVENTS"""
         normalized = []
         seen = set()
         
+        # Events to skip (not meaningful for action graph)
+        skip_event_types = {
+            'scroll',  # Scroll events are too noisy
+            'mousemove',  # Mouse movements are not actions
+            'mouseover',  # Hover events (unless significant)
+            'mouseout',  # Mouse out events
+            'focus',  # Focus events (captured with input)
+            'blur',  # Blur events (captured with input)
+            'resize',  # Window resize
+            'visibilitychange',  # Tab visibility
+        }
+        
         for event in events:
-            # Create signature for deduplication
-            sig = f"{event.get('type')}:{event.get('url', '')}:{event.get('target', {}).get('selector', '')}"
+            # Check both 'event_type' and 'type' fields
+            event_type = (event.get("event_type") or event.get("type") or "").lower()
+            
+            # Skip noisy events
+            if event_type in skip_event_types:
+                continue
+            
+            # Create signature for deduplication (use event_type if available, otherwise type)
+            event_key = event.get("event_type") or event.get("type", "unknown")
+            url = event.get("url", "") or (event.get("event_data", {}).get("url", ""))
+            target = event.get("target", {}) or event.get("event_data", {}).get("interacted_element", {})
+            selector = target.get("selector", "") if isinstance(target, dict) else ""
+            
+            sig = f"{event_key}:{url}:{selector}"
             if sig in seen:
                 continue
             seen.add(sig)

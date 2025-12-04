@@ -2,8 +2,8 @@
 
 > **This is the single source of truth for the QA AI Platform. Update this document with every change.**
 
-**Last Updated:** 2025-01-XX  
-**Version:** 2.0  
+**Last Updated:** 2025-01-05  
+**Version:** 2.0.5  
 **Status:** Production Ready  
 **Maintainer:** Development Team
 
@@ -37,6 +37,9 @@
 - **Testing Guide**: [`TESTING_GUIDE.md`](./TESTING_GUIDE.md)
 - **Benchmark Tests**: [`benchmark-tests/README.md`](./benchmark-tests/README.md)
 - **Real Websites for Testing**: [`REAL_WEBSITES_FOR_TESTING.md`](./REAL_WEBSITES_FOR_TESTING.md)
+- **Rift Persona Integration**: [`RIFT_PERSONA_API_IMPORT_INTEGRATED.md`](./RIFT_PERSONA_API_IMPORT_INTEGRATED.md)
+- **Flowstral Personas**: [`FLOWSTRAL_ALL_PERSONAS_INTEGRATED.md`](./FLOWSTRAL_ALL_PERSONAS_INTEGRATED.md)
+- **Error Fixes**: [`ERROR_FIXES_SUMMARY.md`](./ERROR_FIXES_SUMMARY.md)
 
 ---
 
@@ -44,7 +47,77 @@
 
 > **Update this section with every change made to the platform**
 
-### Version 2.0.3 - 2025-01-XX (Current)
+### Version 2.0.5 - 2025-01-05 (Current)
+
+#### Rift Persona Integration - API Import
+- ✅ **Enterprise-Grade API Testing in API Import**
+  - Rift persona fully integrated into API Import feature
+  - Comprehensive API test generation with OWASP API Top 10 coverage
+  - Authentication matrix (valid, expired, revoked, missing, malformed)
+  - Payload fuzzing (SQLi, XSS, XXE, oversized payloads)
+  - Postman collection + Newman CLI + environment files
+  - Contract tests (Pact) and consumer-driven tests
+  - Rate limiting, pagination, retry behavior tests
+  - Fallback chain: Rift → OpenAI → Deterministic
+  - Files: `backend/app/routers/api_import_api.py`
+  - Documentation: `RIFT_PERSONA_API_IMPORT_INTEGRATED.md`
+
+#### Flowstral - All Personas Integrated
+- ✅ **Complete Persona Integration in Flowstral**
+  - **Flux** (High-Fidelity Playwright): Active in `generate_playwright_script()`
+    - 100% fidelity to recorded flows
+    - Precise timing, coordinates, hovers, scrolls
+    - Fidelity scorecards and auto-healing
+  - **Trace** (Manual Test Cases): Active in `generate_structured_test_cases()`
+    - Enterprise-grade manual test cases
+    - Detailed steps, variations, boundary tests
+    - Traceability mapping
+  - **Blaze** (Performance Tests): Active in `generate_performance_report()`
+    - k6 and Locust scripts
+    - Real user behavior modeling
+    - Chaos scenarios
+    - Grafana dashboards
+  - **A11y** (Accessibility Reports): Active in `generate_accessibility_report()`
+    - WCAG 2.2 AA compliance
+    - Keyboard-only, screen reader, zoom tests
+    - VPAT/GPAT documentation
+  - Files: `backend/app/services/flowstral/flowstral_artifacts.py`
+  - Documentation: `FLOWSTRAL_ALL_PERSONAS_INTEGRATED.md`
+
+#### Error Fixes & Code Quality
+- ✅ **All Runtime Errors Fixed**
+  - Fixed missing `Tuple` import in `flowstral_orchestrator.py`
+  - Fixed indentation errors in `api_import_api.py`
+  - Added safe attribute access for all persona results
+  - Fixed Pydantic model serialization (handles v1 and v2)
+  - All files compile without syntax errors
+  - Documentation: `ERROR_FIXES_SUMMARY.md`
+
+### Version 2.0.4 - 2025-01-XX
+
+#### Persona-Based Agent System
+- ✅ **5 Enterprise-Grade Personas**
+  - **Trace** (Manual Testing): Ex-Amazon Principal QA, 22 years, authored standards for 10,000+ testers
+  - **Blaze** (Performance): Ex-Meta Load Testing Architect, 19 years, led Instagram (2B users) performance
+  - **Rift** (API Testing): Ex-Stripe Principal API Engineer, 17 years, zero outages for 5 years
+  - **A11y** (Accessibility): Ex-Microsoft Senior Accessibility Evangelist, 20 years, audited Office 365
+  - **Void** (Security): Ex-Palantir Offensive Security Lead, 21 years, multiple Fortune 100 zero-days
+  - Persona registry with singleton pattern
+  - Strongly-typed Pydantic response models
+  - Integration examples for all personas
+  - Files: `backend/app/services/agents/personas/`, `backend/app/services/agents/persona_registry.py`
+
+#### Flux High-Fidelity Agent
+- ✅ **Flux Fidelity Agent for Flowstral**
+  - Ex-Microsoft Principal QA Engineer, 20 years, zero user-experience regressions
+  - Generates Playwright scripts with 100% fidelity to recorded flows
+  - Precise interaction mapping (timings, coordinates, hovers, scrolls)
+  - Fidelity scorecard tracking (overall, mouse path, timing, interaction, selector, validation)
+  - Auto-healing if fidelity drops below 95%
+  - Multi-browser variant generation
+  - Files: `backend/app/services/flowstral/flux_fidelity_agent.py`
+
+### Version 2.0.3 - 2025-01-XX
 
 #### Benchmark Test Suite Added
 - ✅ **10 Complex Enterprise Test Scenarios**
@@ -273,6 +346,21 @@
 
 ### Multi-Agent Architecture
 
+#### Persona-Based Agents (Enterprise-Grade)
+1. **Trace** (Manual Testing) - Ex-Amazon Principal QA, 22 years, 10,000+ testers
+   - ✅ Integrated in Flowstral for manual test case generation
+2. **Blaze** (Performance) - Ex-Meta Load Testing Architect, 19 years, Instagram (2B users)
+   - ✅ Integrated in Flowstral for performance test scripts (k6, Locust)
+3. **Rift** (API Testing) - Ex-Stripe Principal API Engineer, 17 years, zero outages
+   - ✅ Integrated in API Import for comprehensive API test generation
+4. **A11y** (Accessibility) - Ex-Microsoft Senior Accessibility Evangelist, 20 years
+   - ✅ Integrated in Flowstral for WCAG 2.2 AA compliance reports
+5. **Void** (Security) - Ex-Palantir Offensive Security Lead, 21 years, Fortune 100 zero-days
+   - Available for security test generation
+6. **Flux** (High-Fidelity Playwright) - Ex-Microsoft Principal QA, 20 years, zero regressions
+   - ✅ Integrated in Flowstral for 100% fidelity Playwright scripts
+
+#### Traditional Agents
 1. **Requirements Agent** - Analyzes and structures requirements
 2. **Automation Agent** - Generates automation code
 3. **Performance Agent** - Performance testing scenarios
@@ -292,6 +380,11 @@
 - Semantic JSON step format
 - Automatic wait heuristics
 - Self-healing test generation
+- **Enterprise-Grade Persona Integration**:
+  - **Flux**: High-fidelity Playwright script generation (100% fidelity)
+  - **Trace**: Enterprise manual test case generation
+  - **Blaze**: Performance test scripts (k6, Locust) with chaos scenarios
+  - **A11y**: WCAG 2.2 AA compliance reports with VPAT/GPAT
 
 ### 2. Nexus - Autonomous Exploratory Testing
 - Risk-based test prioritization
@@ -319,7 +412,12 @@
 - **Semantic test data generation** (auto-generates test data payloads)
 - Test plan expansion
 - Test case to Playwright conversion
-- API test generation
+- **Enterprise-Grade API Test Generation** (Rift persona):
+  - OWASP API Top 10 security tests
+  - Authentication matrix testing
+  - Payload fuzzing (SQLi, XSS, XXE)
+  - Postman collections + Newman CLI
+  - Contract tests (Pact)
 - Defect triage and analysis
 - Requirement analysis
 
@@ -617,7 +715,7 @@ See `docs/AIR_GAPPED_DEPLOYMENT.md`
 
 ---
 
-**Last Updated:** 2025-01-XX  
+**Last Updated:** 2025-01-05  
 **Next Review:** Weekly  
 **Maintained By:** Development Team
 

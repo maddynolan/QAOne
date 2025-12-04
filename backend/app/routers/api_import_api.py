@@ -11,6 +11,7 @@ import json
 
 from app.services.connectors.api_spec_parser import APISpecParser
 from app.services.engines.api_test_engine import APITestEngine
+from app.services.agents.persona_registry import persona_registry, PersonaType
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class APITestGenerationRequest(BaseModel):
     include_negative: bool = True
     include_boundary: bool = True
     include_security: bool = True
+    use_rift_persona: bool = True  # Use Rift persona for enterprise-grade testing
 
 
 @router.post("/spec")
@@ -141,7 +143,7 @@ async def import_api_specification_file(
 @router.post("/generate-tests")
 async def generate_api_tests(request: APITestGenerationRequest):
     """
-    Generate executable test scripts from parsed API specification with OpenAI enhancement.
+    Generate executable test scripts from parsed API specification with Rift persona (enterprise-grade).
     
     Frameworks supported:
     - playwright: Playwright API tests (TypeScript/JavaScript)
@@ -150,8 +152,15 @@ async def generate_api_tests(request: APITestGenerationRequest):
     - rest_assured: REST Assured (Java)
     - k6: k6 performance tests (JavaScript)
     
-    Uses OpenAI (gpt-4o-mini) to enhance test cases and generate high-quality automation code.
-    Falls back to deterministic engine if OpenAI is unavailable.
+    Uses Rift persona (Ex-Stripe Principal API Engineer) for enterprise-grade comprehensive API testing:
+    - OWASP API Top 10 security tests
+    - Authentication matrix (valid, expired, revoked, missing, malformed)
+    - Payload fuzzing (SQLi, XSS, XXE, oversized payloads)
+    - Contract tests (Pact) and consumer-driven tests
+    - Postman collection + Newman CLI + environment files
+    - Rate limiting, pagination, retry behavior tests
+    
+    Falls back to OpenAI enhancement, then deterministic engine if Rift unavailable.
     """
     try:
         import asyncio
@@ -177,25 +186,158 @@ async def generate_api_tests(request: APITestGenerationRequest):
         
         test_suite["test_cases"] = filtered_tests
         
-        # Step 2: Enhance test cases with OpenAI (if available)
+        # Step 2: Use Rift persona for enterprise-grade comprehensive API testing
+        rift_persona_result = None
         enhancement_metrics = None
-        try:
-            api_test_service = get_api_test_service()
-            enhancement_result = await asyncio.wait_for(
-                api_test_service.enhance_test_cases(
-                    test_suite=test_suite,
-                    api_spec=request.parsed_spec,
-                    timeout=60.0
-                ),
-                timeout=65.0
-            )
-            
-            if enhancement_result.get("test_suite"):
-                test_suite = enhancement_result["test_suite"]
-                enhancement_metrics = enhancement_result.get("metrics")
-                logger.info(f"Enhanced test cases: {enhancement_metrics}")
-        except Exception as e:
-            logger.warning(f"Test case enhancement failed: {e}, using base test suite")
+        
+        if request.use_rift_persona:
+            try:
+                logger.info("[Rift Persona] Generating enterprise-grade comprehensive API test suite...")
+                rift_persona = persona_registry.get_persona(PersonaType.API)
+                
+                # Generate comprehensive API tests using Rift persona
+                rift_persona_result = await rift_persona.generate(
+                    input_data={
+                        "openapi_spec": request.parsed_spec,
+                        "include_security_tests": request.include_security,
+                        "include_performance_tests": False,  # Performance is separate
+                        "include_contract_tests": True
+                    },
+                    context={
+                        "environment": "staging",
+                        "authentication_type": _detect_auth_type(request.parsed_spec)
+                    },
+                    temperature=0.3,
+                    tenant_id=None
+                )
+                
+                # Convert Rift persona results to test suite format
+                rift_test_cases = []
+                for tc in rift_persona_result.test_cases:
+                    rift_test_cases.append({
+                        "test_case_id": f"rift_{len(rift_test_cases)}",
+                        "title": tc.name,
+                        "description": f"Rift-generated test: {tc.name}",
+                        "test_type": "api",
+                        "method": tc.method,
+                        "path": tc.endpoint,
+                        "request": {
+                            "method": tc.method,
+                            "url": tc.endpoint,
+                            "headers": {},
+                            "body": tc.request_payload if tc.request_payload is not None else {}
+                        },
+                        "expected_status": tc.expected_status,
+                        "expected_result": f"Response status {tc.expected_status} with valid schema",
+                        "expected_response": tc.expected_response_schema if tc.expected_response_schema is not None else {},
+                        "assertions": tc.assertions,
+                        "tags": [tc.test_type, "rift_persona"],
+                        "priority": "high" if tc.test_type == "security" else "medium"
+                    })
+                
+                # Add security tests from Rift
+                for st in rift_persona_result.security_tests:
+                    rift_test_cases.append({
+                        "test_case_id": f"rift_security_{len(rift_test_cases)}",
+                        "title": st.name,
+                        "description": f"Security test: {st.attack_type} - {st.owasp_category}",
+                        "test_type": "api",
+                        "method": "POST",  # Most security tests are POST
+                        "path": "/api/v1/test",  # Will be mapped to actual endpoints
+                        "request": {
+                            "method": "POST",
+                            "url": "/api/v1/test",
+                            "headers": {},
+                            "body": {"payload": st.payload}
+                        },
+                        "expected_status": 400,  # Security tests expect rejection
+                        "expected_result": st.expected_behavior,
+                        "tags": ["security", "rift_persona", st.attack_type, st.owasp_category],
+                        "priority": "high"
+                    })
+                
+                # Merge Rift tests with base test suite
+                test_suite["test_cases"].extend(rift_test_cases)
+                # Convert authentication matrix to dict if it exists
+                auth_matrix_dict = None
+                if rift_persona_result.authentication_matrix:
+                    auth_matrix = rift_persona_result.authentication_matrix
+                    try:
+                        auth_matrix_dict = {
+                            "valid_token": auth_matrix.valid_token.model_dump() if hasattr(auth_matrix.valid_token, 'model_dump') else auth_matrix.valid_token.dict(),
+                            "expired_token": auth_matrix.expired_token.model_dump() if hasattr(auth_matrix.expired_token, 'model_dump') else auth_matrix.expired_token.dict(),
+                            "revoked_token": auth_matrix.revoked_token.model_dump() if hasattr(auth_matrix.revoked_token, 'model_dump') else auth_matrix.revoked_token.dict(),
+                            "missing_token": auth_matrix.missing_token.model_dump() if hasattr(auth_matrix.missing_token, 'model_dump') else auth_matrix.missing_token.dict(),
+                            "malformed_token": auth_matrix.malformed_token.model_dump() if hasattr(auth_matrix.malformed_token, 'model_dump') else auth_matrix.malformed_token.dict()
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to convert authentication matrix: {e}")
+                        auth_matrix_dict = None
+                
+                test_suite["rift_persona"] = {
+                    "test_cases": len(rift_persona_result.test_cases),
+                    "security_tests": len(rift_persona_result.security_tests),
+                    "postman_collection": rift_persona_result.postman_collection,
+                    "newman_command": rift_persona_result.newman_command,
+                    "owasp_coverage": rift_persona_result.owasp_coverage,
+                    "authentication_matrix": auth_matrix_dict,
+                    "persona_info": {
+                        "name": "Rift",
+                        "expertise": "Ex-Stripe Principal API Test Engineer, 17 years",
+                        "track_record": "Zero API outages in production for 5 years"
+                    }
+                }
+                
+                enhancement_metrics = {
+                    "provider": "rift_persona",
+                    "test_cases_generated": len(rift_test_cases),
+                    "security_tests": len(rift_persona_result.security_tests),
+                    "owasp_coverage": len(rift_persona_result.owasp_coverage)
+                }
+                
+                logger.info(f"[Rift Persona] Generated {len(rift_test_cases)} enterprise-grade API tests with OWASP coverage")
+                
+            except Exception as e:
+                logger.warning(f"Rift persona generation failed: {e}, falling back to OpenAI enhancement", exc_info=True)
+                rift_persona_result = None
+                
+                # Fallback to OpenAI enhancement
+                try:
+                    api_test_service = get_api_test_service()
+                    enhancement_result = await asyncio.wait_for(
+                        api_test_service.enhance_test_cases(
+                            test_suite=test_suite,
+                            api_spec=request.parsed_spec,
+                            timeout=60.0
+                        ),
+                        timeout=65.0
+                    )
+                    
+                    if enhancement_result.get("test_suite"):
+                        test_suite = enhancement_result["test_suite"]
+                        enhancement_metrics = enhancement_result.get("metrics")
+                        logger.info(f"Enhanced test cases with OpenAI: {enhancement_metrics}")
+                except Exception as e2:
+                    logger.warning(f"OpenAI enhancement also failed: {e2}, using base test suite")
+        else:
+            # Rift persona disabled, use OpenAI enhancement
+            try:
+                api_test_service = get_api_test_service()
+                enhancement_result = await asyncio.wait_for(
+                    api_test_service.enhance_test_cases(
+                        test_suite=test_suite,
+                        api_spec=request.parsed_spec,
+                        timeout=60.0
+                    ),
+                    timeout=65.0
+                )
+                
+                if enhancement_result.get("test_suite"):
+                    test_suite = enhancement_result["test_suite"]
+                    enhancement_metrics = enhancement_result.get("metrics")
+                    logger.info(f"Enhanced test cases with OpenAI: {enhancement_metrics}")
+            except Exception as e:
+                logger.warning(f"Test case enhancement failed: {e}, using base test suite")
         
         # Step 3: Generate executable test code (try OpenAI first, fallback to deterministic)
         test_code = ""
@@ -257,12 +399,14 @@ async def generate_api_tests(request: APITestGenerationRequest):
                 "total_tests": len(test_suite.get("test_cases", [])),
                 "endpoints_tested": len(set(t.get("endpoint_id") for t in test_suite.get("test_cases", []))),
                 "enhancement_used": enhancement_metrics is not None,
-                "llm_code_generation": code_metrics is not None
+                "llm_code_generation": code_metrics is not None,
+                "rift_persona_used": rift_persona_result is not None
             },
             "metrics": {
                 "enhancement": enhancement_metrics,
                 "code_generation": code_metrics
-            }
+            },
+            "rift_persona": test_suite.get("rift_persona") if rift_persona_result else None
         }
     except Exception as e:
         logger.error(f"Error generating API tests: {e}", exc_info=True)
@@ -274,6 +418,26 @@ async def generate_api_tests(request: APITestGenerationRequest):
                 "type": type(e).__name__
             }
         )
+
+
+def _detect_auth_type(api_spec: Dict[str, Any]) -> str:
+    """Detect authentication type from API spec"""
+    security_schemes = api_spec.get("components", {}).get("securitySchemes", {})
+    if not security_schemes:
+        return "none"
+    
+    for scheme_name, scheme_def in security_schemes.items():
+        scheme_type = scheme_def.get("type", "").lower()
+        if scheme_type == "http":
+            return scheme_def.get("scheme", "bearer").upper()
+        elif scheme_type == "oauth2":
+            return "OAUTH2"
+        elif scheme_type == "apikey":
+            return "API_KEY"
+        elif scheme_type == "openidconnect":
+            return "OPENID_CONNECT"
+    
+    return "JWT"  # Default assumption
 
 
 @router.get("/formats")

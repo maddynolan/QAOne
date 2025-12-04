@@ -47,6 +47,24 @@ interface NexusSession {
     description: string;
     page_url?: string;
   }>;
+  current_activity?: string;
+  progress?: {
+    capabilities_tested: number;
+    total_capabilities: number;
+    flows_executed: number;
+    pages_crawled: number;
+    iterations: number;
+    progress_percentage: number;
+    estimated_remaining_seconds: number;
+  };
+  recent_activity?: Array<{
+    timestamp: string;
+    action: string;
+    capability?: string;
+    iteration: number;
+    elapsed_seconds: number;
+  }>;
+  last_update?: string;
 }
 
 export default function Nexus() {
@@ -134,8 +152,33 @@ export default function Nexus() {
   };
 
   const stopSession = async () => {
-    setIsRunning(false);
-    toast.info("Session stopped (Nexus will complete current iteration)");
+    if (!sessionId) {
+      toast.error("No active session to stop");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/nexus/stop/${sessionId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to stop session");
+      }
+
+      const data = await response.json();
+      setIsRunning(false);
+      toast.success(data.message || "Nexus session stopped successfully");
+      
+      // Refresh status to show final state
+      await fetchSessionStatus();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to stop Nexus session");
+    }
   };
 
   const getRiskColor = (risk: string) => {
@@ -290,6 +333,11 @@ export default function Nexus() {
                 <div>
                   <p className="text-sm text-muted-foreground">Time Elapsed</p>
                   <p className="text-2xl font-bold">{formatTime(session.time_elapsed_seconds)}</p>
+                  {session.progress && session.progress.estimated_remaining_seconds > 0 && session.status === "running" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Est. remaining: {formatTime(session.progress.estimated_remaining_seconds)}
+                    </p>
+                  )}
                 </div>
                 <Clock className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -301,13 +349,89 @@ export default function Nexus() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Capabilities Tested</p>
-                  <p className="text-2xl font-bold">{Object.keys(session.risk_heatmap).length}</p>
+                  <p className="text-2xl font-bold">
+                    {session.progress?.capabilities_tested || Object.keys(session.risk_heatmap).length}
+                  </p>
+                  {session.progress && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      of {session.progress.total_capabilities || 0}
+                    </p>
+                  )}
                 </div>
                 <Target className="h-8 w-8 text-primary" />
               </div>
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Current Activity & Progress */}
+      {session && session.status === "running" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Current Activity</CardTitle>
+            <CardDescription>
+              Real-time progress of Nexus exploration
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">What's happening now:</span>
+                <span className="text-sm text-muted-foreground">
+                  {session.current_activity || "Initializing..."}
+                </span>
+              </div>
+              {session.progress && (
+                <>
+                  <Progress 
+                    value={session.progress.progress_percentage || 0} 
+                    className="h-2"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>{session.progress.progress_percentage?.toFixed(1) || 0}% complete</span>
+                    <span>Iteration {session.progress.iterations || 0}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {session.progress && (
+              <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                <div>
+                  <p className="text-sm text-muted-foreground">Flows Executed</p>
+                  <p className="text-lg font-semibold">{session.progress.flows_executed || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pages Crawled</p>
+                  <p className="text-lg font-semibold">{session.progress.pages_crawled || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Iterations</p>
+                  <p className="text-lg font-semibold">{session.progress.iterations || 0}</p>
+                </div>
+              </div>
+            )}
+
+            {session.recent_activity && session.recent_activity.length > 0 && (
+              <div className="pt-4 border-t">
+                <p className="text-sm font-medium mb-2">Recent Activity:</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {session.recent_activity.slice().reverse().map((activity, idx) => (
+                    <div key={idx} className="text-xs text-muted-foreground flex justify-between">
+                      <span>
+                        {activity.action === "testing_capability" && activity.capability
+                          ? `Testing: ${activity.capability}`
+                          : activity.action}
+                      </span>
+                      <span>{formatTime(activity.elapsed_seconds)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Risk Heatmap */}
@@ -411,4 +535,7 @@ export default function Nexus() {
     </div>
   );
 }
+
+
+
 

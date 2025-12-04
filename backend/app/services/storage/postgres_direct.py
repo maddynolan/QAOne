@@ -122,6 +122,10 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
     if not pool:
         return None
     
+    # Check if this is DDL (CREATE, ALTER, DROP) - needed for error handling
+    query_upper = query.strip().upper()
+    query_is_ddl = query_upper.startswith(('CREATE', 'ALTER', 'DROP'))
+    
     try:
         conn = pool.getconn()
         try:
@@ -135,7 +139,7 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
                     print(f"[INFO] EXECUTE_QUERY - Query: {query[:100]}..., Params: {params}")
                 
                 # Check if this is DDL (CREATE, ALTER, DROP) - these don't return results
-                is_ddl = query.strip().upper().startswith(('CREATE', 'ALTER', 'DROP'))
+                is_ddl = query_is_ddl
                 
                 # Check if this is DML (INSERT, UPDATE, DELETE)
                 is_modifying = query.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE'))
@@ -169,18 +173,42 @@ async def execute_query(query: str, params: Optional[tuple] = None) -> Optional[
     except Exception as e:
         # For DDL errors like "already exists", that's OK - return empty list
         error_str = str(e).lower()
-        if "already exists" in error_str or "does not exist" in error_str and "drop" in query.lower():
+        
+        # For CREATE TABLE statements, "does not exist" errors are expected and should be ignored
+        # (they happen when checking if table exists before creating)
+        if "already exists" in error_str:
             logger.warning(f"DDL query note (not an error): {str(e)}")
             return []
+        
+        # For CREATE TABLE IF NOT EXISTS, ignore "already exists" errors
+        if "create" in query_upper and "if not exists" in query_upper:
+            if "already exists" in error_str:
+                logger.info(f"Table already exists (expected): {str(e)}")
+                return []
+        
+        # For DROP TABLE IF EXISTS, "does not exist" is OK
+        if "drop" in query_upper and "if exists" in query_upper:
+            if "does not exist" in error_str:
+                logger.info(f"Table does not exist (expected for DROP IF EXISTS): {str(e)}")
+                return []
+        
         print(f"[ERROR] EXECUTE_QUERY - Error: {str(e)}")
         logger.error(f"Query execution error: {str(e)}")
-        # For "relation does not exist" errors, try resetting connection pool
+        
+        # For "relation does not exist" errors on SELECT/INSERT/UPDATE/DELETE (not CREATE)
+        # Don't reset pool for CREATE statements - they're creating the table!
         if "relation" in error_str and "does not exist" in error_str:
-            logger.warning("Table does not exist error detected. Resetting connection pool...")
-            reset_connection_pool()
-            # Re-raise with more context
-            raise Exception(f"Table not found after pool reset. Error: {str(e)}. Please verify table exists and restart backend.")
-            logger.error("If you just created tables, restart the backend server to refresh connection pool.")
+            # Only reset pool for non-DDL queries (SELECT, INSERT, UPDATE, DELETE)
+            if not query_is_ddl:
+                logger.warning("Table does not exist error detected. Resetting connection pool...")
+                reset_connection_pool()
+                # Re-raise with more context
+                raise Exception(f"Table not found after pool reset. Error: {str(e)}. Please verify table exists and restart backend.")
+            else:
+                # For CREATE statements, this might be a dependency issue, but let it through
+                logger.warning(f"DDL query error (may be dependency issue): {str(e)}")
+                raise  # Re-raise so caller can handle it
+        
         raise  # Re-raise so caller can handle it
 
 

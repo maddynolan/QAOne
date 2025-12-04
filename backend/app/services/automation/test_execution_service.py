@@ -435,9 +435,9 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    trace: 'on',
+    screenshot: 'on',
+    video: 'on',
   },
   projects: [
     {
@@ -671,15 +671,38 @@ export default defineConfig({
         
         if stderr_str:
             logger.warning(f"Test stderr (first 1000 chars): {stderr_str[:1000]}")
-        if stdout_str:
-            logger.info(f"Test stdout (first 500 chars): {stdout_str[:500]}")
-        
         # Parse results
         execution_result = {
             "exit_code": exit_code,
             "stdout": stdout_str,
             "stderr": stderr_str,
         }
+        
+        if stdout_str:
+            logger.info(f"Test stdout (first 500 chars): {stdout_str[:500]}")
+            
+            # Try to parse Playwright JSON output to extract error details
+            try:
+                json_data = json.loads(stdout_str)
+                # Extract error information from Playwright JSON
+                if "suites" in json_data:
+                    for suite in json_data.get("suites", []):
+                        for spec in suite.get("specs", []):
+                            for test in spec.get("tests", []):
+                                if test.get("status") == "failed":
+                                    error_info = test.get("results", [{}])[0].get("errors", [])
+                                    if error_info:
+                                        error_msg = error_info[0].get("message", "Test failed")
+                                        logger.error(f"Test failure error: {error_msg}")
+                                        if "error_details" not in execution_result:
+                                            execution_result["error_details"] = []
+                                        execution_result["error_details"].append({
+                                            "test": test.get("title", "Unknown"),
+                                            "error": error_msg,
+                                            "duration": test.get("duration", 0)
+                                        })
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                logger.debug(f"Could not parse Playwright JSON output: {e}")
         
         # Try to find screenshots and videos
         test_results_dir = project_dir / "test-results"

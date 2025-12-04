@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from datetime import datetime
 import json
 import asyncio
+import os
+import base64
 
 from app.services.flowstral.flowstral_orchestrator import FlowstralOrchestrator
 from app.services.core.plugin_service import PluginService
@@ -191,11 +193,18 @@ async def capture_events_batch(
         if not request.events or len(request.events) == 0:
             raise HTTPException(status_code=400, detail="No events provided")
         
+        # Log received batch
+        logger.info(f"[BATCH] Received batch request with {len(request.events)} events")
+        for idx, event in enumerate(request.events[:5]):  # Log first 5 events
+            logger.info(f"[BATCH] Event {idx+1}: session_id={event.get('session_id')}, event_type={event.get('event_type')}, timestamp={event.get('timestamp')}")
+        
         # Process through gateway
         gateway_result = await flowstral_gateway.process_batch(
             events=request.events,
             tenant_id=tenant_id
         )
+        
+        logger.info(f"[BATCH] Gateway processed batch, sessions: {list(gateway_result.get('sessions', {}).keys())}")
         
         # Process each event through orchestrator
         processed_results = {}
@@ -210,11 +219,13 @@ async def capture_events_batch(
             
             for event in session_events:
                 try:
+                    logger.info(f"[BATCH] Processing event: session_id={event.get('session_id')}, event_type={event.get('event_type')}")
                     result = await orchestrator.capture_event(
                         session_id=event.get("session_id"),
                         event_type=event.get("event_type"),
                         event_data=event.get("event_data", {})
                     )
+                    logger.info(f"[BATCH] Event processed successfully: event_type={event.get('event_type')}")
                     session_results.append({
                         "status": "success",
                         "event_type": event.get("event_type"),
@@ -222,12 +233,11 @@ async def capture_events_batch(
                     })
                 except Exception as e:
                     error_msg = str(e)
-                    # Don't log session errors as warnings - they're expected after stop
-                    # Common messages: "not found", "not active", "already stopped"
+                    # Log all errors, but use appropriate log level
                     if any(phrase in error_msg.lower() for phrase in ["not found", "not active", "already stopped", "does not exist"]):
-                        logger.debug(f"Event received for inactive/non-existent session (expected): {error_msg}")
+                        logger.warning(f"[BATCH] Event dropped - session inactive: event_type={event.get('event_type')}, error={error_msg}")
                     else:
-                        logger.warning(f"Failed to process event in batch: {e}")
+                        logger.error(f"[BATCH] Failed to process event: event_type={event.get('event_type')}, error={error_msg}", exc_info=True)
                     session_results.append({
                         "status": "error",
                         "event_type": event.get("event_type"),
@@ -660,10 +670,13 @@ async def execute_flowstral_test(
     Execute Playwright test from Flowstral session artifacts.
     HIGH PRIORITY: Run tests locally after recording.
     """
+    logger.info(f"[FLOWSTRAL EXECUTE] ===== Starting test execution for session {session_id} =====")
+    logger.info(f"[FLOWSTRAL EXECUTE] Parameters: browser={browser}, headless={headless}, timeout={timeout}")
     try:
         # Get session from session manager
         from app.services.flowstral.flowstral_session import flowstral_session_manager
         session = flowstral_session_manager.get_session(session_id)
+        logger.info(f"[FLOWSTRAL EXECUTE] Session found: {session is not None}")
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
@@ -690,8 +703,10 @@ async def execute_flowstral_test(
             )
         
         playwright_code = artifacts["playwright_script"]["code"]
+        logger.info(f"[FLOWSTRAL EXECUTE] Got Playwright code, length: {len(playwright_code)}")
         
         # Execute test using TestExecutionService
+        logger.info(f"[FLOWSTRAL EXECUTE] Calling test_execution_service.execute_test...")
         result = await test_execution_service.execute_test(
             test_code=playwright_code,
             test_name=f"flowstral_test_{session_id[:8]}",
@@ -700,6 +715,79 @@ async def execute_flowstral_test(
             timeout=timeout,
             environment="local"
         )
+        logger.info(f"[FLOWSTRAL EXECUTE] Test execution completed, status: {result.get('status')}")
+        logger.info(f"[FLOWSTRAL EXECUTE] Result keys: {list(result.keys())}")
+        
+        # Create a test run entry for tracking (optional but recommended)
+        test_run_id = None
+        try:
+            logger.info(f"[FLOWSTRAL EXECUTE] Attempting to create test run for session {session_id}")
+            from app.services.storage.postgres_direct import execute_insert, execute_query, ensure_default_org_project
+            import asyncio
+            
+            # Add timeout to prevent hanging
+            try:
+                org_id, project_id = await asyncio.wait_for(
+                    ensure_default_org_project(),
+                    timeout=5.0  # 5 second timeout
+                )
+                logger.info(f"[FLOWSTRAL EXECUTE] Got project_id: {project_id}, org_id: {org_id}")
+            except asyncio.TimeoutError:
+                logger.error(f"[FLOWSTRAL EXECUTE] ⚠️ ensure_default_org_project() timed out after 5 seconds")
+                raise Exception("Database connection timeout - test run creation skipped")
+            except Exception as e:
+                logger.error(f"[FLOWSTRAL EXECUTE] ⚠️ ensure_default_org_project() failed: {e}")
+                raise
+            
+            # Create test run entry
+            run_data = {
+                "project_id": project_id,
+                "name": f"Flowstral Test - {session_id[:8]}",
+                "status": "passed" if result.get("status") == "success" else "failed",
+                "environment": "local",
+                "created_by": "22222222-2222-2222-2222-222222222222"  # DEFAULT_USER_ID
+            }
+            
+            logger.info(f"[FLOWSTRAL EXECUTE] Creating test run with data: {run_data}")
+            try:
+                test_run_id = await asyncio.wait_for(
+                    execute_insert("test_runs", run_data),
+                    timeout=5.0  # 5 second timeout
+                )
+                if test_run_id:
+                    logger.info(f"[FLOWSTRAL EXECUTE] ✅ Created test run {test_run_id} for Flowstral session {session_id}")
+                else:
+                    logger.warning(f"[FLOWSTRAL EXECUTE] ⚠️ execute_insert returned None for test run")
+            except asyncio.TimeoutError:
+                logger.error(f"[FLOWSTRAL EXECUTE] ⚠️ execute_insert() timed out after 5 seconds")
+            except Exception as insert_error:
+                logger.error(f"[FLOWSTRAL EXECUTE] ⚠️ execute_insert() failed: {insert_error}")
+                
+                # Store execution result details
+                if result.get("screenshots"):
+                    for idx, screenshot_path in enumerate(result.get("screenshots", [])[:5]):  # Limit to 5 screenshots
+                        try:
+                            from app.services.storage.test_results_storage import store_artifact
+                            # Read screenshot file if it exists
+                            if os.path.exists(screenshot_path):
+                                with open(screenshot_path, 'rb') as f:
+                                    screenshot_bytes = f.read()
+                                    screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+                                    image_url = f"data:image/png;base64,{screenshot_b64}"
+                                    
+                                    await store_artifact(
+                                        run_id=test_run_id,
+                                        step_id=None,
+                                        artifact_type="screenshot",
+                                        url=image_url,
+                                        size_bytes=len(screenshot_bytes),
+                                        metadata={"source": "flowstral_execution", "index": idx}
+                                    )
+                        except Exception as e:
+                            logger.warning(f"Failed to store screenshot {idx}: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"[FLOWSTRAL EXECUTE] ❌ Failed to create test run entry: {e}", exc_info=True)
+            # Don't fail the execution if test run creation fails
         
         # If execution failed, return error status
         if result.get("status") == "error":
@@ -708,6 +796,7 @@ async def execute_flowstral_test(
                 "status": "error",
                 "session_id": session_id,
                 "execution_result": result,
+                "test_run_id": test_run_id,
                 "message": f"Test execution failed: {result.get('error', 'Unknown error')}"
             }
         
@@ -715,6 +804,7 @@ async def execute_flowstral_test(
             "status": "success",
             "session_id": session_id,
             "execution_result": result,
+            "test_run_id": test_run_id,
             "message": f"Test execution completed with status: {result.get('status')}"
         }
         

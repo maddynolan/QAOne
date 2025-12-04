@@ -134,3 +134,13 @@ class JiraConnector:
             "raw_payload": issue
         }
 
+
+# Global instance
+_jira_connector = None
+
+def get_jira_connector() -> JiraConnector:
+    """Get or create global JiraConnector instance"""
+    global _jira_connector
+    if _jira_connector is None:
+        _jira_connector = JiraConnector()
+    return _jira_connector

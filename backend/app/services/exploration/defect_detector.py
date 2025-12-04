@@ -571,3 +571,6 @@ class DefectDetector:
         
         return defects
 
+
+
+

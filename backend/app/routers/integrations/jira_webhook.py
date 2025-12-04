@@ -9,10 +9,10 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import json
 
-from app.services.integrations.jira_connector import get_jira_connector
+from app.services.connectors.jira_connector import get_jira_connector
 from app.services.core.test_plan_service import get_test_plan_service
 from app.services.automation.test_execution_service import get_test_execution_service
-from app.decorators.audit import audit_log_action
+from app.decorators.audit import audit
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,9 @@ class JiraWebhookPayload(BaseModel):
 
 
 @router.post("/webhook", summary="Jira webhook endpoint")
-@audit_log_action(
+@audit(
     action="jira_webhook_received",
-    resource_type="webhook",
-    get_resource_id=lambda *args, **kwargs: kwargs.get("payload", {}).get("issue", {}).get("key", "unknown")
+    resource_type="webhook"
 )
 async def jira_webhook(
     request: Request,

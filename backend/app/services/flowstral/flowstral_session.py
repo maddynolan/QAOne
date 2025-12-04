@@ -39,6 +39,12 @@ class FlowstralSession:
         self.wcag_issues: List[Dict[str, Any]] = []
         self.performance_metrics: List[Dict[str, Any]] = []
         
+        # Raw events for high-fidelity generation (Flux agent)
+        self.raw_events: List[Dict[str, Any]] = []
+        
+        # Event buffer for coalescing
+        self.event_buffer: List = []
+        
         # Stored artifacts (after generation)
         self.artifacts: Optional[Dict[str, Any]] = None
         self.artifacts_generated_at: Optional[str] = None

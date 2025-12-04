@@ -6975,6 +6975,7 @@ app.include_router(app_first_flow_router)
 
 # Flowstral endpoints
 from app.routers.flowstral_api import router as flowstral_router
+from app.routers.flowstral_config_api import router as flowstral_config_router
 from app.routers.test_case_api import router as test_case_router
 from app.routers.test_cases_crud_api import router as test_cases_crud_router
 from app.routers.test_case_rewrite_api import router as test_case_rewrite_router
@@ -6988,6 +6989,7 @@ from app.routers.workflows_api import router as workflows_router
 from app.routers.models_api import router as models_router
 from app.routers.ai_generation_api import router as ai_generation_router
 app.include_router(flowstral_router)
+app.include_router(flowstral_config_router)
 app.include_router(test_case_router)
 app.include_router(test_cases_crud_router)
 app.include_router(test_case_rewrite_router)
@@ -7043,6 +7045,14 @@ app.include_router(metrics_router)
 # Enterprise integrations
 from app.routers.integrations.jira_webhook import router as jira_webhook_router
 app.include_router(jira_webhook_router)
+
+# Performance Testing API
+from app.routers.performance_api import router as performance_router
+app.include_router(performance_router)
+
+# Accessibility Testing API
+from app.routers.accessibility_api import router as accessibility_router
+app.include_router(accessibility_router)
 
 # Compliance and competitive optimizations
 from app.routers.compliance_api import router as compliance_router

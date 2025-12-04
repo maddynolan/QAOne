@@ -4,8 +4,8 @@
 const API_BASE_URL = 'http://localhost:8000';
 
 // Event batching configuration
-const BATCH_SIZE = 10; // Batch every N events
-const BATCH_INTERVAL = 5000; // Or every 5 seconds
+const BATCH_SIZE = 5; // Batch every N events (reduced for faster capture)
+const BATCH_INTERVAL = 2000; // Or every 2 seconds (reduced for faster capture)
 const MAX_OFFLINE_QUEUE = 100; // Max events to queue offline
 
 // Event batching state
@@ -359,7 +359,7 @@ async function handleCaptureEvent(data) {
     timestamp: Date.now()
   });
   
-  console.log(`Flowstral Background: Event added to batch (${eventBatch.length}/${BATCH_SIZE})`);
+  console.log(`Flowstral Background: Event added to batch (${eventBatch.length}/${BATCH_SIZE}): ${event_type} - ${event_data.action_description || event_data.url || 'no description'}`);
   
   // Start batch timer if not already running
   if (!batchTimer) {
@@ -368,8 +368,10 @@ async function handleCaptureEvent(data) {
     }, BATCH_INTERVAL);
   }
   
-  // Flush if batch is full
-  if (eventBatch.length >= BATCH_SIZE) {
+  // Flush if batch is full OR if it's a critical event (navigate, submit, etc.)
+  const criticalEvents = ['navigate', 'submit', 'page_load'];
+  if (eventBatch.length >= BATCH_SIZE || criticalEvents.includes(event_type)) {
+    console.log(`Flowstral Background: Flushing batch immediately (size: ${eventBatch.length}, critical: ${criticalEvents.includes(event_type)})`);
     await flushEventBatch();
   }
   

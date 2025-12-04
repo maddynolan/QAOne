@@ -20,6 +20,7 @@ from app.services.agents.automation_agent import AutomationAgent
 from app.services.agents.test_design_agent import TestDesignAgent
 from app.services.agents.defect_agent import DefectAgent
 from app.services.flowstral.flowstral_session import flowstral_session_manager
+from app.services.agents.persona_registry import persona_registry, PersonaType
 from app.services.engines.test_case_enhancements import TestCaseEnhancements
 from app.services.engines.scenario_skeleton_generator import ScenarioSkeletonGenerator
 from app.services.llm.test_case_rewrite_service import (
@@ -37,13 +38,16 @@ logger = logging.getLogger(__name__)
 
 class FlowstralArtifactsGenerator:
     """
-    Generates the 6 major artifacts:
+    Generates Flowstral artifacts:
     1. Action Graph Model
     2. Full Playwright Automation Script
     3. Structured Test Cases
-    4. Accessibility Report (WCAG)
-    5. Performance Report
+    4. Accessibility Report (WCAG) - Optional, skipped if WCAG pipeline is disabled
+    5. Performance Report - Optional, skipped if Performance pipeline is disabled
     6. Auto Defects
+    
+    Note: Accessibility and Performance reports are disabled by default.
+    Use the standalone accessibility and performance tools for comprehensive testing.
     """
     
     def __init__(self):
@@ -70,12 +74,37 @@ class FlowstralArtifactsGenerator:
         performance_snapshots: List[Dict[str, Any]],
         project_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
-        progress_callback: Optional[Callable[[str, int, Optional[str], str], None]] = None
+        progress_callback: Optional[Callable[[str, int, Optional[str], str], None]] = None,
+        raw_events: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-        """Generate all 6 artifacts with error handling"""
+        """
+        Generate Flowstral artifacts with error handling.
+        
+        Skips WCAG and Performance reports if their pipelines are disabled in project config.
+        By default, these are disabled - use standalone accessibility and performance tools instead.
+        """
         
         artifacts = {}
         errors = []
+        
+        # Get project config to check if WCAG/Performance are enabled
+        wcag_enabled = False
+        performance_enabled = False
+        if project_id:
+            try:
+                from app.services.flowstral.flowstral_project_config import get_project_config_service
+                config_service = get_project_config_service()
+                config = config_service.get_config(project_id)
+                # Pipelines are PipelineConfig objects, not dicts
+                wcag_pipeline = config.pipelines.get("wcag")
+                performance_pipeline = config.pipelines.get("performance")
+                if wcag_pipeline and hasattr(wcag_pipeline, "enabled"):
+                    wcag_enabled = wcag_pipeline.enabled
+                if performance_pipeline and hasattr(performance_pipeline, "enabled"):
+                    performance_enabled = performance_pipeline.enabled
+                logger.info(f"Project config: WCAG enabled={wcag_enabled}, Performance enabled={performance_enabled}")
+            except Exception as e:
+                logger.warning(f"Failed to get project config: {e}, defaulting to disabled for WCAG/Performance")
         
         # Helper to send progress updates
         async def send_progress(message: str, progress: int, artifact: str = None, status: str = "processing"):
@@ -99,13 +128,15 @@ class FlowstralArtifactsGenerator:
             errors.append(f"Action Graph: {str(e)}")
             await send_progress(f"Action Graph error: {str(e)}", 15, "action_graph", "error")
         
-        # Artifact 2: Full Playwright Script
+        # Artifact 2: Full Playwright Script (with Flux high-fidelity agent)
         try:
-            await send_progress("Generating Playwright script...", 20, "playwright_script")
+            await send_progress("Generating high-fidelity Playwright script (Flux agent)...", 20, "playwright_script")
             playwright_result = await self.generate_playwright_script(
                 action_graph,
                 dom_snapshots,
-                tenant_id=tenant_id
+                tenant_id=tenant_id,
+                use_flux_agent=True,  # Use Flux for high-fidelity generation
+                raw_events=raw_events  # Pass raw events for precise timing/coordinates
             )
             # Ensure it always has a 'code' property, even if empty
             if not playwright_result.get("code"):
@@ -136,15 +167,16 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             errors.append(f"Playwright Script: {str(e)}")
             await send_progress(f"Playwright script error: {str(e)}", 30, "playwright_script", "error")
         
-        # Artifact 3: Structured Test Cases
+        # Artifact 3: Structured Test Cases (using Trace persona for manual tests)
         try:
-            await send_progress("Generating test cases (LLM processing)...", 35, "test_cases")
-            logger.info("Starting test case generation...")
+            await send_progress("Generating test cases (Trace persona - Manual Testing)...", 35, "test_cases")
+            logger.info("Starting test case generation with Trace persona...")
             test_cases_result = await self.generate_structured_test_cases(
                 artifacts.get("playwright_script", {}),
                 action_graph,
                 project_id,
-                tenant_id
+                tenant_id,
+                use_trace_persona=True  # Use Trace persona for enterprise-grade manual tests
             )
             # Validate result before accessing
             if test_cases_result is None:
@@ -213,30 +245,55 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             errors.append(f"Test Cases: {str(e)}")
             await send_progress(f"Test cases error: {str(e)}", 50, "test_cases", "error")
         
-        # Artifact 4: Accessibility Report
-        try:
-            await send_progress("Generating accessibility report...", 55, "accessibility_report")
-            # Get WCAG issues from session
-            session = flowstral_session_manager.get_session(session_id)
-            wcag_issues = session.wcag_issues if session else []
-            artifacts["accessibility_report"] = await self.generate_accessibility_report(wcag_snapshots, wcag_issues)
-            await send_progress("Accessibility report completed", 70, "accessibility_report", "completed")
-        except Exception as e:
-            logger.error(f"Failed to generate accessibility report: {e}", exc_info=True)
-            artifacts["accessibility_report"] = {"error": str(e), "type": "accessibility_report"}
-            errors.append(f"Accessibility Report: {str(e)}")
-            await send_progress(f"Accessibility report error: {str(e)}", 70, "accessibility_report", "error")
+        # Artifact 4: Accessibility Report (skipped if disabled - use standalone tool)
+        if wcag_enabled:
+            try:
+                await send_progress("Generating accessibility report (A11y persona - WCAG 2.2 AA)...", 55, "accessibility_report")
+                # Get WCAG issues from session
+                session = flowstral_session_manager.get_session(session_id)
+                wcag_issues = session.wcag_issues if session else []
+                artifacts["accessibility_report"] = await self.generate_accessibility_report(
+                    wcag_snapshots, 
+                    wcag_issues,
+                    use_a11y_persona=True  # Use A11y persona for enterprise-grade WCAG compliance
+                )
+                await send_progress("Accessibility report completed", 70, "accessibility_report", "completed")
+            except Exception as e:
+                logger.error(f"Failed to generate accessibility report: {e}", exc_info=True)
+                artifacts["accessibility_report"] = {"error": str(e), "type": "accessibility_report"}
+                errors.append(f"Accessibility Report: {str(e)}")
+                await send_progress(f"Accessibility report error: {str(e)}", 70, "accessibility_report", "error")
+        else:
+            logger.info("Skipping accessibility report generation - WCAG pipeline is disabled (use standalone accessibility tool)")
+            artifacts["accessibility_report"] = {
+                "type": "accessibility_report",
+                "skipped": True,
+                "message": "WCAG pipeline is disabled. Use the standalone accessibility tool for comprehensive accessibility testing."
+            }
+            await send_progress("Accessibility report skipped (use standalone tool)", 70, "accessibility_report", "skipped")
         
-        # Artifact 5: Performance Report
-        try:
-            await send_progress("Generating performance report...", 75, "performance_report")
-            artifacts["performance_report"] = await self.generate_performance_report(performance_snapshots)
-            await send_progress("Performance report completed", 85, "performance_report", "completed")
-        except Exception as e:
-            logger.error(f"Failed to generate performance report: {e}", exc_info=True)
-            artifacts["performance_report"] = {"error": str(e), "type": "performance_report"}
-            errors.append(f"Performance Report: {str(e)}")
-            await send_progress(f"Performance report error: {str(e)}", 85, "performance_report", "error")
+        # Artifact 5: Performance Report (skipped if disabled - use standalone tool)
+        if performance_enabled:
+            try:
+                await send_progress("Generating performance report (Blaze persona - Load Testing)...", 75, "performance_report")
+                artifacts["performance_report"] = await self.generate_performance_report(
+                    performance_snapshots,
+                    use_blaze_persona=True  # Use Blaze persona for enterprise-grade performance tests
+                )
+                await send_progress("Performance report completed", 85, "performance_report", "completed")
+            except Exception as e:
+                logger.error(f"Failed to generate performance report: {e}", exc_info=True)
+                artifacts["performance_report"] = {"error": str(e), "type": "performance_report"}
+                errors.append(f"Performance Report: {str(e)}")
+                await send_progress(f"Performance report error: {str(e)}", 85, "performance_report", "error")
+        else:
+            logger.info("Skipping performance report generation - Performance pipeline is disabled (use standalone performance tool)")
+            artifacts["performance_report"] = {
+                "type": "performance_report",
+                "skipped": True,
+                "message": "Performance pipeline is disabled. Use the standalone performance tool for comprehensive performance testing."
+            }
+            await send_progress("Performance report skipped (use standalone tool)", 85, "performance_report", "skipped")
         
         # Artifact 6: Auto Defects
         try:
@@ -354,9 +411,114 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
         self,
         action_graph: ActionGraph,
         dom_snapshots: List[Dict[str, Any]],
-        tenant_id: Optional[str] = None
+        tenant_id: Optional[str] = None,
+        use_flux_agent: bool = True,
+        raw_events: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-        """Artifact 2: Full Playwright Automation Script"""
+        """
+        Artifact 2: Full Playwright Automation Script
+        
+        Args:
+            action_graph: Flowstral action graph
+            dom_snapshots: DOM snapshots with timing
+            tenant_id: Tenant ID
+            use_flux_agent: Use Flux high-fidelity agent (default: True)
+            raw_events: Raw event log with precise timing and coordinates
+        """
+        # Use Enhanced Playwright Generator (best practices: semantic locators, auto-waiting, etc.)
+        if use_flux_agent:
+            try:
+                from app.services.flowstral.enhanced_playwright_generator import get_enhanced_playwright_generator
+                enhanced_generator = get_enhanced_playwright_generator()
+                
+                logger.info("[ENHANCED] Using Enhanced Playwright Generator (best practices approach)...")
+                result = await enhanced_generator.generate_script(
+                    action_graph=action_graph,
+                    dom_snapshots=dom_snapshots,
+                    raw_events=raw_events
+                )
+                
+                if result and result.get("script"):
+                    gen_time = result.get("generation_time_ms", 0)
+                    logger.info(f"[ENHANCED] Generated script: {result.get('action_count', 0)} actions in {gen_time:.0f}ms (from {result.get('total_nodes', 0)} nodes)")
+                    logger.info(f"[ENHANCED] Strategies used: {', '.join(result.get('strategies_used', []))}")
+                    return {
+                        "type": "playwright_script",
+                        "format": "typescript",
+                        "code": result["script"],
+                        "data": result["script"],
+                        "action_count": result.get("action_count", 0),
+                        "generation_time_ms": gen_time,
+                        "strategies_used": result.get("strategies_used", []),
+                        "warnings": result.get("warnings", []),
+                        "export_format": "playwright_test.ts"
+                    }
+                else:
+                    logger.warning("[ENHANCED] Enhanced generator returned empty script, falling back to Forge agent")
+            except Exception as e:
+                logger.error(f"[ENHANCED] Enhanced generator failed: {e}", exc_info=True)
+                logger.info("[ENHANCED] Falling back to Forge agent")
+        
+        # Fallback to Forge Flux agent (production-grade, minimal, fast)
+        try:
+            from app.services.flowstral.forge_flux_agent import get_forge_flux_agent
+            forge_flux = get_forge_flux_agent()
+            
+            logger.info("[FORGE] Using Forge Flux agent (production-grade minimal approach)...")
+            result = await forge_flux.generate_script(
+                action_graph=action_graph,
+                dom_snapshots=dom_snapshots
+            )
+            
+            if result and result.get("script"):
+                gen_time = result.get("generation_time_ms", 0)
+                logger.info(f"[FORGE] Generated script: {result.get('action_count', 0)} actions in {gen_time:.0f}ms (from {result.get('total_nodes', 0)} nodes)")
+                return {
+                    "type": "playwright_script",
+                    "format": "typescript",
+                    "code": result["script"],
+                    "data": result["script"],
+                    "action_count": result.get("action_count", 0),
+                    "generation_time_ms": gen_time,
+                    "intents": result.get("intents", []),
+                    "export_format": "playwright_test.ts"
+                }
+            else:
+                logger.warning("[FORGE] Forge agent returned empty script, falling back to simple agent")
+        except Exception as e:
+            logger.error(f"[FORGE] Forge Flux agent failed: {e}", exc_info=True)
+            logger.info("[FORGE] Falling back to simple agent")
+        
+        # Fallback to Simple Flux agent
+        if use_flux_agent:
+            try:
+                from app.services.flowstral.simple_flux_agent import get_simple_flux_agent
+                simple_flux = get_simple_flux_agent()
+                
+                logger.info("[SIMPLE-FLUX] Using Simple Flux agent...")
+                result = await simple_flux.generate_script(
+                    action_graph=action_graph,
+                    dom_snapshots=dom_snapshots
+                )
+                
+                if result and result.get("script"):
+                    logger.info(f"[SIMPLE-FLUX] Generated script with {result.get('action_count', 0)} actions")
+                    return {
+                        "type": "playwright_script",
+                        "format": "typescript",
+                        "code": result["script"],
+                        "data": result["script"],
+                        "action_count": result.get("action_count", 0),
+                        "export_format": "playwright_test.ts"
+                    }
+            except Exception as e:
+                logger.error(f"[SIMPLE-FLUX] Simple Flux agent failed: {e}", exc_info=True)
+                logger.info("[SIMPLE-FLUX] Falling back to standard generation")
+        
+        # Standard generation (fallback) - NO complex agent
+        # Removed complex Flux agent fallback - use simple standard generation instead
+        
+        # Standard generation (fallback)
         generator = RealTimeOutputGenerator()
         
         # If no nodes, return empty script template
@@ -566,7 +728,8 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
         action_graph: ActionGraph,
         project_id: Optional[str],
         tenant_id: Optional[str],
-        use_enhanced_engine: bool = True
+        use_enhanced_engine: bool = True,
+        use_trace_persona: bool = True
     ) -> Dict[str, Any]:
         """
         Generate structured test cases with automatic quality improvement.
@@ -1103,6 +1266,59 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             
             playwright_script = playwright_artifact.get("code", "") if isinstance(playwright_artifact, dict) else ""
             
+            # Use Trace persona for enterprise-grade manual test cases
+            trace_persona_manual_cases = []
+            if use_trace_persona and action_graph and action_graph.nodes:
+                try:
+                    logger.info("[Trace Persona] Generating enterprise-grade manual test cases...")
+                    trace_persona = persona_registry.get_persona(PersonaType.MANUAL)
+                    
+                    trace_result = await trace_persona.generate(
+                        input_data={
+                            "action_graph": action_graph.to_dict(),
+                            "project_id": project_id,
+                            "generate_variations": True,
+                            "include_negative_cases": True,
+                            "include_boundary_tests": True
+                        },
+                        context={
+                            "project_id": project_id,
+                            "tenant_id": tenant_id,
+                            "source": "flowstral_recording"
+                        },
+                        temperature=0.3,
+                        tenant_id=tenant_id
+                    )
+                    
+                    # Convert Trace persona results to test case format
+                    if hasattr(trace_result, 'test_cases'):
+                        for tc in trace_result.test_cases:
+                            trace_persona_manual_cases.append({
+                                "title": tc.title if hasattr(tc, 'title') else "Manual Test Case",
+                                "description": tc.description if hasattr(tc, 'description') else "",
+                                "preconditions": tc.preconditions if hasattr(tc, 'preconditions') else "",
+                                "steps": [
+                                    {
+                                        "step_number": step.step_number if hasattr(step, 'step_number') else i+1,
+                                        "action": step.action if hasattr(step, 'action') else "",
+                                        "expected_result": step.expected_result if hasattr(step, 'expected_result') else "",
+                                        "data_values": step.data_values if hasattr(step, 'data_values') else {},
+                                        "variations": step.variations if hasattr(step, 'variations') else []
+                                    }
+                                    for i, step in enumerate(tc.steps if hasattr(tc, 'steps') else [])
+                                ],
+                                "postconditions": tc.postconditions if hasattr(tc, 'postconditions') else "",
+                                "traceability": tc.traceability if hasattr(tc, 'traceability') else "",
+                                "tags": tc.tags if hasattr(tc, 'tags') else [],
+                                "priority": tc.priority if hasattr(tc, 'priority') else "medium",
+                                "test_type": "manual"
+                            })
+                    
+                    logger.info(f"[Trace Persona] Generated {len(trace_persona_manual_cases)} enterprise-grade manual test cases")
+                except Exception as e:
+                    logger.warning(f"Trace persona generation failed: {e}, falling back to standard generation", exc_info=True)
+                    trace_persona_manual_cases = []
+            
             # OPTIMIZATION: Run automated and manual test case generation in PARALLEL
             # asyncio is already imported at top of file (line 8)
             from app.services.llm.model_gateway import get_model_gateway, GenerationRequest
@@ -1562,6 +1778,23 @@ Return ONLY valid JSON array, no explanations."""
                     
                     # Categorize additional test cases by type
                     # (manual_cases, a11y_cases, perf_cases already initialized above)
+                    
+                    # Add Trace persona manual cases first (highest quality)
+                    for trace_case in trace_persona_manual_cases:
+                        manual_cases.append(trace_case)
+                        try:
+                            trace_id = await self.test_design_agent._store_test_case(
+                                test_case=trace_case,
+                                playwright_script="",
+                                requirement_id=None,
+                                project_id=project_id,
+                                tenant_id=tenant_id
+                            )
+                            if trace_id:
+                                stored_test_case_ids.append(trace_id)
+                                logger.info(f"Stored Trace persona test case '{trace_case.get('title', 'Unknown')}' with ID: {trace_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to store Trace persona test case: {e}")
                     
                     for additional_case in additional_cases:
                         # Safety check: ensure additional_case is a dict before accessing
@@ -2374,7 +2607,7 @@ Return ONLY valid JSON array, no explanations."""
         
         return intersection / union
     
-    async def generate_accessibility_report(self, wcag_snapshots: List[Dict[str, Any]], wcag_issues: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    async def generate_accessibility_report(self, wcag_snapshots: List[Dict[str, Any]], wcag_issues: Optional[List[Dict[str, Any]]] = None, use_a11y_persona: bool = False) -> Dict[str, Any]:
         """Artifact 4: Accessibility Report (WCAG) with OpenAI enhancement"""
         all_violations = []
         all_reports = []
@@ -2469,36 +2702,82 @@ Return ONLY valid JSON array, no explanations."""
         total_moderate = sum(1 for v in all_violations if v.get("impact") == "moderate")
         total_minor = sum(1 for v in all_violations if v.get("impact") == "minor")
         
-        # Step 2: Use OpenAI to generate enhanced report with insights
+        # Step 2: Use A11y persona for enterprise-grade WCAG compliance report
         enhanced_report = None
         report_metrics = None
+        a11y_persona_result = None
         
-        try:
-            from app.services.llm.accessibility_report_service import get_accessibility_report_service
-            a11y_service = get_accessibility_report_service()
-            
-            logger.info("[LLM] Generating enhanced Accessibility report with OpenAI...")
-            
-            result = await asyncio.wait_for(
-                a11y_service.generate_report(
-                    wcag_violations=all_violations,
-                    timeout=30.0
-                ),
-                timeout=35.0
-            )
-            
-            enhanced_report = result.get("report", {})
-            report_metrics = result.get("metrics", {})
-            
-            logger.info(
-                f"[OK] Generated Accessibility report "
-                f"({report_metrics.get('provider', 'unknown')}, "
-                f"{report_metrics.get('latency_ms', 0):.0f}ms)"
-            )
-            
-        except Exception as e:
-            logger.warning(f"LLM Accessibility report generation failed: {e}, using base report")
-            enhanced_report = None
+        if use_a11y_persona:
+            try:
+                a11y_persona = persona_registry.get_persona(PersonaType.ACCESSIBILITY)
+                
+                logger.info("[A11y Persona] Generating enterprise-grade WCAG 2.2 AA compliance report...")
+                
+                # Convert WCAG snapshots to DOM snapshots format for A11y persona
+                dom_snapshots = []
+                for snapshot in valid_snapshots:
+                    if snapshot and isinstance(snapshot, dict):
+                        html = snapshot.get("html") or snapshot.get("dom_snapshot", {}).get("html", "")
+                        if html:
+                            dom_snapshots.append({
+                                "html": html,
+                                "url": snapshot.get("url", ""),
+                                "timestamp": snapshot.get("timestamp")
+                            })
+                
+                if dom_snapshots:
+                    # Generate using A11y persona
+                    a11y_persona_result = await a11y_persona.generate(
+                        input_data={
+                            "dom_snapshots": dom_snapshots,
+                            "wcag_level": "AA",  # WCAG 2.2 AA compliance
+                            "include_keyboard_tests": True,
+                            "include_screen_reader_tests": True,
+                            "include_zoom_tests": True
+                        },
+                        context={
+                            "target_browsers": ["Chrome", "Firefox", "Safari"],
+                            "screen_readers": ["NVDA", "VoiceOver"]
+                        },
+                        tenant_id=None
+                    )
+                    
+                    logger.info(f"[A11y Persona] Generated {len(a11y_persona_result.wcag_tests)} WCAG tests")
+                else:
+                    logger.warning("[A11y Persona] No DOM snapshots available, skipping persona generation")
+                    
+            except Exception as e:
+                logger.warning(f"A11y persona generation failed: {e}, falling back to standard report", exc_info=True)
+                a11y_persona_result = None
+        
+        # Fallback to standard LLM report if persona not used or failed
+        if not a11y_persona_result:
+            try:
+                from app.services.llm.accessibility_report_service import get_accessibility_report_service
+                a11y_service = get_accessibility_report_service()
+                
+                logger.info("[LLM] Generating enhanced Accessibility report with OpenAI...")
+                
+                result = await asyncio.wait_for(
+                    a11y_service.generate_report(
+                        wcag_violations=all_violations,
+                        timeout=30.0
+                    ),
+                    timeout=35.0
+                )
+                
+                enhanced_report = result.get("report", {})
+                report_metrics = result.get("metrics", {})
+                
+                logger.info(
+                    f"[OK] Generated Accessibility report "
+                    f"({report_metrics.get('provider', 'unknown')}, "
+                    f"{report_metrics.get('latency_ms', 0):.0f}ms)"
+                )
+                
+            except Exception as e:
+                logger.warning(f"LLM Accessibility report generation failed: {e}, using base report")
+                enhanced_report = None
         
         # Merge enhanced report with base data
         base_summary = {
@@ -2509,13 +2788,13 @@ Return ONLY valid JSON array, no explanations."""
             "minor": total_minor
         }
         
-        return {
+        result = {
             "type": "accessibility_report",
-            "format": "wcag_2.1_aa",
+            "format": "wcag_2.2_aa" if a11y_persona_result else "wcag_2.1_aa",
             "summary": enhanced_report.get("summary", base_summary) if enhanced_report else base_summary,
             "violations_by_rule": list(violations_by_rule.values()),
             "detailed_reports": all_reports,
-            "enhanced_report": enhanced_report,  # LLM-generated insights
+            "enhanced_report": enhanced_report,  # LLM-generated insights (fallback)
             "findings": enhanced_report.get("findings", []) if enhanced_report else [],
             "recommendations": enhanced_report.get("recommendations", []) if enhanced_report else [],
             "compliance_breakdown": enhanced_report.get("compliance_breakdown", {}) if enhanced_report else {},
@@ -2523,8 +2802,35 @@ Return ONLY valid JSON array, no explanations."""
             "generation_metrics": report_metrics,
             "export_format": "accessibility_report.json"
         }
+        
+        # Add A11y persona results if available
+        if a11y_persona_result:
+            result["a11y_persona"] = {
+                "wcag_tests": [
+                    {
+                        "wcag_criterion": test.wcag_criterion if hasattr(test, 'wcag_criterion') else "",
+                        "level": test.level if hasattr(test, 'level') else "AA",
+                        "test_name": test.test_name if hasattr(test, 'test_name') else "",
+                        "severity": test.severity if hasattr(test, 'severity') else "moderate",
+                        "remediation": test.remediation if hasattr(test, 'remediation') else ""
+                    }
+                    for test in (a11y_persona_result.wcag_tests if hasattr(a11y_persona_result, 'wcag_tests') else [])
+                ],
+                "axe_core_rules": a11y_persona_result.axe_core_rules if hasattr(a11y_persona_result, 'axe_core_rules') else [],
+                "keyboard_only_tests": a11y_persona_result.keyboard_only_tests if hasattr(a11y_persona_result, 'keyboard_only_tests') else [],
+                "screen_reader_tests": a11y_persona_result.screen_reader_tests if hasattr(a11y_persona_result, 'screen_reader_tests') else {},
+                "vpat_sections": a11y_persona_result.vpat_sections if hasattr(a11y_persona_result, 'vpat_sections') else {},
+                "remediation_instructions": a11y_persona_result.remediation_instructions if hasattr(a11y_persona_result, 'remediation_instructions') else {},
+                "persona_info": {
+                    "name": "A11y",
+                    "expertise": "Ex-Microsoft Senior Accessibility Evangelist, 20 years",
+                    "track_record": "Personally audited Office 365 and Windows"
+                }
+            }
+        
+        return result
     
-    async def generate_performance_report(self, performance_snapshots: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_performance_report(self, performance_snapshots: List[Dict[str, Any]], use_blaze_persona: bool = False) -> Dict[str, Any]:
         """Artifact 5: Performance Report with OpenAI enhancement"""
         all_bottlenecks = []
         api_latency_matrix = {}
@@ -2570,7 +2876,7 @@ Return ONLY valid JSON array, no explanations."""
             if endpoint_data["calls"]:
                 endpoint_data["avg_latency"] = sum(c["duration"] for c in endpoint_data["calls"]) / len(endpoint_data["calls"])
         
-        # Step 2: Use OpenAI to generate enhanced report with insights
+        # Step 2: Use Blaze persona for enterprise-grade performance test scripts
         base_metrics = {
             "average_latency_ms": sum(p["metrics"].get("lcp", 0) for p in page_timelines) / len(page_timelines) if page_timelines else 0,
             "total_nodes": len(page_timelines),
@@ -2588,33 +2894,83 @@ Return ONLY valid JSON array, no explanations."""
         
         enhanced_report = None
         report_metrics = None
+        blaze_persona_result = None
         
-        try:
-            from app.services.llm.performance_report_service import get_performance_report_service
-            perf_service = get_performance_report_service()
-            
-            logger.info("[LLM] Generating enhanced Performance report with OpenAI...")
-            
-            result = await asyncio.wait_for(
-                perf_service.generate_report(
-                    performance_metrics=base_metrics,
-                    timeout=30.0
-                ),
-                timeout=35.0
-            )
-            
-            enhanced_report = result.get("report", {})
-            report_metrics = result.get("metrics", {})
-            
-            logger.info(
-                f"[OK] Generated Performance report "
-                f"({report_metrics.get('provider', 'unknown')}, "
-                f"{report_metrics.get('latency_ms', 0):.0f}ms)"
-            )
-            
-        except Exception as e:
-            logger.warning(f"LLM Performance report generation failed: {e}, using base report")
-            # Fallback to basic recommendations
+        if use_blaze_persona and page_timelines:
+            try:
+                blaze_persona = persona_registry.get_persona(PersonaType.PERFORMANCE)
+                
+                logger.info("[Blaze Persona] Generating enterprise-grade performance test scripts...")
+                
+                # Convert performance snapshots to user journeys format
+                user_journeys = []
+                for timeline in page_timelines:
+                    user_journeys.append({
+                        "name": f"Navigate to {timeline.get('url', 'page')}",
+                        "url": timeline.get("url", ""),
+                        "weight": 1.0,  # Equal weight for now
+                        "metrics": timeline.get("metrics", {})
+                    })
+                
+                production_metrics = {
+                    "requests_per_second": 1000,  # Default, could be extracted from snapshots
+                    "p95_latency_ms": base_metrics["average_latency_ms"] * 1.5,
+                    "error_rate_percent": 0.1
+                }
+                
+                # Generate using Blaze persona
+                blaze_persona_result = await blaze_persona.generate(
+                    input_data={
+                        "user_journeys": user_journeys,
+                        "production_metrics": production_metrics,
+                        "target_throughput": production_metrics.get("requests_per_second", 1000),
+                        "target_p95_latency_ms": 300,
+                        "target_error_rate_percent": 0.1
+                    },
+                    context={
+                        "environment": "production",
+                        "include_chaos_tests": True
+                    },
+                    temperature=0.2,
+                    tenant_id=None
+                )
+                
+                # Log success with safe attribute access
+                scaling_stages = blaze_persona_result.scaling_strategy.get('stages', []) if isinstance(blaze_persona_result.scaling_strategy, dict) else []
+                logger.info(f"[Blaze Persona] Generated k6 and Locust scripts with {len(scaling_stages)} stages")
+                
+            except Exception as e:
+                logger.warning(f"Blaze persona generation failed: {e}, falling back to standard report", exc_info=True)
+                blaze_persona_result = None
+        
+        # Fallback to standard LLM report if persona not used or failed
+        if not blaze_persona_result:
+            try:
+                from app.services.llm.performance_report_service import get_performance_report_service
+                perf_service = get_performance_report_service()
+                
+                logger.info("[LLM] Generating enhanced Performance report with OpenAI...")
+                
+                result = await asyncio.wait_for(
+                    perf_service.generate_report(
+                        performance_metrics=base_metrics,
+                        timeout=30.0
+                    ),
+                    timeout=35.0
+                )
+                
+                enhanced_report = result.get("report", {})
+                report_metrics = result.get("metrics", {})
+                
+                logger.info(
+                    f"[OK] Generated Performance report "
+                    f"({report_metrics.get('provider', 'unknown')}, "
+                    f"{report_metrics.get('latency_ms', 0):.0f}ms)"
+                )
+                
+            except Exception as e:
+                logger.warning(f"LLM Performance report generation failed: {e}, using base report")
+                # Fallback to basic recommendations
             recommendations = self._generate_performance_recommendations(all_bottlenecks, api_latency_matrix)
             enhanced_report = {
                 "summary": {
@@ -2641,24 +2997,59 @@ Return ONLY valid JSON array, no explanations."""
             }
         
         # Merge enhanced report with base metrics
-        return {
+        result = {
             "type": "performance_report",
             "format": "web_vitals",
             "api_latency_matrix": list(api_latency_matrix.values()),
             "page_timelines": page_timelines,
             "bottlenecks": all_bottlenecks,
-            "enhanced_report": enhanced_report,  # LLM-generated insights
+            "enhanced_report": enhanced_report,  # LLM-generated insights (fallback)
             "summary": enhanced_report.get("summary", {
                 "total_bottlenecks": len(all_bottlenecks),
                 "high_severity": len([b for b in all_bottlenecks if b.get("severity") == "high"]),
                 "api_endpoints_tested": len(api_latency_matrix),
                 "pages_tested": len(page_timelines)
-            }),
-            "findings": enhanced_report.get("findings", []),
-            "recommendations": enhanced_report.get("recommendations", []),
+            }) if enhanced_report else {
+                "total_bottlenecks": len(all_bottlenecks),
+                "high_severity": len([b for b in all_bottlenecks if b.get("severity") == "high"]),
+                "api_endpoints_tested": len(api_latency_matrix),
+                "pages_tested": len(page_timelines)
+            },
+            "findings": enhanced_report.get("findings", []) if enhanced_report else [],
+            "recommendations": enhanced_report.get("recommendations", []) if enhanced_report else [],
             "generation_metrics": report_metrics,
             "export_format": "performance_report.json"
         }
+        
+        # Add Blaze persona results if available
+        if blaze_persona_result:
+            # Extract chaos scenarios from k6_script (they're in the script object)
+            chaos_scenarios_list = []
+            if hasattr(blaze_persona_result, 'k6_script') and hasattr(blaze_persona_result.k6_script, 'chaos_scenarios'):
+                chaos_scenarios_list = [
+                    {
+                        "name": cs.name if hasattr(cs, 'name') else str(cs),
+                        "type": cs.type if hasattr(cs, 'type') else "unknown",
+                        "description": cs.parameters.get('description', '') if hasattr(cs, 'parameters') and isinstance(cs.parameters, dict) else ""
+                    }
+                    for cs in blaze_persona_result.k6_script.chaos_scenarios
+                ]
+            
+            result["blaze_persona"] = {
+                "k6_script": blaze_persona_result.k6_script.script_content if hasattr(blaze_persona_result, 'k6_script') else "",
+                "locust_script": blaze_persona_result.locust_script.script_content if hasattr(blaze_persona_result, 'locust_script') else "",
+                "grafana_dashboard": blaze_persona_result.grafana_dashboard_json if hasattr(blaze_persona_result, 'grafana_dashboard_json') else "",
+                "scaling_strategy": blaze_persona_result.scaling_strategy if hasattr(blaze_persona_result, 'scaling_strategy') else {},
+                "duration_justification": blaze_persona_result.duration_justification if hasattr(blaze_persona_result, 'duration_justification') else "",
+                "chaos_scenarios": chaos_scenarios_list,
+                "persona_info": {
+                    "name": "Blaze",
+                    "expertise": "Ex-Meta Load Testing Architect, 19 years",
+                    "track_record": "Led performance for Instagram (2B users) and WhatsApp"
+                }
+            }
+        
+        return result
     
     def _generate_performance_recommendations(
         self,

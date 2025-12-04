@@ -6,7 +6,7 @@ Coordinates all pipelines and generates real-time outputs
 import logging
 import asyncio
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 
 from app.services.flowstral.flowstral_session import FlowstralSession, flowstral_session_manager
@@ -16,6 +16,9 @@ from app.services.flowstral.flowstral_wcag_pipeline import WCAGPipeline
 from app.services.flowstral.flowstral_performance_pipeline import PerformancePipeline
 from app.services.flowstral.flowstral_realtime_output import RealTimeOutputGenerator
 from app.services.flowstral.flowstral_artifacts import FlowstralArtifactsGenerator
+from app.services.flowstral.flowstral_event_coalescer import get_event_coalescer, Event
+from app.services.flowstral.flowstral_snapshot_deduplicator import get_snapshot_deduplicator
+from app.services.flowstral.flowstral_project_config import get_project_config_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,7 @@ class FlowstralOrchestrator:
         self.performance_pipeline = PerformancePipeline()
         self.realtime_generator = RealTimeOutputGenerator()
         self.artifacts_generator = FlowstralArtifactsGenerator()
+        self.config_service = get_project_config_service()
     
     async def start_session(
         self,
@@ -117,6 +121,21 @@ class FlowstralOrchestrator:
         - Performance Probe Pipeline
         - Action Graph Update Pipeline
         """
+        # FILTER OUT NOISY EVENTS BEFORE PROCESSING (reduce nodes from 1000+ to ~50-100)
+        noisy_events = {
+            'scroll', 'mousemove', 'mouseover', 'mouseout', 
+            'focus', 'blur', 'resize', 'visibilitychange',
+            'wcag_scan', 'dom_snapshot', 'api_request', 'page_load',
+            'change'  # Change events are captured with input events
+        }
+        
+        if event_type.lower() in noisy_events:
+            logger.debug(f"[CAPTURE] Skipping noisy event: {event_type}")
+            return {
+                "status": "skipped",
+                "reason": f"Event type '{event_type}' is filtered out (noisy event)"
+            }
+        
         session = flowstral_session_manager.get_session(session_id)
         if not session:
             # Log at WARNING level since this is expected when:
@@ -133,6 +152,10 @@ class FlowstralOrchestrator:
         
         logger.debug(f"[CAPTURE] Capturing event: {event_type} for session {session_id}")
         
+        # Get project configuration
+        project_id = session.project_id
+        config = await self.config_service.get_config(project_id)
+        
         # Extract event data
         html = event_data.get("html", "")
         url = event_data.get("url", "")
@@ -142,32 +165,185 @@ class FlowstralOrchestrator:
         network_calls = event_data.get("network_calls")
         screenshot = event_data.get("screenshot")  # Base64 data URL from extension
         
+        # Store raw event for potential coalescing
+        raw_event = Event(
+            event_id=f"{session_id}_{event_type}_{datetime.utcnow().timestamp()}",
+            event_type=event_type,
+            timestamp=datetime.utcnow().timestamp(),
+            element_id=interacted_element.get("id") if interacted_element else None,
+            element_selector=interacted_element.get("selector") if interacted_element else None,
+            value=event_data.get("value"),
+            url=url,
+            metadata={
+                "interacted_element": interacted_element,
+                "action_description": event_data.get("action_description", ""),
+                "text_content": interacted_element.get("text_content") if interacted_element else None
+            }
+        )
+        
+        # Add to session's event buffer for coalescing
+        if not hasattr(session, 'event_buffer'):
+            session.event_buffer = []
+        session.event_buffer.append(raw_event)
+        
+        # Check if we should coalesce events
+        should_coalesce = config.event_coalescing.enabled
+        coalesce_window_ms = config.event_coalescing.window_ms
+        
+        # Check if enough time has passed or if this is a significant event
+        should_process_now = False
+        if not session.event_buffer:
+            should_process_now = True
+        elif len(session.event_buffer) > 0:
+            last_event_time = session.event_buffer[-1].timestamp
+            time_since_last = (raw_event.timestamp - last_event_time) * 1000
+            # Process if time window exceeded or significant event
+            if time_since_last > coalesce_window_ms or event_type in ['navigate', 'submit', 'page_load']:
+                should_process_now = True
+        
+        # If not time to process, just store and return
+        if should_coalesce and not should_process_now:
+            return {
+                "status": "buffered",
+                "message": "Event buffered for coalescing",
+                "buffer_size": len(session.event_buffer)
+            }
+        
+        # Process events (coalesced or single)
+        events_to_process = session.event_buffer if should_coalesce else [raw_event]
+        session.event_buffer = []  # Clear buffer
+        
+        # Coalesce events if enabled
+        coalesced_actions = []
+        if should_coalesce and len(events_to_process) > 0:
+            coalescer_config = {
+                "coalescing_window_ms": config.event_coalescing.window_ms,
+                "input_debounce_ms": config.event_coalescing.input_debounce_ms,
+                "max_click_count": config.event_coalescing.max_click_count
+            }
+            coalescer = get_event_coalescer(coalescer_config)
+            coalesced_actions = coalescer.coalesce_events(events_to_process)
+        else:
+            # Convert single event to action format
+            from app.services.flowstral.flowstral_event_coalescer import CoalescedAction
+            from uuid import uuid4
+            coalesced_actions = [CoalescedAction(
+                action_id=str(uuid4()),
+                action_type=event_type,
+                description=event_data.get("action_description", f"User {event_type}"),
+                element_id=raw_event.element_id,
+                element_selector=raw_event.element_selector,
+                value=raw_event.value,
+                url=raw_event.url,
+                start_timestamp=raw_event.timestamp,
+                end_timestamp=raw_event.timestamp,
+                raw_events=[raw_event]
+            )]
+        
+        # Process each coalesced action
+        results = []
+        for action in coalesced_actions:
+            result = await self._process_coalesced_action(
+                session_id, action, html, url, interacted_element,
+                page_metrics, component_metrics, network_calls, screenshot, config
+            )
+            results.append(result)
+        
+        # Return result from last action (or combined result)
+        return results[-1] if results else {"status": "processed"}
+    
+    async def _process_coalesced_action(
+        self,
+        session_id: str,
+        action,
+        html: str,
+        url: str,
+        interacted_element: Optional[Dict[str, Any]],
+        page_metrics: Optional[Dict[str, Any]],
+        component_metrics: Optional[Dict[str, Any]],
+        network_calls: Optional[List[Dict[str, Any]]],
+        screenshot: Optional[str],
+        config
+    ) -> Dict[str, Any]:
+        """
+        Process a coalesced action through all pipelines
+        This is the core processing logic extracted from capture_event
+        """
+        from app.services.flowstral.flowstral_event_coalescer import CoalescedAction
+        
+        session = flowstral_session_manager.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        # Use action's event type or default
+        event_type = action.action_type if isinstance(action, CoalescedAction) else action.get("action_type", "unknown")
+        
+        # Get interacted element from action if available
+        if isinstance(action, CoalescedAction) and action.raw_events:
+            # Use last event's interacted element
+            last_event = action.raw_events[-1]
+            if not interacted_element and last_event.metadata:
+                interacted_element = last_event.metadata.get("interacted_element")
+        
         # Run all 4 pipelines in parallel with error handling
         async def safe_dom_capture():
             try:
-                return await self.dom_pipeline.capture_snapshot(html, url, interacted_element)
+                # Get previous HTML for deduplication
+                previous_html = None
+                if config.storage.deduplication_enabled and session.nodes:
+                    # Try to get previous DOM snapshot HTML
+                    last_node = session.nodes[-1]
+                    if last_node.get("dom_snapshot_id"):
+                        # In production, would fetch HTML from storage using dom_snapshot_id
+                        # For now, we'll pass None and deduplicator will handle it
+                        pass
+                
+                # Capture snapshot with deduplication if enabled
+                return await self.dom_pipeline.capture_snapshot(
+                    html=html,
+                    url=url,
+                    interacted_element=interacted_element,
+                    previous_html=previous_html,
+                    deduplication_enabled=config.storage.deduplication_enabled,
+                    compression_algorithm=config.storage.compression_algorithm
+                )
             except Exception as e:
                 logger.warning(f"DOM snapshot failed: {e}", exc_info=True)
                 return {"dom_snapshot_id": None, "selector_set": {}, "error": str(e)}
         
         async def safe_wcag_scan():
             try:
-                # Check if this is a wcag_scan event with pre-scanned data
-                wcag_scan_data = None
-                if event_type == "wcag_scan" and event_data.get("violations"):
-                    wcag_scan_data = {
-                        "violations": event_data.get("violations", []),
-                        "passes": event_data.get("passes", []),
-                        "incomplete": event_data.get("incomplete", [])
-                    }
+                # Check pipeline configuration
+                wcag_config = config.pipelines.get("wcag", {})
+                if not wcag_config.get("enabled", True):
+                    return {"wcag_snapshot_id": None, "violations": [], "summary": {"total": 0}, "skipped": True}
                 
-                return await self.wcag_pipeline.scan_page(html, url, wcag_scan_data=wcag_scan_data)
+                # Check if should run based on event type
+                wcag_run_on = wcag_config.get("run_on", ["navigate", "page_load", "submit"])
+                if event_type not in wcag_run_on and event_type not in ["navigate", "page_load", "submit"]:
+                    # Skip WCAG scan for this event
+                    return {"wcag_snapshot_id": None, "violations": [], "summary": {"total": 0}, "skipped": True}
+                
+                return await self.wcag_pipeline.scan_page(html, url)
             except Exception as e:
                 logger.warning(f"WCAG scan failed: {e}", exc_info=True)
                 return {"wcag_snapshot_id": None, "violations": [], "summary": {"total": 0}, "error": str(e)}
         
         async def safe_perf_capture():
             try:
+                # Check pipeline configuration
+                perf_config = config.pipelines.get("performance", {})
+                if not perf_config.get("enabled", True):
+                    return {"performance_snapshot_id": None, "bottlenecks": [], "summary": {}, "skipped": True}
+                
+                # Check if should run based on event count
+                max_events = perf_config.get("max_events_per_page", 5)
+                # In production, would track events per page
+                # For now, run on significant events
+                if event_type not in ["navigate", "page_load", "submit"]:
+                    # Skip performance scan for minor events
+                    return {"performance_snapshot_id": None, "bottlenecks": [], "summary": {}, "skipped": True}
+                
                 return await self.performance_pipeline.capture_metrics(url, page_metrics, component_metrics, network_calls)
             except Exception as e:
                 logger.warning(f"Performance capture failed: {e}", exc_info=True)
@@ -177,13 +353,45 @@ class FlowstralOrchestrator:
             safe_dom_capture(), safe_wcag_scan(), safe_perf_capture()
         )
         
-        # Generate selector
+        # Generate BEST selector IMMEDIATELY at capture time (like Playwright Codegen)
         selector = None
+        playwright_locator = None
+        fallback_selectors = []
+        
         if interacted_element:
             selector_set = dom_snapshot.get("selector_set", {})
-            recommended = selector_set.get("recommended")
-            if recommended:
-                selector = recommended.get("selector")
+            
+            # Use primary Playwright locator if available (best practice)
+            playwright_locator = selector_set.get("primary_selector")
+            fallback_selectors = selector_set.get("fallback_selectors", [])
+            
+            # Fallback to recommended selector
+            if not playwright_locator:
+                recommended = selector_set.get("recommended")
+                if recommended:
+                    selector = recommended.get("selector")
+                    # Try to convert to Playwright locator
+                    playwright_locator = recommended.get("playwright_locator")
+            
+            # If still no selector, generate from element attributes directly
+            if not playwright_locator and not selector:
+                element_id = interacted_element.get("id")
+                data_testid = interacted_element.get("data_testid") or interacted_element.get("data-testid")
+                element_name = interacted_element.get("name")
+                tag_name = interacted_element.get("tag_name", "").lower()
+                
+                # Priority: data-testid > ID > name
+                if data_testid:
+                    playwright_locator = f"page.getByTestId('{data_testid}')"
+                    selector = f'[data-testid="{data_testid}"]'
+                elif element_id and not any(p in element_id.lower() for p in ["react", "vue", "angular", "generated"]):
+                    playwright_locator = f"page.locator('#{element_id}')"
+                    selector = f"#{element_id}"
+                elif element_name and tag_name in ["input", "select", "textarea", "button"]:
+                    playwright_locator = f"page.locator('{tag_name}[name=\"{element_name}\"]')"
+                    selector = f'{tag_name}[name="{element_name}"]'
+            
+            logger.info(f"[SELECTOR] Generated selector: {playwright_locator or selector} for {event_type}")
         
         # Extract target_text with fallback to multiple sources
         target_text = None
@@ -215,9 +423,9 @@ class FlowstralOrchestrator:
                     target_text = re.sub(r'([a-z])([A-Z])', r'\1 \2', target_text)
                     target_text = target_text.title().strip()
             
-            # Priority 5: Extract from action_description if it contains text
-            if not target_text:
-                action_desc = event_data.get("action_description", "")
+            # Priority 5: Extract from action description if available
+            if not target_text and isinstance(action, CoalescedAction):
+                action_desc = action.description
                 # Pattern: "CLICK_BUTTON: BUTTON - Text" or "User clicks 'Text'"
                 if " - " in action_desc:
                     parts = action_desc.split(" - ", 1)
@@ -233,40 +441,80 @@ class FlowstralOrchestrator:
                     else:
                         target_text = None
         
+        # Use action description if available
+        action_description = action.description if isinstance(action, CoalescedAction) else f"User {event_type}"
+        action_value = action.value if isinstance(action, CoalescedAction) else None
+        
         # Log what we extracted for debugging
         if target_text:
             logger.debug(f"Extracted target_text: '{target_text}' from event_type={event_type}, selector={selector}")
         else:
-            logger.debug(f"No target_text extracted for event_type={event_type}, selector={selector}, interacted_element keys: {list(interacted_element.keys()) if interacted_element else 'None'}")
+            logger.debug(f"No target_text extracted for event_type={event_type}, selector={selector}")
+        
+        # Store raw events for Flux high-fidelity generation
+        import time
+        if isinstance(action, CoalescedAction):
+            for raw_event_obj in action.raw_events:
+                raw_event = {
+                    "event_type": raw_event_obj.event_type,
+                    "timestamp": raw_event_obj.timestamp,
+                    "event_data": raw_event_obj.metadata,
+                    "selector": selector,
+                    "target_text": target_text,
+                    "url": raw_event_obj.url or url,
+                    "dom_snapshot_id": dom_snapshot.get("dom_snapshot_id"),
+                    "screenshot": screenshot
+                }
+                session.raw_events.append(raw_event)
+        else:
+            raw_event = {
+                "event_type": event_type,
+                "timestamp": time.time(),
+                "event_data": {},
+                "selector": selector,
+                "target_text": target_text,
+                "url": url,
+                "dom_snapshot_id": dom_snapshot.get("dom_snapshot_id"),
+                "screenshot": screenshot
+            }
+            session.raw_events.append(raw_event)
         
         # Add node to action graph with screenshot
+        # Store the BEST selector (Playwright locator) for immediate use
         node_id = session.add_node(
             event_type=event_type,
-            target_selector=selector,
+            target_selector=playwright_locator or selector,
             target_text=target_text,
             url=url,
             dom_snapshot_id=dom_snapshot.get("dom_snapshot_id"),
             wcag_snapshot_id=wcag_snapshot.get("wcag_snapshot_id"),
             performance_snapshot_id=perf_snapshot.get("performance_snapshot_id"),
-            action_description=event_data.get("action_description", f"User {event_type}"),
-            screenshot_url=screenshot,  # Store screenshot base64 data URL
+            action_description=action_description,
+            screenshot_url=screenshot,
             metadata={
-                "value": event_data.get("value"),
+                "value": action_value,
                 "latency_ms": perf_snapshot.get("summary", {}).get("avg_latency", 0),
                 "wcag_violations_count": wcag_snapshot.get("summary", {}).get("total", 0),
-                "performance_issues_count": len(perf_snapshot.get("bottlenecks", []))
+                "performance_issues_count": len(perf_snapshot.get("bottlenecks", [])),
+                "timestamp": time.time(),
+                "interacted_element": interacted_element,
+                "playwright_locator": playwright_locator,
+                "css_selector": selector,
+                "fallback_selectors": fallback_selectors,
+                "selector_set": dom_snapshot.get("selector_set", {}),
+                "coalesced": isinstance(action, CoalescedAction),
+                "event_count": action.event_count if isinstance(action, CoalescedAction) else 1
             }
         )
         
         logger.info(f"[OK] Added node {node_id} to session {session_id}. Total nodes: {len(session.nodes)}, Total edges: {len(session.edges)}")
-        logger.info(f"Session still in manager: {session_id in flowstral_session_manager.sessions}")
         
-        # Generate real-time outputs with error handling
+        # Generate real-time outputs
         try:
             playwright_line = self.realtime_generator.generate_playwright_line(
                 event_type=event_type,
                 selector=selector,
-                value=event_data.get("value"),
+                value=action_value,
                 url=url if event_type == "navigate" else None
             )
         except Exception as e:
@@ -277,12 +525,12 @@ class FlowstralOrchestrator:
             test_step = self.realtime_generator.generate_test_step(
                 step_number=len(session.test_steps) + 1,
                 event_type=event_type,
-                action_description=event_data.get("action_description", f"User {event_type}"),
-                expected_result=event_data.get("expected_result")
+                action_description=action_description,
+                expected_result=None
             )
         except Exception as e:
             logger.warning(f"Test step generation failed: {e}", exc_info=True)
-            test_step = {"step_number": len(session.test_steps) + 1, "action": f"User {event_type}", "expected_result": "N/A"}
+            test_step = {"step_number": len(session.test_steps) + 1, "action": action_description, "expected_result": "N/A"}
         
         try:
             accessibility_panel = self.realtime_generator.generate_accessibility_panel(wcag_snapshot)
@@ -299,12 +547,10 @@ class FlowstralOrchestrator:
         # Update session outputs
         session.playwright_code.append(playwright_line)
         session.test_steps.append(test_step)
-        # Only extend if violations is a list
         violations = wcag_snapshot.get("violations", [])
         if isinstance(violations, list):
             session.wcag_issues.extend(violations)
         elif violations:
-            # If it's a single violation dict, wrap it in a list
             session.wcag_issues.append(violations)
         session.performance_metrics.append(perf_snapshot)
         
@@ -321,8 +567,34 @@ class FlowstralOrchestrator:
                 "dom": dom_snapshot.get("dom_snapshot_id"),
                 "wcag": wcag_snapshot.get("wcag_snapshot_id"),
                 "performance": perf_snapshot.get("performance_snapshot_id")
-            }
+            },
+            "coalesced": isinstance(action, CoalescedAction),
+            "action_description": action_description
         }
+    
+    def _extract_coordinates(self, event_data: Dict[str, Any]) -> Optional[Tuple[int, int]]:
+        """Extract mouse coordinates from event data."""
+        interacted_element = event_data.get("interacted_element", {})
+        if isinstance(interacted_element, dict):
+            # Check for mouse coordinates in event data
+            if "mouse_x" in event_data and "mouse_y" in event_data:
+                return (int(event_data["mouse_x"]), int(event_data["mouse_y"]))
+            elif "clientX" in event_data and "clientY" in event_data:
+                return (int(event_data["clientX"]), int(event_data["clientY"]))
+        return None
+    
+    def _extract_hover_duration(self, event_data: Dict[str, Any]) -> float:
+        """Extract hover duration from event data."""
+        if "hover_duration_ms" in event_data:
+            return float(event_data["hover_duration_ms"])
+        # Default hover before click (natural user behavior)
+        return 150.0 if event_data.get("event_type") == "click" else 0.0
+    
+    def _extract_scroll_position(self, event_data: Dict[str, Any]) -> Optional[Tuple[int, int]]:
+        """Extract scroll position from event data."""
+        if "scrollY" in event_data and "scrollX" in event_data:
+            return (int(event_data["scrollX"]), int(event_data["scrollY"]))
+        return None
     
     async def stop_session(
         self,
@@ -425,6 +697,18 @@ class FlowstralOrchestrator:
         logger.info(f"Session has {len(session.nodes)} nodes, {len(session.edges)} edges")
         logger.info(f"Session has {len(session.wcag_issues)} WCAG issues, {len(session.performance_metrics)} performance metrics")
         
+        # Log detailed node information for debugging
+        if action_graph.nodes:
+            logger.info(f"Action graph node event types: {[n.event_type for n in action_graph.nodes]}")
+            logger.info(f"Action graph node URLs: {[n.url for n in action_graph.nodes if n.url]}")
+            logger.info(f"Action graph node selectors: {[n.target_selector for n in action_graph.nodes if n.target_selector]}")
+        else:
+            logger.warning(f"[WARNING] Action graph has NO NODES! This means no events were captured.")
+        
+        # Get raw events for Flux high-fidelity generation
+        raw_events = session.raw_events if hasattr(session, 'raw_events') else None
+        logger.info(f"Session has {len(raw_events) if raw_events else 0} raw events for Flux agent")
+        
         # Generate all 6 artifacts with progress updates
         logger.info(f"Starting artifact generation for session {session_id}")
         logger.info(f"Session has {len(session.nodes)} nodes, {len(session.edges)} edges")
@@ -459,7 +743,8 @@ class FlowstralOrchestrator:
                     performance_snapshots=session.performance_metrics,
                     project_id=project_id,
                     tenant_id=tenant_id,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    raw_events=raw_events  # Pass raw events for Flux high-fidelity generation
                 ),
                 timeout=300.0  # 5 minutes max
             )

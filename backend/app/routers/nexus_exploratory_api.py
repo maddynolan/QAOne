@@ -4,11 +4,14 @@ API endpoints for Nexus Autonomous Exploratory Testing Service
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import os
+import logging
 
 from app.services.llm.openai_service import OpenAIService
 from app.services.exploration.nexus_exploratory_service import NexusExploratoryService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nexus", tags=["nexus"])
 
@@ -47,6 +50,10 @@ class SessionStatusResponse(BaseModel):
     time_elapsed_seconds: float
     proof: Optional[str] = None
     defects: list
+    current_activity: Optional[str] = None
+    progress: Optional[Dict[str, Any]] = None
+    recent_activity: Optional[List[Dict[str, Any]]] = None
+    last_update: Optional[str] = None
 
 
 @router.post("/start")
@@ -75,7 +82,12 @@ async def start_nexus_session(request: StartSessionRequest) -> Dict[str, Any]:
             max_duration_minutes=request.max_duration_minutes
         )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Failed to start Nexus session: {e}\n{error_details}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
 
 
@@ -104,6 +116,29 @@ async def get_nexus_status(session_id: str) -> SessionStatusResponse:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+
+@router.post("/stop/{session_id}")
+async def stop_nexus_session(session_id: str) -> Dict[str, Any]:
+    """
+    Stop a running Nexus exploratory session.
+    
+    This will gracefully terminate the autonomous loop and mark the session as complete.
+    """
+    if not nexus_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Nexus service not available"
+        )
+    
+    try:
+        result = await nexus_service.stop_session(session_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stop Nexus session: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
 
 
 @router.get("/sessions")

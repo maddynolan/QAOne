@@ -159,3 +159,6 @@ COMMENT ON COLUMN defects.exploration_run_id IS 'Exploration run that detected t
 COMMENT ON COLUMN defects.defect_type IS 'Type of defect: functional, performance, security, ui_consistency';
 COMMENT ON COLUMN defects.evidence IS 'Additional evidence (screenshots, logs, metrics)';
 
+
+
+

@@ -97,3 +97,6 @@ async def get_defect_statistics(project_id: Optional[str] = None):
             detail=f"Failed to get statistics: {str(e)}"
         )
 
+
+
+

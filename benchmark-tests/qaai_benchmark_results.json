@@ -1,0 +1,71 @@
+{
+  "timestamp": "2025-11-30 12:30:54",
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "scenario": 1,
+      "name": "Trading Portal - Dynamic ID",
+      "status": "passed",
+      "mechanism": "Layer 2 (Role/Name) - Stable despite ID re-render"
+    },
+    {
+      "scenario": 2,
+      "name": "CMS Drag-Drop",
+      "status": "passed",
+      "mechanism": "Semantic dragTo() - Not pixel coordinates"
+    },
+    {
+      "scenario": 3,
+      "name": "CRM Virtualized Table",
+      "status": "passed",
+      "mechanism": "Text + Relative Locator - Handles virtualization"
+    },
+    {
+      "scenario": 4,
+      "name": "Insurance Form - Race Condition",
+      "status": "passed",
+      "mechanism": "Dynamic Wait (toBeEnabled) - Eliminates race condition"
+    },
+    {
+      "scenario": 5,
+      "name": "iFrame Consent Form",
+      "status": "passed",
+      "mechanism": "iframe title attribute - Stable despite generic ID"
+    },
+    {
+      "scenario": 6,
+      "name": "Analytics Chart Type",
+      "status": "passed",
+      "mechanism": "Role + aria-label - Stable despite SVG class changes"
+    },
+    {
+      "scenario": 7,
+      "name": "E-Commerce Pop-up",
+      "status": "passed",
+      "mechanism": "Auto-Triage - Detects and handles interrupting modals"
+    },
+    {
+      "scenario": 8,
+      "name": "File Upload - Hidden Input",
+      "status": "passed",
+      "mechanism": "Playwright Native API - Bypasses UI complexity"
+    },
+    {
+      "scenario": 9,
+      "name": "Async Chat - Dynamic Timestamp",
+      "status": "passed",
+      "mechanism": "Semantic Assertion with Pattern - Handles async rendering"
+    },
+    {
+      "scenario": 10,
+      "name": "Dynamic Profile Name",
+      "status": "passed",
+      "mechanism": "Fuzzy Text Matching - Case-insensitive, handles variations"
+    }
+  ]
+}

@@ -110,3 +110,6 @@ If artifacts still don't generate:
    print(response.choices[0].message.content)
    ```
 
+
+
+

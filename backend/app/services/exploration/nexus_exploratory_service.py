@@ -12,10 +12,38 @@ import asyncio
 import json
 import queue
 import uuid
+import heapq
+import logging
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
+
+class PriorityQueueWrapper:
+    """Wrapper for priority queue that handles dict comparison issues"""
+    def __init__(self):
+        self._queue = []
+        self._counter = 0
+    
+    def put(self, item):
+        """Add item to queue with format (priority, counter, data)"""
+        priority, data = item if isinstance(item, tuple) and len(item) == 2 else (0, item)
+        heapq.heappush(self._queue, (priority, self._counter, data))
+        self._counter += 1
+    
+    def get(self):
+        """Get item from queue, returns (priority, data)"""
+        if self.empty():
+            raise queue.Empty()
+        priority, counter, data = heapq.heappop(self._queue)
+        return (priority, data)
+    
+    def empty(self):
+        """Check if queue is empty"""
+        return len(self._queue) == 0
 
 try:
     from openai import OpenAI
@@ -23,11 +51,10 @@ except ImportError:
     OpenAI = None
 
 from app.services.storage.postgres_direct import execute_query
-from app.services.automation.test_execution_service import TestExecutionService
+from app.services.automation.test_execution_service import get_test_execution_service
 from app.services.exploration.autonomous_explorer import AutonomousExplorer, ExplorationConfig
 from app.services.exploration.defect_detector_sync import detect_defects_sync
 from app.services.exploration.defect_storage import DefectStorage
-from app.services.exploration.nexus_storage import NexusStorage
 from app.services.exploration.nexus_storage import NexusStorage
 
 # Load Nexus system prompt
@@ -41,6 +68,10 @@ Rules you always follow:
 1. First 60 seconds: Rapidly crawl and build a complete weighted capability map of the entire application (prioritize money paths, auth, PII, admin).
 
 2. Continuously maintain and display a live Risk Heatmap.
+   - When you FIRST discover a capability (during initial crawl), set risk to "Medium" (not High) - you haven't tested it yet
+   - Only set risk to "High" or "Critical" AFTER you've actually tested the capability and found defects or failures
+   - Set risk to "Low" only AFTER you've successfully tested the capability with multiple E2E flows and found no issues
+   - Risk levels: Critical (defects found + critical business impact), High (defects found), Medium (not yet tested or partially tested), Low (thoroughly tested with no issues)
 
 3. Never stop until you have executed at least three full E2E happy + unhappy flows for every critical business capability.
 
@@ -50,7 +81,7 @@ Rules you always follow:
 
 6. Use parallel tool calls aggressively — crawl new pages while simultaneously probing APIs and running smoke tests.
 
-You are paranoid, relentless, and slightly terrifying.
+You are paranoid, relentless, and slightly terrifying, but also methodical and evidence-based in your risk assessments.
 """
 
 # Pre-defined critical E2E flows (expand as needed)
@@ -182,15 +213,15 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "update_risk_heatmap",
-            "description": "Update the risk assessment for a specific capability or page",
+            "description": "Update the risk assessment for a specific capability or page. IMPORTANT: Only set 'High' or 'Critical' AFTER testing reveals defects. When first discovering a capability, use 'Medium'. Use 'Low' only after thorough testing with no issues found.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "capability": {"type": "string"},
                     "risk_level": {"type": "string", "enum": ["Critical", "High", "Medium", "Low"]},
-                    "reason": {"type": "string"}
+                    "reason": {"type": "string", "description": "Required explanation for why this risk level was assigned (e.g., 'Defects found: X', 'E2E flows passed', 'Not yet tested')"}
                 },
-                "required": ["capability", "risk_level"]
+                "required": ["capability", "risk_level", "reason"]
             }
         }
     }
@@ -217,7 +248,7 @@ class NexusExploratoryService:
         else:
             self.client = openai_client
         self.sessions: Dict[str, Dict] = {}  # In-memory for dev; use DB in prod
-        self.test_executor = TestExecutionService()
+        self.test_executor = get_test_execution_service()
         self.defect_storage = DefectStorage()
         self.nexus_storage = NexusStorage()
         self.explorer = None  # Will be initialized per session
@@ -241,57 +272,98 @@ class NexusExploratoryService:
         Returns:
             Session initialization response
         """
-        if not session_id:
-            session_id = str(uuid.uuid4())
-        
-        # Initialize priority queue with default E2E flows
-        priority_queue = queue.PriorityQueue()
-        for capability in DEFAULT_E2E_FLOWS.keys():
-            priority_queue.put((0, {
-                "capability": capability,
-                "url": app_url,
-                "flow_steps": DEFAULT_E2E_FLOWS[capability]
-            }))
-        
-        # Initialize session state
-        history = [{"role": "system", "content": NEXUS_PROMPT}]
-        risk_heatmap: Dict[str, str] = {}
-        defects: List[Dict] = []
-        
-        # Initialize autonomous explorer for this session
-        config = ExplorationConfig(
-            base_url=app_url,
-            max_pages=100,
-            max_depth=5,
-            headless=True,
-            screenshot=True
-        )
-        self.explorer = AutonomousExplorer(config)
-        
-        self.sessions[session_id] = {
-            "queue": priority_queue,
-            "history": history,
-            "risk_heatmap": risk_heatmap,
-            "defects": defects,
-            "app_url": app_url,
-            "project_id": project_id,
-            "started_at": datetime.utcnow(),
-            "max_duration": max_duration_minutes * 60,
-            "complete": False,
-            "proof": None
-        }
-        
-        # Store session in database
-        await self._save_session(session_id)
-        
-        # Kick off autonomy loop
-        asyncio.create_task(self.autonomy_loop(session_id))
-        
-        return {
-            "status": "started",
-            "session_id": session_id,
-            "message": "Nexus autonomous exploration started. Monitoring in background."
-        }
+        try:
+            if not session_id:
+                session_id = str(uuid.uuid4())
+            
+            # Initialize priority queue with default E2E flows
+            priority_queue = PriorityQueueWrapper()
+            for capability in DEFAULT_E2E_FLOWS.keys():
+                priority_queue.put((0, {
+                    "capability": capability,
+                    "url": app_url,
+                    "flow_steps": DEFAULT_E2E_FLOWS[capability]
+                }))
+            
+            # Initialize session state
+            history = [{"role": "system", "content": NEXUS_PROMPT}]
+            risk_heatmap: Dict[str, str] = {}
+            defects: List[Dict] = []
+            
+            # Initialize autonomous explorer for this session
+            try:
+                config = ExplorationConfig(
+                    base_url=app_url,
+                    max_pages=100,
+                    max_depth=5,
+                    headless=True,
+                    screenshot=True
+                )
+                self.explorer = AutonomousExplorer(config)
+                logger.info(f"Initialized AutonomousExplorer for {app_url}")
+            except Exception as e:
+                logger.error(f"Failed to initialize AutonomousExplorer: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to initialize explorer: {str(e)}"
+                )
+            
+            self.sessions[session_id] = {
+                "queue": priority_queue,
+                "history": history,
+                "risk_heatmap": risk_heatmap,
+                "defects": defects,
+                "app_url": app_url,
+                "project_id": project_id,
+                "started_at": datetime.utcnow(),
+                "max_duration": max_duration_minutes * 60,
+                "complete": False,
+                "proof": None,
+                # Progress tracking
+                "current_activity": "Initializing...",
+                "activity_log": [],
+                "capabilities_tested": 0,
+                "flows_executed": 0,
+                "pages_crawled": 0,
+                "iterations": 0,
+                "last_update": datetime.utcnow().isoformat()
+            }
+            
+            # Create session in database (non-blocking, errors are logged but don't fail)
+            try:
+                await self.nexus_storage.create_session(
+                    session_id=session_id,
+                    app_url=app_url,
+                    project_id=project_id,
+                    max_duration_seconds=max_duration_minutes * 60,
+                    red_team_mode=False
+                )
+                logger.info(f"Created Nexus session {session_id} in database")
+            except Exception as e:
+                logger.warning(f"Failed to create session in database: {e}", exc_info=True)
+                # Continue anyway - session is in memory
+            
+            # Kick off autonomy loop (fire and forget)
+            try:
+                asyncio.create_task(self.autonomy_loop(session_id))
+                logger.info(f"Started autonomy loop for session {session_id}")
+            except Exception as e:
+                logger.error(f"Failed to start autonomy loop: {e}", exc_info=True)
+                # Still return success - session is created
+            
+            return {
+                "status": "started",
+                "session_id": session_id,
+                "message": "Nexus autonomous exploration started. Monitoring in background."
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error in start_session: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start session: {str(e)}"
+            )
     
     async def autonomy_loop(self, session_id: str):
         """
@@ -321,6 +393,23 @@ class NexusExploratoryService:
                 
                 priority, target = session["queue"].get()
                 
+                # Update current activity
+                capability = target.get("capability", "Unknown")
+                session["current_activity"] = f"Testing: {capability}"
+                session["last_update"] = datetime.utcnow().isoformat()
+                
+                # Add to activity log (keep last 50 entries)
+                activity_entry = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "action": "testing_capability",
+                    "capability": capability,
+                    "iteration": iteration_count,
+                    "elapsed_seconds": elapsed
+                }
+                session["activity_log"].append(activity_entry)
+                if len(session["activity_log"]) > 50:
+                    session["activity_log"].pop(0)
+                
                 # Build prompt with current state
                 state_prompt = f"""
 Current target: {json.dumps(target)}
@@ -333,29 +422,108 @@ What should I do next?
 """
                 
                 # Call OpenAI with function calling
-                response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",  # Using gpt-4o-mini (o1-mini not available yet)
-                    messages=session["history"] + [{"role": "user", "content": state_prompt}],
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    max_tokens=4096,
-                    temperature=0.7
-                )
+                try:
+                    # Prepare messages - ensure they're properly formatted
+                    messages = session["history"] + [{"role": "user", "content": state_prompt}]
+                    
+                    # Validate messages format
+                    for msg in messages:
+                        if not isinstance(msg, dict) or "role" not in msg or "content" not in msg:
+                            logger.error(f"Invalid message format: {msg}")
+                            raise ValueError(f"Invalid message format in history")
+                    
+                    response = self.client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages,
+                        tools=TOOLS,
+                        tool_choice="auto",
+                        max_tokens=4096,
+                        temperature=0.7
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    # Try to extract more details from OpenAI error
+                    if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                        try:
+                            error_details = e.response.json()
+                            error_msg = f"{error_msg} - Details: {json.dumps(error_details)}"
+                        except:
+                            pass
+                    
+                    logger.error(f"OpenAI API error: {error_msg}", exc_info=True)
+                    # Log the request details for debugging (truncate if too long)
+                    messages_preview = messages[-3:] if len(messages) > 3 else messages
+                    logger.error(f"Last messages: {json.dumps(messages_preview, indent=2)}")
+                    logger.error(f"Total messages in history: {len(messages)}")
+                    
+                    # Don't raise - continue with next iteration to avoid breaking the loop
+                    session["defects"].append({
+                        "defect_type": "api_error",
+                        "severity": "medium",
+                        "title": "OpenAI API Error",
+                        "description": error_msg,
+                        "detected_at": datetime.utcnow().isoformat()
+                    })
+                    await asyncio.sleep(5)  # Wait longer before retry
+                    continue
                 
                 # Handle response
                 message = response.choices[0].message
-                session["history"].append({
+                # Store assistant message with tool_calls if present
+                assistant_msg = {
                     "role": "assistant",
                     "content": message.content or ""
-                })
+                }
+                # Include tool_calls in the message if present (required for OpenAI)
+                if message.tool_calls:
+                    assistant_msg["tool_calls"] = [
+                        {
+                            "id": call.id,
+                            "type": call.type,
+                            "function": {
+                                "name": call.function.name,
+                                "arguments": call.function.arguments
+                            }
+                        }
+                        for call in message.tool_calls
+                    ]
+                session["history"].append(assistant_msg)
                 
                 # Execute tool calls
                 if message.tool_calls:
+                    # Update activity based on tool calls
+                    tool_names = [call.function.name for call in message.tool_calls]
+                    if "crawl_page" in tool_names:
+                        session["current_activity"] = "Crawling pages..."
+                        session["pages_crawled"] += tool_names.count("crawl_page")
+                    elif "execute_e2e_flow" in tool_names:
+                        session["current_activity"] = "Executing E2E flows..."
+                        session["flows_executed"] += tool_names.count("execute_e2e_flow")
+                    elif "detect_defects_on_page" in tool_names:
+                        session["current_activity"] = "Detecting defects..."
+                    elif "update_risk_heatmap" in tool_names:
+                        session["current_activity"] = "Updating risk assessment..."
+                        session["capabilities_tested"] = len(session["risk_heatmap"])
+                    
                     tool_results = await self._execute_tools(message.tool_calls, session)
-                    session["history"].append({
-                        "role": "tool",
-                        "content": json.dumps(tool_results)
-                    })
+                    # Add tool results in the correct format for OpenAI
+                    # Each tool call needs a separate tool message with matching tool_call_id
+                    for i, call in enumerate(message.tool_calls):
+                        tool_result = tool_results[i] if i < len(tool_results) else {"error": "No result"}
+                        # Format the result as a string (OpenAI expects string content)
+                        if isinstance(tool_result, dict):
+                            content = json.dumps(tool_result, ensure_ascii=False)
+                        else:
+                            content = str(tool_result)
+                        
+                        session["history"].append({
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "content": content
+                        })
+                
+                # Update iteration count in session
+                session["iterations"] = iteration_count
                 
                 # Update session state in DB periodically
                 if iteration_count % 10 == 0:
@@ -382,6 +550,51 @@ What should I do next?
         
         # Final save
         await self._save_session(session_id)
+    
+    async def stop_session(self, session_id: str) -> Dict[str, Any]:
+        """
+        Stop a running Nexus session gracefully.
+        
+        Args:
+            session_id: Session ID to stop
+            
+        Returns:
+            Status response
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        session = self.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        if session.get("complete"):
+            return {
+                "status": "already_stopped",
+                "session_id": session_id,
+                "message": "Session was already complete"
+            }
+        
+        # Mark session as complete to stop the autonomy loop
+        session["complete"] = True
+        session["stopped_at"] = datetime.utcnow()
+        session["stopped_reason"] = "User requested stop"
+        
+        logger.info(f"Stopping Nexus session {session_id}")
+        
+        # Save final state
+        try:
+            await self._save_session(session_id)
+        except Exception as e:
+            logger.warning(f"Failed to save session on stop: {e}")
+        
+        return {
+            "status": "stopped",
+            "session_id": session_id,
+            "message": "Session stopped successfully. The autonomy loop will exit on next iteration.",
+            "defects_found": len(session.get("defects", [])),
+            "time_elapsed_seconds": (datetime.utcnow() - session["started_at"]).total_seconds()
+        }
     
     async def _execute_tools(self, tool_calls: List, session: Dict) -> List[Dict]:
         """Execute tool calls from OpenAI function calling."""
@@ -438,10 +651,25 @@ What should I do next?
                     })
                 
                 elif func_name == "update_risk_heatmap":
-                    session["risk_heatmap"][args["capability"]] = args["risk_level"]
+                    capability = args["capability"]
+                    risk_level = args["risk_level"]
+                    reason = args.get("reason", "No reason provided")
+                    
+                    # Validate risk level assignment logic
+                    current_risk = session["risk_heatmap"].get(capability)
+                    
+                    # If setting to High/Critical, ensure there's a valid reason
+                    if risk_level in ["High", "Critical"]:
+                        if not reason or ("defect" not in reason.lower() and "fail" not in reason.lower() and "error" not in reason.lower() and "issue" not in reason.lower()):
+                            # If no evidence of problems, default to Medium instead
+                            logger.warning(f"Nexus tried to set {capability} to {risk_level} without evidence. Defaulting to Medium.")
+                            risk_level = "Medium"
+                            reason = f"Risk level {args['risk_level']} requested but no defects/issues found. Defaulting to Medium until testing completes."
+                    
+                    session["risk_heatmap"][capability] = risk_level
                     results.append({
                         "tool": func_name,
-                        "result": f"Risk updated: {args['capability']} = {args['risk_level']}"
+                        "result": f"Risk updated: {capability} = {risk_level} (Reason: {reason})"
                     })
                 
             except Exception as e:
@@ -629,11 +857,68 @@ Prove that there are no more P1/P2 risks remaining, or add more exploration targ
     
     async def get_session_status(self, session_id: str) -> Dict:
         """Get current status of an exploratory session."""
+        # First check in-memory sessions
         session = self.sessions.get(session_id)
+        
+        # If not in memory, try to load from database
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            try:
+                db_session = await self.nexus_storage.get_session(session_id)
+                if db_session:
+                    # Load defects from database
+                    defects = await self.nexus_storage.get_session_defects(session_id)
+                    
+                    # Calculate elapsed time
+                    started_at = db_session.get("started_at")
+                    if started_at:
+                        try:
+                            if isinstance(started_at, str):
+                                # Try parsing ISO format
+                                started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                            elif isinstance(started_at, datetime):
+                                pass  # Already a datetime
+                            else:
+                                started_at = None
+                            
+                            if started_at:
+                                elapsed = (datetime.utcnow() - started_at.replace(tzinfo=None)).total_seconds()
+                            else:
+                                elapsed = 0
+                        except Exception:
+                            elapsed = 0
+                    else:
+                        elapsed = 0
+                    
+                    # Reconstruct session from database
+                    # Note: Full session state (queue, history) may not be recoverable
+                    logger.info(f"Loaded session {session_id} from database with {len(defects)} defects")
+                    return {
+                        "session_id": session_id,
+                        "status": db_session.get("status", "unknown"),
+                        "defects_found": len(defects),
+                        "risk_heatmap": {},  # Not stored in DB currently
+                        "time_elapsed_seconds": elapsed,
+                        "proof": db_session.get("proof"),
+                        "defects": defects[:10],  # Return first 10 defects
+                        "message": "Session loaded from database (session was lost due to server restart, but defects were recovered)"
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to load session from database: {e}", exc_info=True)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found. It may have been lost due to server restart.")
         
         elapsed = (datetime.utcnow() - session["started_at"]).total_seconds()
+        
+        # Calculate progress percentage
+        total_capabilities = len(session.get("risk_heatmap", {}))
+        tested_capabilities = sum(1 for risk in session.get("risk_heatmap", {}).values() if risk in ["Low", "Medium", "High", "Critical"])
+        progress_percentage = (tested_capabilities / max(total_capabilities, 1)) * 100 if total_capabilities > 0 else 0
+        
+        # Estimate time remaining (rough estimate based on average time per capability)
+        avg_time_per_capability = elapsed / max(tested_capabilities, 1) if tested_capabilities > 0 else 60
+        remaining_capabilities = max(0, total_capabilities - tested_capabilities)
+        estimated_remaining_seconds = remaining_capabilities * avg_time_per_capability
         
         return {
             "session_id": session_id,
@@ -642,7 +927,20 @@ Prove that there are no more P1/P2 risks remaining, or add more exploration targ
             "risk_heatmap": session["risk_heatmap"],
             "time_elapsed_seconds": elapsed,
             "proof": session.get("proof"),
-            "defects": session["defects"][:10]  # Return first 10 defects
+            "defects": session["defects"][:10],  # Return first 10 defects
+            # Progress information
+            "current_activity": session.get("current_activity", "Initializing..."),
+            "progress": {
+                "capabilities_tested": session.get("capabilities_tested", 0),
+                "total_capabilities": total_capabilities,
+                "flows_executed": session.get("flows_executed", 0),
+                "pages_crawled": session.get("pages_crawled", 0),
+                "iterations": session.get("iterations", 0),
+                "progress_percentage": round(progress_percentage, 1),
+                "estimated_remaining_seconds": round(estimated_remaining_seconds, 0)
+            },
+            "recent_activity": session.get("activity_log", [])[-10:],  # Last 10 activities
+            "last_update": session.get("last_update", datetime.utcnow().isoformat())
         }
     
     async def _save_session(self, session_id: str):
@@ -651,7 +949,29 @@ Prove that there are no more P1/P2 risks remaining, or add more exploration targ
         if not session:
             return
         
-        # TODO: Implement database persistence
-        # For now, sessions are in-memory
-        pass
+        try:
+            # Save to database using NexusStorage
+            await self.nexus_storage.update_session_status(
+                session_id=session_id,
+                status="complete" if session.get("complete") else "running",
+                proof=session.get("proof")
+            )
+            
+            # Save defects
+            for defect in session.get("defects", []):
+                try:
+                    await self.nexus_storage.save_defect(
+                        session_id=session_id,
+                        defect_type=defect.get("defect_type", "unknown"),
+                        severity=defect.get("severity", "medium"),
+                        title=defect.get("title", "Untitled"),
+                        description=defect.get("description", ""),
+                        page_url=defect.get("page_url"),
+                        evidence=defect
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save defect: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to save session to database: {e}", exc_info=True)
+            # Continue anyway - session is still in memory
 

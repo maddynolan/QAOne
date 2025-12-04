@@ -11,7 +11,7 @@ from functools import wraps
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.services.core.rbac_service import rbac_service
-from app.middleware.tenant_middleware import get_tenant_id, get_user_id
+from app.middleware.tenant_middleware import get_tenant_id, get_user_id, _current_request, _current_request
 
 logger = logging.getLogger(__name__)
 
@@ -228,4 +228,15 @@ def require_any_permission(permissions: List[str]):
         
         return wrapper
     return decorator
+
+
+def get_current_auth_user_id() -> Optional[str]:
+    """
+    Get user_id from current request context.
+    Returns None if called outside of a request context.
+    """
+    request = _current_request.get()
+    if request:
+        return get_user_id(request)
+    return None
 

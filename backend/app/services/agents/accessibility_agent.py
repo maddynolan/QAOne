@@ -272,7 +272,7 @@ Format as JSON:
         issues: List[Dict[str, Any]],
         tenant_id: Optional[str]
     ) -> Dict[str, Any]:
-        """Generate human-readable accessibility report"""
+        """Generate human-readable accessibility report (LLM optional)"""
         summary = {
             "total": len(issues),
             "critical": sum(1 for i in issues if i.get("severity") == "critical"),
@@ -281,7 +281,46 @@ Format as JSON:
             "low": sum(1 for i in issues if i.get("severity") == "low")
         }
         
-        prompt = f"""Generate a human-readable accessibility report for these issues:
+        # Generate basic report without LLM
+        report_markdown = f"""# Accessibility Report
+
+## Executive Summary
+Total Issues: {summary['total']}
+- Critical: {summary['critical']}
+- High: {summary['high']}
+- Medium: {summary['medium']}
+- Low: {summary['low']}
+
+## Compliance Status
+"""
+        
+        if summary['critical'] > 0:
+            report_markdown += "**Status**: Non-Compliant (Critical issues found)\n\n"
+        elif summary['high'] > 5:
+            report_markdown += "**Status**: Needs Improvement (Multiple high-severity issues)\n\n"
+        elif summary['total'] == 0:
+            report_markdown += "**Status**: Compliant (No issues found)\n\n"
+        else:
+            report_markdown += "**Status**: Mostly Compliant (Minor issues only)\n\n"
+        
+        report_markdown += "## Issue Breakdown\n\n"
+        
+        # Add top issues
+        for i, issue in enumerate(issues[:10], 1):
+            report_markdown += f"### Issue {i}: {issue.get('type', 'Unknown')}\n"
+            report_markdown += f"- **Severity**: {issue.get('severity', 'unknown')}\n"
+            report_markdown += f"- **Description**: {issue.get('description', '')}\n"
+            if issue.get('element'):
+                report_markdown += f"- **Element**: `{issue.get('element', '')[:100]}`\n"
+            if issue.get('suggested_fix'):
+                report_markdown += f"- **Suggested Fix**: {issue.get('suggested_fix', '')}\n"
+            report_markdown += "\n"
+        
+        model_used = None
+        
+        # Try to enhance with LLM if available (optional)
+        try:
+            prompt = f"""Generate a human-readable accessibility report for these issues:
 
 Summary:
 - Total Issues: {summary['total']}
@@ -301,17 +340,21 @@ Generate a comprehensive report with:
 
 Format as markdown."""
 
-        gen_request = GenerationRequest(
-            prompt=prompt,
-            mode="ui"
-        )
-        
-        result = await self.model_gateway.generate(gen_request, tenant_id=tenant_id)
+            gen_request = GenerationRequest(
+                prompt=prompt,
+                mode="ui"
+            )
+            
+            result = await self.model_gateway.generate(gen_request, tenant_id=tenant_id)
+            report_markdown = result.response
+            model_used = result.model
+        except Exception as e:
+            logger.warning(f"LLM report generation failed, using basic report: {e}")
         
         return {
             "summary": summary,
-            "report_markdown": result.response,
-            "model": result.model
+            "report_markdown": report_markdown,
+            "model": model_used
         }
     
     async def _get_issue(self, issue_id: str) -> Optional[Dict[str, Any]]:

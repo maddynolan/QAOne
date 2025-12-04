@@ -11,25 +11,31 @@ let eventBuffer = [];
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Flowstral Content: Received message', message.type, message);
   
-  try {
-    switch (message.type) {
-      case 'FLOWSTRAL_START_RECORDING':
-        startRecording(message.sessionId);
-        sendResponse({ success: true, message: 'Recording started' });
-        break;
-        
-      case 'FLOWSTRAL_STOP_RECORDING':
-        stopRecording();
-        sendResponse({ success: true, message: 'Recording stopped' });
-        break;
-        
-      default:
-        sendResponse({ success: false, error: 'Unknown message type' });
+  // Handle async responses properly
+  const handleAsync = async () => {
+    try {
+      switch (message.type) {
+        case 'FLOWSTRAL_START_RECORDING':
+          startRecording(message.sessionId);
+          sendResponse({ success: true, message: 'Recording started' });
+          break;
+          
+        case 'FLOWSTRAL_STOP_RECORDING':
+          await stopRecording();
+          sendResponse({ success: true, message: 'Recording stopped' });
+          break;
+          
+        default:
+          sendResponse({ success: false, error: 'Unknown message type' });
+      }
+    } catch (error) {
+      console.error('Flowstral Content: Message handler error', error);
+      sendResponse({ success: false, error: error.message });
     }
-  } catch (error) {
-    console.error('Flowstral Content: Message handler error', error);
-    sendResponse({ success: false, error: error.message });
-  }
+  };
+  
+  // Execute async handler
+  handleAsync();
   
   return true; // Keep channel open for async response
 });
@@ -82,24 +88,29 @@ function initializeRecording() {
 }
 
 // Stop recording
-function stopRecording() {
+async function stopRecording() {
   if (!isRecording) {
     console.log('Flowstral Content: Not recording, nothing to stop');
     return;
   }
   
+  console.log('Flowstral Content: Stopping recording - flushing events first...');
+  
+  // CRITICAL: Flush any buffered events BEFORE stopping
+  await flushEventBuffer();
+  
+  // Wait a moment for events to be sent
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
   isRecording = false;
   currentSessionId = null;
-  console.log('Flowstral Content: Stopping recording');
+  console.log('Flowstral Content: Recording stopped');
   
   // Hide visual indicator
   hideRecordingIndicator();
   
   // Remove event listeners
   removeEventListeners();
-  
-  // Flush any buffered events
-  flushEventBuffer();
 }
 
 // Capture screenshot using Chrome tabs API (via background script)
@@ -145,8 +156,35 @@ function attachEventListeners() {
   // Click events
   document.addEventListener('click', handleClick, true);
   
-  // Input events
-  document.addEventListener('input', handleInput, true);
+  // Input events (with debouncing to avoid too many events)
+  let inputTimeout;
+  const inputElements = new WeakSet(); // Track which inputs we've seen
+  
+  document.addEventListener('input', (event) => {
+    if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+      inputElements.add(event.target); // Mark this element as having input
+      // Debounce input events - only capture after user stops typing for 300ms (reduced from 500ms)
+      clearTimeout(inputTimeout);
+      inputTimeout = setTimeout(() => {
+        handleInput(event);
+      }, 300);
+    }
+  }, true);
+  
+  // CRITICAL: Capture on blur (when user leaves the field) - this is the most reliable
+  // This ensures we capture the final value even if debounce didn't fire
+  document.addEventListener('blur', (event) => {
+    if ((event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') && inputElements.has(event.target)) {
+      // Clear any pending input timeout for this element
+      clearTimeout(inputTimeout);
+      // Small delay to ensure value is updated
+      setTimeout(() => {
+        handleInput(event);
+        inputElements.delete(event.target); // Clean up
+      }, 50);
+    }
+  }, true);
+  
   document.addEventListener('change', handleChange, true);
   
   // Navigation events
@@ -189,7 +227,8 @@ function attachEventListeners() {
 // Remove event listeners
 function removeEventListeners() {
   document.removeEventListener('click', handleClick, true);
-  document.removeEventListener('input', handleInput, true);
+  // Note: We can't remove the debounced input listener easily, but that's okay
+  // since isRecording will prevent capture anyway
   document.removeEventListener('change', handleChange, true);
   window.removeEventListener('popstate', handleNavigation);
 }
@@ -282,8 +321,37 @@ function detectSemanticAction(element, eventType) {
 
 // Extract accessibility tree summary
 function extractAccessibilityTree(element) {
+  // CRITICAL: Only use actual ARIA role attribute, never fallback to tag name
+  // Tag names like "input", "button", "div" are NOT valid ARIA roles
+  const roleAttr = element.getAttribute('role');
+  // Map common input types to their proper ARIA roles
+  let role = roleAttr;
+  if (!roleAttr && element.tagName === 'INPUT') {
+    const inputType = element.type || 'text';
+    const roleMap = {
+      'text': 'textbox',
+      'email': 'textbox',
+      'password': 'textbox',
+      'search': 'searchbox',
+      'number': 'spinbutton',
+      'tel': 'textbox',
+      'url': 'textbox',
+      'button': 'button',
+      'submit': 'button',
+      'reset': 'button',
+      'checkbox': 'checkbox',
+      'radio': 'radio'
+    };
+    role = roleMap[inputType] || null; // null if no valid mapping
+  } else if (!roleAttr && element.tagName === 'BUTTON') {
+    role = 'button';
+  } else if (!roleAttr) {
+    // For other elements, only use role if explicitly set
+    role = null;
+  }
+  
   const a11y = {
-    role: element.getAttribute('role') || element.tagName.toLowerCase(),
+    role: role, // Only valid ARIA roles, never tag names
     ariaLabel: element.getAttribute('aria-label') || null,
     ariaLabelledBy: element.getAttribute('aria-labelledby') || null,
     ariaDescribedBy: element.getAttribute('aria-describedby') || null,
@@ -432,7 +500,15 @@ async function handleClick(event) {
 
 // Handle input events (enhanced with privacy guards)
 function handleInput(event) {
-  if (!isRecording) return;
+  if (!isRecording) {
+    console.log('Flowstral Content: Input ignored - not recording');
+    return;
+  }
+  
+  if (!currentSessionId) {
+    console.log('Flowstral Content: Input ignored - no session ID');
+    return;
+  }
   
   // Only capture events from active/visible tabs
   if (document.hidden) {
@@ -441,6 +517,21 @@ function handleInput(event) {
   }
   
   const element = event.target;
+  
+  // Only capture input/textarea elements
+  if (element.tagName !== 'INPUT' && element.tagName !== 'TEXTAREA') {
+    return;
+  }
+  
+  console.log('Flowstral Content: Capturing input event', {
+    tag: element.tagName,
+    type: element.type,
+    id: element.id,
+    name: element.name,
+    valueLength: (element.value || '').length,
+    hasValue: !!(element.value && element.value.trim()),
+    value: element.type === 'password' ? '***MASKED***' : (element.value || '').substring(0, 20)
+  });
   const selector = generateSelector(element);
   const enhancedSelectors = generateEnhancedSelector(element);
   const semanticAction = detectSemanticAction(element, 'input');
@@ -800,9 +891,28 @@ function captureEvent(eventType, eventData) {
   }
 }
 
-// Flush event buffer
-function flushEventBuffer() {
-  // Events are sent individually, but we can batch if needed
+// Flush event buffer - send any remaining events to background script
+async function flushEventBuffer() {
+  if (eventBuffer.length === 0) {
+    return;
+  }
+  
+  console.log(`Flowstral Content: Flushing ${eventBuffer.length} buffered events`);
+  
+  // Send each buffered event to background script
+  for (const event of eventBuffer) {
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'FLOWSTRAL_CAPTURE_EVENT',
+        data: event
+      });
+      console.log('Flowstral Content: Buffered event sent', event.event_type);
+    } catch (error) {
+      console.error('Flowstral Content: Failed to send buffered event', error);
+    }
+  }
+  
+  // Clear buffer
   eventBuffer = [];
 }
 

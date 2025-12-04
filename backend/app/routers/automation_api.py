@@ -84,9 +84,58 @@ async def execute_test(request: TestExecutionRequest) -> Dict[str, Any]:
             environment=request.environment
         )
         
+        # Create a test run entry for tracking (same as Flowstral endpoint)
+        test_run_id = None
+        try:
+            logger.info(f"[AUTOMATION EXECUTE] Attempting to create test run for test: {request.test_name}")
+            from app.services.storage.postgres_direct import execute_insert, ensure_default_org_project
+            import asyncio
+            
+            # Add timeout to prevent hanging
+            try:
+                org_id, project_id = await asyncio.wait_for(
+                    ensure_default_org_project(),
+                    timeout=5.0  # 5 second timeout
+                )
+                logger.info(f"[AUTOMATION EXECUTE] Got project_id: {project_id}, org_id: {org_id}")
+            except asyncio.TimeoutError:
+                logger.error(f"[AUTOMATION EXECUTE] ⚠️ ensure_default_org_project() timed out after 5 seconds")
+                raise Exception("Database connection timeout - test run creation skipped")
+            except Exception as e:
+                logger.error(f"[AUTOMATION EXECUTE] ⚠️ ensure_default_org_project() failed: {e}")
+                raise
+            
+            # Create test run entry
+            run_data = {
+                "project_id": project_id,
+                "name": f"Automation Test - {request.test_name}",
+                "status": "passed" if result.get("status") == "success" else "failed",
+                "environment": request.environment or "local",
+                "created_by": "22222222-2222-2222-2222-222222222222"  # DEFAULT_USER_ID
+            }
+            
+            logger.info(f"[AUTOMATION EXECUTE] Creating test run with data: {run_data}")
+            try:
+                test_run_id = await asyncio.wait_for(
+                    execute_insert("test_runs", run_data),
+                    timeout=5.0  # 5 second timeout
+                )
+                if test_run_id:
+                    logger.info(f"[AUTOMATION EXECUTE] ✅ Created test run {test_run_id} for test: {request.test_name}")
+                else:
+                    logger.warning(f"[AUTOMATION EXECUTE] ⚠️ execute_insert returned None for test run")
+            except asyncio.TimeoutError:
+                logger.error(f"[AUTOMATION EXECUTE] ⚠️ execute_insert() timed out after 5 seconds")
+            except Exception as insert_error:
+                logger.error(f"[AUTOMATION EXECUTE] ⚠️ execute_insert() failed: {insert_error}")
+        except Exception as e:
+            logger.error(f"[AUTOMATION EXECUTE] ❌ Failed to create test run entry: {e}", exc_info=True)
+            # Don't fail the execution if test run creation fails
+        
         return {
             "status": "success",
             "execution_result": result,
+            "test_run_id": test_run_id,
             "message": f"Test execution completed with status: {result.get('status')}"
         }
     except Exception as e:
@@ -161,4 +210,7 @@ async def health_check() -> Dict[str, Any]:
             "auto_healing": "available"
         }
     }
+
+
+
 

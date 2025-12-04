@@ -40,6 +40,8 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { dataStorageService } from "./lib/data-storage";
 import APIImport from "./pages/APIImport";
 import GherkinConverter from "./pages/GherkinConverter";
+import Accessibility from "./pages/Accessibility";
+import Performance from "./pages/Performance";
 
 const queryClient = new QueryClient();
 
@@ -224,6 +226,16 @@ const App = () => {
               <Route path="/gherkin" element={
                 <ProtectedRoute>
                   <Layout><GherkinConverter /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/accessibility" element={
+                <ProtectedRoute>
+                  <Layout><Accessibility /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/performance" element={
+                <ProtectedRoute>
+                  <Layout><Performance /></Layout>
                 </ProtectedRoute>
               } />
               

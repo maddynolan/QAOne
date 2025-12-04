@@ -10,8 +10,8 @@ from pydantic import BaseModel
 
 from app.services.compliance.compliance_reporter import get_compliance_reporter
 from app.services.compliance.framework_mapper import get_compliance_mapper
-from app.decorators.audit import audit_log_action
-from app.decorators.permissions import requires_permission
+from app.decorators.audit import audit
+from app.decorators.permissions import require_any_permission
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +26,11 @@ class ComplianceReportRequest(BaseModel):
 
 
 @router.post("/report", summary="Generate compliance report")
-@audit_log_action(
+@audit(
     action="generate_compliance_report",
-    resource_type="compliance_report",
-    get_resource_id=lambda *args, **kwargs: kwargs.get("request", {}).get("test_run_id") or kwargs.get("request", {}).get("project_id")
+    resource_type="compliance_report"
 )
-@requires_permission(["compliance:read", "compliance:generate"])
+@require_any_permission(["compliance:read", "compliance:generate"])
 async def generate_compliance_report(request: ComplianceReportRequest):
     """
     Generate compliance report from test runs.
@@ -58,7 +57,7 @@ async def generate_compliance_report(request: ComplianceReportRequest):
 
 
 @router.get("/report/{report_id}", summary="Get compliance report")
-@requires_permission(["compliance:read"])
+@require_any_permission(["compliance:read"])
 async def get_compliance_report(report_id: str):
     """Get stored compliance report by ID"""
     try:

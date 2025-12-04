@@ -172,3 +172,6 @@ class ExplorationReporting:
             'pass_rate': (passed / total * 100) if total > 0 else 0
         }
 
+
+
+

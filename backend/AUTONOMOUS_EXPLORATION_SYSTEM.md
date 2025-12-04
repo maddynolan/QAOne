@@ -290,3 +290,6 @@ ExplorationConfig(
 7. ⏳ Add database storage for capability maps
 8. ⏳ Enhance semantic matching with embeddings
 
+
+
+

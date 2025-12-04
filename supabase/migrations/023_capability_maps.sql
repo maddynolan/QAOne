@@ -75,3 +75,6 @@ CREATE TABLE IF NOT EXISTS capability_map_changes (
 CREATE INDEX IF NOT EXISTS idx_capability_map_changes_map ON capability_map_changes(capability_map_id);
 CREATE INDEX IF NOT EXISTS idx_capability_map_changes_detected ON capability_map_changes(detected_at DESC);
 
+
+
+

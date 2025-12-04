@@ -110,3 +110,6 @@ Based on this research, we should:
    - By element type (all buttons together)
    - By location (same page area)
 
+
+
+

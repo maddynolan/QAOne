@@ -7,3 +7,6 @@ ADD COLUMN IF NOT EXISTS acceptance_criteria TEXT;
 -- Add comment
 COMMENT ON COLUMN requirements.acceptance_criteria IS 'Acceptance criteria for the requirement, stored as text (one per line)';
 
+
+
+
