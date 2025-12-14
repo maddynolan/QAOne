@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://testwebsite.com/soap"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             targetNamespace="http://testwebsite.com/soap"
+             name="TestWebsiteSOAPService">
+
+  <!-- Types -->
+  <types>
+    <xsd:schema targetNamespace="http://testwebsite.com/soap">
+      
+      <!-- Product Types -->
+      <xsd:complexType name="Product">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:int"/>
+          <xsd:element name="name" type="xsd:string"/>
+          <xsd:element name="description" type="xsd:string"/>
+          <xsd:element name="price" type="xsd:double"/>
+          <xsd:element name="stock" type="xsd:int"/>
+          <xsd:element name="category_id" type="xsd:int"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetProductRequest">
+        <xsd:sequence>
+          <xsd:element name="product_id" type="xsd:int"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetProductResponse">
+        <xsd:sequence>
+          <xsd:element name="product" type="tns:Product"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetProductsRequest">
+        <xsd:sequence>
+          <xsd:element name="skip" type="xsd:int" minOccurs="0"/>
+          <xsd:element name="limit" type="xsd:int" minOccurs="0"/>
+          <xsd:element name="category_id" type="xsd:int" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetProductsResponse">
+        <xsd:sequence>
+          <xsd:element name="products" type="tns:ProductArray"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ProductArray">
+        <xsd:sequence>
+          <xsd:element name="item" type="tns:Product" minOccurs="0" maxOccurs="unbounded"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- Order Types -->
+      <xsd:complexType name="Order">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:int"/>
+          <xsd:element name="user_id" type="xsd:int"/>
+          <xsd:element name="status" type="xsd:string"/>
+          <xsd:element name="total_amount" type="xsd:double"/>
+          <xsd:element name="created_at" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="CreateOrderRequest">
+        <xsd:sequence>
+          <xsd:element name="shipping_address" type="tns:ShippingAddress"/>
+          <xsd:element name="payment_method" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="ShippingAddress">
+        <xsd:sequence>
+          <xsd:element name="street" type="xsd:string"/>
+          <xsd:element name="city" type="xsd:string"/>
+          <xsd:element name="state" type="xsd:string"/>
+          <xsd:element name="zip" type="xsd:string"/>
+          <xsd:element name="country" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="CreateOrderResponse">
+        <xsd:sequence>
+          <xsd:element name="order" type="tns:Order"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <!-- User Types -->
+      <xsd:complexType name="User">
+        <xsd:sequence>
+          <xsd:element name="id" type="xsd:int"/>
+          <xsd:element name="email" type="xsd:string"/>
+          <xsd:element name="username" type="xsd:string"/>
+          <xsd:element name="full_name" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetUserRequest">
+        <xsd:sequence>
+          <xsd:element name="user_id" type="xsd:int"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+      <xsd:complexType name="GetUserResponse">
+        <xsd:sequence>
+          <xsd:element name="user" type="tns:User"/>
+        </xsd:sequence>
+      </xsd:complexType>
+
+    </xsd:schema>
+  </types>
+
+  <!-- Messages -->
+  <message name="GetProductRequest">
+    <part name="parameters" element="tns:GetProductRequest"/>
+  </message>
+  <message name="GetProductResponse">
+    <part name="parameters" element="tns:GetProductResponse"/>
+  </message>
+
+  <message name="GetProductsRequest">
+    <part name="parameters" element="tns:GetProductsRequest"/>
+  </message>
+  <message name="GetProductsResponse">
+    <part name="parameters" element="tns:GetProductsResponse"/>
+  </message>
+
+  <message name="CreateOrderRequest">
+    <part name="parameters" element="tns:CreateOrderRequest"/>
+  </message>
+  <message name="CreateOrderResponse">
+    <part name="parameters" element="tns:CreateOrderResponse"/>
+  </message>
+
+  <message name="GetUserRequest">
+    <part name="parameters" element="tns:GetUserRequest"/>
+  </message>
+  <message name="GetUserResponse">
+    <part name="parameters" element="tns:GetUserResponse"/>
+  </message>
+
+  <!-- Port Type -->
+  <portType name="TestWebsitePortType">
+    <operation name="GetProduct">
+      <input message="tns:GetProductRequest"/>
+      <output message="tns:GetProductResponse"/>
+    </operation>
+    <operation name="GetProducts">
+      <input message="tns:GetProductsRequest"/>
+      <output message="tns:GetProductsResponse"/>
+    </operation>
+    <operation name="CreateOrder">
+      <input message="tns:CreateOrderRequest"/>
+      <output message="tns:CreateOrderResponse"/>
+    </operation>
+    <operation name="GetUser">
+      <input message="tns:GetUserRequest"/>
+      <output message="tns:GetUserResponse"/>
+    </operation>
+  </portType>
+
+  <!-- Binding -->
+  <binding name="TestWebsiteBinding" type="tns:TestWebsitePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetProduct">
+      <soap:operation soapAction="http://testwebsite.com/soap/GetProduct"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+    <operation name="GetProducts">
+      <soap:operation soapAction="http://testwebsite.com/soap/GetProducts"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+    <operation name="CreateOrder">
+      <soap:operation soapAction="http://testwebsite.com/soap/CreateOrder"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+    <operation name="GetUser">
+      <soap:operation soapAction="http://testwebsite.com/soap/GetUser"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+  </binding>
+
+  <!-- Service -->
+  <service name="TestWebsiteSOAPService">
+    <port name="TestWebsitePort" binding="tns:TestWebsiteBinding">
+      <soap:address location="http://localhost:8002/soap"/>
+    </port>
+  </service>
+
+</definitions>
+
+

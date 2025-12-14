@@ -1,0 +1,16 @@
+{
+  "name": "flowstral-engine-bridge",
+  "version": "1.0.0",
+  "description": "Bridge script for Python-Flowstral integration",
+  "main": "generate.js",
+  "type": "commonjs",
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "uuid": "^9.0.1"
+  }
+}
+
+

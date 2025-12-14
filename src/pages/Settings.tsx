@@ -76,7 +76,7 @@ export default function Settings() {
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-3xl font-bold gradient-text">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your QA AI Platform configuration</p>
+        <p className="text-muted-foreground mt-1">Manage your ArisTrace configuration</p>
       </div>
 
       <AIConfiguration />
@@ -199,6 +199,51 @@ export default function Settings() {
               <p className="text-sm text-muted-foreground">Send notifications to Slack</p>
             </div>
             <Switch />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Data Management */}
+      <Card className="border-red-200">
+        <CardHeader>
+          <CardTitle className="text-red-600">Data Management</CardTitle>
+          <CardDescription>Manage local data storage</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Clear All Local Data</Label>
+              <p className="text-sm text-muted-foreground">
+                Remove all locally stored data (releases, plans, runs, test cases, requirements, defects)
+              </p>
+            </div>
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                if (confirm('Are you sure you want to clear ALL local data?\n\nThis will delete:\n- Releases\n- Test Plans\n- Test Runs\n- Test Cases (local)\n- Requirements (local)\n- Defects (local)\n\nThis cannot be undone!')) {
+                  // Clear all localStorage
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  toast.success('All local data cleared');
+                  // Reload to reset state
+                  setTimeout(() => window.location.reload(), 500);
+                }
+              }}
+            >
+              Clear All Data
+            </Button>
+          </div>
+          <Separator />
+          <div className="text-xs text-muted-foreground">
+            <p className="font-medium mb-1">Currently stored:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Releases: {JSON.parse(localStorage.getItem('releases') || '[]').length}</li>
+              <li>Test Plans: {JSON.parse(localStorage.getItem('test_plans') || '[]').length}</li>
+              <li>Test Runs: {JSON.parse(localStorage.getItem('test_runs') || '[]').length}</li>
+              <li>Test Cases: {JSON.parse(localStorage.getItem('test_cases') || '[]').length}</li>
+              <li>Requirements: {JSON.parse(localStorage.getItem('requirements') || '[]').length}</li>
+              <li>Defects: {JSON.parse(localStorage.getItem('defects') || '[]').length}</li>
+            </ul>
           </div>
         </CardContent>
       </Card>

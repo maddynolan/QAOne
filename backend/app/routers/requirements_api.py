@@ -1,51 +1,73 @@
 """
 Requirements CRUD API Router
 Handles all requirement operations including Gherkin conversion
+Falls back to in-memory storage when PostgreSQL is not available
 """
 import logging
-from typing import Optional
+import uuid
+from typing import Optional, Dict, Any, List
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from app.utils.endpoint_helpers import ensure_default_org_project
-from app.services.storage.database import get_database_client, create_requirement
-from app.services.storage.postgres_direct import execute_query, get_postgres_pool
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/requirements", tags=["requirements"])
+
+# In-memory storage fallback - shared module
+_requirements_store: Dict[str, Dict[str, Any]] = {}
+
+def get_requirements_store():
+    """Get the requirements store - used by sample_data_api"""
+    return _requirements_store
+
+def _is_postgres_available() -> bool:
+    """Check if PostgreSQL is available"""
+    try:
+        from app.services.storage.database import get_database_client
+        pool = get_database_client()
+        return pool is not None and hasattr(pool, 'getconn')
+    except Exception:
+        return False
 
 
 @router.get("")
 async def get_requirements(project_id: Optional[str] = None):
     """Get all requirements"""
     try:
-        org_id, proj_id = await ensure_default_org_project()
-        project_id = project_id or proj_id
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import execute_query
+                org_id, proj_id = await ensure_default_org_project()
+                project_id = project_id or proj_id
+                
+                query = """
+                    SELECT id, project_id, source, source_ref, title, description, acceptance_criteria, raw_payload, created_at
+                    FROM requirements
+                    WHERE project_id = %s
+                    ORDER BY created_at DESC
+                """
+                results = await execute_query(query, (project_id,))
+                
+                requirements = []
+                for row in results or []:
+                    requirements.append({
+                        "id": str(row.get("id", "")),
+                        "title": row.get("title", ""),
+                        "description": row.get("description", ""),
+                        "acceptance_criteria": row.get("acceptance_criteria", ""),
+                        "source": row.get("source", ""),
+                        "source_ref": row.get("source_ref", ""),
+                        "created_at": str(row.get("created_at", ""))
+                    })
+                
+                return {"requirements": requirements}
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL query failed: {pg_error}")
         
-        pool = get_database_client()
-        if not pool or not hasattr(pool, 'getconn'):
-            return {"requirements": []}
-        
-        query = """
-            SELECT id, project_id, source, source_ref, title, description, acceptance_criteria, raw_payload, created_at
-            FROM requirements
-            WHERE project_id = %s
-            ORDER BY created_at DESC
-        """
-        results = await execute_query(query, (project_id,))
-        
-        requirements = []
-        for row in results or []:
-            requirements.append({
-                "id": str(row.get("id", "")),
-                "title": row.get("title", ""),
-                "description": row.get("description", ""),
-                "acceptance_criteria": row.get("acceptance_criteria", ""),
-                "source": row.get("source", ""),
-                "source_ref": row.get("source_ref", ""),
-                "created_at": str(row.get("created_at", ""))
-            })
-        
-        return {"requirements": requirements}
+        # Fallback to in-memory storage
+        return {"requirements": list(_requirements_store.values())}
     except Exception as e:
         logger.error(f"Error getting requirements: {str(e)}")
         return {"requirements": []}
@@ -55,23 +77,50 @@ async def get_requirements(project_id: Optional[str] = None):
 async def create_requirement_endpoint(request: Request):
     """Create a new requirement"""
     try:
-        org_id, project_id = await ensure_default_org_project()
         data = await request.json()
+        now = datetime.now().isoformat()
+        req_id = str(uuid.uuid4())[:8]
         
-        requirement_id = await create_requirement(
-            project_id=project_id,
-            source=data.get("source", "manual"),
-            title=data.get("title", ""),
-            description=data.get("description", ""),
-            source_ref=data.get("source_ref"),
-            raw_payload=data.get("raw_payload"),
-            acceptance_criteria=data.get("acceptance_criteria")
-        )
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.database import create_requirement
+                org_id, project_id = await ensure_default_org_project()
+                
+                requirement_id = await create_requirement(
+                    project_id=project_id,
+                    source=data.get("source", "manual"),
+                    title=data.get("title", ""),
+                    description=data.get("description", ""),
+                    source_ref=data.get("source_ref"),
+                    raw_payload=data.get("raw_payload"),
+                    acceptance_criteria=data.get("acceptance_criteria")
+                )
+                
+                if requirement_id:
+                    return {"id": requirement_id}
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL insert failed: {pg_error}")
         
-        if not requirement_id:
-            raise HTTPException(status_code=500, detail="Failed to create requirement")
+        # Fallback to in-memory storage
+        requirement = {
+            "id": req_id,
+            "title": data.get("title", ""),
+            "description": data.get("description", ""),
+            "type": data.get("type", "functional"),
+            "priority": data.get("priority", "medium"),
+            "status": data.get("status", "draft"),
+            "acceptance_criteria": data.get("acceptanceCriteria", []),
+            "source": data.get("source", "manual"),
+            "tags": data.get("tags", []),
+            "linkedTestCases": data.get("linkedTestCases", []),
+            "created_at": now,
+            "updated_at": now
+        }
+        _requirements_store[req_id] = requirement
+        logger.info(f"Requirement {req_id} saved to in-memory store")
         
-        return {"id": requirement_id}
+        return {"id": req_id}
     except HTTPException:
         raise
     except Exception as e:

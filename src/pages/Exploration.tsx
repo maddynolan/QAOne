@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,11 @@ import {
   TestTube,
   BarChart3,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Globe,
+  Link2,
+  Layout,
+  Settings
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -145,6 +149,14 @@ export default function Exploration() {
       return;
     }
 
+    // Validate URL
+    try {
+      new URL(baseUrl);
+    } catch {
+      toast.error("Please enter a valid URL (e.g., https://example.com)");
+      return;
+    }
+
     setIsExploring(true);
     setExplorationRun(null);
     setCapabilityMap(null);
@@ -152,6 +164,8 @@ export default function Exploration() {
     setTestCases([]);
     setWorkflowSummary(null);
     setReport(null);
+
+    toast.info("Starting exploration... This may take a few minutes.");
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/exploration/start`, {
@@ -221,6 +235,14 @@ export default function Exploration() {
       return;
     }
 
+    // Validate URL
+    try {
+      new URL(baseUrl);
+    } catch {
+      toast.error("Please enter a valid URL (e.g., https://example.com)");
+      return;
+    }
+
     setIsRunningWorkflow(true);
     setExplorationRun(null);
     setCapabilityMap(null);
@@ -230,7 +252,7 @@ export default function Exploration() {
     setReport(null);
 
     try {
-      toast.info("Starting complete workflow... This may take several minutes.");
+      toast.info("Starting complete workflow... This may take several minutes. Please wait.");
       
       const response = await fetch(`${API_BASE_URL}/api/exploration/complete-workflow`, {
         method: "POST",
@@ -396,9 +418,12 @@ export default function Exploration() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Autonomous App Exploration</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Map className="h-8 w-8 text-primary" />
+            Exploration - Capability Mapping
+          </h1>
           <p className="text-muted-foreground mt-2">
-            Automatically discover capabilities, detect defects, generate tests, and execute them
+            Build capability maps, compare requirements, and generate test cases from discovered capabilities
           </p>
         </div>
       </div>

@@ -26,7 +26,13 @@ class FlowstralSession:
         self.project_id: Optional[str] = None
         self.user_id: Optional[str] = None
         self.start_timestamp: Optional[datetime] = None
+        self.stop_timestamp: Optional[float] = None  # Unix timestamp when stopped (for grace period)
         self.is_active: bool = False
+        
+        # User-specified Base URL for test navigation
+        # This is the TARGET URL where the test should start (e.g., localhost:3000)
+        # NOT the ArisTrace URL where recording was initiated
+        self.base_url: Optional[str] = None
         
         # Action Graph
         self.nodes: List[Dict[str, Any]] = []
@@ -54,14 +60,26 @@ class FlowstralSession:
         project_id: str,
         user_id: str,
         initial_url: str,
-        initial_dom: Optional[str] = None
+        initial_dom: Optional[str] = None,
+        base_url: Optional[str] = None  # User-specified target URL
     ) -> Dict[str, Any]:
-        """Start a new Flowstral session"""
+        """Start a new Flowstral session
+        
+        Args:
+            base_url: The URL where the test should START. User specifies this before
+                     recording. This is the actual test target (e.g., localhost:3000),
+                     not the ArisTrace platform URL.
+        """
         self.session_id = str(uuid4())
         self.project_id = project_id
         self.user_id = user_id
         self.start_timestamp = datetime.utcnow()
         self.is_active = True
+        self.base_url = base_url  # Store the user-specified target URL
+        
+        # For the root node, use base_url if provided, otherwise use initial_url
+        # This ensures the action graph has the correct starting URL
+        starting_url = base_url if base_url else initial_url
         
         # Initialize Action Graph with root node
         root_node = {
@@ -69,7 +87,7 @@ class FlowstralSession:
             "event_type": "session_start",
             "target_selector": None,
             "target_text": None,
-            "url": initial_url,
+            "url": starting_url,  # Use base_url if available
             "state_before": None,
             "state_after": None,
             "dom_snapshot_id": None,
@@ -77,20 +95,26 @@ class FlowstralSession:
             "performance_snapshot_id": None,
             "action_description": "Flowstral session started",
             "timestamp": self.start_timestamp.isoformat(),
-            "metadata": {}
+            "metadata": {
+                "base_url": base_url,  # Store original base_url in metadata
+                "initial_url": initial_url  # Store where recording was initiated
+            }
         }
         
         self.nodes.append(root_node)
         self.current_node_id = root_node["id"]
         
         logger.info(f"Flowstral session started: {self.session_id}")
+        if base_url:
+            logger.info(f"Base URL (test target): {base_url}")
         
         return {
             "session_id": self.session_id,
             "project_id": self.project_id,
             "user_id": self.user_id,
             "start_timestamp": self.start_timestamp.isoformat(),
-            "root_node_id": root_node["id"]
+            "root_node_id": root_node["id"],
+            "base_url": base_url
         }
     
     def stop_session(self) -> Dict[str, Any]:
@@ -113,6 +137,8 @@ class FlowstralSession:
             }
         
         self.is_active = False
+        import time
+        self.stop_timestamp = time.time()  # Store Unix timestamp for grace period check
         end_timestamp = datetime.utcnow()
         
         # Add end node
@@ -254,13 +280,16 @@ class FlowstralSessionManager:
         project_id: str,
         user_id: str,
         initial_url: str,
-        initial_dom: Optional[str] = None
+        initial_dom: Optional[str] = None,
+        base_url: Optional[str] = None  # User-specified target URL
     ) -> FlowstralSession:
         """Create a new Flowstral session"""
         logger.info(f"Creating session. Current sessions count: {len(self.sessions)}")
         logger.info(f"Sessions dict id: {id(self.sessions)}")
+        if base_url:
+            logger.info(f"Base URL (test target): {base_url}")
         session = FlowstralSession()
-        session.start_session(project_id, user_id, initial_url, initial_dom)
+        session.start_session(project_id, user_id, initial_url, initial_dom, base_url)
         self.sessions[session.session_id] = session
         logger.info(f"Session {session.session_id} stored. New sessions count: {len(self.sessions)}")
         logger.info(f"Session IDs: {list(self.sessions.keys())}")

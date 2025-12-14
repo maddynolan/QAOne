@@ -30,7 +30,7 @@ export default function GherkinConverter() {
 
   const fetchRequirements = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/requirements`);
+      const response = await fetch(`${API_BASE_URL}/requirements`);
       if (response.ok) {
         const data = await response.json();
         setRequirements(data.requirements || []);

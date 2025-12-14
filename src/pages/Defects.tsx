@@ -43,12 +43,17 @@ export default function Defects() {
   const loadDefects = async () => {
     try {
       setLoading(true);
-      // Try API first, fallback to dataStorageService
+      let allDefects: Defect[] = [];
+      
+      // Load from localStorage first (most recent)
+      const localDefects = JSON.parse(localStorage.getItem('defects') || '[]');
+      allDefects = [...localDefects];
+      
+      // Try API to merge
       try {
         const response = await fetch(`${API_BASE_URL}/defects`);
         if (response.ok) {
           const data = await response.json();
-          // Transform API response to match Defect interface
           const apiDefects = (data.defects || []).map((d: any) => ({
             id: d.id,
             title: d.title,
@@ -61,15 +66,27 @@ export default function Defects() {
             defectType: d.defect_type,
             pageUrl: d.page_url,
           }));
-          setDefects(apiDefects);
-          return;
+          
+          // Merge: add API defects that aren't in local
+          const localIds = new Set(localDefects.map((d: any) => d.id));
+          for (const apiDef of apiDefects) {
+            if (!localIds.has(apiDef.id)) {
+              allDefects.push(apiDef);
+            }
+          }
         }
       } catch (apiError) {
-        console.warn("API fetch failed, using local storage:", apiError);
+        console.warn("API fetch failed, using local storage only:", apiError);
       }
-      // Fallback to local storage
-      const loadedDefects = await dataStorageService.getDefects();
-      setDefects(loadedDefects);
+      
+      // Sort by createdAt descending
+      allDefects.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+      
+      setDefects(allDefects);
     } catch (error) {
       console.error("Error loading defects:", error);
       toast.error("Failed to load defects");

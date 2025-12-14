@@ -747,3 +747,6 @@ Persist to Database
 
 7. **6 artifacts** are generated when recording stops.
 
+
+
+

@@ -358,3 +358,6 @@ def get_event_coalescer(config: Optional[Dict[str, Any]] = None) -> EventCoalesc
         _event_coalescer = EventCoalescer(config)
     return _event_coalescer
 
+
+
+

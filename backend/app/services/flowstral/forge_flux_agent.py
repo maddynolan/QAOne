@@ -93,7 +93,8 @@ class ForgeFluxAgent:
         script_lines.append("")
         
         # Process nodes - only meaningful actions with deduplication
-        meaningful_events = ["click", "input", "select", "navigate"]
+        # CRITICAL: Normalize event types - coalescer generates "click_button", "fill_field", "unknown"
+        meaningful_events = ["click", "click_button", "input", "type", "fill_field", "select", "navigate", "unknown"]
         processed_actions = []  # Track (event_type, selector) to avoid duplicates
         processed_count = 0
         intents = []
@@ -108,8 +109,45 @@ class ForgeFluxAgent:
             else:
                 event_type = getattr(node, 'event_type', None)
             
-            if not event_type or event_type not in meaningful_events:
+            if not event_type:
                 continue
+            
+            # Normalize event type (coalescer generates click_button, fill_field, unknown)
+            normalized_event_type = event_type
+            if event_type == "click_button":
+                normalized_event_type = "click"
+            elif event_type == "fill_field":
+                normalized_event_type = "input"
+            elif event_type == "unknown":
+                # Try to infer from action_description or metadata
+                action_desc = None
+                if hasattr(node, 'action_description'):
+                    action_desc = node.action_description
+                elif isinstance(node, dict):
+                    action_desc = node.get('action_description')
+                else:
+                    action_desc = getattr(node, 'action_description', None)
+                
+                if action_desc:
+                    action_lower = action_desc.lower()
+                    if "click" in action_lower or "button" in action_lower:
+                        normalized_event_type = "click"
+                    elif "fill" in action_lower or "input" in action_lower or "type" in action_lower:
+                        normalized_event_type = "input"
+                    else:
+                        # Default to click for unknown
+                        normalized_event_type = "click"
+                else:
+                    # Default to click for unknown
+                    normalized_event_type = "click"
+            
+            # Check if normalized event type is meaningful
+            if normalized_event_type not in ["click", "input", "select", "navigate"]:
+                logger.debug(f"[FORGE] Skipping event type: {event_type} (normalized: {normalized_event_type})")
+                continue
+            
+            # Use normalized event type for processing
+            event_type = normalized_event_type
             
             # Create unique key for deduplication
             target_selector = getattr(node, 'target_selector', None) or (node.get('target_selector') if isinstance(node, dict) else "")
@@ -121,9 +159,26 @@ class ForgeFluxAgent:
                 logger.debug(f"[FORGE] Skipping duplicate action: {node.event_type}")
                 continue
             
-            # Generate action code
+            # Generate action code (pass normalized event_type)
             try:
+                # Temporarily set normalized event_type on node for _generate_action_code
+                original_event_type = None
+                if hasattr(node, 'event_type'):
+                    original_event_type = node.event_type
+                    node.event_type = normalized_event_type
+                elif isinstance(node, dict):
+                    original_event_type = node.get('event_type')
+                    node['event_type'] = normalized_event_type
+                
                 action_code, intent = self._generate_action_code(node)
+                
+                # Restore original event_type
+                if original_event_type is not None:
+                    if hasattr(node, 'event_type'):
+                        node.event_type = original_event_type
+                    elif isinstance(node, dict):
+                        node['event_type'] = original_event_type
+                
                 if action_code:
                     script_lines.extend(action_code)
                     script_lines.append("")
@@ -208,10 +263,33 @@ async function fillRobust(locator, value, intent) {
         intent = f"{event_type}: {target_text or getattr(node, 'target_selector', 'element')}"
         
         # Get selector result
-        selector_result = self.selector_engine.generate_selector(element_data, intent=intent)
-        primary = selector_result["primary"]
-        fallback = selector_result.get("fallback")
-        intent = selector_result.get("intent", intent)
+        try:
+            selector_result = self.selector_engine.generate_selector(element_data, intent=intent)
+            primary = selector_result.get("primary") or selector_result.get("selector")
+            fallback = selector_result.get("fallback")
+            intent = selector_result.get("intent", intent)
+            
+            # CRITICAL: If no selector generated, create a basic one from target_text or target_selector
+            if not primary:
+                if target_text:
+                    # Use getByText as fallback (fix f-string backslash issue)
+                    escaped_text = target_text.replace("'", "\\'")
+                    primary = f"page.getByText('{escaped_text}')"
+                elif getattr(node, 'target_selector', None):
+                    # Use target_selector directly
+                    primary = f"page.locator('{getattr(node, 'target_selector')}')"
+                else:
+                    logger.warning(f"[FORGE] No selector generated for {event_type} - skipping")
+                    return [], None
+        except Exception as e:
+            logger.warning(f"[FORGE] Selector generation failed: {e} - using fallback")
+            # Fallback to basic selector
+            if target_text:
+                primary = f"page.getByText('{target_text.replace(\"'\", \"\\'\")}')"
+            elif getattr(node, 'target_selector', None):
+                primary = f"page.locator('{getattr(node, 'target_selector')}')"
+            else:
+                return [], None
         
         if event_type == "navigate":
             url = getattr(node, 'url', None)

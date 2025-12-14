@@ -1,32 +1,51 @@
 """
 Direct PostgreSQL connection service (alternative to Supabase)
 Uses psycopg2 for direct database connections
+
+NOTE: PostgreSQL is DISABLED by default. Set ENABLE_POSTGRES=true to enable.
+The app uses SQLite/in-memory storage by default.
 """
 
 import os
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 import json
 
 logger = logging.getLogger(__name__)
 
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
+# Type hint only - doesn't require actual import at runtime
+if TYPE_CHECKING:
     from psycopg2.pool import ThreadedConnectionPool
-    
-    PSYCOPG2_AVAILABLE = True
-except ImportError:
+
+# Check if PostgreSQL is explicitly enabled
+POSTGRES_ENABLED = os.getenv("ENABLE_POSTGRES", "false").lower() == "true"
+
+# Placeholder for when psycopg2 is not available
+ThreadedConnectionPool = None  # type: ignore
+
+if POSTGRES_ENABLED:
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        from psycopg2.pool import ThreadedConnectionPool
+        
+        PSYCOPG2_AVAILABLE = True
+    except ImportError:
+        PSYCOPG2_AVAILABLE = False
+        logger.warning("psycopg2 not installed. Install with: pip install psycopg2-binary")
+else:
     PSYCOPG2_AVAILABLE = False
-    logger.warning("psycopg2 not installed. Install with: pip install psycopg2-binary")
+    # Silently disabled - no log spam
 
 # Connection pool (will be initialized)
-_pool: Optional[ThreadedConnectionPool] = None
+_pool: Optional[Any] = None
 _pool_initialized: bool = False
+_db_unavailable_logged: bool = False  # Track if we've already logged database unavailable error
 
 def reset_connection_pool():
     """Reset the connection pool - useful after schema changes"""
-    global _pool, _pool_initialized
+    global _pool, _pool_initialized, _db_unavailable_logged
+    _db_unavailable_logged = False  # Reset flag when pool is reset
     if _pool:
         try:
             _pool.closeall()
@@ -55,12 +74,12 @@ def get_postgres_connection_string() -> Optional[str]:
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
-def get_postgres_pool() -> Optional[ThreadedConnectionPool]:
+def get_postgres_pool() -> Optional["ThreadedConnectionPool"]:
     """Get or create PostgreSQL connection pool"""
-    global _pool, _pool_initialized
+    global _pool, _pool_initialized, _db_unavailable_logged
     
-    if not PSYCOPG2_AVAILABLE:
-        logger.error("psycopg2 not available - cannot create PostgreSQL pool")
+    # Silently return None if PostgreSQL is disabled
+    if not POSTGRES_ENABLED or not PSYCOPG2_AVAILABLE:
         return None
     
     if _pool is None or not _pool_initialized:
@@ -81,16 +100,44 @@ def get_postgres_pool() -> Optional[ThreadedConnectionPool]:
                 print(f"[INFO] POSTGRES_POOL - Connecting to: {parsed.hostname}:{parsed.port or 5432}/{parsed.path[1:] if parsed.path else 'qaai'}")
                 logger.info(f"Connecting to PostgreSQL: {parsed.hostname}:{parsed.port or 5432}")
                 
-                _pool = ThreadedConnectionPool(
-                    minconn=1,
-                    maxconn=5,
-                    host=parsed.hostname,
-                    port=parsed.port or 5432,
-                    database=parsed.path[1:] if parsed.path else "qaai",
-                    user=parsed.username,
-                    password=parsed.password,
-                    options="-c search_path=public"  # Explicitly set search path
-                )
+                # Retry logic for "database system is starting up"
+                max_retries = 10
+                retry_delay = 2  # seconds
+                last_error = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        _pool = ThreadedConnectionPool(
+                            minconn=1,
+                            maxconn=5,
+                            host=parsed.hostname,
+                            port=parsed.port or 5432,
+                            database=parsed.path[1:] if parsed.path else "qaai",
+                            user=parsed.username,
+                            password=parsed.password,
+                            options="-c search_path=public"  # Explicitly set search path
+                        )
+                        logger.info("PostgreSQL connection pool created successfully")
+                        print(f"[OK] POSTGRES_POOL - Connection pool created")
+                        _pool_initialized = True
+                        break  # Success!
+                    except Exception as e:
+                        last_error = e
+                        error_str = str(e).lower()
+                        
+                        # Check if it's a "starting up" error
+                        if "database system is starting up" in error_str or "starting up" in error_str:
+                            if attempt < max_retries - 1:
+                                print(f"[INFO] POSTGRES_POOL - Database is starting up, waiting {retry_delay}s (attempt {attempt + 1}/{max_retries})...")
+                                logger.info(f"PostgreSQL is starting up, retrying in {retry_delay}s...")
+                                import time
+                                time.sleep(retry_delay)
+                                continue
+                        # For other errors, break immediately
+                        raise
+                
+                if not _pool_initialized:
+                    raise last_error
             else:
                 # Direct connection string format
                 print(f"[INFO] POSTGRES_POOL - Using DSN connection string")
@@ -99,19 +146,32 @@ def get_postgres_pool() -> Optional[ThreadedConnectionPool]:
                     maxconn=5,
                     dsn=conn_string
                 )
-            
-            logger.info("PostgreSQL connection pool created successfully")
-            print(f"[OK] POSTGRES_POOL - Connection pool created")
-            _pool_initialized = True
+                logger.info("PostgreSQL connection pool created successfully")
+                print(f"[OK] POSTGRES_POOL - Connection pool created")
+                _pool_initialized = True
         except Exception as e:
+            # Only log full traceback once to avoid log spam
             error_msg = f"Failed to create PostgreSQL connection pool: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            print(f"[ERROR] POSTGRES_POOL - {error_msg}")
-            import traceback
-            print(f"[ERROR] POSTGRES_POOL - Traceback:\n{traceback.format_exc()}")
+            if not _db_unavailable_logged:
+                logger.error(error_msg, exc_info=True)
+                print(f"[ERROR] POSTGRES_POOL - {error_msg}")
+                import traceback
+                print(f"[ERROR] POSTGRES_POOL - Traceback:\n{traceback.format_exc()}")
+                _db_unavailable_logged = True
+            else:
+                # Subsequent failures: just log a simple debug message
+                logger.debug(f"PostgreSQL connection still unavailable: {str(e)}")
             return None
     else:
-        logger.debug("Using existing PostgreSQL connection pool")
+        if _pool:
+            logger.debug("Using existing PostgreSQL connection pool")
+            return _pool
+        else:
+            # Pool was attempted but failed - don't retry immediately
+            if not _db_unavailable_logged:
+                logger.warning("PostgreSQL connection pool unavailable. Database may not be running.")
+                _db_unavailable_logged = True
+            return None
     
     return _pool
 

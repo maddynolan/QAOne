@@ -142,3 +142,6 @@ The simple approach:
 
 **KISS Principle**: Keep It Simple, Stupid. We'll add complexity only when we have evidence it's needed.
 
+
+
+

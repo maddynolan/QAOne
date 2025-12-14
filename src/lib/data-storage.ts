@@ -1,31 +1,109 @@
-// Data Storage Service for QA AI Platform
-// Handles local storage of test cases, plans, and other data
+// Data Storage Service for ArisTrace Platform
+// Handles local storage of test cases, plans, requirements, and recordings
 
-export interface TestCase {
+// ============ RECORDING (from Flowstral) ============
+export interface Recording {
   id: string;
+  sessionId: string;
   name: string;
-  description: string;
-  steps: Array<{
-    action: string;
-    expectedResult: string;
-  }>;
-  preconditions: string[];
-  testData: string[];
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  tags: string[];
-  automationScript?: string;
-  testType: string;
-  complexity: string;
-  estimatedTime: number;
+  description?: string;
+  status: 'draft' | 'in_review' | 'approved' | 'rejected';
+  actions: RecordingAction[];
+  metadata: {
+    baseUrl?: string;
+    browser?: string;
+    startTime?: string;
+    endTime?: string;
+    duration?: number;
+  };
+  playwrightScript?: string;
+  reviewNotes?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  testCaseId?: string; // Linked test case after approval
   createdAt: string;
   updatedAt: string;
 }
 
+export interface RecordingAction {
+  id: string;
+  type: 'navigate' | 'click' | 'type' | 'select' | 'scroll' | 'wait' | 'assert';
+  target?: string;
+  value?: string;
+  selector?: string;
+  url?: string;
+  description?: string;
+  timestamp?: string;
+}
+
+// ============ REQUIREMENT ============
+export interface Requirement {
+  id: string;
+  title: string;
+  description: string;
+  type: 'functional' | 'non_functional' | 'business' | 'technical';
+  priority: 'must_have' | 'should_have' | 'could_have' | 'wont_have';
+  status: 'draft' | 'approved' | 'implemented' | 'verified' | 'rejected';
+  acceptanceCriteria: string[];
+  linkedTestCases: string[]; // Test Case IDs
+  tags: string[];
+  source?: 'jira' | 'manual' | 'import';
+  externalId?: string; // Jira ticket ID, etc.
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============ TEST CASE ============
+export interface TestCase {
+  id: string;
+  name: string;
+  description: string;
+  // Execution type
+  type: 'manual' | 'automated';
+  // Category for organization
+  category: 'functional' | 'regression' | 'smoke' | 'e2e' | 'integration' | 'api' | 'performance';
+  // Lifecycle status
+  status: 'draft' | 'active' | 'deprecated';
+  // Test steps
+  steps: Array<{
+    action: string;
+    expectedResult: string;
+    testData?: string;
+  }>;
+  preconditions: string[];
+  testData: string[];
+  expectedResult: string; // Overall expected outcome
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  tags: string[];
+  // Traceability
+  linkedRequirements: string[]; // Requirement IDs
+  // Source tracking
+  source: {
+    type: 'manual' | 'flowstral' | 'import';
+    recordingId?: string; // If from Flowstral
+    importedFrom?: string;
+  };
+  // Automation
+  automationScript?: string;
+  // Legacy fields (kept for compatibility)
+  testType: string;
+  complexity: string;
+  estimatedTime: number;
+  // Timestamps
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============ TEST PLAN ============
 export interface TestPlan {
   id: string;
   name: string;
   description: string;
-  testCases: TestCase[];
+  status: 'draft' | 'active' | 'completed' | 'archived';
+  testCases: string[]; // Test Case IDs (not full objects)
+  linkedRequirements: string[]; // Requirement IDs
+  environment: string;
+  scheduledDate?: string;
   estimatedDuration: number;
   coverage: string;
   riskAssessment: string;
@@ -63,6 +141,58 @@ class DataStorageService {
 
   constructor(baseUrl: string = 'http://localhost:8000') {
     this.baseUrl = baseUrl;
+  }
+
+  // Convert Flowstral recorded test case to standard TestCase format
+  private convertFlowstralTestCase(fc: any): TestCase {
+    const metadata = fc.metadata || {};
+    const actions = fc.actions || [];
+    
+    // Convert actions to steps
+    const steps = actions.map((action: any) => ({
+      action: action.description || `${action.type}: ${action.value || action.url || ''}`,
+      expectedResult: this.getExpectedResult(action)
+    }));
+    
+    // Handle tags - backend may return string or array
+    let tags: string[] = [];
+    if (typeof fc.tags === 'string') {
+      tags = fc.tags.split(/[\s,]+/).filter((t: string) => t.trim());
+    } else if (Array.isArray(fc.tags)) {
+      tags = fc.tags;
+    }
+    
+    return {
+      id: fc.id || `flowstral_${Date.now()}`,
+      name: fc.name || 'Recorded Test',
+      description: fc.description || metadata.description || `Recorded from ${fc.start_url || metadata.start_url || 'browser'}`,
+      steps: steps.length > 0 ? steps : [{ action: 'No actions recorded', expectedResult: 'N/A' }],
+      preconditions: [`Application accessible at ${fc.start_url || metadata.start_url || 'target URL'}`],
+      testData: [],
+      priority: (fc.priority || metadata.priority || 'medium') as 'low' | 'medium' | 'high' | 'critical',
+      tags: tags,
+      automationScript: fc.script || undefined,
+      testType: fc.test_type || metadata.test_type || 'automated',
+      complexity: fc.category || metadata.category || 'functional',
+      estimatedTime: Math.max(1, Math.ceil((fc.action_count || actions.length || 1) / 4)),
+      createdAt: fc.created_at || new Date().toISOString(),
+      updatedAt: fc.updated_at || new Date().toISOString(),
+    };
+  }
+  
+  private getExpectedResult(action: any): string {
+    const type = action.type || '';
+    switch (type) {
+      case 'navigate': return 'Page loads successfully';
+      case 'click': return 'Element responds to click';
+      case 'fill': case 'type': case 'input': return 'Field accepts input';
+      case 'check': return 'Checkbox/radio is selected';
+      case 'uncheck': return 'Checkbox is deselected';
+      case 'select': return 'Option is selected';
+      case 'hover': return 'Hover action completes';
+      case 'upload': return 'File is uploaded';
+      default: return 'Action completes successfully';
+    }
   }
 
   // Test Case Management
@@ -151,31 +281,60 @@ class DataStorageService {
       }
       console.log('Fetching test cases from:', url);
       
+      // Fetch from main endpoint
       const response = await fetch(url);
       console.log('Response status:', response.status, response.statusText);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to get test cases:', response.status, errorText);
-        throw new Error(`Failed to get test cases: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Backend response for getTestCases:', data);
-      
-      // Handle different response formats
       let testCases: TestCase[] = [];
-      if (Array.isArray(data)) {
-        testCases = data;
-      } else if (data.testCases && Array.isArray(data.testCases)) {
-        testCases = data.testCases;
-      } else if (data.test_cases && Array.isArray(data.test_cases)) {
-        testCases = data.test_cases;
-      } else {
-        console.warn('Unexpected response format:', data);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Backend response for getTestCases:', data);
+        
+        // Handle different response formats
+        if (Array.isArray(data)) {
+          testCases = data;
+        } else if (data.testCases && Array.isArray(data.testCases)) {
+          testCases = data.testCases;
+        } else if (data.test_cases && Array.isArray(data.test_cases)) {
+          testCases = data.test_cases;
+        } else {
+          console.warn('Unexpected response format:', data);
+        }
       }
       
-      console.log(`Returning ${testCases.length} test cases`);
+      // Also fetch from Flowstral endpoint (recorded test cases)
+      try {
+        const flowstralUrl = `${this.baseUrl}/api/flowstral/test-cases`;
+        console.log('Also fetching from Flowstral:', flowstralUrl);
+        const flowstralResponse = await fetch(flowstralUrl);
+        console.log('Flowstral response status:', flowstralResponse.status, flowstralResponse.statusText);
+        
+        if (flowstralResponse.ok) {
+          const flowstralData = await flowstralResponse.json();
+          console.log('Flowstral raw data:', flowstralData);
+          const flowstralCases = flowstralData.test_cases || [];
+          console.log(`Found ${flowstralCases.length} Flowstral test cases`);
+          
+          if (flowstralCases.length > 0) {
+            // Convert Flowstral format to standard TestCase format
+            const convertedCases = flowstralCases.map((fc: any) => {
+              console.log('Converting Flowstral case:', fc.id, fc.name);
+              return this.convertFlowstralTestCase(fc);
+            });
+            
+            // Merge (Flowstral cases first - they're newer/recorded)
+            testCases = [...convertedCases, ...testCases];
+            console.log(`Added ${convertedCases.length} Flowstral recorded test cases`);
+          }
+        } else {
+          console.warn('Flowstral API returned non-OK status:', flowstralResponse.status);
+        }
+      } catch (flowstralError) {
+        console.error('Could not fetch Flowstral test cases:', flowstralError);
+      }
+      
+      console.log(`Returning ${testCases.length} total test cases`);
       return testCases;
     } catch (error: any) {
       console.error('Error getting test cases:', error);
@@ -191,14 +350,28 @@ class DataStorageService {
 
   async getTestCase(id: string): Promise<TestCase | null> {
     try {
+      // First try the main endpoint
       const response = await fetch(`${this.baseUrl}/test-cases/${id}`);
       
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`Failed to get test case: ${response.statusText}`);
+      if (response.ok) {
+        return await response.json() as TestCase;
       }
       
-      return await response.json() as TestCase;
+      // If not found, try Flowstral endpoint
+      if (response.status === 404) {
+        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
+        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`);
+        
+        if (flowstralResponse.ok) {
+          const flowstralData = await flowstralResponse.json();
+          // Convert Flowstral format to standard TestCase format
+          return this.convertFlowstralTestCase(flowstralData.test_case || flowstralData);
+        }
+        
+        return null;
+      }
+      
+      throw new Error(`Failed to get test case: ${response.statusText}`);
     } catch (error) {
       console.error('Error getting test case:', error);
       return null;
@@ -207,19 +380,33 @@ class DataStorageService {
 
   async updateTestCase(id: string, updates: Partial<TestCase>): Promise<TestCase | null> {
     try {
+      // First try the main endpoint
       const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
       
-      if (!response.ok) {
-        if (response.status === 404) return null;
-        throw new Error(`Failed to update test case: ${response.statusText}`);
+      if (response.ok) {
+        return await this.getTestCase(id);
       }
       
-      const updated = await response.json();
-      return await this.getTestCase(id);
+      // If not found, try Flowstral endpoint
+      if (response.status === 404) {
+        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
+        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+        
+        if (flowstralResponse.ok) {
+          return await this.getTestCase(id);
+        }
+        return null;
+      }
+      
+      throw new Error(`Failed to update test case: ${response.statusText}`);
     } catch (error) {
       console.error('Error updating test case:', error);
       return null;
@@ -228,16 +415,26 @@ class DataStorageService {
 
   async deleteTestCase(id: string): Promise<boolean> {
     try {
+      // First try the main endpoint
       const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
         method: 'DELETE'
       });
       
-      if (!response.ok) {
-        if (response.status === 404) return false;
-        throw new Error(`Failed to delete test case: ${response.statusText}`);
+      if (response.ok) {
+        return true;
       }
       
-      return true;
+      // If not found, try Flowstral endpoint
+      if (response.status === 404) {
+        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
+        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`, {
+          method: 'DELETE'
+        });
+        
+        return flowstralResponse.ok;
+      }
+      
+      throw new Error(`Failed to delete test case: ${response.statusText}`);
     } catch (error) {
       console.error('Error deleting test case:', error);
       return false;

@@ -108,7 +108,7 @@ class AdvancedPatternRecognizer:
         # Infer business rules based on pattern
         business_rules = []
         if best_match:
-            business_rules = self._infer_business_rules(best_match, form_fields)
+            business_rules = self.infer_business_rules(best_match, form_fields)
         
         return {
             "pattern": best_match or "unknown",

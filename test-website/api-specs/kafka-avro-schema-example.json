@@ -1,0 +1,214 @@
+{
+  "schemas": [
+    {
+      "type": "record",
+      "name": "OrderEvent",
+      "namespace": "testwebsite.events",
+      "fields": [
+        {
+          "name": "orderId",
+          "type": "int",
+          "doc": "Order ID"
+        },
+        {
+          "name": "userId",
+          "type": "int",
+          "doc": "User ID who placed the order"
+        },
+        {
+          "name": "status",
+          "type": {
+            "type": "enum",
+            "name": "OrderStatus",
+            "symbols": ["pending", "processing", "shipped", "delivered", "cancelled"]
+          },
+          "doc": "Order status"
+        },
+        {
+          "name": "totalAmount",
+          "type": "double",
+          "doc": "Total order amount"
+        },
+        {
+          "name": "items",
+          "type": {
+            "type": "array",
+            "items": {
+              "type": "record",
+              "name": "OrderItem",
+              "fields": [
+                {
+                  "name": "productId",
+                  "type": "int"
+                },
+                {
+                  "name": "quantity",
+                  "type": "int"
+                },
+                {
+                  "name": "price",
+                  "type": "double"
+                }
+              ]
+            }
+          },
+          "doc": "Order items"
+        },
+        {
+          "name": "timestamp",
+          "type": "long",
+          "logicalType": "timestamp-millis",
+          "doc": "Event timestamp"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "ProductEvent",
+      "namespace": "testwebsite.events",
+      "fields": [
+        {
+          "name": "productId",
+          "type": "int",
+          "doc": "Product ID"
+        },
+        {
+          "name": "action",
+          "type": {
+            "type": "enum",
+            "name": "ProductAction",
+            "symbols": ["created", "updated", "deleted", "stock_updated", "price_changed"]
+          },
+          "doc": "Action performed on product"
+        },
+        {
+          "name": "productName",
+          "type": "string",
+          "doc": "Product name"
+        },
+        {
+          "name": "price",
+          "type": ["null", "double"],
+          "default": null,
+          "doc": "Product price (if applicable)"
+        },
+        {
+          "name": "stock",
+          "type": ["null", "int"],
+          "default": null,
+          "doc": "Product stock (if applicable)"
+        },
+        {
+          "name": "timestamp",
+          "type": "long",
+          "logicalType": "timestamp-millis",
+          "doc": "Event timestamp"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "UserEvent",
+      "namespace": "testwebsite.events",
+      "fields": [
+        {
+          "name": "userId",
+          "type": "int",
+          "doc": "User ID"
+        },
+        {
+          "name": "action",
+          "type": {
+            "type": "enum",
+            "name": "UserAction",
+            "symbols": ["registered", "logged_in", "logged_out", "profile_updated", "password_changed"]
+          },
+          "doc": "User action"
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "doc": "Username"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "doc": "User email"
+        },
+        {
+          "name": "timestamp",
+          "type": "long",
+          "logicalType": "timestamp-millis",
+          "doc": "Event timestamp"
+        }
+      ]
+    },
+    {
+      "type": "record",
+      "name": "CartEvent",
+      "namespace": "testwebsite.events",
+      "fields": [
+        {
+          "name": "userId",
+          "type": "int",
+          "doc": "User ID"
+        },
+        {
+          "name": "action",
+          "type": {
+            "type": "enum",
+            "name": "CartAction",
+            "symbols": ["item_added", "item_updated", "item_removed", "cart_cleared", "checkout_started"]
+          },
+          "doc": "Cart action"
+        },
+        {
+          "name": "productId",
+          "type": ["null", "int"],
+          "default": null,
+          "doc": "Product ID (if applicable)"
+        },
+        {
+          "name": "quantity",
+          "type": ["null", "int"],
+          "default": null,
+          "doc": "Quantity (if applicable)"
+        },
+        {
+          "name": "timestamp",
+          "type": "long",
+          "logicalType": "timestamp-millis",
+          "doc": "Event timestamp"
+        }
+      ]
+    }
+  ],
+  "topics": [
+    {
+      "name": "orders",
+      "schema": "OrderEvent",
+      "description": "Order lifecycle events"
+    },
+    {
+      "name": "products",
+      "schema": "ProductEvent",
+      "description": "Product management events"
+    },
+    {
+      "name": "users",
+      "schema": "UserEvent",
+      "description": "User activity events"
+    },
+    {
+      "name": "cart",
+      "schema": "CartEvent",
+      "description": "Shopping cart events"
+    }
+  ],
+  "kafka_config": {
+    "bootstrap_servers": "localhost:9092",
+    "schema_registry_url": "http://localhost:8081"
+  }
+}
+
+

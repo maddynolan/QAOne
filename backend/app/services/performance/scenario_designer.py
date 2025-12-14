@@ -456,3 +456,6 @@ class ScenarioDesigner:
             del self.scenarios[scenario_id]
             logger.info(f"Deleted scenario: {scenario_id}")
 
+
+
+

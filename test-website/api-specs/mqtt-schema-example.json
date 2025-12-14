@@ -1,0 +1,226 @@
+{
+  "protocol": "MQTT",
+  "version": "5.0",
+  "broker": {
+    "host": "localhost",
+    "port": 1883,
+    "secure": false,
+    "username": "testuser",
+    "password": "testpass"
+  },
+  "topics": [
+    {
+      "name": "devices/sensor/data",
+      "qos": 1,
+      "retain": false,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "description": "Device identifier"
+          },
+          "sensorType": {
+            "type": "string",
+            "enum": ["temperature", "humidity", "pressure", "motion"],
+            "description": "Type of sensor"
+          },
+          "value": {
+            "type": "number",
+            "description": "Sensor reading value"
+          },
+          "unit": {
+            "type": "string",
+            "description": "Unit of measurement"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the reading"
+          },
+          "location": {
+            "type": "object",
+            "properties": {
+              "latitude": {"type": "number"},
+              "longitude": {"type": "number"}
+            },
+            "description": "Device location"
+          }
+        },
+        "required": ["deviceId", "sensorType", "value", "timestamp"]
+      },
+      "description": "Sensor data from IoT devices"
+    },
+    {
+      "name": "devices/actuator/commands",
+      "qos": 2,
+      "retain": false,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "description": "Target device identifier"
+          },
+          "command": {
+            "type": "string",
+            "enum": ["on", "off", "set_value", "reset", "calibrate"],
+            "description": "Command to execute"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "Command parameters"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Command timestamp"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Command priority"
+          }
+        },
+        "required": ["deviceId", "command", "timestamp"]
+      },
+      "description": "Commands sent to actuators"
+    },
+    {
+      "name": "orders/status",
+      "qos": 1,
+      "retain": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "integer",
+            "description": "Order ID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "processing", "shipped", "delivered", "cancelled"],
+            "description": "Order status"
+          },
+          "userId": {
+            "type": "integer",
+            "description": "User ID"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Status update timestamp"
+          },
+          "message": {
+            "type": "string",
+            "description": "Status message"
+          }
+        },
+        "required": ["orderId", "status", "timestamp"]
+      },
+      "description": "Order status updates"
+    },
+    {
+      "name": "products/updates",
+      "qos": 1,
+      "retain": false,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "integer",
+            "description": "Product ID"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["created", "updated", "deleted", "stock_changed", "price_changed"],
+            "description": "Action performed"
+          },
+          "productName": {
+            "type": "string",
+            "description": "Product name"
+          },
+          "changes": {
+            "type": "object",
+            "description": "Changed fields and values"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Update timestamp"
+          }
+        },
+        "required": ["productId", "action", "timestamp"]
+      },
+      "description": "Product update notifications"
+    },
+    {
+      "name": "users/activity",
+      "qos": 0,
+      "retain": false,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer",
+            "description": "User ID"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["login", "logout", "register", "profile_update", "password_change"],
+            "description": "User action"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username"
+          },
+          "ipAddress": {
+            "type": "string",
+            "format": "ipv4",
+            "description": "User IP address"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Activity timestamp"
+          }
+        },
+        "required": ["userId", "action", "timestamp"]
+      },
+      "description": "User activity events"
+    }
+  ],
+  "test_messages": {
+    "devices/sensor/data": {
+      "deviceId": "sensor-001",
+      "sensorType": "temperature",
+      "value": 23.5,
+      "unit": "celsius",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "location": {
+        "latitude": 40.7128,
+        "longitude": -74.0060
+      }
+    },
+    "devices/actuator/commands": {
+      "deviceId": "actuator-001",
+      "command": "set_value",
+      "parameters": {
+        "value": 25.0
+      },
+      "timestamp": "2024-01-15T10:30:00Z",
+      "priority": 8
+    },
+    "orders/status": {
+      "orderId": 1,
+      "status": "shipped",
+      "userId": 1,
+      "timestamp": "2024-01-15T10:30:00Z",
+      "message": "Order has been shipped"
+    }
+  }
+}
+
+

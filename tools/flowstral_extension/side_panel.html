@@ -202,17 +202,20 @@
         ⚠️ <strong>Privacy Notice:</strong> Flowstral masks sensitive data (passwords, credit cards, SSNs). No PII is recorded.
     </div>
     
-    <div class="section">
-        <div class="section-title">Session Configuration</div>
+    <div class="section" style="background: #fffbeb; border: 2px solid #f59e0b;">
+        <div class="section-title" style="color: #b45309;">🎯 Test Starting URL</div>
         <div class="input-group">
-            <label for="projectId">Project ID</label>
-            <input type="text" id="projectId" placeholder="Enter project ID" value="">
+            <label for="baseUrl" style="color: #92400e; font-weight: 600;">Where should your test begin?</label>
+            <input type="text" id="baseUrl" placeholder="http://localhost:3000" value="http://localhost:3000" style="border-color: #f59e0b;">
         </div>
-        <div class="input-group">
-            <label for="userId">User ID (optional)</label>
-            <input type="text" id="userId" placeholder="Enter user ID" value="">
-        </div>
+        <p style="font-size: 11px; color: #92400e; margin-top: 4px;">
+            💡 Test will start with: <code style="background: #fef3c7; padding: 2px 4px; border-radius: 2px;">page.goto('this URL')</code>
+        </p>
     </div>
+    
+    <!-- Hidden fields with auto-generated values -->
+    <input type="hidden" id="projectId" value="recording">
+    <input type="hidden" id="userId" value="user">
     
     <div class="section">
         <div class="section-title">Recording Status</div>
@@ -234,8 +237,8 @@
     </div>
     
     <div class="section">
-        <button id="btnStart" class="button button-primary">Start Flowstral</button>
-        <button id="btnStop" class="button button-danger" disabled>Stop & Generate</button>
+        <button id="btnStart" class="button button-primary">🔴 Start Recording</button>
+        <button id="btnStop" class="button button-danger" disabled>⏹️ Stop & Generate Test</button>
     </div>
     
     <div class="section" id="progressSection" style="display: none;">

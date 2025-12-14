@@ -16,15 +16,21 @@ let offlineQueue = [];
 // Log when background script loads
 console.log('Flowstral Background: Service worker loaded');
 
-// Load offline queue on startup
+// Load offline queue on startup (with error handling)
 chrome.storage.local.get('flowstral_offline_queue').then(stored => {
-  if (stored.flowstral_offline_queue) {
-    offlineQueue = stored.flowstral_offline_queue;
-    console.log(`Flowstral Background: Loaded ${offlineQueue.length} events from offline queue`);
-    if (offlineQueue.length > 0) {
-      processOfflineQueue();
+  try {
+    if (stored && stored.flowstral_offline_queue) {
+      offlineQueue = stored.flowstral_offline_queue;
+      console.log(`Flowstral Background: Loaded ${offlineQueue.length} events from offline queue`);
+      if (offlineQueue.length > 0) {
+        processOfflineQueue();
+      }
     }
+  } catch (error) {
+    console.error('Flowstral Background: Error loading offline queue', error);
   }
+}).catch(error => {
+  console.error('Flowstral Background: Error accessing storage', error);
 });
 
 // Open side panel when extension icon is clicked
@@ -53,12 +59,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return { success: true, data: startResult };
           
         case 'FLOWSTRAL_STOP':
-          console.log('Flowstral Background: Handling FLOWSTRAL_STOP');
-          const stopResult = await handleStopFlowstral(message.data, sender.tab?.id);
-          return { success: true, data: stopResult };
+          console.log('=== FLOWSTRAL BACKGROUND: FLOWSTRAL_STOP MESSAGE RECEIVED ===');
+          console.log('Flowstral Background: Message data', message.data);
+          console.log('Flowstral Background: Sender tab ID', sender.tab?.id);
+          try {
+            const stopResult = await handleStopFlowstral(message.data, sender.tab?.id);
+            console.log('Flowstral Background: Stop result received, returning success');
+            return { success: true, data: stopResult };
+          } catch (error) {
+            console.error('=== FLOWSTRAL BACKGROUND: STOP ERROR ===');
+            console.error('Flowstral Background: Error in handleStopFlowstral', error);
+            console.error('Flowstral Background: Error message', error.message);
+            console.error('Flowstral Background: Error stack', error.stack);
+            return { success: false, error: error.message || String(error) };
+          }
           
         case 'FLOWSTRAL_CAPTURE_EVENT':
+          console.log('Flowstral Background: Received FLOWSTRAL_CAPTURE_EVENT', message.data);
           const captureResult = await handleCaptureEvent(message.data);
+          console.log('Flowstral Background: handleCaptureEvent result', captureResult);
           return { success: true, data: captureResult };
           
         case 'FLOWSTRAL_GET_SESSION':
@@ -68,6 +87,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'FLOWSTRAL_CAPTURE_SCREENSHOT':
           const screenshotResult = await handleCaptureScreenshot(sender.tab?.id);
           return { success: true, screenshot: screenshotResult };
+          
+        case 'FLOWSTRAL_RECORDING_STATUS':
+          // Just acknowledge the status update
+          return { success: true, message: 'Status received' };
           
         default:
           console.warn('Flowstral Background: Unknown message type', message.type);
@@ -142,7 +165,7 @@ async function checkDomainAllowlist(url) {
 
 // Start Flowstral session
 async function handleStartFlowstral(data, tabId) {
-  const { project_id, user_id, initial_url, tab_id } = data;
+  const { project_id, user_id, initial_url, base_url, tab_id } = data;
   const targetTabId = tab_id || tabId;
   
   // Check domain allowlist
@@ -153,10 +176,14 @@ async function handleStartFlowstral(data, tabId) {
     }
   }
   
-  console.log('Flowstral Background: Starting session', { project_id, targetTabId, initial_url });
+  console.log('Flowstral Background: Starting session', { project_id, targetTabId, initial_url, base_url });
   
   if (!project_id) {
     throw new Error('Project ID is required');
+  }
+  
+  if (base_url) {
+    console.log('Flowstral Background: User-specified Base URL (test target):', base_url);
   }
   
   try {
@@ -181,7 +208,8 @@ async function handleStartFlowstral(data, tabId) {
         project_id,
         user_id: user_id || 'extension_user',
         initial_url: initial_url || 'about:blank',
-        initial_dom: '' // Will be captured by content script
+        initial_dom: '', // Will be captured by content script
+        base_url: base_url || null  // User-specified target URL for test
       })
     });
     
@@ -198,7 +226,13 @@ async function handleStartFlowstral(data, tabId) {
     
     console.log('Flowstral Background: Session started successfully', sessionId);
     
-    // Store session in extension storage
+    // Clear any old session data first
+    const oldSession = await chrome.storage.local.get('flowstral_session');
+    if (oldSession.flowstral_session && oldSession.flowstral_session.sessionId !== sessionId) {
+      console.log(`Flowstral Background: Clearing old session ${oldSession.flowstral_session.sessionId}`);
+    }
+    
+    // Store new session in extension storage
     await chrome.storage.local.set({
       flowstral_session: {
         sessionId,
@@ -271,20 +305,48 @@ async function handleStartFlowstral(data, tabId) {
 async function handleStopFlowstral(data, tabId) {
   const { session_id, project_id } = data;
   
+  // TIMING: Track total time from start to finish
+  const timing = {
+    start: performance.now(),
+    flushStart: null,
+    flushEnd: null,
+    requestStart: null,
+    requestEnd: null,
+    parseStart: null,
+    parseEnd: null,
+    finish: null
+  };
+  
   console.log('=== FLOWSTRAL BACKGROUND: STOP SESSION ===');
+  console.log(`[TIMING] T0: Stop initiated at ${new Date().toISOString()}`);
   console.log('Flowstral Background: Stopping session', { session_id, project_id });
   
   try {
     // CRITICAL: Flush events BEFORE stopping session to ensure they're received
+    timing.flushStart = performance.now();
+    console.log(`[TIMING] T1: Flushing events (elapsed: ${(timing.flushStart - timing.start).toFixed(2)}ms)`);
     console.log('Flowstral Background: Flushing events before stopping session...');
     await flushBatchOnStop();
+    timing.flushEnd = performance.now();
+    console.log(`[TIMING] T2: Events flushed (elapsed: ${(timing.flushEnd - timing.start).toFixed(2)}ms, flush took: ${(timing.flushEnd - timing.flushStart).toFixed(2)}ms)`);
     
     // Wait a moment for events to be processed by backend
     console.log('Flowstral Background: Waiting for events to be processed...');
     await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log(`[TIMING] T3: Wait completed (elapsed: ${(performance.now() - timing.start).toFixed(2)}ms)`);
     
+    timing.requestStart = performance.now();
+    console.log(`[TIMING] T4: Starting API request (elapsed: ${(timing.requestStart - timing.start).toFixed(2)}ms)`);
     console.log('Flowstral Background: Calling backend API to stop session...');
+    console.log('Flowstral Background: API_BASE_URL', API_BASE_URL);
+    console.log('Flowstral Background: Stop URL', `${API_BASE_URL}/api/flowstral/stop`);
+    console.log('Flowstral Background: Request body', JSON.stringify({
+      session_id,
+      project_id: project_id || 'default'
+    }));
+    
     // Call backend API to stop session
+    const fetchStart = performance.now();
     const response = await fetch(`${API_BASE_URL}/api/flowstral/stop`, {
       method: 'POST',
       headers: {
@@ -295,9 +357,13 @@ async function handleStopFlowstral(data, tabId) {
         project_id: project_id || 'default'
       })
     });
+    const fetchEnd = performance.now();
+    timing.requestEnd = performance.now();
     
+    console.log(`[TIMING] T5: API response received (elapsed: ${(timing.requestEnd - timing.start).toFixed(2)}ms, network time: ${(fetchEnd - fetchStart).toFixed(2)}ms)`);
     console.log('Flowstral Background: Stop API response status', response.status);
     console.log('Flowstral Background: Response ok?', response.ok);
+    console.log('Flowstral Background: Response headers', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -305,8 +371,13 @@ async function handleStopFlowstral(data, tabId) {
       throw new Error(`Failed to stop session: ${response.status} - ${errorText.substring(0, 200)}`);
     }
     
+    timing.parseStart = performance.now();
+    console.log(`[TIMING] T6: Parsing response JSON (elapsed: ${(timing.parseStart - timing.start).toFixed(2)}ms)`);
     console.log('Flowstral Background: Parsing response JSON...');
     const result = await response.json();
+    timing.parseEnd = performance.now();
+    console.log(`[TIMING] T7: Response parsed (elapsed: ${(timing.parseEnd - timing.start).toFixed(2)}ms, parse took: ${(timing.parseEnd - timing.parseStart).toFixed(2)}ms)`);
+    
     console.log('Flowstral Background: Response parsed successfully');
     console.log('Flowstral Background: Result keys', Object.keys(result));
     console.log('Flowstral Background: Artifacts in result?', !!result.artifacts);
@@ -335,8 +406,20 @@ async function handleStopFlowstral(data, tabId) {
       }
     }
     
-    // Events were already flushed before stopping
+    timing.finish = performance.now();
+    const totalTime = timing.finish - timing.start;
+    const networkTime = timing.requestEnd - timing.requestStart;
+    const backendTime = networkTime; // This is the time from request sent to response received (includes network + backend processing)
+    
     console.log('=== FLOWSTRAL BACKGROUND: STOP COMPLETE ===');
+    console.log(`[TIMING] SUMMARY:`);
+    console.log(`  Total time: ${totalTime.toFixed(2)}ms (${(totalTime/1000).toFixed(2)}s)`);
+    console.log(`  Flush events: ${((timing.flushEnd - timing.flushStart) || 0).toFixed(2)}ms`);
+    console.log(`  Network + Backend: ${networkTime.toFixed(2)}ms (${(networkTime/1000).toFixed(2)}s)`);
+    console.log(`  Parse JSON: ${((timing.parseEnd - timing.parseStart) || 0).toFixed(2)}ms`);
+    console.log(`  Other (storage, notifications): ${(totalTime - networkTime - (timing.flushEnd - timing.flushStart || 0) - (timing.parseEnd - timing.parseStart || 0)).toFixed(2)}ms`);
+    console.log(`[TIMING] If network+backend time > 10s, delay is in backend. If < 10s but total > 4min, delay is in frontend/UI.`);
+    
     return result;
   } catch (error) {
     console.error('=== FLOWSTRAL BACKGROUND: STOP ERROR ===');
@@ -349,17 +432,26 @@ async function handleStopFlowstral(data, tabId) {
 
 // Capture event from content script (with batching)
 async function handleCaptureEvent(data) {
+  console.log('Flowstral Background: handleCaptureEvent called with data:', data);
   const { session_id, event_type, event_data } = data;
   
+  if (!session_id || !event_type) {
+    console.error('Flowstral Background: Invalid event data - missing session_id or event_type', data);
+    return { success: false, error: 'Invalid event data' };
+  }
+  
   // Add to batch
-  eventBatch.push({
+  const eventToBatch = {
     session_id,
     event_type,
     event_data,
     timestamp: Date.now()
-  });
+  };
   
-  console.log(`Flowstral Background: Event added to batch (${eventBatch.length}/${BATCH_SIZE}): ${event_type} - ${event_data.action_description || event_data.url || 'no description'}`);
+  eventBatch.push(eventToBatch);
+  
+  console.log(`Flowstral Background: Event added to batch (${eventBatch.length}/${BATCH_SIZE}): ${event_type} - ${event_data?.action_description || event_data?.url || 'no description'}`);
+  console.log(`Flowstral Background: Current batch contains:`, eventBatch.map(e => e.event_type));
   
   // Start batch timer if not already running
   if (!batchTimer) {
@@ -397,6 +489,9 @@ async function flushEventBatch() {
   }
   
   console.log(`Flowstral Background: Flushing batch of ${batchToSend.length} events`);
+  // Log event types in batch for debugging
+  const eventTypes = batchToSend.map(e => e.event_type);
+  console.log(`Flowstral Background: Batch event types:`, eventTypes);
   
   try {
     // Try to send batch
@@ -524,6 +619,21 @@ async function flushBatchOnStop() {
     }
   } else {
     console.log('Flowstral Background: No events in batch to flush');
+  }
+}
+
+// Capture screenshot
+async function handleCaptureScreenshot(tabId) {
+  if (!tabId) {
+    throw new Error('Tab ID is required for screenshot');
+  }
+  
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    return { screenshot: dataUrl };
+  } catch (error) {
+    console.error('Flowstral Background: Screenshot error', error);
+    throw new Error(`Failed to capture screenshot: ${error.message}`);
   }
 }
 

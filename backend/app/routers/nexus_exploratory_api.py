@@ -1,44 +1,31 @@
 """
-API endpoints for Nexus Autonomous Exploratory Testing Service
+API endpoints for Real Exploratory Testing Service (Blaze)
+
+Provides REAL exploratory testing that actually crawls websites and finds defects.
+Works WITHOUT OpenAI - uses intelligent heuristics and Playwright.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
-import os
 import logging
 
-from app.services.llm.openai_service import OpenAIService
-from app.services.exploration.nexus_exploratory_service import NexusExploratoryService
+from app.services.exploration.real_exploratory_service import get_real_exploratory_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/nexus", tags=["nexus"])
+router = APIRouter(prefix="/api/nexus", tags=["nexus", "blaze"])
 
-# Initialize OpenAI service
-try:
-    openai_service = OpenAIService()
-    # Try to get OpenAI client
-    import os
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        from openai import OpenAI
-        openai_client = OpenAI(api_key=api_key)
-    else:
-        openai_client = None
-except Exception:
-    openai_client = None
-
-# Initialize Nexus service
-nexus_service = NexusExploratoryService(openai_client) if openai_client else None
+# Get the real exploratory service (no OpenAI dependency!)
+real_service = get_real_exploratory_service()
 
 
 class StartSessionRequest(BaseModel):
-    """Request model for starting a Nexus exploratory session."""
-    app_url: str = Field(..., description="Base URL of the application to test")
-    session_id: Optional[str] = Field(None, description="Optional session ID")
-    project_id: Optional[str] = Field(None, description="Project ID for defect storage")
-    max_duration_minutes: int = Field(30, description="Maximum session duration in minutes")
+    """Request model for starting an exploratory testing session."""
+    app_url: str = Field(..., description="URL of the application to test")
+    max_duration_minutes: int = Field(10, description="Maximum duration in minutes")
+    max_pages: int = Field(30, description="Maximum pages to crawl")
+    headless: bool = Field(True, description="Run browser in headless mode")
 
 
 class SessionStatusResponse(BaseModel):
@@ -57,111 +44,102 @@ class SessionStatusResponse(BaseModel):
 
 
 @router.post("/start")
-async def start_nexus_session(request: StartSessionRequest) -> Dict[str, Any]:
+async def start_blaze_session(request: StartSessionRequest) -> Dict[str, Any]:
     """
-    Start a new Nexus autonomous exploratory testing session.
+    Start a real exploratory testing session.
     
-    Nexus will autonomously:
-    - Crawl and map the application
-    - Execute E2E flows
-    - Detect defects
-    - Maintain a risk heatmap
-    - Continue until all P1/P2 risks are addressed
+    Blaze will autonomously:
+    - Crawl your actual website
+    - Detect real defects (broken links, JS errors, accessibility issues, etc.)
+    - Build a risk heatmap
+    - Complete within the time limit
+    
+    NO OpenAI required - works on any website!
     """
-    if not nexus_service:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI client not configured. Set OPENAI_API_KEY environment variable."
-        )
-    
     try:
-        result = await nexus_service.start_session(
+        result = await real_service.start_session(
             app_url=request.app_url,
-            session_id=request.session_id,
-            project_id=request.project_id,
-            max_duration_minutes=request.max_duration_minutes
+            max_duration_minutes=request.max_duration_minutes,
+            max_pages=request.max_pages,
+            headless=request.headless
         )
         return result
-    except HTTPException:
-        raise
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        logger.error(f"Failed to start Nexus session: {e}\n{error_details}", exc_info=True)
+        logger.error(f"Failed to start session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
 
 
 @router.get("/status/{session_id}")
-async def get_nexus_status(session_id: str) -> SessionStatusResponse:
+async def get_blaze_status(session_id: str) -> SessionStatusResponse:
     """
-    Get the current status of a Nexus exploratory session.
+    Get the current status of an exploratory testing session.
     
     Returns:
-    - Current status (running/complete)
+    - Current status (running/completed/error)
     - Number of defects found
-    - Risk heatmap
+    - Risk heatmap by category
     - Time elapsed
-    - Recent defects
+    - List of defects with details
     """
-    if not nexus_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Nexus service not available"
-        )
-    
     try:
-        status = await nexus_service.get_session_status(session_id)
+        status = await real_service.get_session_status(session_id)
         return SessionStatusResponse(**status)
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        logger.error(f"Failed to get status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
 
 
 @router.post("/stop/{session_id}")
-async def stop_nexus_session(session_id: str) -> Dict[str, Any]:
+async def stop_blaze_session(session_id: str) -> Dict[str, Any]:
     """
-    Stop a running Nexus exploratory session.
-    
-    This will gracefully terminate the autonomous loop and mark the session as complete.
+    Stop a running exploratory testing session.
     """
-    if not nexus_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Nexus service not available"
-        )
-    
     try:
-        result = await nexus_service.stop_session(session_id)
+        result = await real_service.stop_session(session_id)
         return result
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Failed to stop Nexus session: {e}", exc_info=True)
+        logger.error(f"Failed to stop session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
 
 
 @router.get("/sessions")
-async def list_nexus_sessions() -> Dict[str, Any]:
+async def list_blaze_sessions() -> Dict[str, Any]:
     """
-    List all active Nexus exploratory sessions.
+    List all exploratory testing sessions.
     """
-    if not nexus_service:
-        raise HTTPException(
-            status_code=503,
-            detail="Nexus service not available"
-        )
-    
     sessions = []
-    for session_id, session_data in nexus_service.sessions.items():
-        elapsed = (session_data["started_at"] - session_data["started_at"]).total_seconds()
+    for session_id, session_data in real_service.sessions.items():
         sessions.append({
             "session_id": session_id,
-            "app_url": session_data["app_url"],
-            "status": "complete" if session_data.get("complete") else "running",
-            "defects_found": len(session_data["defects"]),
-            "time_elapsed_seconds": elapsed
+            "app_url": session_data.get("app_url", ""),
+            "status": session_data.get("status", "unknown"),
+            "defects_found": len(session_data.get("defects", [])),
+            "pages_crawled": session_data.get("pages_crawled", 0)
         })
     
     return {"sessions": sessions, "count": len(sessions)}
 
+
+@router.get("/health")
+async def blaze_health() -> Dict[str, Any]:
+    """
+    Health check for the Blaze service.
+    """
+    return {
+        "status": "healthy",
+        "service": "Blaze Real Exploratory Testing",
+        "openai_required": False,
+        "features": [
+            "HTTP Error Detection",
+            "JavaScript Error Detection",
+            "Accessibility Testing (WCAG)",
+            "Performance Monitoring",
+            "Security Checks",
+            "Mobile Responsiveness",
+            "Broken Link Detection"
+        ]
+    }

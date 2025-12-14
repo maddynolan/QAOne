@@ -32,6 +32,9 @@ from app.services.automation.locator_engine import get_locator_engine
 from app.services.automation.auto_healing_service import get_auto_healing_service
 from app.services.automation.script_converter import get_script_converter
 from app.services.automation.test_execution_service import get_test_execution_service
+from app.services.flowstral.salesforce_playwright_generator import SalesforcePlaywrightGenerator
+from app.services.flowstral.simple_salesforce_generator import SimpleSalesforceGenerator
+from app.services.flowstral.robust_salesforce_generator import RobustSalesforceGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,20 @@ class FlowstralArtifactsGenerator:
         self.auto_healing_service = get_auto_healing_service()
         self.script_converter = get_script_converter()
         self.test_execution_service = get_test_execution_service()
+        # Robust Salesforce generator (preserves exact order, fast, no LLM)
+        self.robust_salesforce_generator = RobustSalesforceGenerator()
+        # TypeScript Flowstral Engine bridge (supports 25+ enterprise apps)
+        try:
+            from app.services.flowstral.flowstral_ts_bridge import get_flowstral_ts_bridge
+            self.ts_bridge = get_flowstral_ts_bridge()
+            if self.ts_bridge.is_available():
+                logger.info("[TS-ENGINE] ✅ TypeScript Flowstral Engine available - will use for 25+ enterprise apps")
+            else:
+                logger.warning("[TS-ENGINE] ⚠️ TypeScript Flowstral Engine not available - using Python generators only")
+                self.ts_bridge = None
+        except Exception as e:
+            logger.warning(f"[TS-ENGINE] ⚠️ Could not initialize TypeScript bridge: {e}")
+            self.ts_bridge = None
     
     async def generate_all_artifacts(
         self,
@@ -130,14 +147,19 @@ class FlowstralArtifactsGenerator:
         
         # Artifact 2: Full Playwright Script (with Flux high-fidelity agent)
         try:
-            await send_progress("Generating high-fidelity Playwright script (Flux agent)...", 20, "playwright_script")
+            logger.debug(f"[ARTIFACTS] Generating Playwright script for session {session_id}")
+            await send_progress("Generating Playwright script...", 20, "playwright_script")
+            script_start_time = time.time()
             playwright_result = await self.generate_playwright_script(
                 action_graph,
                 dom_snapshots,
                 tenant_id=tenant_id,
-                use_flux_agent=True,  # Use Flux for high-fidelity generation
-                raw_events=raw_events  # Pass raw events for precise timing/coordinates
+                use_flux_agent=False,  # CRITICAL: Disabled - fast generators (TS engine, robust_salesforce) will be used
+                raw_events=raw_events,  # Pass raw events for precise timing/coordinates
+                session_id=session_id  # Pass session_id for element model retrieval
             )
+            script_elapsed = int((time.time() - script_start_time) * 1000)
+            logger.debug(f"[ARTIFACTS] Playwright script generated in {script_elapsed}ms")
             # Ensure it always has a 'code' property, even if empty
             if not playwright_result.get("code"):
                 logger.warning("Playwright script generated but 'code' is empty, creating fallback")
@@ -167,17 +189,27 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             errors.append(f"Playwright Script: {str(e)}")
             await send_progress(f"Playwright script error: {str(e)}", 30, "playwright_script", "error")
         
-        # Artifact 3: Structured Test Cases (using Trace persona for manual tests)
+        # Artifact 3: Structured Test Cases - DISABLED FOR SPEED
+        # CRITICAL: Skip test case generation to avoid 5-minute delay from LLM calls
+        # Test cases can be generated separately if needed
         try:
-            await send_progress("Generating test cases (Trace persona - Manual Testing)...", 35, "test_cases")
-            logger.info("Starting test case generation with Trace persona...")
-            test_cases_result = await self.generate_structured_test_cases(
-                artifacts.get("playwright_script", {}),
-                action_graph,
-                project_id,
-                tenant_id,
-                use_trace_persona=True  # Use Trace persona for enterprise-grade manual tests
-            )
+            logger.debug("[TEST_CASES] Skipped for speed")
+            test_cases_result = {
+                "type": "test_cases",
+                "format": "structured",
+                "test_cases": {
+                    "automated": [],
+                    "manual": [],
+                    "accessibility": [],
+                    "performance": []
+                },
+                "total_count": 0,
+                "stored_count": 0,
+                "stored_test_case_ids": [],
+                "export_format": "test_cases.json",
+                "skipped": True,
+                "message": "Test case generation skipped for speed. Use separate test case generation tool if needed."
+            }
             # Validate result before accessing
             if test_cases_result is None:
                 logger.error("Test case generation returned None")
@@ -295,22 +327,19 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             }
             await send_progress("Performance report skipped (use standalone tool)", 85, "performance_report", "skipped")
         
-        # Artifact 6: Auto Defects
+        # Artifact 6: Auto Defects - DISABLED FOR SPEED
+        # CRITICAL: Skip defects generation to avoid delays
         try:
-            await send_progress("Generating defects...", 90, "defects")
-            artifacts["defects"] = await self.generate_auto_defects(
-                action_graph,
-                wcag_snapshots,
-                performance_snapshots,
-                project_id,
-                tenant_id
-            )
-            await send_progress("Defects completed", 95, "defects", "completed")
+            logger.debug("[DEFECTS] Skipped for speed")
+            artifacts["defects"] = {
+                "type": "defects",
+                "skipped": True,
+                "message": "Defects generation skipped for speed. Use separate defects tool if needed."
+            }
+            await send_progress("Defects skipped (use separate tool)", 95, "defects", "skipped")
         except Exception as e:
-            logger.error(f"Failed to generate defects: {e}", exc_info=True)
-            artifacts["defects"] = {"error": str(e), "type": "defects"}
-            errors.append(f"Defects: {str(e)}")
-            await send_progress(f"Defects error: {str(e)}", 95, "defects", "error")
+            logger.error(f"Failed to skip defects: {e}", exc_info=True)
+            artifacts["defects"] = {"error": str(e), "type": "defects", "skipped": True}
         
         await send_progress("All artifacts generated successfully!", 100, None, "completed")
         
@@ -412,8 +441,9 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
         action_graph: ActionGraph,
         dom_snapshots: List[Dict[str, Any]],
         tenant_id: Optional[str] = None,
-        use_flux_agent: bool = True,
-        raw_events: Optional[List[Dict[str, Any]]] = None
+        use_flux_agent: bool = False,  # CRITICAL: Default False to avoid slow LLM generators
+        raw_events: Optional[List[Dict[str, Any]]] = None,
+        session_id: Optional[str] = None  # Added: session_id for element model retrieval
     ) -> Dict[str, Any]:
         """
         Artifact 2: Full Playwright Automation Script
@@ -425,18 +455,185 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
             use_flux_agent: Use Flux high-fidelity agent (default: True)
             raw_events: Raw event log with precise timing and coordinates
         """
+        # Step 1: Detect application type
+        detected_app = None
+        initial_url = None
+        
+        # Find initial URL from nodes
+        for node in action_graph.nodes:
+            if hasattr(node, 'url') and node.url:
+                initial_url = node.url
+                break
+            elif isinstance(node, dict) and node.get('url'):
+                initial_url = node.get('url')
+                break
+        
+        # Detect application from DOM snapshots or URL
+        if dom_snapshots:
+            try:
+                from app.services.automation.application_detector import ApplicationDetector, ApplicationType
+                detector = ApplicationDetector()
+                
+                # Use first DOM snapshot for detection
+                first_snapshot = dom_snapshots[0] if dom_snapshots else {}
+                html_content = first_snapshot.get('html', '') or first_snapshot.get('dom', '')
+                
+                if html_content:
+                    app_type = detector.detect_application(html_content, initial_url or "")
+                    detected_app = app_type.value if app_type != ApplicationType.UNKNOWN else None
+                    logger.info(f"[APP_DETECT] Detected application: {detected_app}")
+            except Exception as e:
+                logger.warning(f"[APP_DETECT] Could not detect application: {e}")
+        
+        # Step 2: Try TypeScript Engine first (supports 25+ enterprise apps)
+        if self.ts_bridge and self.ts_bridge.is_available():
+            try:
+                logger.info(f"[TS-ENGINE] Attempting TypeScript Flowstral Engine for app: {detected_app or 'unknown'}")
+                start_time = time.time()
+                ts_result = self.ts_bridge.generate_script(
+                    action_graph_nodes=action_graph.nodes,
+                    session_id=session_id or "unknown",
+                    application_type=detected_app,
+                    initial_url=initial_url
+                )
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                
+                if ts_result.get("code") and len(ts_result.get("code", "").strip()) > 100:
+                    logger.info(f"[TS-ENGINE] ✅ Generated script using TypeScript engine in {elapsed_ms}ms (app: {ts_result.get('application', 'unknown')})")
+                    return {
+                        "type": "playwright_script",
+                        "format": "javascript",
+                        "code": ts_result["code"],
+                        "data": ts_result["code"],
+                        "action_count": len(action_graph.nodes),
+                        "generation_time_ms": elapsed_ms,
+                        "strategies_used": ["typescript_engine"] + ts_result.get("locator_strategies", []),
+                        "application": ts_result.get("application", detected_app),
+                        "warnings": ts_result.get("warnings", []),
+                        "export_format": "playwright_test.js"
+                    }
+                else:
+                    logger.warning(f"[TS-ENGINE] TypeScript engine returned empty/short script ({len(ts_result.get('code', '') or '')} chars), falling back")
+            except Exception as e:
+                logger.error(f"[TS-ENGINE] ❌ TypeScript engine failed: {e}", exc_info=True)
+                logger.warning("[TS-ENGINE] Falling back to Python generators")
+        
+        # Step 3: For Salesforce OR if detection failed, try robust generator (fast, preserves order, no LLM)
+        # CRITICAL: This must NEVER fail - it's fast and should always return a script
+        # Also use it if we have Salesforce-like nodes (IDs like #checkbox-88, #radio-131, etc.)
+        use_robust_generator = False
+        if detected_app == "salesforce":
+            use_robust_generator = True
+            logger.info("[ROBUST-SF] App detected as Salesforce")
+        elif not detected_app or detected_app == "unknown":
+            # Check if nodes have Salesforce-like patterns
+            salesforce_patterns = ["#checkbox-", "#radio-", "#input-", "#button-"]
+            for node in action_graph.nodes[:10]:  # Check first 10 nodes
+                # Try multiple ways to get selector
+                selector = ""
+                if hasattr(node, 'target_selector'):
+                    selector = str(node.target_selector) or ""
+                elif hasattr(node, 'metadata') and isinstance(node.metadata, dict):
+                    selector = str(node.metadata.get('target_selector', '')) or ""
+                elif isinstance(node, dict):
+                    selector = str(node.get('target_selector', '')) or ""
+                
+                if any(pattern in selector for pattern in salesforce_patterns):
+                    use_robust_generator = True
+                    logger.info(f"[ROBUST-SF] Salesforce-like patterns detected in nodes (e.g., {selector[:50]})")
+                    break
+        
+        if use_robust_generator:
+            logger.info("[ROBUST-SF] Using robust Salesforce generator (fast, preserves exact order, no LLM)...")
+            try:
+                start_time = time.time()
+                script = self.robust_salesforce_generator.generate_script(
+                    nodes=action_graph.nodes,
+                    session_element_models=None
+                )
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                
+                # CRITICAL: If script is empty or too short, create minimal fallback
+                if not script or len(script.strip()) < 100:
+                    logger.warning("[ROBUST-SF] Generated script is too short, creating minimal fallback")
+                    script = f"""import {{ test, expect }} from '@playwright/test';
+
+test('Flowstral Recorded Test', async ({{ page }}) => {{
+  await page.goto('{initial_url or "about:blank"}');
+  // {len(action_graph.nodes)} actions recorded but could not generate script
+}});"""
+                
+                logger.info(f"[ROBUST-SF] ✅ Generated script with {len(action_graph.nodes)} nodes in {elapsed_ms}ms")
+                return {
+                    "type": "playwright_script",
+                    "format": "javascript",
+                    "code": script,
+                    "data": script,
+                    "action_count": len(action_graph.nodes),
+                    "generation_time_ms": elapsed_ms,
+                    "strategies_used": ["robust_salesforce"],
+                    "export_format": "playwright_test.js"
+                }
+            except Exception as e:
+                logger.error(f"[ROBUST-SF] ❌ Robust Salesforce generator failed: {e}", exc_info=True)
+                # CRITICAL: Create minimal fallback immediately - don't fall through to slow generators
+                logger.warning("[ROBUST-SF] Creating minimal fallback script to prevent timeout")
+                fallback_script = f"""import {{ test, expect }} from '@playwright/test';
+
+test('Flowstral Recorded Test', async ({{ page }}) => {{
+  await page.goto('{initial_url or "about:blank"}');
+  // Error generating script: {str(e)[:100]}
+}});"""
+                return {
+                    "type": "playwright_script",
+                    "format": "javascript",
+                    "code": fallback_script,
+                    "data": fallback_script,
+                    "action_count": len(action_graph.nodes),
+                    "generation_time_ms": 0,
+                    "strategies_used": ["fallback"],
+                    "export_format": "playwright_test.js",
+                    "warnings": [f"Generator error: {str(e)}"]
+                }
+        
         # Use Enhanced Playwright Generator (best practices: semantic locators, auto-waiting, etc.)
         if use_flux_agent:
             try:
+                logger.info("[ENHANCED] Attempting to import Enhanced Playwright Generator...")
                 from app.services.flowstral.enhanced_playwright_generator import get_enhanced_playwright_generator
+                logger.info("[ENHANCED] Import successful, getting generator instance...")
                 enhanced_generator = get_enhanced_playwright_generator()
+                logger.info("[ENHANCED] Generator instance created successfully")
                 
                 logger.info("[ENHANCED] Using Enhanced Playwright Generator (best practices approach)...")
-                result = await enhanced_generator.generate_script(
-                    action_graph=action_graph,
-                    dom_snapshots=dom_snapshots,
-                    raw_events=raw_events
-                )
+                logger.info(f"[ENHANCED] Action graph has {len(action_graph.nodes)} nodes")
+                
+                # CRITICAL: Get element models from session if available (for in-memory fallback)
+                session_element_models = None
+                try:
+                    from app.services.flowstral.flowstral_session import flowstral_session_manager
+                    session = flowstral_session_manager.get_session(session_id)
+                    if session and hasattr(session, 'element_models'):
+                        session_element_models = session.element_models
+                        logger.info(f"[ENHANCED] Found {len(session_element_models)} element models in session memory")
+                except Exception as e:
+                    logger.warning(f"[ENHANCED] Could not get session element models: {e}")
+                
+                # CRITICAL: Add timeout to prevent hanging (enhanced generator uses LLM)
+                try:
+                    result = await asyncio.wait_for(
+                        enhanced_generator.generate_script(
+                            action_graph=action_graph,
+                            dom_snapshots=dom_snapshots,
+                            raw_events=raw_events,
+                            session_element_models=session_element_models
+                        ),
+                        timeout=30.0  # 30 second timeout - if it takes longer, fall back
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("[ENHANCED] Enhanced generator timed out after 30 seconds, falling back")
+                    result = None
+                logger.info(f"[ENHANCED] Generator returned result: {type(result)}, has 'script': {bool(result and result.get('script'))}")
                 
                 if result and result.get("script"):
                     gen_time = result.get("generation_time_ms", 0)
@@ -788,6 +985,7 @@ test('Flowstral Recorded Test', async ({{ page }}) => {{
                     scenarios = skeleton_result.get("scenarios", [])
                     if not scenarios:
                         logger.warning("No scenarios generated from skeleton generator, falling back to deterministic engine")
+                        logger.info("[FALLBACK] Immediately falling back to deterministic test case generation (no LLM rewrite)")
                         raise ValueError("No scenarios generated")
                     
                     logger.info(f"Generated {len(scenarios)} scenario skeletons")
@@ -1398,16 +1596,26 @@ Return ONLY valid JSON array, no explanations."""
             
             async def generate_automated_test_case():
                 """Generate automated test case from Playwright script with action graph enrichment"""
+                logger.info("[DETERMINISTIC] Starting automated test case generation...")
                 try:
                     # Use action graph to enrich the test case with semantic names
-                    return await self.test_design_agent.convert_script_to_test_case(
-                        playwright_script=playwright_script,
-                        recording_data={"action_graph": action_graph.to_dict() if action_graph else None},
-                        project_id=project_id,
-                        tenant_id=tenant_id
+                    logger.info("[DETERMINISTIC] Calling convert_script_to_test_case...")
+                    result = await asyncio.wait_for(
+                        self.test_design_agent.convert_script_to_test_case(
+                            playwright_script=playwright_script,
+                            recording_data={"action_graph": action_graph.to_dict() if action_graph else None},
+                            project_id=project_id,
+                            tenant_id=tenant_id
+                        ),
+                        timeout=60.0  # 60 second timeout for deterministic engine
                     )
+                    logger.info("[DETERMINISTIC] Automated test case generation completed successfully")
+                    return result
+                except asyncio.TimeoutError:
+                    logger.error("[DETERMINISTIC] Automated test case generation timed out after 60s")
+                    raise
                 except Exception as e:
-                    logger.warning(f"Failed to store test case in database, generating in-memory only: {e}. This is usually due to an invalid project_id or database connection issue. The test case will still be included in artifacts.")
+                    logger.warning(f"[DETERMINISTIC] Failed to store test case in database, generating in-memory only: {e}. This is usually due to an invalid project_id or database connection issue. The test case will still be included in artifacts.")
                     parsed = self.test_design_agent._parse_playwright_script(playwright_script)
                     return {
                         "status": "success",
@@ -1522,10 +1730,10 @@ Return ONLY valid JSON array, no explanations."""
             logger.info("   Automated test case should use 7B model (qwen2.5-coder:7b)")
             start_time = time.time()
             
-            # Add timeout to prevent hanging - increased to 5 minutes to accommodate 30B model fallback
-            # 7B model should take ~30-60s, but 30B can take 2-3 minutes, so we need buffer
-            test_case_timeout = float(os.getenv("TEST_CASE_GENERATION_TIMEOUT", "300.0"))  # 5 minutes default
-            logger.info(f"   Timeout set to {test_case_timeout}s ({test_case_timeout/60:.1f} minutes)")
+            # CRITICAL: Reduce timeout to 30 seconds for fast generation
+            # Skip LLM-based test case generation if it takes too long
+            test_case_timeout = float(os.getenv("TEST_CASE_GENERATION_TIMEOUT", "30.0"))  # 30 seconds (was 300)
+            logger.info(f"   Timeout set to {test_case_timeout}s (fast mode - was 5 minutes)")
             
             try:
                 gather_result = await asyncio.wait_for(

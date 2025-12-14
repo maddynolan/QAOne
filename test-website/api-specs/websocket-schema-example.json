@@ -1,0 +1,344 @@
+{
+  "protocol": "WebSocket",
+  "version": "RFC 6455",
+  "endpoints": [
+    {
+      "url": "ws://localhost:8002/ws",
+      "secure": false,
+      "description": "Main WebSocket endpoint for real-time updates"
+    },
+    {
+      "url": "wss://localhost:8002/ws",
+      "secure": true,
+      "description": "Secure WebSocket endpoint (if SSL configured)"
+    }
+  ],
+  "message_schemas": {
+    "client_to_server": {
+      "connect": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["connect"],
+            "description": "Connection action"
+          },
+          "token": {
+            "type": "string",
+            "description": "Authentication token (optional)"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client identifier"
+          }
+        },
+        "required": ["action"]
+      },
+      "subscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["subscribe"],
+            "description": "Subscribe action"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["orders", "products", "cart", "notifications"],
+            "description": "Channel to subscribe to"
+          },
+          "filters": {
+            "type": "object",
+            "description": "Optional filters for the subscription"
+          }
+        },
+        "required": ["action", "channel"]
+      },
+      "unsubscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["unsubscribe"],
+            "description": "Unsubscribe action"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Channel to unsubscribe from"
+          }
+        },
+        "required": ["action", "channel"]
+      },
+      "ping": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["ping"],
+            "description": "Ping action for keepalive"
+          }
+        },
+        "required": ["action"]
+      },
+      "send_message": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["message"],
+            "description": "Send message action"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Target channel"
+          },
+          "data": {
+            "type": "object",
+            "description": "Message data"
+          }
+        },
+        "required": ["action", "channel", "data"]
+      }
+    },
+    "server_to_client": {
+      "connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["connected"],
+            "description": "Connection confirmation"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Session identifier"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server timestamp"
+          }
+        },
+        "required": ["type", "sessionId"]
+      },
+      "subscribed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["subscribed"],
+            "description": "Subscription confirmation"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Subscribed channel"
+          }
+        },
+        "required": ["type", "channel"]
+      },
+      "order_update": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["order_update"],
+            "description": "Order update message"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["orders"],
+            "description": "Channel name"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "orderId": {"type": "integer"},
+              "status": {
+                "type": "string",
+                "enum": ["pending", "processing", "shipped", "delivered", "cancelled"]
+              },
+              "userId": {"type": "integer"},
+              "totalAmount": {"type": "number"},
+              "timestamp": {"type": "string", "format": "date-time"}
+            },
+            "required": ["orderId", "status", "timestamp"]
+          }
+        },
+        "required": ["type", "channel", "data"]
+      },
+      "product_update": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["product_update"],
+            "description": "Product update message"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["products"],
+            "description": "Channel name"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "productId": {"type": "integer"},
+              "action": {
+                "type": "string",
+                "enum": ["created", "updated", "deleted", "stock_changed", "price_changed"]
+              },
+              "productName": {"type": "string"},
+              "changes": {"type": "object"},
+              "timestamp": {"type": "string", "format": "date-time"}
+            },
+            "required": ["productId", "action", "timestamp"]
+          }
+        },
+        "required": ["type", "channel", "data"]
+      },
+      "cart_update": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cart_update"],
+            "description": "Cart update message"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["cart"],
+            "description": "Channel name"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "userId": {"type": "integer"},
+              "action": {
+                "type": "string",
+                "enum": ["item_added", "item_updated", "item_removed", "cart_cleared"]
+              },
+              "productId": {"type": ["integer", "null"]},
+              "quantity": {"type": ["integer", "null"]},
+              "timestamp": {"type": "string", "format": "date-time"}
+            },
+            "required": ["userId", "action", "timestamp"]
+          }
+        },
+        "required": ["type", "channel", "data"]
+      },
+      "notification": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["notification"],
+            "description": "Notification message"
+          },
+          "channel": {
+            "type": "string",
+            "enum": ["notifications"],
+            "description": "Channel name"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {"type": "string"},
+              "message": {"type": "string"},
+              "level": {
+                "type": "string",
+                "enum": ["info", "warning", "error", "success"]
+              },
+              "timestamp": {"type": "string", "format": "date-time"}
+            },
+            "required": ["title", "message", "level", "timestamp"]
+          }
+        },
+        "required": ["type", "channel", "data"]
+      },
+      "pong": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["pong"],
+            "description": "Pong response to ping"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server timestamp"
+          }
+        },
+        "required": ["type"]
+      },
+      "error": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["error"],
+            "description": "Error message"
+          },
+          "code": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Error timestamp"
+          }
+        },
+        "required": ["type", "code", "message"]
+      }
+    }
+  },
+  "test_scenarios": [
+    {
+      "name": "Connect and Subscribe to Orders",
+      "steps": [
+        {
+          "send": {
+            "action": "connect",
+            "token": "your_auth_token_here",
+            "clientId": "test-client-1"
+          }
+        },
+        {
+          "expect": {
+            "type": "connected"
+          }
+        },
+        {
+          "send": {
+            "action": "subscribe",
+            "channel": "orders"
+          }
+        },
+        {
+          "expect": {
+            "type": "subscribed",
+            "channel": "orders"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Receive Order Updates",
+      "steps": [
+        {
+          "expect": {
+            "type": "order_update",
+            "channel": "orders"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+

@@ -12,6 +12,11 @@ import os
 import sys
 import uvicorn
 import logging
+
+# Fix Windows asyncio event loop policy for Playwright subprocess support
+# Must be done before any event loop is created
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -85,8 +90,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting QA AI Backend...")
     try:
-        # Initialize any startup resources here
-        # e.g., database connections, WebSocket managers, etc.
+        # Initialize SQLite database
+        from app.services.storage.database_service import init_database
+        await init_database()
+        logger.info("SQLite database initialized")
+        
+        # Initialize any other startup resources here
         logger.info("Backend started successfully")
         yield
     except asyncio.CancelledError:
@@ -355,6 +364,18 @@ mock_ai_service = MockAIService()
 async def health_check_database():
     """Check database connection and schema - DEPRECATED: Use /health/database from health router"""
     try:
+        import os
+        postgres_enabled = os.getenv("ENABLE_POSTGRES", "false").lower() == "true"
+        
+        if not postgres_enabled:
+            return {
+                "status": "ok",
+                "connection_type": "sqlite_memory",
+                "message": "Using SQLite/in-memory storage (PostgreSQL disabled)",
+                "tables_available": ["test_cases", "recordings", "defects", "requirements"],
+                "note": "Set ENABLE_POSTGRES=true to use PostgreSQL"
+            }
+        
         from app.services.storage.postgres_direct import test_connection as test_postgres_connection, get_postgres_pool
         
         # Try direct Postgres first
@@ -6965,6 +6986,10 @@ async def health_check_database():
 from app.routers.health_api import router as health_router
 app.include_router(health_router)
 
+# Dashboard API
+from app.routers.dashboard_api import router as dashboard_router
+app.include_router(dashboard_router)
+
 # Phase 4.1: Plugin API endpoints
 from app.routers.plugin_api import router as plugin_router
 app.include_router(plugin_router)
@@ -6973,9 +6998,16 @@ app.include_router(plugin_router)
 from app.routers.app_first_flow import router as app_first_flow_router
 app.include_router(app_first_flow_router)
 
-# Flowstral endpoints
-from app.routers.flowstral_api import router as flowstral_router
-from app.routers.flowstral_config_api import router as flowstral_config_router
+# Flowstral API - Simple and Fast Script Generation
+from app.routers.playwright_recorder_api import router as flowstral_router
+app.include_router(flowstral_router)
+
+# COMMENTED OUT: Flowstral endpoints (old recording system)
+# from app.routers.flowstral_api import router as flowstral_router
+# from app.routers.flowstral_config_api import router as flowstral_config_router
+# app.include_router(flowstral_router)
+# app.include_router(flowstral_config_router)
+
 from app.routers.test_case_api import router as test_case_router
 from app.routers.test_cases_crud_api import router as test_cases_crud_router
 from app.routers.test_case_rewrite_api import router as test_case_rewrite_router
@@ -6988,8 +7020,6 @@ from app.routers.agents_api import router as agents_router
 from app.routers.workflows_api import router as workflows_router
 from app.routers.models_api import router as models_router
 from app.routers.ai_generation_api import router as ai_generation_router
-app.include_router(flowstral_router)
-app.include_router(flowstral_config_router)
 app.include_router(test_case_router)
 app.include_router(test_cases_crud_router)
 app.include_router(test_case_rewrite_router)
@@ -7002,6 +7032,10 @@ app.include_router(agents_router)
 app.include_router(workflows_router)
 app.include_router(models_router)
 app.include_router(ai_generation_router)
+
+# LLM API with cost optimization
+from app.routers.llm_api import router as llm_router
+app.include_router(llm_router)
 
 # API Import and Gherkin routers
 from app.routers.api_import_api import router as api_import_router
@@ -7034,6 +7068,10 @@ app.include_router(exploration_reporting_router)
 from app.routers.nexus_exploratory_api import router as nexus_exploratory_router
 app.include_router(nexus_exploratory_router)
 
+# Blaze - Real Autonomous Exploratory Testing (no AI dependency)
+from app.routers.blaze_api import router as blaze_router
+app.include_router(blaze_router)
+
 # Exploration Complete Workflow API
 from app.routers.exploration_workflow_api import router as exploration_workflow_router
 app.include_router(exploration_workflow_router)
@@ -7057,6 +7095,30 @@ app.include_router(accessibility_router)
 # Compliance and competitive optimizations
 from app.routers.compliance_api import router as compliance_router
 app.include_router(compliance_router)
+
+# Enhanced API Testing (Enterprise-grade, ReadyAPI-level)
+from app.routers.enhanced_api_testing_api import router as enhanced_api_testing_router
+app.include_router(enhanced_api_testing_router)
+
+# Framework Analyzer - Analyze and convert automation frameworks
+from app.routers.framework_analyzer_api import router as framework_analyzer_router
+app.include_router(framework_analyzer_router)
+
+# Database API - Unified SQLite/PostgreSQL storage with caching
+from app.routers.database_api import router as database_router
+app.include_router(database_router)
+
+# Project Management API - Better than Jira
+from app.routers.project_management_api import router as project_management_router
+app.include_router(project_management_router)
+
+# Traceability API - Requirements to Test Runs coverage matrix
+from app.routers.traceability_api import router as traceability_router
+app.include_router(traceability_router)
+
+# Sample Data (for testing/demos)
+from app.routers.sample_data_api import router as sample_data_router
+app.include_router(sample_data_router)
 
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility

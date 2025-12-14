@@ -1,9 +1,12 @@
 """
 Defects CRUD API Router
 Handles all defect operations
+Falls back to in-memory storage when PostgreSQL is not available
 """
 import logging
-from typing import Optional
+import uuid
+from typing import Optional, Dict, Any, List
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from app.utils.endpoint_helpers import (
     ensure_default_org_project,
@@ -11,54 +14,69 @@ from app.utils.endpoint_helpers import (
     map_priority_to_db,
     DEFAULT_USER_ID
 )
-from app.services.storage.database import get_database_client
-from app.services.storage.postgres_direct import execute_query, execute_insert, get_postgres_pool
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/defects", tags=["defects"])
+
+# In-memory storage fallback
+_defects_store: Dict[str, Dict[str, Any]] = {}
+
+def _is_postgres_available() -> bool:
+    """Check if PostgreSQL is available"""
+    try:
+        from app.services.storage.database import get_database_client
+        pool = get_database_client()
+        return pool is not None and hasattr(pool, 'getconn')
+    except Exception:
+        return False
+
 
 
 @router.get("")
 async def get_defects(project_id: Optional[str] = None):
     """Get all defects"""
     try:
-        org_id, proj_id = await ensure_default_org_project()
-        project_id = project_id or proj_id
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import execute_query
+                org_id, proj_id = await ensure_default_org_project()
+                project_id = project_id or proj_id
+                
+                query = """
+                    SELECT id, project_id, run_id, step_id, title, description, priority, status, 
+                           assigned_to, jira_id, created_by, created_at, updated_at
+                    FROM defects
+                    WHERE project_id = %s
+                    ORDER BY created_at DESC
+                """
+                results = await execute_query(query, (project_id,))
+                
+                defects = []
+                for row in results or []:
+                    priority = map_priority_from_db(row.get("priority", "P2"))
+                    defects.append({
+                        "id": str(row.get("id", "")),
+                        "title": row.get("title", ""),
+                        "description": row.get("description", ""),
+                        "priority": priority,
+                        "severity": priority,
+                        "status": row.get("status", "open"),
+                        "runId": str(row.get("run_id", "")) if row.get("run_id") else None,
+                        "stepId": str(row.get("step_id", "")) if row.get("step_id") else None,
+                        "assignedTo": str(row.get("assigned_to", "")) if row.get("assigned_to") else None,
+                        "jiraId": row.get("jira_id"),
+                        "createdAt": str(row.get("created_at", "")),
+                        "updatedAt": str(row.get("updated_at", ""))
+                    })
+                
+                return {"defects": defects}
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL query failed: {pg_error}")
         
-        pool = get_database_client()
-        if not pool or not hasattr(pool, 'getconn'):
-            return {"defects": []}
-        
-        query = """
-            SELECT id, project_id, run_id, step_id, title, description, priority, status, 
-                   assigned_to, jira_id, created_by, created_at, updated_at
-            FROM defects
-            WHERE project_id = %s
-            ORDER BY created_at DESC
-        """
-        results = await execute_query(query, (project_id,))
-        
-        defects = []
-        for row in results or []:
-            priority = map_priority_from_db(row.get("priority", "P2"))
-            
-            defects.append({
-                "id": str(row.get("id", "")),
-                "title": row.get("title", ""),
-                "description": row.get("description", ""),
-                "priority": priority,
-                "severity": priority,
-                "status": row.get("status", "open"),
-                "runId": str(row.get("run_id", "")) if row.get("run_id") else None,
-                "stepId": str(row.get("step_id", "")) if row.get("step_id") else None,
-                "assignedTo": str(row.get("assigned_to", "")) if row.get("assigned_to") else None,
-                "jiraId": row.get("jira_id"),
-                "createdAt": str(row.get("created_at", "")),
-                "updatedAt": str(row.get("updated_at", ""))
-            })
-        
-        return {"defects": defects}
+        # Fallback: return from in-memory store
+        return {"defects": list(_defects_store.values())}
     except Exception as e:
         logger.error(f"Error getting defects: {str(e)}")
         return {"defects": []}
@@ -111,31 +129,58 @@ async def get_defect(defect_id: str):
 async def create_defect(request: Request):
     """Create a new defect"""
     try:
-        org_id, project_id = await ensure_default_org_project()
         data = await request.json()
-        priority = map_priority_to_db(data.get("priority", "medium"))
+        now = datetime.now().isoformat()
+        defect_id = f"def_{uuid.uuid4().hex[:8]}"
         
-        pool = get_database_client()
-        if not pool or not hasattr(pool, 'getconn'):
-            raise HTTPException(status_code=500, detail="Database connection not available")
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import execute_insert
+                org_id, project_id = await ensure_default_org_project()
+                priority = map_priority_to_db(data.get("priority", "medium"))
+                
+                defect_data = {
+                    "project_id": project_id,
+                    "title": data.get("title", ""),
+                    "description": data.get("description", ""),
+                    "priority": priority,
+                    "status": data.get("status", "open"),
+                    "run_id": data.get("runId"),
+                    "step_id": data.get("stepId"),
+                    "assigned_to": data.get("assignedTo"),
+                    "jira_id": data.get("jiraId"),
+                    "created_by": DEFAULT_USER_ID
+                }
+                
+                pg_id = await execute_insert("defects", defect_data)
+                if pg_id:
+                    logger.info(f"Created defect in PostgreSQL: {pg_id}")
+                    return {"id": pg_id}
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL insert failed: {pg_error}")
         
-        defect_data = {
-            "project_id": project_id,
+        # Fallback: save to in-memory store
+        defect = {
+            "id": defect_id,
             "title": data.get("title", ""),
             "description": data.get("description", ""),
-            "priority": priority,
+            "severity": data.get("severity", data.get("priority", "medium")),
+            "priority": data.get("priority", "medium"),
             "status": data.get("status", "open"),
-            "run_id": data.get("runId"),
-            "step_id": data.get("stepId"),
-            "assigned_to": data.get("assignedTo"),
-            "jira_id": data.get("jiraId"),
-            "created_by": DEFAULT_USER_ID
+            "category": data.get("category", "functional"),
+            "stepsToReproduce": data.get("stepsToReproduce", []),
+            "actualResult": data.get("actualResult", ""),
+            "expectedResult": data.get("expectedResult", ""),
+            "environment": data.get("environment", {}),
+            "linkedTestCases": data.get("linkedTestCases", []),
+            "linkedRequirements": data.get("linkedRequirements", []),
+            "tags": data.get("tags", []),
+            "created_at": now,
+            "updated_at": now
         }
-        
-        defect_id = await execute_insert("defects", defect_data)
-        if not defect_id:
-            raise HTTPException(status_code=500, detail="Failed to create defect")
-        
+        _defects_store[defect_id] = defect
+        logger.info(f"Created defect in memory: {defect_id}")
         return {"id": defect_id}
     except HTTPException:
         raise

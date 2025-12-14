@@ -15,6 +15,17 @@ from .monitoring_service import MonitoringService
 from .protocol_handler import ProtocolHandler, HTTPHandler, create_protocol_handler
 from .correlation_engine import CorrelationEngine
 from .distributed_controller import DistributedController
+from .load_profiles import LoadProfileManager, LoadProfile, LoadProfileType
+from .data_parameterization import DataParameterizationEngine
+from .system_monitoring import SystemMonitor
+from .reporting_engine import ReportingEngine
+from .alerting_service import AlertingService, AlertSeverity
+from .test_scheduler import TestScheduler, ScheduleType
+from .transaction_analyzer import TransactionAnalyzer
+from .advanced_protocols import create_advanced_protocol_handler
+from .test_templates import TestTemplateLibrary
+from .network_simulation import NetworkSimulator, NetworkProfile
+from .apm_integration import APMIntegration, APMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +33,7 @@ logger = logging.getLogger(__name__)
 class PerformanceEngine:
     """
     Main Performance Testing Engine
-    Orchestrates load generation, monitoring, correlation, and reporting
+    Orchestrates load generation, monitoring, correlation, reporting, and all enterprise features
     """
     
     def __init__(self):
@@ -31,6 +42,18 @@ class PerformanceEngine:
         self.monitoring_service = MonitoringService()
         self.correlation_engine = CorrelationEngine()
         self.distributed_controller = DistributedController()
+        
+        # Enterprise features
+        self.load_profile_manager = LoadProfileManager()
+        self.data_parameterization = DataParameterizationEngine()
+        self.system_monitor = SystemMonitor()
+        self.reporting_engine = ReportingEngine()
+        self.alerting_service = AlertingService()
+        self.test_scheduler = TestScheduler()
+        self.transaction_analyzer = TransactionAnalyzer()
+        self.test_templates = TestTemplateLibrary()
+        self.network_simulator = NetworkSimulator()
+        self.apm_integration = APMIntegration()
         
         self.active_tests: Dict[str, Dict[str, Any]] = {}
         self.test_results: Dict[str, Dict[str, Any]] = {}

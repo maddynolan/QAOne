@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flowstral Recorder</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 380px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+      color: #ffffff;
+      min-height: 400px;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .header p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .status-bar {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .status-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .status-value {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .recording-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    .recording-dot.active {
+      background: #ff4757;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.8); }
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .actions-list {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 20px;
+    }
+
+    .actions-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .actions-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .actions-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+
+    .action-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .action-item:last-child {
+      border-bottom: none;
+    }
+
+    .action-icon {
+      width: 28px;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .action-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .action-type {
+      font-size: 12px;
+      font-weight: 600;
+      color: #667eea;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .action-desc {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .script-preview {
+      background: #0d1117;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .script-preview pre {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #e6edf3;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .script-preview .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .script-preview .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .options {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .options h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .option-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .option-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle.active {
+      background: #667eea;
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+    }
+
+    .toggle.active::after {
+      transform: translateX(20px);
+    }
+
+    .language-toggle {
+      display: flex;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 2px;
+    }
+
+    .lang-btn {
+      padding: 6px 12px;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .lang-btn.active {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .lang-btn:hover:not(.active) {
+      color: white;
+    }
+
+    .app-select {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      max-width: 160px;
+    }
+
+    .app-select option {
+      background: #1a1a2e;
+      color: white;
+    }
+
+    .app-select optgroup {
+      background: #16213e;
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .detected-app {
+      background: rgba(102, 126, 234, 0.2);
+      border: 1px solid rgba(102, 126, 234, 0.4);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .detected-app .app-icon {
+      font-size: 16px;
+    }
+
+    .detected-app .app-name {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .footer {
+      text-align: center;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .footer a {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .execution-results {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .results-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .close-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .results-content {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .result-status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .result-status.success {
+      background: rgba(74, 222, 128, 0.2);
+      color: #4ade80;
+      border: 1px solid rgba(74, 222, 128, 0.4);
+    }
+
+    .result-status.failed {
+      background: rgba(255, 71, 87, 0.2);
+      color: #ff4757;
+      border: 1px solid rgba(255, 71, 87, 0.4);
+    }
+
+    .result-status.running {
+      background: rgba(102, 126, 234, 0.2);
+      color: #667eea;
+      border: 1px solid rgba(102, 126, 234, 0.4);
+    }
+
+    .result-details {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 8px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* Syntax highlighting */
+    .hljs-keyword { color: #ff7b72; }
+    .hljs-string { color: #a5d6ff; }
+    .hljs-comment { color: #8b949e; }
+    .hljs-function { color: #d2a8ff; }
+    .hljs-number { color: #79c0ff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">▶</div>
+      <div>
+        <h1>Flowstral</h1>
+        <p>Test Recorder</p>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-row">
+        <span class="status-label">Status</span>
+        <div class="status-indicator">
+          <div class="recording-dot" id="statusDot"></div>
+          <span class="status-value" id="statusText">Ready</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Actions Recorded</span>
+        <span class="status-value" id="actionCount">0</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="startBtn">
+        <span>⏺</span> Start Recording
+      </button>
+      <button class="btn btn-danger hidden" id="stopBtn">
+        <span>⏹</span> Stop
+      </button>
+      <button class="btn btn-secondary hidden" id="pauseBtn" disabled>
+        <span>⏸</span> Pause
+      </button>
+      <button class="btn btn-secondary hidden" id="resumeBtn" disabled>
+        <span>▶</span> Resume
+      </button>
+      <button class="btn btn-secondary" id="clearBtn" disabled>
+        <span>🗑</span> Clear
+      </button>
+    </div>
+
+    <!-- Open in Sidebar button -->
+    <div style="margin-bottom: 16px;">
+      <button class="btn btn-secondary" id="openSidebarBtn" style="width: 100%; padding: 10px;">
+        <span>📌</span> Pin to Sidebar (See live steps)
+      </button>
+    </div>
+
+    <div id="actionsContainer" class="actions-list hidden">
+      <!-- Actions will be populated here -->
+    </div>
+
+    <div class="empty-state" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polygon points="10 8 16 12 10 16 10 8"></polygon>
+      </svg>
+      <p>Click "Start Recording" to begin<br>capturing your actions</p>
+    </div>
+
+    <div class="script-preview hidden" id="scriptPreview">
+      <button class="copy-btn" id="copyBtn">Copy</button>
+      <pre id="scriptCode"></pre>
+    </div>
+
+    <div class="options" id="optionsPanel">
+      <h3>Generation Options</h3>
+      
+      <div class="option-row">
+        <span class="option-label">Target Application</span>
+        <select id="appSelector" class="app-select">
+          <option value="auto">🔍 Auto-Detect</option>
+          <optgroup label="CRM & Sales">
+            <option value="salesforce">Salesforce</option>
+            <option value="dynamics365">Microsoft Dynamics 365</option>
+            <option value="hubspot">HubSpot</option>
+            <option value="zoho">Zoho</option>
+          </optgroup>
+          <optgroup label="ITSM & Support">
+            <option value="servicenow">ServiceNow</option>
+            <option value="jira">Jira / Atlassian</option>
+            <option value="zendesk">Zendesk</option>
+            <option value="freshdesk">Freshdesk</option>
+          </optgroup>
+          <optgroup label="ERP & Finance">
+            <option value="sap">SAP</option>
+            <option value="oracle">Oracle</option>
+            <option value="workday">Workday</option>
+            <option value="netsuite">NetSuite</option>
+            <option value="quickbooks">QuickBooks</option>
+            <option value="coupa">Coupa</option>
+          </optgroup>
+          <optgroup label="Productivity">
+            <option value="slack">Slack</option>
+            <option value="monday">Monday.com</option>
+            <option value="anaplan">Anaplan</option>
+          </optgroup>
+          <optgroup label="E-commerce & Other">
+            <option value="shopify">Shopify</option>
+            <option value="powerapps">Power Apps</option>
+            <option value="successfactors">SAP SuccessFactors</option>
+          </optgroup>
+          <option value="generic">Generic (Standard)</option>
+        </select>
+      </div>
+
+      <div class="option-row">
+        <span class="option-label">Output Language</span>
+        <div class="language-toggle">
+          <button class="lang-btn active" data-lang="typescript">TypeScript</button>
+          <button class="lang-btn" data-lang="python">Python</button>
+        </div>
+      </div>
+
+      <div class="option-row">
+        <span class="option-label">🎯 Visual Locators (CV)</span>
+        <div class="toggle" data-option="useVisualLocators"></div>
+      </div>
+
+      <div class="option-row">
+        <span class="option-label">Include comments</span>
+        <div class="toggle active" data-option="includeComments"></div>
+      </div>
+      <div class="option-row">
+        <span class="option-label">Generate assertions</span>
+        <div class="toggle active" data-option="generateAssertions"></div>
+      </div>
+      <div class="option-row">
+        <span class="option-label">Add wait strategies</span>
+        <div class="toggle active" data-option="addWaits"></div>
+      </div>
+    </div>
+
+    <div class="option-row" style="margin-bottom: 12px;">
+      <span class="option-label">🖥️ Show Browser (not headless)</span>
+      <div class="toggle" id="showBrowserToggle" data-option="showBrowser"></div>
+    </div>
+
+    <div class="controls" id="exportControls">
+      <button class="btn btn-primary" id="generateBtn" disabled>
+        <span>⚡</span> Generate Script
+      </button>
+      <button class="btn btn-secondary" id="runBtn" disabled>
+        <span>▶</span> Run Test
+      </button>
+      <button class="btn btn-secondary" id="downloadBtn" disabled>
+        <span>⬇</span> Download
+      </button>
+    </div>
+
+    <div class="options" id="testCaseOptions" style="margin-top: 16px;">
+      <h3>📋 Test Case Formats</h3>
+      <div class="controls" style="flex-wrap: wrap;">
+        <button class="btn btn-secondary" id="downloadISTQB" disabled style="flex: 1; min-width: 100px;">
+          <span>📋</span> ISTQB
+        </button>
+        <button class="btn btn-secondary" id="downloadGherkin" disabled style="flex: 1; min-width: 100px;">
+          <span>🥒</span> Gherkin
+        </button>
+        <button class="btn btn-secondary" id="downloadMarkdown" disabled style="flex: 1; min-width: 100px;">
+          <span>📄</span> Markdown
+        </button>
+      </div>
+    </div>
+    
+    <div class="execution-results hidden" id="executionResults">
+      <div class="results-header">
+        <h3>Test Execution Results</h3>
+        <button class="close-btn" id="closeResults">×</button>
+      </div>
+      <div class="results-content" id="resultsContent">
+        <!-- Results will be shown here -->
+      </div>
+    </div>
+
+    <div class="footer">
+      <a href="#" target="_blank">Flowstral Docs</a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

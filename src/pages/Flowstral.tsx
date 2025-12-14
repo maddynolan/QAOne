@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square, Download, Code, FileText, AlertTriangle, BarChart3, Bug, History, Loader2, CheckCircle, XCircle, Clock, Eye, Save, Trash2, ExternalLink, ChevronDown, ChevronUp, RefreshCw, Zap, Settings } from "lucide-react";
+import { Play, Square, Download, Code, FileText, AlertTriangle, BarChart3, Bug, History, Loader2, CheckCircle, XCircle, Clock, Eye, Save, Trash2, ExternalLink, ChevronDown, ChevronUp, RefreshCw, Zap, Settings, MousePointer, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,7 @@ export default function Flowstral() {
 
   const [projectId, setProjectId] = useState<string>("");
   const [apiKey, setApiKey] = useState<string>("");
+  const [baseUrl, setBaseUrl] = useState<string>("http://localhost:3000");  // Target URL for test
   const [stats, setStats] = useState({
     nodeCount: 0,
     edgeCount: 0,
@@ -74,6 +75,18 @@ export default function Flowstral() {
   const [testExecutionResult, setTestExecutionResult] = useState<any>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   
+  // Approval workflow state
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [approvalData, setApprovalData] = useState({
+    testCaseType: 'automated' as 'manual' | 'automated',
+    testCaseCategory: 'functional' as string,
+    testCasePriority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
+    linkedRequirements: [] as string[],
+    testCaseName: '',
+    testCaseDescription: '',
+  });
+  const [isApproving, setIsApproving] = useState(false);
+  
   const navigate = useNavigate();
 
   const eventListenersRef = useRef<any[]>([]);
@@ -97,10 +110,28 @@ export default function Flowstral() {
     };
   }, []);
 
-  // Load sessions when switching to sessions tab
+  // Load baseUrl from localStorage on mount
   useEffect(() => {
-    if (selectedTab === "sessions" && sessions.length === 0) {
+    const savedBaseUrl = localStorage.getItem('flowstral_base_url');
+    if (savedBaseUrl) {
+      setBaseUrl(savedBaseUrl);
+    }
+  }, []);
+
+  // Load sessions on mount and when switching tabs
+  useEffect(() => {
+    // Always load sessions on mount
+    loadSessions();
+  }, []);
+
+  // Auto-refresh sessions every 5 seconds when on sessions tab
+  useEffect(() => {
+    if (selectedTab === "sessions") {
       loadSessions();
+      const interval = setInterval(() => {
+        loadSessions();
+      }, 5000);
+      return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTab]);
@@ -181,7 +212,8 @@ export default function Flowstral() {
           project_id: projectId,
           user_id: "web_user",
           initial_url: window.location.href,
-          initial_dom: document.documentElement.outerHTML.substring(0, 50000)
+          initial_dom: document.documentElement.outerHTML.substring(0, 50000),
+          base_url: baseUrl || null  // User-specified target URL for test
         })
       });
 
@@ -569,10 +601,11 @@ export default function Flowstral() {
         // Show artifacts
         showArtifacts(artifactsData);
         
-        // Reload sessions list
-        if (selectedTab === "sessions") {
-          loadSessions();
-        }
+        // Always reload sessions list after stopping (regardless of tab)
+        loadSessions();
+        
+        // Reload again after a short delay to ensure backend has processed
+        setTimeout(() => loadSessions(), 1000);
       }, 2000);
 
     } catch (error: any) {
@@ -614,6 +647,111 @@ export default function Flowstral() {
       toast.error(`Failed to load sessions: ${error.message}`);
     } finally {
       setLoadingSessions(false);
+    }
+  };
+
+  // Update recording status (Draft → In Review → Approved/Rejected)
+  const updateRecordingStatus = async (sessionId: string, newStatus: 'draft' | 'in_review' | 'approved' | 'rejected') => {
+    try {
+      // Update locally first for immediate UI feedback
+      setSessions(prev => prev.map(s => 
+        s.session_id === sessionId ? { ...s, status: newStatus } : s
+      ));
+      
+      // Try to update on backend
+      const response = await fetch(`${API_BASE_URL}/api/flowstral/session/${sessionId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      if (!response.ok) {
+        console.warn('Backend status update failed, but local state updated');
+      }
+      
+      toast.success(`Recording marked as ${newStatus.replace('_', ' ')}`);
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      toast.success(`Recording marked as ${newStatus.replace('_', ' ')} (local only)`);
+    }
+  };
+
+  // Approve recording and create test case
+  const approveToTestCase = async () => {
+    if (!selectedSession) return;
+    
+    setIsApproving(true);
+    try {
+      // Create test case from recording
+      const testCase = {
+        id: `tc_${Date.now()}`,
+        name: approvalData.testCaseName || `Test: ${selectedSession.name || selectedSession.session_id.substring(0, 8)}`,
+        description: approvalData.testCaseDescription || `Test case created from recording ${selectedSession.session_id}`,
+        type: approvalData.testCaseType,
+        category: approvalData.testCaseCategory,
+        status: 'active',
+        steps: (selectedSession.actions || selectedSession.nodes || []).map((action: any, idx: number) => ({
+          action: action.description || `${action.type}: ${action.value || action.target || ''}`,
+          expectedResult: 'Step completes successfully',
+          testData: action.value || ''
+        })),
+        preconditions: [],
+        testData: [],
+        expectedResult: 'All steps complete successfully',
+        priority: approvalData.testCasePriority,
+        tags: ['flowstral', 'automated'],
+        linkedRequirements: approvalData.linkedRequirements,
+        source: {
+          type: 'flowstral' as const,
+          recordingId: selectedSession.session_id
+        },
+        testType: approvalData.testCaseType,
+        complexity: 'medium',
+        estimatedTime: 5,
+        automationScript: selectedSession.playwright_code || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Save to backend
+      const response = await fetch(`${API_BASE_URL}/test-cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testCase)
+      });
+      
+      if (response.ok) {
+        toast.success('Test case created successfully!');
+      } else {
+        // Save locally if backend fails
+        const existing = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        existing.push(testCase);
+        localStorage.setItem('test_cases', JSON.stringify(existing));
+        toast.success('Test case created (saved locally)');
+      }
+      
+      // Update recording status
+      await updateRecordingStatus(selectedSession.session_id, 'approved');
+      
+      // Update session with linked test case ID
+      setSessions(prev => prev.map(s => 
+        s.session_id === selectedSession.session_id 
+          ? { ...s, status: 'approved', test_case_id: testCase.id }
+          : s
+      ));
+      
+      setShowApprovalDialog(false);
+      setSelectedSession(null);
+      
+      // Navigate to test cases
+      toast.info('Navigating to Test Cases...');
+      setTimeout(() => navigate('/test-cases'), 1000);
+      
+    } catch (error: any) {
+      console.error('Failed to create test case:', error);
+      toast.error(`Failed to create test case: ${error.message}`);
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -1071,16 +1209,30 @@ export default function Flowstral() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 p-6">
-      {/* Header with Stats Dashboard */}
+      {/* Header with Workflow Editor Prominently Featured */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              ⭐ Flowstral Artifacts
+              ⭐ Trace (Flowstral)
             </h1>
-            <p className="text-muted-foreground">Review, manage, and export your generated test artifacts</p>
+            <p className="text-muted-foreground">Record user flows and generate test automation</p>
           </div>
           <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                const sessionId = session.sessionId || selectedSession?.session_id;
+                if (sessionId) {
+                  navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                } else {
+                  navigate('/flowstral/workflow-editor');
+                }
+              }}
+              className="bg-primary text-primary-foreground"
+            >
+              <Code className="h-4 w-4 mr-2" />
+              Open Workflow Editor
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -1099,6 +1251,120 @@ export default function Flowstral() {
             </Button>
           </div>
         </div>
+
+        {/* Base URL Configuration - IMPORTANT for correct test generation */}
+        <Card className="border-2 border-amber-500 bg-gradient-to-r from-amber-50 to-amber-100 dark:from-amber-950/30 dark:to-amber-900/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2 text-amber-800 dark:text-amber-200">
+              <ExternalLink className="h-5 w-5" />
+              Test Target URL
+            </CardTitle>
+            <CardDescription className="text-amber-700 dark:text-amber-300">
+              Enter the starting URL BEFORE recording. This is where your test should begin (not this page).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Label htmlFor="baseUrl" className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Base URL (Test Starting Point)
+                </Label>
+                <Input
+                  id="baseUrl"
+                  value={baseUrl}
+                  onChange={(e) => {
+                    setBaseUrl(e.target.value);
+                    // Store in localStorage so extensions can access it
+                    localStorage.setItem('flowstral_base_url', e.target.value);
+                  }}
+                  placeholder="http://localhost:3000"
+                  className="mt-1 border-amber-400 focus:border-amber-500 bg-white dark:bg-amber-950/50"
+                />
+              </div>
+              <Button
+                variant="outline"
+                className="border-amber-500 text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                onClick={() => {
+                  if (baseUrl) {
+                    window.open(baseUrl, '_blank');
+                    toast.success(`Opening ${baseUrl} in new tab. Record your actions there!`);
+                  } else {
+                    toast.error("Please enter a Base URL first");
+                  }
+                }}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open URL
+              </Button>
+            </div>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+              💡 The generated test will start with: <code className="bg-amber-200 dark:bg-amber-800 px-1 rounded">page.goto('{baseUrl || "..."}')</code>
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Prominent Workflow Editor Card */}
+        <Card className="border-2 border-primary bg-gradient-to-r from-primary/5 to-primary/10">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl flex items-center gap-2">
+                  <Code className="h-6 w-6 text-primary" />
+                  Workflow Editor
+                </CardTitle>
+                <CardDescription className="mt-2">
+                  Visual drag-and-drop editor to create, edit, and manage test workflows. Import from recordings or build from scratch.
+                </CardDescription>
+              </div>
+              <Button
+                size="lg"
+                onClick={() => {
+                  const sessionId = session.sessionId || selectedSession?.session_id;
+                  if (sessionId) {
+                    navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                  } else {
+                    navigate('/flowstral/workflow-editor');
+                  }
+                }}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Code className="h-5 w-5 mr-2" />
+                Open Workflow Editor
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <MousePointer className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Drag & Drop</p>
+                  <p className="text-xs text-muted-foreground">Intuitive visual workflow builder</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Zap className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Import Sessions</p>
+                  <p className="text-xs text-muted-foreground">Load from Flowstral recordings</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Play className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Test Execution</p>
+                  <p className="text-xs text-muted-foreground">Run tests directly from editor</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Quick Stats Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1308,6 +1574,21 @@ export default function Flowstral() {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
+                  onClick={() => {
+                    const sessionId = session.sessionId || selectedSession?.session_id;
+                    if (sessionId) {
+                      navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                    } else {
+                      navigate('/flowstral/workflow-editor');
+                    }
+                  }}
+                >
+                  <Code className="h-4 w-4 mr-2" />
+                  Open Workflow Editor
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
                   onClick={() => navigate("/cases")}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
@@ -1386,27 +1667,49 @@ export default function Flowstral() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sessions.map((sess) => (
+                  {sessions.map((sess) => {
+                    const recordingStatus = sess.status || 'draft';
+                    const statusColors: Record<string, string> = {
+                      draft: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
+                      in_review: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+                      approved: 'bg-green-500/10 text-green-600 border-green-500/20',
+                      rejected: 'bg-red-500/10 text-red-600 border-red-500/20',
+                    };
+                    return (
                     <Card key={sess.session_id} className="hover:bg-muted/50 transition-colors">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
-                              <Badge variant={sess.is_active ? "destructive" : "secondary"}>
-                                {sess.is_active ? "Active" : "Completed"}
+                              {/* Recording Status */}
+                              <Badge className={statusColors[recordingStatus] || statusColors.draft}>
+                                {recordingStatus === 'in_review' ? 'In Review' : 
+                                 recordingStatus.charAt(0).toUpperCase() + recordingStatus.slice(1)}
                               </Badge>
-                              <span className="text-xs font-mono text-muted-foreground">
+                              {sess.is_active && (
+                                <Badge variant="destructive">Recording...</Badge>
+                              )}
+                              {sess.test_case_id && (
+                                <Badge variant="outline" className="text-green-600">
+                                  → TC-{sess.test_case_id.substring(0, 6)}
+                                </Badge>
+                              )}
+                              <span className="text-xs font-mono text-muted-foreground ml-2">
                                 {sess.session_id.substring(0, 8)}...
                               </span>
                             </div>
+                            {/* Recording Name */}
+                            <div className="font-medium mb-2">
+                              {sess.name || `Recording ${sess.session_id.substring(0, 8)}`}
+                            </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
                               <div>
-                                <div className="text-sm font-semibold">{sess.node_count || 0}</div>
-                                <div className="text-xs text-muted-foreground">Nodes</div>
+                                <div className="text-sm font-semibold">{sess.node_count || sess.actions?.length || 0}</div>
+                                <div className="text-xs text-muted-foreground">Steps</div>
                               </div>
                               <div>
                                 <div className="text-sm font-semibold">{sess.edge_count || 0}</div>
-                                <div className="text-xs text-muted-foreground">Edges</div>
+                                <div className="text-xs text-muted-foreground">Transitions</div>
                               </div>
                               <div>
                                 <div className="text-sm font-semibold">{sess.wcag_issues_count || 0}</div>
@@ -1419,16 +1722,12 @@ export default function Flowstral() {
                             </div>
                             {sess.start_timestamp && (
                               <div className="text-xs text-muted-foreground mt-2">
-                                Started: {new Date(sess.start_timestamp).toLocaleString()}
-                              </div>
-                            )}
-                            {sess.project_id && (
-                              <div className="text-xs text-muted-foreground">
-                                Project: {sess.project_id}
+                                Recorded: {new Date(sess.start_timestamp).toLocaleString()}
                               </div>
                             )}
                           </div>
-                          <div className="flex gap-2 ml-4">
+                          <div className="flex flex-col gap-2 ml-4">
+                            {/* Primary Actions */}
                             <div className="flex gap-2">
                               <Button
                                 onClick={() => viewSessionDetails(sess.session_id)}
@@ -1440,69 +1739,152 @@ export default function Flowstral() {
                               </Button>
                               {!sess.is_active && (
                                 <Button
-                                  onClick={() => loadArtifactsForSession(sess.session_id)}
+                                  onClick={() => navigate(`/flowstral/workflow-editor?sessionId=${sess.session_id}`)}
                                   variant="outline"
                                   size="sm"
                                 >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Load Artifacts
+                                  <Zap className="h-4 w-4 mr-2" />
+                                  Edit Flow
                                 </Button>
                               )}
                             </div>
+                            {/* Workflow Actions */}
+                            {!sess.is_active && recordingStatus !== 'approved' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={() => {
+                                    setSelectedSession(sess);
+                                    setShowApprovalDialog(true);
+                                  }}
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Approve → Test Case
+                                </Button>
+                                <Button
+                                  onClick={() => updateRecordingStatus(sess.session_id, 'rejected')}
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  )})}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Session Details */}
+          {/* Session Details with Quick Assertions */}
           {selectedSession && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Session Details</CardTitle>
-                  <Button onClick={() => setSelectedSession(null)} variant="ghost" size="sm">
-                    Close
-                  </Button>
+                  <CardTitle>Recording Details</CardTitle>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => navigate(`/flowstral/workflow-editor?sessionId=${selectedSession.session_id}`)} 
+                      variant="outline" 
+                      size="sm"
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Edit in Workflow
+                    </Button>
+                    <Button onClick={() => setSelectedSession(null)} variant="ghost" size="sm">
+                      Close
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Session ID</Label>
-                      <div className="text-sm font-mono">{selectedSession.session_id}</div>
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Left Column - Session Info */}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Session ID</Label>
+                        <div className="text-sm font-mono">{selectedSession.session_id?.substring(0, 12)}...</div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Status</Label>
+                        <Badge variant={selectedSession.is_active ? "destructive" : "secondary"}>
+                          {selectedSession.status || (selectedSession.is_active ? "Recording" : "Completed")}
+                        </Badge>
+                      </div>
                     </div>
+                    
+                    {/* Steps Preview */}
                     <div>
-                      <Label>Project ID</Label>
-                      <div className="text-sm">{selectedSession.project_id}</div>
-                    </div>
-                    <div>
-                      <Label>Status</Label>
-                      <Badge variant={selectedSession.is_active ? "destructive" : "secondary"}>
-                        {selectedSession.is_active ? "Active" : "Completed"}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Label>Started</Label>
-                      <div className="text-sm">
-                        {selectedSession.start_timestamp 
-                          ? new Date(selectedSession.start_timestamp).toLocaleString()
-                          : "N/A"}
+                      <Label className="text-xs text-muted-foreground">Recorded Steps ({selectedSession.node_count || selectedSession.actions?.length || 0})</Label>
+                      <div className="mt-2 max-h-[200px] overflow-y-auto space-y-1">
+                        {(selectedSession.actions || selectedSession.nodes || []).slice(0, 10).map((action: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded text-xs">
+                            <Badge variant="outline" className="w-6 h-6 flex items-center justify-center p-0">
+                              {idx + 1}
+                            </Badge>
+                            <span className="font-medium">{action.type || 'action'}</span>
+                            <span className="text-muted-foreground truncate flex-1">
+                              {action.description || action.target || action.value || ''}
+                            </span>
+                          </div>
+                        ))}
+                        {(selectedSession.node_count || selectedSession.actions?.length || 0) > 10 && (
+                          <div className="text-xs text-muted-foreground text-center py-2">
+                            +{(selectedSession.node_count || selectedSession.actions?.length || 0) - 10} more steps
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <Label>Action Graph</Label>
-                    <div className="mt-2 p-3 bg-muted rounded-lg">
-                      <div className="text-sm">
-                        <strong>Nodes:</strong> {selectedSession.node_count || 0} | 
-                        <strong> Edges:</strong> {selectedSession.edge_count || 0}
-                      </div>
+                  
+                  {/* Right Column - Quick Assertions */}
+                  <div className="space-y-4 border-l pl-6">
+                    <div>
+                      <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Quick Assertions
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Add assertions to verify expected behavior
+                      </p>
+                    </div>
+                    
+                    {/* Assertion Builder */}
+                    <div className="space-y-2">
+                      <select className="w-full h-9 px-3 rounded-md border bg-background text-sm">
+                        <option value="text_visible">Text is visible on page</option>
+                        <option value="element_visible">Element is visible</option>
+                        <option value="url_contains">URL contains</option>
+                        <option value="title_is">Page title equals</option>
+                      </select>
+                      <Input placeholder="Expected value..." className="text-sm" />
+                      <Button size="sm" variant="outline" className="w-full">
+                        <Plus className="h-3 w-3 mr-2" />
+                        Add Assertion
+                      </Button>
+                    </div>
+                    
+                    {/* Assertions List */}
+                    <div className="space-y-1">
+                      {(selectedSession.assertions || []).map((assertion: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 bg-green-50 rounded text-xs">
+                          <CheckCircle className="h-3 w-3 text-green-600" />
+                          <span>{assertion.type}: {assertion.value}</span>
+                        </div>
+                      ))}
+                      {(!selectedSession.assertions || selectedSession.assertions.length === 0) && (
+                        <div className="text-xs text-muted-foreground text-center py-4 border-2 border-dashed rounded">
+                          No assertions yet. Add one above or use Workflow Editor for advanced assertions.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2380,6 +2762,135 @@ export default function Flowstral() {
             <Button onClick={() => handleSaveTestCase(selectedTestCase)}>
               <Save className="h-4 w-4 mr-2" />
               Save Test Case
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recording Approval Dialog - Convert to Test Case */}
+      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Approve Recording → Create Test Case
+            </DialogTitle>
+            <DialogDescription>
+              Convert this recording into a test case for your test library
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Recording Info */}
+            {selectedSession && (
+              <div className="p-3 bg-muted rounded-lg">
+                <div className="text-sm">
+                  <strong>Recording:</strong> {selectedSession.name || selectedSession.session_id?.substring(0, 8)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {selectedSession.actions?.length || selectedSession.node_count || 0} steps recorded
+                </div>
+              </div>
+            )}
+            
+            {/* Test Case Name */}
+            <div className="space-y-2">
+              <Label>Test Case Name *</Label>
+              <Input
+                value={approvalData.testCaseName}
+                onChange={(e) => setApprovalData(prev => ({ ...prev, testCaseName: e.target.value }))}
+                placeholder={`Test: ${selectedSession?.name || 'Recording'}`}
+              />
+            </div>
+            
+            {/* Description */}
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={approvalData.testCaseDescription}
+                onChange={(e) => setApprovalData(prev => ({ ...prev, testCaseDescription: e.target.value }))}
+                placeholder="Describe what this test verifies..."
+              />
+            </div>
+            
+            {/* Type Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Test Type *</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={approvalData.testCaseType === 'automated' ? 'default' : 'outline'}
+                    onClick={() => setApprovalData(prev => ({ ...prev, testCaseType: 'automated' }))}
+                    className="flex-1"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Automated
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={approvalData.testCaseType === 'manual' ? 'default' : 'outline'}
+                    onClick={() => setApprovalData(prev => ({ ...prev, testCaseType: 'manual' }))}
+                    className="flex-1"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Manual
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <select
+                  value={approvalData.testCasePriority}
+                  onChange={(e) => setApprovalData(prev => ({ ...prev, testCasePriority: e.target.value as any }))}
+                  className="w-full h-10 px-3 rounded-md border bg-background"
+                >
+                  <option value="critical">P0 - Critical</option>
+                  <option value="high">P1 - High</option>
+                  <option value="medium">P2 - Medium</option>
+                  <option value="low">P3 - Low</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Category */}
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <select
+                value={approvalData.testCaseCategory}
+                onChange={(e) => setApprovalData(prev => ({ ...prev, testCaseCategory: e.target.value }))}
+                className="w-full h-10 px-3 rounded-md border bg-background"
+              >
+                <option value="functional">Functional</option>
+                <option value="regression">Regression</option>
+                <option value="smoke">Smoke</option>
+                <option value="e2e">End-to-End (E2E)</option>
+                <option value="integration">Integration</option>
+              </select>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={approveToTestCase}
+              disabled={isApproving}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isApproving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Create Test Case
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

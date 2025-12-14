@@ -66,6 +66,7 @@ class StartFlowstralRequest(BaseModel):
     user_id: str
     initial_url: str
     initial_dom: Optional[str] = None
+    base_url: Optional[str] = None  # Target URL for test - user specifies this!
 
 
 class CaptureEventRequest(BaseModel):
@@ -101,7 +102,8 @@ async def start_flowstral(
             project_id=request.project_id,
             user_id=request.user_id,
             initial_url=request.initial_url,
-            initial_dom=request.initial_dom
+            initial_dom=request.initial_dom,
+            base_url=request.base_url  # User-specified target URL for test
         )
         
         return {
@@ -193,18 +195,14 @@ async def capture_events_batch(
         if not request.events or len(request.events) == 0:
             raise HTTPException(status_code=400, detail="No events provided")
         
-        # Log received batch
-        logger.info(f"[BATCH] Received batch request with {len(request.events)} events")
-        for idx, event in enumerate(request.events[:5]):  # Log first 5 events
-            logger.info(f"[BATCH] Event {idx+1}: session_id={event.get('session_id')}, event_type={event.get('event_type')}, timestamp={event.get('timestamp')}")
+        # Reduced logging - only log batch summary
+        logger.debug(f"[BATCH] Received {len(request.events)} events")
         
         # Process through gateway
         gateway_result = await flowstral_gateway.process_batch(
             events=request.events,
             tenant_id=tenant_id
         )
-        
-        logger.info(f"[BATCH] Gateway processed batch, sessions: {list(gateway_result.get('sessions', {}).keys())}")
         
         # Process each event through orchestrator
         processed_results = {}
@@ -219,13 +217,12 @@ async def capture_events_batch(
             
             for event in session_events:
                 try:
-                    logger.info(f"[BATCH] Processing event: session_id={event.get('session_id')}, event_type={event.get('event_type')}")
+                    logger.debug(f"[BATCH] Processing {event.get('event_type')} for session {event.get('session_id')[:8]}")
                     result = await orchestrator.capture_event(
                         session_id=event.get("session_id"),
                         event_type=event.get("event_type"),
                         event_data=event.get("event_data", {})
                     )
-                    logger.info(f"[BATCH] Event processed successfully: event_type={event.get('event_type')}")
                     session_results.append({
                         "status": "success",
                         "event_type": event.get("event_type"),
@@ -284,16 +281,29 @@ async def stop_flowstral(
     5. Performance Report
     6. Auto Defects
     """
+    import time
+    request_start_time = time.time()
+    request_start_iso = datetime.utcnow().isoformat()
+    
+    logger.info(f"[STOP-ENDPOINT] ⚡ STOP endpoint called for session: {request.session_id}")
+    logger.info(f"[STOP-ENDPOINT] [TIMING] T0: Request received at {request_start_iso}")
+    logger.info(f"[STOP-ENDPOINT] Project ID: {request.project_id}")
     try:
         tenant_id = key_data.get("tenant_id")
         
+        orchestrator_start = time.time()
+        logger.info(f"[STOP-ENDPOINT] [TIMING] T1: Calling orchestrator.stop_session (elapsed: {(orchestrator_start - request_start_time)*1000:.2f}ms)")
+        logger.info(f"[STOP-ENDPOINT] Calling orchestrator.stop_session...")
         result = await orchestrator.stop_session(
             session_id=request.session_id,
             project_id=request.project_id,
             tenant_id=tenant_id
         )
+        orchestrator_end = time.time()
+        logger.info(f"[STOP-ENDPOINT] [TIMING] T2: orchestrator.stop_session completed (elapsed: {(orchestrator_end - request_start_time)*1000:.2f}ms, orchestrator took: {(orchestrator_end - orchestrator_start)*1000:.2f}ms)")
         
         # Extract artifacts from nested structure
+        extract_start = time.time()
         artifacts_result = result.get("artifacts", {})
         # generate_all_artifacts returns {artifacts: {...}, warnings: [...]}
         # So we need to extract the nested artifacts dict
@@ -301,10 +311,13 @@ async def stop_flowstral(
             artifacts_dict = artifacts_result.get("artifacts", {})
         else:
             artifacts_dict = artifacts_result
+        extract_end = time.time()
+        logger.info(f"[STOP-ENDPOINT] [TIMING] T3: Artifacts extracted (elapsed: {(extract_end - request_start_time)*1000:.2f}ms, extract took: {(extract_end - extract_start)*1000:.2f}ms)")
         
         logger.info(f"Returning artifacts with keys: {list(artifacts_dict.keys()) if isinstance(artifacts_dict, dict) else 'not a dict'}")
         
-        return {
+        response_start = time.time()
+        response_data = {
             "status": "success",
             "session_id": request.session_id,
             "artifacts": {
@@ -315,6 +328,16 @@ async def stop_flowstral(
             "real_time_outputs": result.get("real_time_outputs", {}),
             "completed_at": datetime.utcnow().isoformat()
         }
+        response_end = time.time()
+        total_time = (response_end - request_start_time) * 1000
+        
+        logger.info(f"[STOP-ENDPOINT] [TIMING] T4: Response prepared (elapsed: {total_time:.2f}ms)")
+        logger.info(f"[STOP-ENDPOINT] [TIMING] SUMMARY: Total backend time: {total_time:.2f}ms ({(total_time/1000):.2f}s)")
+        logger.info(f"[STOP-ENDPOINT] [TIMING]   - Orchestrator: {(orchestrator_end - orchestrator_start)*1000:.2f}ms")
+        logger.info(f"[STOP-ENDPOINT] [TIMING]   - Extract: {(extract_end - extract_start)*1000:.2f}ms")
+        logger.info(f"[STOP-ENDPOINT] [TIMING]   - Response prep: {(response_end - response_start)*1000:.2f}ms")
+        
+        return response_data
     
     except asyncio.TimeoutError:
         logger.error(f"Artifact generation timed out for session {request.session_id}")

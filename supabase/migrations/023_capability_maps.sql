@@ -78,3 +78,6 @@ CREATE INDEX IF NOT EXISTS idx_capability_map_changes_detected ON capability_map
 
 
 
+
+
+

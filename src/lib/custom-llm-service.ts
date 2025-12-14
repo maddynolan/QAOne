@@ -1,4 +1,4 @@
-// Custom LLM Service for QA AI Platform
+// Custom LLM Service for ArisTrace Platform
 // This integrates with the QAOne backend API
 
 export interface TestCaseGenerationRequest {

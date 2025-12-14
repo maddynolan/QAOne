@@ -1,10 +1,13 @@
 """
 Test Cases CRUD API Router
 Handles all test case CRUD operations
+Falls back to in-memory storage when PostgreSQL is not available
 """
 import logging
 import json
-from typing import Optional, List
+import uuid
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from app.utils.endpoint_helpers import (
     ensure_default_org_project,
@@ -12,12 +15,22 @@ from app.utils.endpoint_helpers import (
     map_priority_to_db,
     DEFAULT_USER_ID
 )
-from app.services.storage.database import get_database_client
-from app.services.storage.postgres_direct import execute_query, execute_insert, get_postgres_pool
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/test-cases", tags=["test-cases"])
+
+# In-memory storage fallback when PostgreSQL is not available
+_test_cases_store: Dict[str, Dict[str, Any]] = {}
+
+def _is_postgres_available() -> bool:
+    """Check if PostgreSQL is available"""
+    try:
+        from app.services.storage.database import get_database_client
+        pool = get_database_client()
+        return pool is not None and hasattr(pool, 'getconn')
+    except Exception:
+        return False
 
 
 @router.get("")
@@ -28,70 +41,73 @@ async def get_test_cases(
     """Get all test cases, optionally filtered by plan_id"""
     try:
         logger.info(f"Getting test cases - project_id: {project_id}, plan_id: {plan_id}")
-        org_id, proj_id = await ensure_default_org_project()
-        project_id = project_id or proj_id
-        logger.info(f"Using project_id: {project_id}")
         
-        pool = get_database_client()
-        if not pool or not hasattr(pool, 'getconn'):
-            logger.warning("No database pool available, returning empty list")
-            return []
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import execute_query
+                org_id, proj_id = await ensure_default_org_project()
+                project_id = project_id or proj_id
+                
+                if plan_id:
+                    query = """
+                        SELECT id, project_id, plan_id, title, description, priority, test_type, 
+                               status, tags, steps, preconditions, test_data, estimated_time,
+                               created_by, created_at, updated_at
+                        FROM test_cases 
+                        WHERE project_id = %s AND plan_id = %s 
+                          AND status IN ('draft', 'active')
+                        ORDER BY created_at DESC
+                    """
+                    results = await execute_query(query, (project_id, plan_id))
+                else:
+                    query = """
+                        SELECT id, project_id, plan_id, title, description, priority, test_type, 
+                               status, tags, steps, preconditions, test_data, estimated_time,
+                               created_by, created_at, updated_at
+                        FROM test_cases 
+                        WHERE project_id = %s 
+                          AND status IN ('draft', 'active')
+                        ORDER BY created_at DESC
+                    """
+                    results = await execute_query(query, (project_id,))
+                
+                test_cases = []
+                for row in results or []:
+                    steps = row.get("steps") or []
+                    if isinstance(steps, str):
+                        try:
+                            steps = json.loads(steps)
+                        except:
+                            steps = []
+                    
+                    test_cases.append({
+                        "id": str(row.get("id", "")),
+                        "name": row.get("title", ""),
+                        "description": row.get("description", ""),
+                        "steps": steps,
+                        "priority": map_priority_from_db(row.get("priority", "P2")),
+                        "tags": row.get("tags") or [],
+                        "testType": row.get("test_type", "manual"),
+                        "complexity": "medium",
+                        "estimatedTime": row.get("estimated_time", 15),
+                        "preconditions": row.get("preconditions") or [],
+                        "testData": row.get("test_data") or {},
+                        "createdAt": row.get("created_at", "").isoformat() if hasattr(row.get("created_at"), 'isoformat') else str(row.get("created_at", "")),
+                        "updatedAt": row.get("updated_at", "").isoformat() if hasattr(row.get("updated_at"), 'isoformat') else str(row.get("updated_at", ""))
+                    })
+                
+                logger.info(f"Returning {len(test_cases)} test cases from PostgreSQL")
+                return test_cases
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL query failed, using in-memory store: {pg_error}")
         
-        # Build query with optional plan_id filter
-        # Only show active test cases (exclude archived and deprecated)
-        if plan_id:
-            query = """
-                SELECT id, project_id, plan_id, title, description, priority, test_type, 
-                       status, tags, steps, preconditions, test_data, estimated_time,
-                       created_by, created_at, updated_at
-                FROM test_cases 
-                WHERE project_id = %s AND plan_id = %s 
-                  AND status IN ('draft', 'active')
-                ORDER BY created_at DESC
-            """
-            results = await execute_query(query, (project_id, plan_id))
-        else:
-            query = """
-                SELECT id, project_id, plan_id, title, description, priority, test_type, 
-                       status, tags, steps, preconditions, test_data, estimated_time,
-                       created_by, created_at, updated_at
-                FROM test_cases 
-                WHERE project_id = %s 
-                  AND status IN ('draft', 'active')
-                ORDER BY created_at DESC
-            """
-            results = await execute_query(query, (project_id,))
-        
-        logger.info(f"Found {len(results or [])} test cases in database")
-        
-        test_cases = []
-        for row in results or []:
-            # Parse steps JSON if needed
-            steps = row.get("steps") or []
-            if isinstance(steps, str):
-                try:
-                    steps = json.loads(steps)
-                except:
-                    steps = []
-            
-            test_cases.append({
-                "id": str(row.get("id", "")),
-                "name": row.get("title", ""),
-                "description": row.get("description", ""),
-                "steps": steps,
-                "priority": map_priority_from_db(row.get("priority", "P2")),
-                "tags": row.get("tags") or [],
-                "testType": row.get("test_type", "manual"),
-                "complexity": "medium",
-                "estimatedTime": row.get("estimated_time", 15),
-                "preconditions": row.get("preconditions") or [],
-                "testData": row.get("test_data") or {},
-                "createdAt": row.get("created_at", "").isoformat() if hasattr(row.get("created_at"), 'isoformat') else str(row.get("created_at", "")),
-                "updatedAt": row.get("updated_at", "").isoformat() if hasattr(row.get("updated_at"), 'isoformat') else str(row.get("updated_at", ""))
-            })
-        
-        logger.info(f"Returning {len(test_cases)} test cases")
+        # Fallback to in-memory storage
+        logger.info("Using in-memory storage for test cases")
+        test_cases = list(_test_cases_store.values())
+        logger.info(f"Returning {len(test_cases)} test cases from in-memory store")
         return test_cases
+        
     except Exception as e:
         logger.error(f"Error getting test cases: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting test cases: {str(e)}")
@@ -101,44 +117,49 @@ async def get_test_cases(
 async def get_test_case(case_id: str):
     """Get a specific test case"""
     try:
-        pool = get_database_client()
-        if not pool or not hasattr(pool, 'getconn'):
-            raise HTTPException(status_code=404, detail="Test case not found")
-        
-        query = """
-            SELECT id, project_id, plan_id, title, description, priority, test_type, 
-                   status, tags, steps, preconditions, test_data, estimated_time,
-                   created_by, created_at, updated_at
-            FROM test_cases 
-            WHERE id = %s
-        """
-        results = await execute_query(query, (case_id,))
-        
-        if not results or len(results) == 0:
-            raise HTTPException(status_code=404, detail="Test case not found")
-        
-        row = results[0]
-        # Parse steps JSON if needed (consistent with get_test_cases)
-        steps = row.get("steps") or []
-        if isinstance(steps, str):
+        # Try PostgreSQL first
+        if _is_postgres_available():
             try:
-                steps = json.loads(steps)
-            except:
-                steps = []
+                from app.services.storage.postgres_direct import execute_query
+                query = """
+                    SELECT id, project_id, plan_id, title, description, priority, test_type, 
+                           status, tags, steps, preconditions, test_data, estimated_time,
+                           created_by, created_at, updated_at
+                    FROM test_cases 
+                    WHERE id = %s
+                """
+                results = await execute_query(query, (case_id,))
+                
+                if results and len(results) > 0:
+                    row = results[0]
+                    steps = row.get("steps") or []
+                    if isinstance(steps, str):
+                        try:
+                            steps = json.loads(steps)
+                        except:
+                            steps = []
+                    
+                    return {
+                        "id": str(row.get("id", "")),
+                        "name": row.get("title", ""),
+                        "description": row.get("description", ""),
+                        "steps": steps,
+                        "priority": map_priority_from_db(row.get("priority", "P2")),
+                        "tags": row.get("tags") or [],
+                        "testType": row.get("test_type", "manual"),
+                        "complexity": "medium",
+                        "estimatedTime": row.get("estimated_time", 15),
+                        "preconditions": row.get("preconditions") or [],
+                        "testData": row.get("test_data") or {}
+                    }
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL query failed: {pg_error}")
         
-        return {
-            "id": str(row.get("id", "")),
-            "name": row.get("title", ""),
-            "description": row.get("description", ""),
-            "steps": steps,
-            "priority": map_priority_from_db(row.get("priority", "P2")),
-            "tags": row.get("tags") or [],
-            "testType": row.get("test_type", "manual"),
-            "complexity": "medium",
-            "estimatedTime": row.get("estimated_time", 15),
-            "preconditions": row.get("preconditions") or [],
-            "testData": row.get("test_data") or {}
-        }
+        # Fallback: check in-memory store
+        if case_id in _test_cases_store:
+            return _test_cases_store[case_id]
+        
+        raise HTTPException(status_code=404, detail="Test case not found")
     except HTTPException:
         raise
     except Exception as e:
@@ -221,40 +242,63 @@ async def create_test_case(request: Request):
                         }
                     ]
         
+        # Generate UUID for test case
+        case_id = str(uuid.uuid4())[:8]
+        now = datetime.now().isoformat()
+        
         case_data = {
+            "id": case_id,
             "project_id": project_id,
+            "name": data.get("name", ""),
             "title": data.get("name", ""),
             "description": data.get("description", ""),
-            "priority": priority,
+            "priority": map_priority_from_db(priority),
+            "testType": data.get("testType", "manual"),
             "test_type": data.get("testType", "manual"),
             "status": "draft",
             "tags": data.get("tags", []),
             "steps": steps,
             "preconditions": data.get("preconditions", []),
+            "testData": data.get("testData", {}),
             "test_data": data.get("testData", {}),
+            "estimatedTime": data.get("estimatedTime", 15),
             "estimated_time": data.get("estimatedTime", 15),
-            "created_by": DEFAULT_USER_ID
+            "createdAt": now,
+            "updatedAt": now
         }
         
-        logger.info(f"Creating test case: title={case_data['title']}, test_type={case_data['test_type']}, steps_count={len(steps)}")
+        logger.info(f"Creating test case: title={case_data['name']}, test_type={case_data['testType']}, steps_count={len(steps)}")
         
-        try:
-            case_id = await execute_insert("test_cases", case_data)
-            if not case_id:
-                error_msg = "execute_insert returned None - database insert failed"
-                logger.error(error_msg)
-                raise HTTPException(status_code=500, detail=error_msg)
-            
-            logger.info(f"Successfully created test case: {case_id}")
-            return {"id": case_id}
-        except HTTPException:
-            raise
-        except Exception as db_error:
-            error_msg = f"Database error creating test case: {str(db_error)}"
-            logger.error(error_msg)
-            import traceback
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}. Check server logs for full details.")
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import execute_insert
+                db_data = {
+                    "project_id": project_id,
+                    "title": data.get("name", ""),
+                    "description": data.get("description", ""),
+                    "priority": priority,
+                    "test_type": data.get("testType", "manual"),
+                    "status": "draft",
+                    "tags": data.get("tags", []),
+                    "steps": steps,
+                    "preconditions": data.get("preconditions", []),
+                    "test_data": data.get("testData", {}),
+                    "estimated_time": data.get("estimatedTime", 15),
+                    "created_by": DEFAULT_USER_ID
+                }
+                pg_case_id = await execute_insert("test_cases", db_data)
+                if pg_case_id:
+                    logger.info(f"Successfully created test case in PostgreSQL: {pg_case_id}")
+                    return {"id": pg_case_id}
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL insert failed, using in-memory: {pg_error}")
+        
+        # Fallback to in-memory storage
+        _test_cases_store[case_id] = case_data
+        logger.info(f"Successfully created test case in memory: {case_id}")
+        return {"id": case_id}
+        
     except Exception as e:
         logger.error(f"Error in create_test_case: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -264,46 +308,68 @@ async def create_test_case(request: Request):
 async def update_test_case(case_id: str, request: Request):
     """Update a test case"""
     try:
-        org_id, project_id = await ensure_default_org_project()
         data = await request.json()
         priority = map_priority_to_db(data.get("priority", "medium"))
+        now = datetime.now().isoformat()
         
-        pool = get_postgres_pool()
-        if not pool:
-            raise HTTPException(status_code=500, detail="Database connection failed")
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import get_postgres_pool
+                pool = get_postgres_pool()
+                if pool:
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            update_query = """
+                                UPDATE test_cases 
+                                SET title = %s, description = %s, priority = %s, test_type = %s,
+                                    tags = %s, steps = %s, preconditions = %s, test_data = %s,
+                                    estimated_time = %s, updated_at = NOW()
+                                WHERE id = %s
+                                RETURNING id
+                            """
+                            cur.execute(update_query, (
+                                data.get("name", ""),
+                                data.get("description", ""),
+                                priority,
+                                data.get("testType", "manual"),
+                                data.get("tags", []),
+                                json.dumps(data.get("steps", [])),
+                                data.get("preconditions", []),
+                                json.dumps(data.get("testData", {})),
+                                data.get("estimatedTime", 15),
+                                case_id
+                            ))
+                            result = cur.fetchone()
+                            conn.commit()
+                            
+                            if result:
+                                return {"id": case_id}
+                    finally:
+                        pool.putconn(conn)
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL update failed: {pg_error}")
         
-        conn = pool.getconn()
-        try:
-            with conn.cursor() as cur:
-                update_query = """
-                    UPDATE test_cases 
-                    SET title = %s, description = %s, priority = %s, test_type = %s,
-                        tags = %s, steps = %s, preconditions = %s, test_data = %s,
-                        estimated_time = %s, updated_at = NOW()
-                    WHERE id = %s
-                    RETURNING id
-                """
-                cur.execute(update_query, (
-                    data.get("name", ""),
-                    data.get("description", ""),
-                    priority,
-                    data.get("testType", "manual"),
-                    data.get("tags", []),
-                    json.dumps(data.get("steps", [])),
-                    data.get("preconditions", []),
-                    json.dumps(data.get("testData", {})),
-                    data.get("estimatedTime", 15),
-                    case_id
-                ))
-                result = cur.fetchone()
-                conn.commit()
-                
-                if not result:
-                    raise HTTPException(status_code=404, detail="Test case not found")
-                
-                return {"id": str(result[0])}
-        finally:
-            pool.putconn(conn)
+        # Fallback: update in-memory
+        if case_id in _test_cases_store:
+            _test_cases_store[case_id].update({
+                "name": data.get("name", ""),
+                "title": data.get("name", ""),
+                "description": data.get("description", ""),
+                "priority": map_priority_from_db(priority),
+                "testType": data.get("testType", "manual"),
+                "tags": data.get("tags", []),
+                "steps": data.get("steps", []),
+                "preconditions": data.get("preconditions", []),
+                "testData": data.get("testData", {}),
+                "estimatedTime": data.get("estimatedTime", 15),
+                "updatedAt": now
+            })
+            return {"id": case_id}
+        
+        # Not found in either store
+        raise HTTPException(status_code=404, detail="Test case not found")
     except HTTPException:
         raise
     except Exception as e:
@@ -315,28 +381,37 @@ async def update_test_case(case_id: str, request: Request):
 async def delete_test_case(case_id: str):
     """Delete a test case by setting status to 'archived' (soft delete)"""
     try:
-        pool = get_postgres_pool()
-        if not pool:
-            raise HTTPException(status_code=404, detail="Test case not found")
+        # Try PostgreSQL first
+        if _is_postgres_available():
+            try:
+                from app.services.storage.postgres_direct import get_postgres_pool
+                pool = get_postgres_pool()
+                if pool:
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE test_cases SET status = 'archived', updated_at = NOW() WHERE id = %s RETURNING id",
+                                (case_id,)
+                            )
+                            result = cur.fetchone()
+                            conn.commit()
+                            
+                            if result:
+                                logger.info(f"Test case {case_id} archived in PostgreSQL")
+                                return {"status": "archived", "id": str(result[0])}
+                    finally:
+                        pool.putconn(conn)
+            except Exception as pg_error:
+                logger.warning(f"PostgreSQL delete failed: {pg_error}")
         
-        conn = pool.getconn()
-        try:
-            with conn.cursor() as cur:
-                # Soft delete: set status to 'archived' instead of hard delete
-                cur.execute(
-                    "UPDATE test_cases SET status = 'archived', updated_at = NOW() WHERE id = %s RETURNING id",
-                    (case_id,)
-                )
-                result = cur.fetchone()
-                conn.commit()
-                
-                if not result:
-                    raise HTTPException(status_code=404, detail="Test case not found")
-                
-                logger.info(f"Test case {case_id} archived (soft deleted)")
-                return {"status": "archived", "id": str(result[0])}
-        finally:
-            pool.putconn(conn)
+        # Fallback: delete from in-memory store
+        if case_id in _test_cases_store:
+            del _test_cases_store[case_id]
+            logger.info(f"Test case {case_id} deleted from in-memory store")
+            return {"status": "deleted", "id": case_id}
+        
+        raise HTTPException(status_code=404, detail="Test case not found")
     except HTTPException:
         raise
     except Exception as e:

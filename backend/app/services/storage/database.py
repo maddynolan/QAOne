@@ -39,25 +39,37 @@ except ImportError:
         return None
 
 
+_db_warning_logged = False
+
 def get_database_client() -> Optional[Any]:
     """
     Get database client - prefers direct Postgres, falls back to Supabase
     Returns: Postgres pool or Supabase client or None
+    
+    Note: Returns None silently if PostgreSQL is disabled (default).
+    The app uses SQLite/in-memory storage instead.
     """
+    global _db_warning_logged
+    
     # Prefer direct Postgres connection (for hybrid approach)
     if POSTGRES_DIRECT_AVAILABLE:
         pool = get_postgres_pool()
         if pool:
-            logger.info("Using direct PostgreSQL connection")
+            if not _db_warning_logged:
+                logger.info("Using direct PostgreSQL connection")
             return pool
     
     # Fallback to Supabase
     client = get_supabase_client()
     if client:
-        logger.info("Using Supabase client")
+        if not _db_warning_logged:
+            logger.info("Using Supabase client")
         return client
     
-    logger.warning("No database connection configured")
+    # Only log once to avoid log spam
+    if not _db_warning_logged:
+        logger.debug("No external database configured - using SQLite/in-memory storage")
+        _db_warning_logged = True
     return None
 
 

@@ -14,12 +14,13 @@ AIR_GAPPED_MODE = os.getenv("AIR_GAPPED_MODE", "false").lower() == "true"
 
 # Allowed LLM providers based on mode
 if AIR_GAPPED_MODE:
-    ALLOWED_LLM_PROVIDERS = ["local_ollama", "local_vllm"]
+    ALLOWED_LLM_PROVIDERS = ["local_ollama", "local_vllm", "local_qwen"]
     logger.info("🔒 AIR-GAPPED MODE ENABLED - External LLM calls blocked")
 else:
     ALLOWED_LLM_PROVIDERS = [
         "local_ollama",
         "local_vllm",
+        "local_qwen",  # Added: Qwen models via Ollama
         "openai",
         "anthropic",
         "azure_openai"
@@ -56,10 +57,20 @@ LLM_CONFIG = {
     "anthropic": {
         "api_key": os.getenv("ANTHROPIC_API_KEY"),
         "enabled": not AIR_GAPPED_MODE and bool(os.getenv("ANTHROPIC_API_KEY")),
+        "use_prompt_caching": os.getenv("LLM_ENABLE_PROMPT_CACHING", "true").lower() == "true",
         "models": {
+            # Claude Sonnet 4 - Latest and best for coding tasks
+            "claude_sonnet_4": "claude-sonnet-4-20250514",
+            # Claude 3.5 Sonnet - Previous gen, still excellent
             "claude_3_5_sonnet": "claude-3-5-sonnet-20241022",
+            # Claude 3 Haiku - Fast and cheap for simple tasks
+            "claude_3_haiku": "claude-3-haiku-20240307",
+            # Claude 3 Opus - Most capable (use sparingly, expensive)
             "claude_3_opus": "claude-3-opus-20240229"
-        }
+        },
+        # Default models for different task types
+        "default_model": os.getenv("CLAUDE_DEFAULT_MODEL", "claude-sonnet-4-20250514"),
+        "simple_model": os.getenv("CLAUDE_SIMPLE_MODEL", "claude-3-haiku-20240307"),
     },
     "azure_openai": {
         "endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),

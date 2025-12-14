@@ -37,19 +37,52 @@ class FlowstralOrchestrator:
         self.artifacts_generator = FlowstralArtifactsGenerator()
         self.config_service = get_project_config_service()
     
+    def _extract_url_pattern(self, url: str) -> str:
+        """
+        Extract URL pattern from full URL.
+        Examples:
+        - https://example.com/login -> /login
+        - https://example.com/product/123 -> /product/:id
+        - https://example.com/checkout?step=1 -> /checkout
+        """
+        if not url:
+            return "unknown_page"
+        
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            path = parsed.path
+            
+            # Replace numeric IDs with :id pattern
+            path = re.sub(r'/\d+', '/:id', path)
+            # Replace UUIDs with :id pattern
+            path = re.sub(r'/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '/:id', path, flags=re.IGNORECASE)
+            
+            return path or "/"
+        except Exception:
+            return "unknown_page"
+    
     async def start_session(
         self,
         project_id: str,
         user_id: str,
         initial_url: str,
-        initial_dom: Optional[str] = None
+        initial_dom: Optional[str] = None,
+        base_url: Optional[str] = None  # User-specified target URL for test navigation
     ) -> Dict[str, Any]:
-        """Start a new Flowstral session"""
+        """Start a new Flowstral session
+        
+        Args:
+            base_url: The URL where the test should START. This is entered by the user
+                     before recording and represents the actual test target, not the
+                     ArisTrace page URL where recording was initiated.
+        """
         session = flowstral_session_manager.create_session(
             project_id=project_id,
             user_id=user_id,
             initial_url=initial_url,
-            initial_dom=initial_dom
+            initial_dom=initial_dom,
+            base_url=base_url  # Store the user-specified target URL
         )
         
         logger.info(f"[OK] Session created: {session.session_id}")
@@ -122,6 +155,7 @@ class FlowstralOrchestrator:
         - Action Graph Update Pipeline
         """
         # FILTER OUT NOISY EVENTS BEFORE PROCESSING (reduce nodes from 1000+ to ~50-100)
+        # NOTE: WCAG and Performance scans are disabled - use standalone tools instead
         noisy_events = {
             'scroll', 'mousemove', 'mouseover', 'mouseout', 
             'focus', 'blur', 'resize', 'visibilitychange',
@@ -130,11 +164,13 @@ class FlowstralOrchestrator:
         }
         
         if event_type.lower() in noisy_events:
-            logger.debug(f"[CAPTURE] Skipping noisy event: {event_type}")
+            logger.info(f"[CAPTURE] Skipping noisy event: {event_type} (filtered - use standalone tools for WCAG/Performance)")
             return {
                 "status": "skipped",
-                "reason": f"Event type '{event_type}' is filtered out (noisy event)"
+                "reason": f"Event type '{event_type}' is filtered out (noisy event). Use standalone accessibility/performance tools for comprehensive testing."
             }
+        
+        logger.debug(f"[CAPTURE] Processing event: {event_type} for session {session_id}")
         
         session = flowstral_session_manager.get_session(session_id)
         if not session:
@@ -146,9 +182,22 @@ class FlowstralOrchestrator:
             logger.debug(f"Available sessions: {list(flowstral_session_manager.sessions.keys())}")
             raise ValueError(f"Session {session_id} not found. Make sure you started the session first with /api/flowstral/start")
         
+        # Allow events for a grace period after session stop (5 seconds)
+        # This handles events that are in-flight when user clicks "Stop"
         if not session.is_active:
-            logger.warning(f"[WARNING] Session {session_id} is not active (already stopped)")
-            raise ValueError(f"Session {session_id} is not active")
+            import time
+            stop_time = getattr(session, 'stop_timestamp', None)
+            if stop_time:
+                grace_period = 5.0  # 5 seconds grace period
+                time_since_stop = time.time() - stop_time
+                if time_since_stop > grace_period:
+                    logger.warning(f"[WARNING] Session {session_id} is not active (stopped {time_since_stop:.1f}s ago, grace period: {grace_period}s)")
+                    raise ValueError(f"Session {session_id} is not active (stopped {time_since_stop:.1f}s ago)")
+                else:
+                    logger.info(f"[INFO] Processing late event for stopped session (within {grace_period}s grace period): {event_type}")
+            else:
+                logger.warning(f"[WARNING] Session {session_id} is not active (already stopped)")
+                raise ValueError(f"Session {session_id} is not active")
         
         logger.debug(f"[CAPTURE] Capturing event: {event_type} for session {session_id}")
         
@@ -164,6 +213,112 @@ class FlowstralOrchestrator:
         component_metrics = event_data.get("component_metrics")
         network_calls = event_data.get("network_calls")
         screenshot = event_data.get("screenshot")  # Base64 data URL from extension
+        
+        # Detect application type and store in session
+        from app.services.automation.application_detector import get_application_detector
+        app_detector = get_application_detector()
+        app_type = app_detector.detect_application(html, url)
+        
+        # Store application type in session metadata
+        if not hasattr(session, 'application_type'):
+            session.application_type = app_type.value
+            logger.info(f"[APP_DETECT] Detected application type: {app_type.value} for session {session_id}")
+        
+        # Analyze interacted element if available
+        element_analysis = None
+        element_model = None
+        if interacted_element:
+            element_analysis = app_detector.analyze_element(interacted_element)
+            # Add analysis to interacted_element metadata
+            if 'metadata' not in interacted_element:
+                interacted_element['metadata'] = {}
+            interacted_element['metadata']['selector_analysis'] = element_analysis
+            interacted_element['metadata']['application_type'] = app_type.value
+            
+            # Build element model (Tosca-style) - store multiple identifiers
+            # CRITICAL: This MUST work even without database (use in-memory fallback)
+            try:
+                from app.services.flowstral.element_model_builder import ElementModelBuilder
+                
+                element_builder = ElementModelBuilder()
+                url_pattern = self._extract_url_pattern(url)
+                
+                # Try to get page_id from database, but don't fail if DB unavailable
+                page_id = None
+                try:
+                    from app.services.core.page_object_service import get_page_object_service
+                    page_object_service = get_page_object_service()
+                    page_objects = await page_object_service.list_page_objects(
+                        org_id=None,
+                        project_id=project_id
+                    )
+                    for po in page_objects:
+                        if po.get("url_pattern") == url_pattern:
+                            page_id = po.get("page_object_id")
+                            break
+                    
+                    if not page_id:
+                        page_obj = await page_object_service.create_page_object(
+                            name=url_pattern or "unknown_page",
+                            url_pattern=url_pattern,
+                            project_id=project_id
+                        )
+                        page_id = page_obj.get("page_object_id")
+                except Exception as db_error:
+                    logger.warning(f"[ELEMENT_MODEL] Database unavailable for page objects, using in-memory: {db_error}")
+                    # Use session-based page_id when DB unavailable
+                    page_id = f"session_{session_id}_{url_pattern}"
+                
+                # Build element model (this will try DB first, then fallback to in-memory)
+                element_model = await element_builder.build_element_model(
+                    element_data=interacted_element,
+                    application_type=app_type,
+                    page_id=page_id,
+                    page_context=url_pattern
+                )
+                
+                # CRITICAL: Store element model in session memory (for when DB unavailable)
+                if not hasattr(session, 'element_models'):
+                    session.element_models = {}
+                
+                element_model_id = element_model.get("element_id")
+                session.element_models[element_model_id] = element_model
+                
+                # Store element_id in interacted_element metadata for later reference
+                interacted_element['metadata']['element_model_id'] = element_model_id
+                
+                logger.info(f"[ELEMENT_MODEL] ✅ Built element model: {element_model.get('element_name')} (app: {app_type.value}) with {len(element_model.get('identifiers', []))} identifiers")
+                logger.info(f"[ELEMENT_MODEL]   Identifiers: {[id.get('type') for id in element_model.get('identifiers', [])[:5]]}")
+            except Exception as e:
+                logger.error(f"[ELEMENT_MODEL] ❌ Failed to build element model: {e}", exc_info=True)
+                # CRITICAL: Even if element model fails, generate identifiers inline and store in session
+                try:
+                    # Generate identifiers directly (bypass database)
+                    identifiers = element_builder.generate_identifiers(interacted_element, app_type)
+                    element_name = element_builder.generate_element_name(interacted_element, url_pattern)
+                    
+                    # Create in-memory element model
+                    element_model_id = f"mem_{session_id}_{len(session.nodes)}"
+                    element_model = {
+                        "element_id": element_model_id,
+                        "element_name": element_name,
+                        "element_type": interacted_element.get("tag_name", "unknown"),
+                        "application_type": app_type.value,
+                        "identifiers": identifiers,
+                        "metadata": {},
+                        "page_id": None
+                    }
+                    
+                    # Store in session
+                    if not hasattr(session, 'element_models'):
+                        session.element_models = {}
+                    session.element_models[element_model_id] = element_model
+                    interacted_element['metadata']['element_model_id'] = element_model_id
+                    
+                    logger.info(f"[ELEMENT_MODEL] ✅ Created in-memory element model: {element_name} with {len(identifiers)} identifiers")
+                except Exception as fallback_error:
+                    logger.error(f"[ELEMENT_MODEL] ❌ Fallback also failed: {fallback_error}", exc_info=True)
+                    # Don't fail the entire capture if element model building fails
         
         # Store raw event for potential coalescing
         raw_event = Event(
@@ -184,22 +339,40 @@ class FlowstralOrchestrator:
         # Add to session's event buffer for coalescing
         if not hasattr(session, 'event_buffer'):
             session.event_buffer = []
-        session.event_buffer.append(raw_event)
         
         # Check if we should coalesce events
         should_coalesce = config.event_coalescing.enabled
         coalesce_window_ms = config.event_coalescing.window_ms
         
         # Check if enough time has passed or if this is a significant event
+        # CRITICAL: Check BEFORE appending, so we compare with previous event
         should_process_now = False
-        if not session.event_buffer:
-            should_process_now = True
-        elif len(session.event_buffer) > 0:
+        if len(session.event_buffer) == 0:
+            # First event - process immediately if coalescing is disabled
+            should_process_now = not should_coalesce
+        else:
+            # Compare with the LAST event in buffer (before we append this one)
             last_event_time = session.event_buffer[-1].timestamp
             time_since_last = (raw_event.timestamp - last_event_time) * 1000
-            # Process if time window exceeded or significant event
-            if time_since_last > coalesce_window_ms or event_type in ['navigate', 'submit', 'page_load']:
+            # Process if:
+            # 1. Time window exceeded
+            # 2. Significant event (navigation, submit, page_load)
+            # 3. Buffer is getting large (process every 10 events to prevent infinite buffering)
+            # 4. User interaction events (click, input) - these are important and should be processed
+            if (time_since_last > coalesce_window_ms or 
+                event_type in ['navigate', 'submit', 'page_load'] or
+                len(session.event_buffer) >= 10 or
+                event_type in ['click', 'input']):
                 should_process_now = True
+        
+        # Now append the event to buffer
+        session.event_buffer.append(raw_event)
+        
+        # CRITICAL: If session is stopped, process immediately (don't buffer)
+        # This ensures late events are processed before session cleanup
+        if not session.is_active:
+            should_process_now = True
+            logger.info(f"[COALESCE] Session stopped - processing buffered events immediately (buffer size: {len(session.event_buffer)})")
         
         # If not time to process, just store and return
         if should_coalesce and not should_process_now:
@@ -243,11 +416,17 @@ class FlowstralOrchestrator:
         # Process each coalesced action
         results = []
         for action in coalesced_actions:
-            result = await self._process_coalesced_action(
-                session_id, action, html, url, interacted_element,
-                page_metrics, component_metrics, network_calls, screenshot, config
-            )
-            results.append(result)
+            try:
+                logger.debug(f"[PROCESS] Processing coalesced action: {action.action_type if hasattr(action, 'action_type') else 'unknown'}")
+                result = await self._process_coalesced_action(
+                    session_id, action, html, url, interacted_element,
+                    page_metrics, component_metrics, network_calls, screenshot, config
+                )
+                logger.debug(f"[PROCESS] Coalesced action processed: {result.get('status', 'unknown')}")
+                results.append(result)
+            except Exception as e:
+                logger.error(f"[PROCESS] Failed to process coalesced action: {e}", exc_info=True)
+                results.append({"status": "error", "error": str(e)})
         
         # Return result from last action (or combined result)
         return results[-1] if results else {"status": "processed"}
@@ -277,6 +456,15 @@ class FlowstralOrchestrator:
         
         # Use action's event type or default
         event_type = action.action_type if isinstance(action, CoalescedAction) else action.get("action_type", "unknown")
+        
+        # CRITICAL: Don't create nodes for WCAG/Performance scan events
+        # These should be filtered earlier, but double-check here
+        if event_type.lower() in ['wcag_scan', 'dom_snapshot', 'api_request', 'page_load']:
+            logger.info(f"[SKIP] Skipping node creation for {event_type} - use standalone tools")
+            return {
+                "status": "skipped",
+                "reason": f"Event type '{event_type}' does not create action graph nodes"
+            }
         
         # Get interacted element from action if available
         if isinstance(action, CoalescedAction) and action.raw_events:
@@ -391,7 +579,9 @@ class FlowstralOrchestrator:
                     playwright_locator = f"page.locator('{tag_name}[name=\"{element_name}\"]')"
                     selector = f'{tag_name}[name="{element_name}"]'
             
-            logger.info(f"[SELECTOR] Generated selector: {playwright_locator or selector} for {event_type}")
+            # Reduced logging - only log if selector generation is interesting
+            if not playwright_locator and not selector:
+                logger.warning(f"[SELECTOR] No selector generated for {event_type}")
         
         # Extract target_text with fallback to multiple sources
         target_text = None
@@ -507,7 +697,9 @@ class FlowstralOrchestrator:
             }
         )
         
-        logger.info(f"[OK] Added node {node_id} to session {session_id}. Total nodes: {len(session.nodes)}, Total edges: {len(session.edges)}")
+        # Reduced logging - only log every 10 nodes or on errors
+        if len(session.nodes) % 10 == 0 or event_type in ["navigate", "session_start", "session_end"]:
+            logger.debug(f"[OK] Added node {node_id} to session {session_id}. Total nodes: {len(session.nodes)}")
         
         # Generate real-time outputs
         try:
@@ -731,9 +923,9 @@ class FlowstralOrchestrator:
                 logger.warning(f"Failed to send progress via WebSocket: {e}")
         
         try:
-            # Add timeout to prevent hanging (max 5 minutes for artifact generation)
+            # CRITICAL: Reduced timeout to 60 seconds (test case generation is disabled)
             import asyncio
-            logger.info(f"Starting artifact generation with timeout (5 minutes max)")
+            logger.info(f"[ARTIFACTS] Generating artifacts for {len(action_graph.nodes)} nodes")
             artifacts = await asyncio.wait_for(
                 self.artifacts_generator.generate_all_artifacts(
                     session_id=session_id,
@@ -746,7 +938,7 @@ class FlowstralOrchestrator:
                     progress_callback=progress_callback,
                     raw_events=raw_events  # Pass raw events for Flux high-fidelity generation
                 ),
-                timeout=300.0  # 5 minutes max
+                timeout=30.0  # 30 seconds max (script generation is < 1s, other artifacts are fast)
             )
             logger.info("[OK] Artifact generation completed successfully")
         except asyncio.TimeoutError:
@@ -774,102 +966,92 @@ class FlowstralOrchestrator:
                 "generated_at": datetime.utcnow().isoformat()
             }
         
-        # Extract artifacts from the result (generate_all_artifacts returns {artifacts: {...}, ...})
+        # Extract artifacts from the result
         artifacts_dict = artifacts.get('artifacts', {})
-        logger.info(f"Artifact generation completed. Artifacts keys: {list(artifacts_dict.keys())}")
         if artifacts.get('warnings'):
-            logger.warning(f"Artifact generation warnings: {artifacts.get('warnings')}")
+            logger.warning(f"[ARTIFACTS] Warnings: {artifacts.get('warnings')}")
         
-        # Log artifact counts for debugging
-        artifact_count = 0
-        for artifact_name, artifact_data in artifacts_dict.items():
-            if isinstance(artifact_data, dict) and 'error' not in artifact_data:
-                logger.info(f"  [OK] {artifact_name}: Generated successfully")
-                artifact_count += 1
-            elif isinstance(artifact_data, dict) and 'error' in artifact_data:
-                logger.warning(f"  [ERROR] {artifact_name}: Error - {artifact_data.get('error', 'Unknown')}")
-            else:
-                logger.info(f"  [OK] {artifact_name}: Generated (type: {type(artifact_data).__name__})")
-                artifact_count += 1
-        
-        if artifact_count == 0:
-            logger.error(f"[ERROR] ZERO artifacts generated! This usually means:")
-            logger.error(f"  1. Session had no nodes/edges (no events captured)")
-            logger.error(f"  2. Artifact generation failed silently")
-            logger.error(f"  3. Check if browser extension is sending events to /api/flowstral/capture-event")
-        
-        # Store artifacts in session for later retrieval
+        # Store artifacts in session
         session.artifacts = artifacts_dict
         session.artifacts_generated_at = datetime.utcnow().isoformat()
-        logger.info(f"[OK] Stored artifacts in session {session_id} for later retrieval")
-        logger.info(f"[OK] Stored artifacts keys: {list(artifacts_dict.keys())}")
-        logger.info(f"[OK] Artifacts count: {len(artifacts_dict)}")
-        logger.info(f"[OK] Session.artifacts type: {type(session.artifacts)}")
-        logger.info(f"[OK] Session.artifacts is None: {session.artifacts is None}")
-        logger.info(f"[OK] Session still in manager: {session_id in flowstral_session_manager.sessions}")
-        logger.info(f"[OK] Total sessions in manager: {len(flowstral_session_manager.sessions)}")
         
-        # Verify storage
-        if session.artifacts is None:
-            logger.error(f"[ERROR] CRITICAL: session.artifacts is None after assignment!")
-        elif not isinstance(session.artifacts, dict):
-            logger.error(f"[ERROR] CRITICAL: session.artifacts is not a dict, it's {type(session.artifacts)}")
-        elif len(session.artifacts) == 0:
-            logger.warning(f"[WARNING] session.artifacts is an empty dict")
-        else:
-            logger.info(f"[OK] Verified: session.artifacts is a dict with {len(session.artifacts)} keys")
+        # Only log errors, not success details
+        if not artifacts_dict or len(artifacts_dict) == 0:
+            logger.error(f"[ARTIFACTS] No artifacts generated! Check if events were captured.")
+        elif session.artifacts is None:
+            logger.error(f"[ARTIFACTS] CRITICAL: session.artifacts is None after assignment!")
         
-        # PERSIST ARTIFACTS TO DATABASE for long-term storage
-        try:
-            from app.services.storage.postgres_direct import execute_insert, execute_query
-            import uuid
-            
-            # Get session's database ID if it exists
-            # First, try to find session in database
-            db_session_id = None
+        # PERSIST ARTIFACTS TO DATABASE for long-term storage (NON-BLOCKING)
+        # CRITICAL: Don't block response - persist in background with short timeout
+        async def persist_artifacts_async():
             try:
-                session_query = """
-                    SELECT id FROM flowstral_sessions 
-                    WHERE id::text = %s OR project_id::text = %s
-                    ORDER BY created_at DESC LIMIT 1
-                """
-                # Try to find by session_id (UUID string) or project_id
-                session_result = await execute_query(session_query, (session_id, session.project_id or ""))
-                if session_result and len(session_result) > 0:
-                    db_session_id = session_result[0].get("id")
-                    logger.info(f"[OK] Found database session ID: {db_session_id}")
-            except Exception as e:
-                logger.warning(f"[WARNING] Could not find session in database: {e}")
-            
-            # Store each artifact type in database
-            stored_count = 0
-            for artifact_type, artifact_data in artifacts_dict.items():
+                from app.services.storage.postgres_direct import execute_insert, execute_query
+                import uuid
+                
+                # Quick check if database is available (with 2-second timeout)
                 try:
-                    artifact_record = {
-                        "session_id": db_session_id or session_id,  # Use DB ID if available, else string ID
-                        "tenant_id": tenant_id,
-                        "artifact_type": artifact_type,
-                        "artifact_data": artifact_data,  # JSONB field
-                        "export_format": "json"
-                    }
-                    
-                    artifact_id = await execute_insert("flowstral_artifacts", artifact_record)
-                    if artifact_id:
-                        stored_count += 1
-                        logger.info(f"[OK] Persisted {artifact_type} to database with ID: {artifact_id}")
-                    else:
-                        logger.warning(f"[WARNING] Failed to persist {artifact_type} to database")
-                except Exception as e:
-                    logger.error(f"[ERROR] Failed to persist {artifact_type} to database: {e}")
-                    # Continue with other artifacts
+                    await asyncio.wait_for(
+                        execute_query("SELECT 1", ()),
+                        timeout=2.0
+                    )
+                except (asyncio.TimeoutError, Exception) as e:
+                    logger.warning(f"[DB] Database not available, skipping persistence: {e}")
+                    return  # Skip persistence if DB is not available
+                
+                # Get session's database ID if it exists (with timeout)
+                db_session_id = None
+                try:
+                    session_query = """
+                        SELECT id FROM flowstral_sessions 
+                        WHERE id::text = %s OR project_id::text = %s
+                        ORDER BY created_at DESC LIMIT 1
+                    """
+                    session_result = await asyncio.wait_for(
+                        execute_query(session_query, (session_id, session.project_id or "")),
+                        timeout=2.0
+                    )
+                    if session_result and len(session_result) > 0:
+                        db_session_id = session_result[0].get("id")
+                        logger.info(f"[DB] Found database session ID: {db_session_id}")
+                except (asyncio.TimeoutError, Exception) as e:
+                    logger.warning(f"[DB] Could not find session in database (timeout/error): {e}")
+                
+                # Store each artifact type in database (with timeout per artifact)
+                stored_count = 0
+                for artifact_type, artifact_data in artifacts_dict.items():
+                    try:
+                        artifact_record = {
+                            "session_id": db_session_id or session_id,
+                            "tenant_id": tenant_id,
+                            "artifact_type": artifact_type,
+                            "artifact_data": artifact_data,
+                            "export_format": "json"
+                        }
+                        
+                        artifact_id = await asyncio.wait_for(
+                            execute_insert("flowstral_artifacts", artifact_record),
+                            timeout=3.0  # 3 seconds per artifact max
+                        )
+                        if artifact_id:
+                            stored_count += 1
+                            logger.info(f"[DB] Persisted {artifact_type} to database with ID: {artifact_id}")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"[DB] Timeout persisting {artifact_type} (3s limit), skipping")
+                    except Exception as e:
+                        logger.warning(f"[DB] Failed to persist {artifact_type}: {e}")
+                        # Continue with other artifacts
             
-            if stored_count > 0:
-                logger.info(f"[OK] Persisted {stored_count}/{len(artifacts_dict)} artifacts to database")
-            else:
-                logger.warning(f"[WARNING] No artifacts were persisted to database")
-        except Exception as e:
-            logger.error(f"[ERROR] Failed to persist artifacts to database: {e}", exc_info=True)
-            # Don't fail the whole operation if DB persistence fails
+                if stored_count > 0:
+                    logger.info(f"[DB] Persisted {stored_count}/{len(artifacts_dict)} artifacts to database")
+                else:
+                    logger.warning(f"[DB] No artifacts persisted (database unavailable or timeout)")
+            except Exception as e:
+                logger.warning(f"[DB] Database persistence failed: {e}")
+        
+        # CRITICAL: Start database persistence in background (non-blocking)
+        # Don't wait for it - return artifacts immediately
+        asyncio.create_task(persist_artifacts_async())
+        logger.info("[DB] Database persistence started in background (non-blocking)")
         
         return {
             "session_id": session_id,

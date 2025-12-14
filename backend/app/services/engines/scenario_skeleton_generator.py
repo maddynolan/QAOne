@@ -114,11 +114,20 @@ class ScenarioSkeletonGenerator:
         last_url_domain = None
         
         # Filter out internal events (wcag_scan, api_request, scroll, session_end)
-        user_interaction_events = ["click", "input", "type", "select", "submit", "page_load"]
+        # CRITICAL: Normalize action types - edges might have "click_button", "fill_field", etc.
+        user_interaction_events = ["click", "click_button", "input", "type", "fill_field", "select", "submit", "navigate", "page_load"]
         
         for edge in action_graph.edges:
+            # Get action type (normalize from action_type or action)
+            action_type = edge.action_type or edge.action or ""
+            # Normalize: click_button -> click, fill_field -> input
+            if action_type == "click_button":
+                action_type = "click"
+            elif action_type == "fill_field":
+                action_type = "input"
+            
             # Skip internal events (but keep page_load for navigation)
-            if edge.action_type not in user_interaction_events and edge.action_type != "page_load":
+            if action_type not in user_interaction_events and action_type != "page_load":
                 continue
             
             from_node = action_graph.node_map.get(edge.from_node_id)
@@ -127,8 +136,8 @@ class ScenarioSkeletonGenerator:
             # Check if this is a scenario boundary
             is_boundary = False
             
-            # Check for milestone controls
-            if edge.action_type == "click" and to_node:
+            # Check for milestone controls (use normalized action_type)
+            if action_type == "click" and to_node:
                 target_text = (to_node.target_text or "").lower()
                 if any(milestone in target_text for milestone in self.milestone_controls):
                     is_boundary = True
@@ -329,6 +338,8 @@ class ScenarioSkeletonGenerator:
                 return "navigation"
         
         return None
+
+
 
 
 

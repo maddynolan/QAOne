@@ -223,7 +223,7 @@ export default function Nexus() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Zap className="h-8 w-8 text-primary" />
-            Nexus Autonomous Testing
+            Blaze - Autonomous Testing
           </h1>
           <p className="text-muted-foreground mt-2">
             Ex-Google Principal SDET agent that autonomously discovers severe defects with zero human input
@@ -234,9 +234,9 @@ export default function Nexus() {
       {/* Control Panel */}
       <Card>
         <CardHeader>
-          <CardTitle>Start Exploration</CardTitle>
+          <CardTitle>Start Autonomous Testing</CardTitle>
           <CardDescription>
-            Enter an application URL and Nexus will autonomously explore, test, and find defects
+            Enter an application URL and Blaze will autonomously explore, test, and find defects
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -277,7 +277,7 @@ export default function Nexus() {
               ) : (
                 <>
                   <Play className="mr-2 h-4 w-4" />
-                  Start Nexus
+                  Start Blaze
                 </>
               )}
             </Button>

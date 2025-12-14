@@ -57,6 +57,10 @@ export const API_ENDPOINTS = {
   // Health
   HEALTH: `${API_BASE_URL}/health`,
   
+  // Dashboard
+  DASHBOARD_STATS: `${API_BASE_URL}/dashboard/stats`,
+  DASHBOARD_ACTIVITY: `${API_BASE_URL}/dashboard/activity`,
+  
   // Flowstral
   FLOWSTRAL_START: `${API_BASE_URL}/api/flowstral/start`,
   FLOWSTRAL_CAPTURE_EVENT: `${API_BASE_URL}/api/flowstral/capture-event`,

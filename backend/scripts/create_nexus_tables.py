@@ -142,3 +142,6 @@ CREATE INDEX IF NOT EXISTS idx_nexus_e2e_session_id ON nexus_e2e_results(session
 if __name__ == "__main__":
     asyncio.run(create_nexus_tables())
 
+
+
+

@@ -1,0 +1,47 @@
+{
+  "name": "flowstral-engine",
+  "version": "1.0.0",
+  "description": "Enterprise application test recorder with auto-healing locators for 25+ applications",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "flowstral": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint ../*.ts",
+    "format": "prettier --write ../*.ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "playwright",
+    "test-automation",
+    "recorder",
+    "salesforce",
+    "workday",
+    "servicenow",
+    "sap",
+    "pega",
+    "enterprise",
+    "auto-healing",
+    "locators",
+    "shadow-dom"
+  ],
+  "author": "Flowstral",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0"
+  }
+}
+
+

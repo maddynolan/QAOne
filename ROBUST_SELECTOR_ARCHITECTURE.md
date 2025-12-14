@@ -121,3 +121,6 @@ async function clickElement(selector) {
 - **Easier to debug**: Simple code is easier to understand
 - **Works like professional tools**: Same approach as UiPath, Selenium IDE
 
+
+
+

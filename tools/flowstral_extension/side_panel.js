@@ -34,13 +34,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnStart').addEventListener('click', startFlowstral);
     document.getElementById('btnStop').addEventListener('click', stopFlowstral);
     
-    // Load saved project/user IDs
-    const stored = await chrome.storage.local.get(['flowstral_project_id', 'flowstral_user_id']);
-    if (stored.flowstral_project_id) {
-        document.getElementById('projectId').value = stored.flowstral_project_id;
-    }
-    if (stored.flowstral_user_id) {
-        document.getElementById('userId').value = stored.flowstral_user_id;
+    // Load saved base URL (the only thing user needs to configure!)
+    const stored = await chrome.storage.local.get(['flowstral_base_url']);
+    if (stored.flowstral_base_url) {
+        document.getElementById('baseUrl').value = stored.flowstral_base_url;
     }
     
     // Listen for session updates from background
@@ -146,15 +143,17 @@ async function checkActiveSession() {
 
 // Start Flowstral
 async function startFlowstral() {
-    log('🔄 Starting Flowstral session...');
+    log('🔄 Starting recording...');
     
-    const projectId = document.getElementById('projectId').value.trim();
-    const userId = document.getElementById('userId').value.trim() || 'default';
+    // Auto-generate project ID if not set
+    const projectId = document.getElementById('projectId').value.trim() || `recording_${Date.now()}`;
+    const userId = document.getElementById('userId').value.trim() || 'user';
+    const baseUrl = document.getElementById('baseUrl').value.trim();
     
-    if (!projectId) {
-        log('❌ Error: Project ID is required');
-        alert('Please enter a Project ID');
-        return;
+    if (!baseUrl) {
+        log('⚠️ Warning: No Base URL set - using current tab URL');
+    } else {
+        log(`📍 Test will start at: ${baseUrl}`);
     }
     
     // Check domain allowlist
@@ -166,11 +165,10 @@ async function startFlowstral() {
         }
     }
     
-    // Save project/user IDs
-    await chrome.storage.local.set({
-        flowstral_project_id: projectId,
-        flowstral_user_id: userId
-    });
+    // Save base URL for next time
+    if (baseUrl) {
+        await chrome.storage.local.set({ flowstral_base_url: baseUrl });
+    }
     
     try {
         log('📤 Sending start request...');
@@ -181,6 +179,7 @@ async function startFlowstral() {
                 project_id: projectId,
                 user_id: userId,
                 initial_url: currentTab?.url || window.location.href,
+                base_url: baseUrl || null,  // User-specified target URL for test
                 tab_id: currentTab?.id
             }
         });

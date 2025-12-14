@@ -1,6 +1,6 @@
 # Performance Testing Tool
 
-Enterprise-grade performance testing tool similar to Neoload and LoadRunner, integrated with Flowstral.
+Enterprise-grade performance testing tool similar to NeoLoad and LoadRunner, integrated with Flowstral. Now with comprehensive enterprise features for production-ready performance testing.
 
 ## Features
 
@@ -25,6 +25,9 @@ Enterprise-grade performance testing tool similar to Neoload and LoadRunner, int
 3. **Protocol Support**
    - HTTP/HTTPS (REST APIs, GraphQL, SOAP)
    - WebSocket (WS/WSS)
+   - GraphQL (queries and mutations)
+   - gRPC (with grpcio library)
+   - MQTT (with aiomqtt library)
    - Extensible for additional protocols
 
 4. **Real-Time Monitoring**
@@ -50,12 +53,103 @@ Enterprise-grade performance testing tool similar to Neoload and LoadRunner, int
    - Node capacity management
    - Heartbeat monitoring
 
-7. **Advanced Metrics & Reporting**
-   - Comprehensive test reports
-   - Per-scenario breakdown
-   - Threshold validation
-   - Performance score calculation
-   - Historical trend analysis
+### Enterprise Features
+
+7. **Advanced Load Profiles**
+   - Linear ramp-up/ramp-down
+   - Step-wise load patterns
+   - Spike testing (sudden load increases)
+   - Stress testing (gradual increase to failure point)
+   - Endurance testing (long-running stability)
+   - Capacity planning tests
+   - Custom load patterns
+
+8. **Data Parameterization**
+   - CSV and JSON data sources
+   - Sequential, random, unique, and shared access modes
+   - Dynamic data substitution in requests
+   - Data pool management
+   - Support for large datasets
+
+9. **System Resource Monitoring**
+   - CPU usage (per-core and aggregate)
+   - Memory usage and trends
+   - Disk I/O metrics
+   - Network traffic monitoring
+   - Process count tracking
+   - Load average (Unix systems)
+   - Real-time system dashboard
+
+10. **Advanced Reporting & Analytics**
+    - Comprehensive test reports
+    - Per-scenario breakdown
+    - Threshold validation
+    - Performance score calculation
+    - Historical trend analysis
+    - Baseline comparison
+    - Regression detection
+    - Performance recommendations
+    - JSON export
+    - Comparison reports (multiple test runs)
+
+11. **Alerting System**
+    - Email notifications
+    - Slack integration
+    - Webhook support
+    - Configurable alert conditions
+    - Severity levels (info, warning, error, critical)
+    - Cooldown periods
+    - Alert history
+
+12. **Test Scheduling**
+    - One-time scheduled tests
+    - Cron-based recurring tests
+    - Interval-based tests
+    - Maximum run limits
+    - Automatic test execution
+    - Schedule management
+
+13. **Transaction Analysis**
+    - Detailed transaction breakdown
+    - Transaction-level metrics
+    - Error categorization
+    - Root cause analysis
+    - Error summary statistics
+    - Performance bottleneck identification
+
+14. **Test Templates**
+    - Pre-built test scenarios
+    - API load test template
+    - Spike test template
+    - Stress test template
+    - Endurance test template
+    - Capacity test template
+    - Smoke test template
+    - Customizable templates
+
+15. **Network Simulation**
+    - Bandwidth throttling
+    - Latency simulation
+    - Packet loss simulation
+    - Jitter (latency variance)
+    - Predefined network profiles (3G, 4G, Cable, DSL, etc.)
+    - Custom network conditions
+
+16. **APM Integration**
+    - Datadog integration
+    - New Relic integration
+    - Dynatrace integration
+    - Prometheus integration
+    - Grafana support
+    - Custom APM providers
+    - Real-time metric forwarding
+
+17. **CI/CD Integration**
+    - RESTful API for automation
+    - Webhook support
+    - Test result integration
+    - Automated reporting
+    - Pipeline-friendly design
 
 ## Architecture
 

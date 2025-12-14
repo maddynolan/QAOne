@@ -42,13 +42,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Start recording
 function startRecording(sessionId) {
-  if (isRecording) {
-    console.log('Flowstral Content: Already recording');
+  if (!sessionId) {
+    console.error('Flowstral Content: No session ID provided');
     return;
   }
   
-  if (!sessionId) {
-    console.error('Flowstral Content: No session ID provided');
+  // If already recording with a different session ID, update it
+  if (isRecording && currentSessionId !== sessionId) {
+    console.log(`Flowstral Content: Updating session ID from ${currentSessionId} to ${sessionId}`);
+    currentSessionId = sessionId;
+    // Don't return - continue to ensure recording is properly initialized
+  } else if (isRecording) {
+    console.log('Flowstral Content: Already recording with same session ID');
     return;
   }
   
@@ -78,12 +83,18 @@ function initializeRecording() {
   captureInitialState();
   
   // Attach event listeners
+  console.log('Flowstral Content: Attaching event listeners...');
   attachEventListeners();
+  console.log('Flowstral Content: Event listeners attached successfully');
   
-  // Start periodic WCAG and performance scans
-  startPeriodicScans();
+  // NOTE: Periodic WCAG and performance scans are DISABLED
+  // They create too many nodes in the action graph and slow down recording
+  // Use standalone accessibility and performance tools instead for comprehensive testing
+  // startPeriodicScans(); // DISABLED - use standalone tools
   
   console.log('Flowstral Content: Recording initialized and active!');
+  console.log('Flowstral Content: isRecording =', isRecording);
+  console.log('Flowstral Content: currentSessionId =', currentSessionId);
   console.log('Flowstral Content: You should see a green "Flowstral Recording..." indicator in the top-right corner');
 }
 
@@ -153,8 +164,11 @@ async function captureInitialState() {
 
 // Attach event listeners
 function attachEventListeners() {
+  console.log('Flowstral Content: attachEventListeners called');
+  
   // Click events
   document.addEventListener('click', handleClick, true);
+  console.log('Flowstral Content: Click listener attached');
   
   // Input events (with debouncing to avoid too many events)
   let inputTimeout;
@@ -444,8 +458,15 @@ function generateEnhancedSelector(element) {
 
 // Handle click events (enhanced with semantic labeling)
 async function handleClick(event) {
+  console.log('Flowstral Content: handleClick called, isRecording =', isRecording, 'currentSessionId =', currentSessionId);
+  
   if (!isRecording) {
     console.log('Flowstral Content: Click ignored - not recording');
+    return;
+  }
+  
+  if (!currentSessionId) {
+    console.log('Flowstral Content: Click ignored - no session ID');
     return;
   }
   
@@ -473,6 +494,53 @@ async function handleClick(event) {
     screenshot = await captureScreenshot();
   }
   
+  // CRITICAL FIX: Get actual visible text for radio/checkbox inputs
+  // The text is usually in a parent <label> or sibling element, not in the input itself
+  let actualText = element.textContent?.substring(0, 100) || '';
+  
+  // For radio/checkbox inputs, try to get text from associated label
+  if ((element.tagName === 'INPUT' && (element.type === 'radio' || element.type === 'checkbox')) || 
+      (element.tagName === 'INPUT' && !actualText)) {
+    // Try parent label
+    let parent = element.parentElement;
+    if (parent && parent.tagName === 'LABEL') {
+      actualText = parent.textContent?.trim() || '';
+      // Remove the input's own text if it's duplicated
+      if (actualText && element.textContent) {
+        actualText = actualText.replace(element.textContent, '').trim();
+      }
+    } else {
+      // Try aria-labelledby
+      const labelledBy = element.getAttribute('aria-labelledby');
+      if (labelledBy) {
+        const labelElement = document.getElementById(labelledBy);
+        if (labelElement) {
+          actualText = labelElement.textContent?.trim() || '';
+        }
+      }
+      // Try aria-label
+      if (!actualText) {
+        const ariaLabel = element.getAttribute('aria-label');
+        if (ariaLabel) {
+          actualText = ariaLabel.trim();
+        }
+      }
+      // Try next sibling (common pattern: <input><span>Text</span>)
+      if (!actualText && element.nextElementSibling) {
+        actualText = element.nextElementSibling.textContent?.trim() || '';
+      }
+      // Try previous sibling (common pattern: <span>Text</span><input>)
+      if (!actualText && element.previousElementSibling) {
+        actualText = element.previousElementSibling.textContent?.trim() || '';
+      }
+    }
+  }
+  
+  // For other inputs, use value or placeholder
+  if (element.tagName === 'INPUT' && element.type !== 'radio' && element.type !== 'checkbox') {
+    actualText = element.value || element.placeholder || actualText;
+  }
+  
   const eventData = {
     html: document.documentElement.outerHTML.substring(0, 50000),
     url: window.location.href,
@@ -480,7 +548,7 @@ async function handleClick(event) {
       tag_name: element.tagName,
       id: element.id,
       class_name: element.className,
-      text_content: element.textContent?.substring(0, 100),
+      text_content: actualText.substring(0, 100),
       selector: selector,
       enhanced_selectors: enhancedSelectors,
       x: event.clientX,
@@ -490,7 +558,7 @@ async function handleClick(event) {
       framework: framework
     },
     semantic_action: semanticAction,
-    action_description: `${semanticAction}: ${element.tagName}${element.id ? '#' + element.id : ''}${element.textContent ? ' - ' + element.textContent.substring(0, 50) : ''}`,
+    action_description: `${semanticAction}: ${element.tagName}${element.id ? '#' + element.id : ''}${actualText ? ' - ' + actualText.substring(0, 50) : ''}`,
     page_metrics: capturePerformanceMetrics(),
     screenshot: screenshot // Add screenshot for major actions
   };
@@ -872,17 +940,18 @@ function captureEvent(eventType, eventData) {
   eventBuffer.push(event);
   
   // Send to background script (which forwards to API)
+  console.log('Flowstral Content: Sending event to background script', eventType, event.session_id);
   chrome.runtime.sendMessage({
     type: 'FLOWSTRAL_CAPTURE_EVENT',
     data: event
   }).then(response => {
     if (response && response.success) {
-      console.log('Flowstral Content: Event sent successfully', eventType);
+      console.log('Flowstral Content: Event sent successfully', eventType, 'Response:', response);
     } else {
-      console.warn('Flowstral Content: Event send response', response);
+      console.warn('Flowstral Content: Event send response', eventType, response);
     }
   }).catch(error => {
-    console.error('Flowstral Content: Failed to send event', error);
+    console.error('Flowstral Content: Failed to send event', eventType, error);
   });
   
   // Flush buffer if it gets too large

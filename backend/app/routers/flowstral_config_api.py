@@ -162,3 +162,6 @@ async def validate_project_config(
         logger.error(f"Failed to validate project config: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to validate configuration: {str(e)}")
 
+
+
+

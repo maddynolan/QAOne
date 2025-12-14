@@ -40,12 +40,31 @@ export default function Requirements() {
   const loadRequirements = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_ENDPOINTS.REQUIREMENTS);
-      if (!response.ok) {
-        throw new Error("Failed to load requirements");
+      
+      // Load from localStorage first
+      const localReqs = JSON.parse(localStorage.getItem('requirements') || '[]');
+      
+      // Try to load from API
+      let apiReqs: any[] = [];
+      try {
+        const response = await fetch(API_ENDPOINTS.REQUIREMENTS);
+        if (response.ok) {
+          const data = await response.json();
+          apiReqs = data.requirements || [];
+        }
+      } catch (apiError) {
+        console.warn('API not available, using localStorage only');
       }
-      const data = await response.json();
-      setRequirements(data.requirements || []);
+      
+      // Merge and deduplicate (prefer localStorage for local items)
+      const allReqs = [...localReqs];
+      apiReqs.forEach(apiReq => {
+        if (!allReqs.some(r => r.id === apiReq.id)) {
+          allReqs.push(apiReq);
+        }
+      });
+      
+      setRequirements(allReqs);
     } catch (error: any) {
       console.error("Error loading requirements:", error);
       toast.error("Failed to load requirements");
@@ -55,6 +74,7 @@ export default function Requirements() {
   };
 
   const getSourceColor = (source: string) => {
+    if (!source) return "default";
     const sourceLower = source.toLowerCase();
     if (sourceLower.includes("api")) return "default";
     if (sourceLower.includes("eco") || sourceLower.includes("commerce")) return "secondary";
@@ -64,9 +84,9 @@ export default function Requirements() {
   };
 
   const filteredRequirements = requirements.filter((req) =>
-    req.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    req.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    req.source_ref.toLowerCase().includes(searchTerm.toLowerCase())
+    (req.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (req.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (req.source_ref || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {

@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import TestPlans from "./pages/TestPlans";
 import TestCases from "./pages/TestCases";
 import CreateTestCase from "./pages/CreateTestCase";
+import EditTestCase from "./pages/EditTestCase";
 import TestRuns from "./pages/TestRuns";
 import Requirements from "./pages/Requirements";
 import CreateRequirement from "./pages/CreateRequirement";
@@ -26,8 +27,12 @@ import Defects from "./pages/Defects";
 import CreateDefect from "./pages/CreateDefect";
 import RunAutomation from "./pages/RunAutomation";
 import Flowstral from "./pages/Flowstral";
+import Trace from "./pages/Trace";
+import FlowstralWorkflowEditor from "./pages/FlowstralWorkflowEditor";
 import Nexus from "./pages/Nexus";
+import Blaze from "./pages/Blaze";
 import Exploration from "./pages/Exploration";
+import FrameworkAnalyzer from "./pages/FrameworkAnalyzer";
 import JiraIntegration from "./pages/JiraIntegration";
 import GitHubIntegration from "./pages/GitHubIntegration";
 import AzureDevOpsIntegration from "./pages/AzureDevOpsIntegration";
@@ -39,9 +44,24 @@ import { AuthPage } from "./pages/AuthPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { dataStorageService } from "./lib/data-storage";
 import APIImport from "./pages/APIImport";
+import EnhancedAPITesting from "./pages/EnhancedAPITesting";
 import GherkinConverter from "./pages/GherkinConverter";
 import Accessibility from "./pages/Accessibility";
 import Performance from "./pages/Performance";
+import Analytics from "./pages/Analytics";
+import ElementRepository from "./pages/ElementRepository";
+import CICDWizard from "./pages/CICDWizard";
+import EnhancedWorkflowEditor from "./pages/EnhancedWorkflowEditor";
+import TestResultsDashboard from "./pages/TestResultsDashboard";
+import TestSuites from "./pages/TestSuites";
+import ScheduledRuns from "./pages/ScheduledRuns";
+import ProjectManagement from "./pages/ProjectManagement";
+import VirtualUserGenerator from "./pages/VirtualUserGenerator";
+import Traceability from "./pages/Traceability";
+import TestExecution from "./pages/TestExecution";
+import TestCaseExecutor from "./pages/TestCaseExecutor";
+import TestPlanDetail from "./pages/TestPlanDetail";
+import SelfHealing from "./pages/SelfHealing";
 
 const queryClient = new QueryClient();
 
@@ -100,12 +120,37 @@ const App = () => {
               } />
               <Route path="/cases/edit/:id" element={
                 <ProtectedRoute>
-                  <Layout><CreateTestCase /></Layout>
+                  <Layout><EditTestCase /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/test-suites" element={
+                <ProtectedRoute>
+                  <TestSuites />
+                </ProtectedRoute>
+              } />
+              <Route path="/suites" element={
+                <ProtectedRoute>
+                  <TestSuites />
+                </ProtectedRoute>
+              } />
+              <Route path="/execution" element={
+                <ProtectedRoute>
+                  <Layout><TestExecution /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/execution/run/:id" element={
+                <ProtectedRoute>
+                  <Layout><TestCaseExecutor /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/execution/plan/:id" element={
+                <ProtectedRoute>
+                  <Layout><TestPlanDetail /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/runs" element={
                 <ProtectedRoute>
-                  <Layout><TestRuns /></Layout>
+                  <Layout><TestExecution /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/runs/create" element={
@@ -128,17 +173,52 @@ const App = () => {
                   <Layout><TestCaseExecution /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/scheduled-runs" element={
+                <ProtectedRoute>
+                  <ScheduledRuns />
+                </ProtectedRoute>
+              } />
+              <Route path="/projects" element={
+                <ProtectedRoute>
+                  <ProjectManagement />
+                </ProtectedRoute>
+              } />
               <Route path="/runs/automation" element={
                 <ProtectedRoute>
                   <Layout><RunAutomation /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/results-dashboard" element={
+                <ProtectedRoute>
+                  <TestResultsDashboard />
+                </ProtectedRoute>
+              } />
               <Route path="/flowstral" element={
+                <ProtectedRoute>
+                  <Layout><Trace /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/flowstral-legacy" element={
                 <ProtectedRoute>
                   <Layout><Flowstral /></Layout>
                 </ProtectedRoute>
               } />
+              <Route path="/flowstral/workflow-editor" element={
+                <ProtectedRoute>
+                  <FlowstralWorkflowEditor />
+                </ProtectedRoute>
+              } />
+              <Route path="/workflow-editor" element={
+                <ProtectedRoute>
+                  <EnhancedWorkflowEditor />
+                </ProtectedRoute>
+              } />
               <Route path="/nexus" element={
+                <ProtectedRoute>
+                  <Layout><Blaze /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/nexus-legacy" element={
                 <ProtectedRoute>
                   <Layout><Nexus /></Layout>
                 </ProtectedRoute>
@@ -146,6 +226,11 @@ const App = () => {
               <Route path="/exploration" element={
                 <ProtectedRoute>
                   <Layout><Exploration /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/framework-analyzer" element={
+                <ProtectedRoute>
+                  <Layout><FrameworkAnalyzer /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/requirements" element={
@@ -218,9 +303,25 @@ const App = () => {
                   <Layout><CICDIntegration /></Layout>
                 </ProtectedRoute>
               } />
+              {/* API Import merged into Enhanced API Testing (Apex) */}
               <Route path="/api-import" element={
                 <ProtectedRoute>
-                  <Layout><APIImport /></Layout>
+                  <Layout><EnhancedAPITesting /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/enhanced-api-testing" element={
+                <ProtectedRoute>
+                  <Layout><EnhancedAPITesting /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/virtual-users" element={
+                <ProtectedRoute>
+                  <Layout><VirtualUserGenerator /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/load-testing" element={
+                <ProtectedRoute>
+                  <Layout><VirtualUserGenerator /></Layout>
                 </ProtectedRoute>
               } />
               <Route path="/gherkin" element={
@@ -233,9 +334,35 @@ const App = () => {
                   <Layout><Accessibility /></Layout>
                 </ProtectedRoute>
               } />
+              {/* /performance redirects to merged /load-testing page */}
               <Route path="/performance" element={
                 <ProtectedRoute>
-                  <Layout><Performance /></Layout>
+                  <Layout><VirtualUserGenerator /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/analytics" element={
+                <ProtectedRoute>
+                  <Layout><Analytics /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/traceability" element={
+                <ProtectedRoute>
+                  <Layout><Traceability /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/elements" element={
+                <ProtectedRoute>
+                  <Layout><ElementRepository /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/self-healing" element={
+                <ProtectedRoute>
+                  <Layout><SelfHealing /></Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/cicd" element={
+                <ProtectedRoute>
+                  <Layout><CICDWizard /></Layout>
                 </ProtectedRoute>
               } />
               

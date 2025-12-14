@@ -1,0 +1,200 @@
+# GraphQL Schema for Test Website API
+# Use this schema to test GraphQL protocol in Apex
+
+type Query {
+  # Product Queries
+  products(
+    skip: Int = 0
+    limit: Int = 20
+    categoryId: Int
+    search: String
+    minPrice: Float
+    maxPrice: Float
+    sortBy: String = "name"
+    order: String = "asc"
+  ): [Product!]!
+  
+  product(id: ID!): Product
+  
+  productsCount(
+    categoryId: Int
+    search: String
+    minPrice: Float
+    maxPrice: Float
+  ): Int!
+  
+  # Category Queries
+  categories: [Category!]!
+  category(id: ID!): Category
+  
+  # Cart Queries
+  cart: [CartItem!]! @requiresAuth
+  
+  # Order Queries
+  orders(skip: Int = 0, limit: Int = 20): [Order!]! @requiresAuth
+  order(id: ID!): Order @requiresAuth
+  
+  # User Queries
+  me: User @requiresAuth
+  user(id: ID!): User @requiresAuth
+  
+  # Search
+  search(query: String!, limit: Int = 20): [SearchResult!]!
+}
+
+type Mutation {
+  # Authentication
+  register(
+    email: String!
+    username: String!
+    password: String!
+    fullName: String
+  ): AuthPayload!
+  
+  login(username: String!, password: String!): AuthPayload!
+  
+  # Product Mutations
+  createProduct(
+    name: String!
+    description: String!
+    price: Float!
+    categoryId: Int!
+    stock: Int!
+    imageUrl: String
+    sku: String
+  ): Product! @requiresAuth
+  
+  updateProduct(
+    id: ID!
+    name: String
+    description: String
+    price: Float
+    stock: Int
+  ): Product! @requiresAuth
+  
+  # Cart Mutations
+  addToCart(productId: ID!, quantity: Int = 1): CartItem! @requiresAuth
+  updateCartItem(cartItemId: ID!, quantity: Int!): CartItem! @requiresAuth
+  removeFromCart(cartItemId: ID!): Boolean! @requiresAuth
+  clearCart: Boolean! @requiresAuth
+  
+  # Order Mutations
+  createOrder(
+    shippingAddress: ShippingAddressInput!
+    paymentMethod: String!
+  ): Order! @requiresAuth
+  
+  updateOrderStatus(orderId: ID!, status: String!): Order! @requiresAuth
+  
+  # File Upload
+  uploadFile(file: Upload!): FileUploadResult! @requiresAuth
+}
+
+type Subscription {
+  # Real-time subscriptions
+  orderStatusChanged(orderId: ID!): Order!
+  productUpdated(productId: ID!): Product!
+  newOrder: Order! @requiresAuth
+}
+
+# Types
+type Product {
+  id: ID!
+  name: String!
+  description: String!
+  price: Float!
+  stock: Int!
+  categoryId: Int!
+  category: Category
+  imageUrl: String
+  sku: String!
+  rating: Float!
+  reviewCount: Int!
+  isActive: Boolean!
+  metadata: JSON
+  createdAt: String!
+}
+
+type Category {
+  id: ID!
+  name: String!
+  description: String
+  slug: String!
+  products: [Product!]!
+}
+
+type CartItem {
+  id: ID!
+  productId: Int!
+  quantity: Int!
+  product: Product!
+}
+
+type Order {
+  id: ID!
+  userId: Int!
+  user: User
+  status: String!
+  totalAmount: Float!
+  shippingAddress: JSON!
+  paymentMethod: String!
+  createdAt: String!
+  items: [OrderItem!]!
+}
+
+type OrderItem {
+  id: ID!
+  productId: Int!
+  quantity: Int!
+  price: Float!
+  product: Product
+}
+
+type User {
+  id: ID!
+  email: String!
+  username: String!
+  fullName: String
+  isAdmin: Boolean!
+  createdAt: String!
+}
+
+type AuthPayload {
+  accessToken: String!
+  tokenType: String!
+  user: User!
+}
+
+type SearchResult {
+  type: String!
+  id: ID!
+  title: String!
+  description: String
+  url: String
+}
+
+type FileUploadResult {
+  fileId: String!
+  filename: String!
+  size: Int!
+  contentType: String!
+  url: String!
+}
+
+# Input Types
+input ShippingAddressInput {
+  street: String!
+  city: String!
+  state: String!
+  zip: String!
+  country: String! = "USA"
+}
+
+# Scalars
+scalar JSON
+scalar Upload
+
+# Directives
+directive @requiresAuth on FIELD_DEFINITION | FIELD
+
+

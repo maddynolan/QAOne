@@ -256,3 +256,6 @@ ADD COLUMN IF NOT EXISTS compression_algorithm VARCHAR(20) DEFAULT 'brotli';
 
 CREATE INDEX IF NOT EXISTS idx_dom_snapshots_content_hash ON dom_snapshots(content_hash) WHERE content_hash IS NOT NULL;
 
+
+
+
