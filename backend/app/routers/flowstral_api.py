@@ -217,7 +217,7 @@ async def capture_events_batch(
             
             for event in session_events:
                 try:
-                    logger.debug(f"[BATCH] Processing {event.get('event_type')} for session {event.get('session_id')[:8]}")
+                    logger.debug(f"[BATCH] Processing {event.get('event_type')} for session {(event.get('session_id') or '')[:8]}")
                     result = await orchestrator.capture_event(
                         session_id=event.get("session_id"),
                         event_type=event.get("event_type"),
