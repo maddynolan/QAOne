@@ -3,13 +3,14 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, XCircle, 
   Target, Shield, Zap, Clock, Users, BarChart3, Activity,
   Bell, Send, Eye, ChevronRight, ArrowUpRight, ArrowDownRight,
-  Bug, FileText, TestTube, Play, Calendar, Gauge, Sparkles, Download
+  Bug, FileText, TestTube, Play, Calendar, Gauge, Sparkles, Download, RefreshCw
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
+import { resultsIngestionService } from '@/lib/results-ingestion-service';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -148,6 +149,27 @@ export default function Dashboard() {
       const linkedReqs = new Set(tcList.flatMap((tc: any) => tc.linkedRequirements || []));
       const coverage = reqList.length > 0 ? Math.round((linkedReqs.size / reqList.length) * 100) : 0;
 
+      // Get real test run data from results service
+      const testRunResults = resultsIngestionService.getAllResults();
+      
+      // Calculate stats from real test runs
+      let totalTests = 0;
+      let passedTests = 0;
+      let failedTests = 0;
+      let totalDuration = 0;
+      
+      testRunResults.forEach(run => {
+        run.test_cases.forEach(tc => {
+          totalTests++;
+          if (tc.status === 'passed') passedTests++;
+          if (tc.status === 'failed') failedTests++;
+        });
+        totalDuration += run.metadata.duration || 0;
+      });
+      
+      const passRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
+      const avgDuration = testRunResults.length > 0 ? totalDuration / testRunResults.length / 1000 : 0;
+
       setStats(prev => ({
         ...prev,
         totalTestCases: tcList.length || 10,
@@ -155,20 +177,60 @@ export default function Dashboard() {
         criticalDefects: criticalDef || 2,
         highDefects: highDef || 5,
         totalRequirements: reqList.length || 10,
-        testCoverage: coverage || 73
+        testCoverage: coverage || 73,
+        // Real stats from test runs
+        passRate: passRate || prev.passRate,
+        testsRun: totalTests || prev.testsRun,
+        avgExecutionTime: avgDuration > 0 ? parseFloat(avgDuration.toFixed(1)) : prev.avgExecutionTime,
+        automationRate: testRunResults.length > 0 ? 100 : prev.automationRate, // All unified tests are automated
+        releaseReadiness: Math.round((passRate * 0.4) + (coverage * 0.3) + (100 - (criticalDef * 10)) * 0.3)
       }));
 
-      setRecentActivity([
-        { type: 'test', message: 'Smoke test suite completed', time: '2 min ago', status: 'pass' },
-        { type: 'defect', message: 'Critical: Payment gateway timeout', time: '15 min ago', status: 'critical' },
-        { type: 'test', message: 'API regression tests running', time: '1 hour ago', status: 'running' },
-        { type: 'requirement', message: 'New requirement added: SSO Integration', time: '3 hours ago', status: 'new' }
-      ]);
+      // Build recent activity from real test runs
+      const activities: any[] = [];
+      
+      // Add test run activities
+      testRunResults.slice(-5).reverse().forEach(run => {
+        const passedCount = run.test_cases.filter(tc => tc.status === 'passed').length;
+        const failedCount = run.test_cases.filter(tc => tc.status === 'failed').length;
+        const timestamp = new Date(run.metadata.timestamp);
+        const timeAgo = getTimeAgo(timestamp);
+        
+        activities.push({
+          type: 'test',
+          message: run.test_name 
+            ? `${run.test_name}: ${passedCount}/${run.test_cases.length} passed` 
+            : `Test run: ${passedCount}/${run.test_cases.length} passed`,
+          time: timeAgo,
+          status: failedCount > 0 ? 'failed' : 'pass'
+        });
+      });
+      
+      // Fill with mock data if no real runs
+      if (activities.length === 0) {
+        activities.push(
+          { type: 'test', message: 'No test runs yet', time: 'Run tests in Builder', status: 'info' }
+        );
+      }
+
+      setRecentActivity(activities);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Helper to calculate time ago
+  const getTimeAgo = (date: Date): string => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   const notifyTeam = (message: string) => {
@@ -189,6 +251,17 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              setLoading(true);
+              loadDashboardData();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             onClick={async () => {

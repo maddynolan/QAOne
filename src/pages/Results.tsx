@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { BarChart3, TrendingUp, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,13 +101,38 @@ export default function Results() {
           <h1 className="text-3xl font-bold gradient-text">Test Results</h1>
           <p className="text-muted-foreground mt-1">View and analyze test execution results</p>
         </div>
-        <Button 
-          onClick={() => navigate('/runs')}
-          variant="outline"
-        >
-          <BarChart3 className="h-4 w-4 mr-2" />
-          View Test Runs
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={loadResults}
+            variant="outline"
+            size="sm"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+          {results.length > 0 && (
+            <Button 
+              onClick={() => {
+                resultsIngestionService.clearResults();
+                setResults([]);
+                toast.success('Results cleared');
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          )}
+          <Button 
+            onClick={() => navigate('/runs')}
+            variant="outline"
+            size="sm"
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            View Test Runs
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -246,6 +271,24 @@ export default function Results() {
                   </div>
                 </div>
 
+                {/* Show failed step info if available */}
+                {run.metadata.failed_step && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span className="font-medium text-red-700">Failed at Step {run.metadata.failed_step}</span>
+                    </div>
+                    {run.metadata.error_message && (
+                      <p className="text-sm text-red-600 mt-1 font-mono">{run.metadata.error_message}</p>
+                    )}
+                    {run.metadata.screenshot_path && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        📸 Screenshot: {run.metadata.screenshot_path}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <Button 
                     variant="outline" 
@@ -254,14 +297,18 @@ export default function Results() {
                   >
                     View Details
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => ingestTestRun(run.run_id)}
-                    disabled={isLoading}
-                  >
-                    Re-ingest
-                  </Button>
+                  {run.metadata.screenshot_path && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Open screenshot - it's in the backend directory
+                        toast.info(`Screenshot saved at: ${run.metadata.screenshot_path}`);
+                      }}
+                    >
+                      View Screenshot
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

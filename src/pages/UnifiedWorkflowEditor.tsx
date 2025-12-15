@@ -45,6 +45,7 @@ import { toast } from 'sonner';
 import { Layout } from '@/components/Layout';
 import { ReusableModulesManager, ModuleStep } from '@/components/ReusableModulesManager';
 import { BlackboxLocatorStrategies, BlackboxLocator } from '@/components/BlackboxLocatorStrategies';
+import { resultsIngestionService, TestRunData } from '@/lib/results-ingestion-service';
 
 // ============================================================================
 // TYPES - Unified Test Case Schema
@@ -887,8 +888,9 @@ export default function UnifiedWorkflowEditor() {
       }));
 
       // Save to history with more details
+      const runId = `run_${Date.now()}`;
       const historyEntry = {
-        id: `run_${Date.now()}`,
+        id: runId,
         testName: testCase.name,
         status: passed ? 'passed' : 'failed',
         timestamp: new Date().toISOString(),
@@ -900,6 +902,31 @@ export default function UnifiedWorkflowEditor() {
         logs: logs.slice(-10), // Store last 10 log lines
       };
       setTestHistory(prev => [historyEntry, ...prev.slice(0, 49)]);
+      
+      // Push to results ingestion service for dashboard
+      const runData: TestRunData = {
+        run_id: runId,
+        org_id: 'local',
+        project_id: 'unified-builder',
+        test_name: testCase.name,
+        test_cases: testCase.steps.map((step, idx) => ({
+          case_id: step.id,
+          status: passed ? 'passed' : (failedStep && idx + 1 >= failedStep ? 'failed' : 'passed') as 'passed' | 'failed' | 'skipped',
+          duration: Math.round((result.duration || 0) / testCase.steps.length),
+          error: failedStep && idx + 1 === failedStep ? errorMessage || undefined : undefined,
+          step_number: idx + 1,
+        })),
+        metadata: {
+          environment: 'local',
+          browser: 'chromium',
+          timestamp: new Date().toISOString(),
+          duration: result.duration || 0,
+          failed_step: failedStep || undefined,
+          error_message: errorMessage || undefined,
+          screenshot_path: screenshotPath || undefined,
+        }
+      };
+      resultsIngestionService.ingestResults(runData);
 
       if (passed) {
         toast.success('✅ Test passed!');
@@ -916,33 +943,76 @@ export default function UnifiedWorkflowEditor() {
     }
   };
 
-  // Save test case
+  // Save test case (create or update if exists)
   const saveTestCase = async () => {
     try {
-      const response = await fetch('http://localhost:8000/test-cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: testCase.name,
-          name: testCase.name,
-          description: testCase.description,
-          test_type: 'unified',
-          steps: testCase.steps.map((s, i) => ({
-            step_number: i + 1,
-            action: s.name,
-            expected_result: s.expectedResult || '',
-            test_data: JSON.stringify(s),
-          })),
-          tags: testCase.tags,
-        }),
-      });
-
-      if (response.ok) {
-        toast.success('Test case saved');
+      // First, search for existing test case by name
+      let existingId: string | null = null;
+      
+      try {
+        const searchResponse = await fetch(
+          `http://localhost:8000/test-cases/search/${encodeURIComponent(testCase.name)}`
+        );
+        if (searchResponse.ok) {
+          const searchResults = await searchResponse.json();
+          // Find exact match by name
+          const exactMatch = searchResults.find(
+            (tc: any) => tc.name === testCase.name || tc.title === testCase.name
+          );
+          if (exactMatch) {
+            existingId = exactMatch.id;
+          }
+        }
+      } catch (e) {
+        console.log('[Save] No existing test case found, will create new');
+      }
+      
+      const testCaseData = {
+        title: testCase.name,
+        name: testCase.name,
+        description: testCase.description,
+        test_type: 'unified',
+        steps: testCase.steps.map((s, i) => ({
+          step_number: i + 1,
+          action: s.name,
+          expected_result: s.expectedResult || '',
+          test_data: JSON.stringify(s),
+        })),
+        tags: testCase.tags,
+        // Store the full unified test case for later retrieval
+        unified_data: JSON.stringify(testCase),
+      };
+      
+      let response;
+      if (existingId) {
+        // Update existing test case
+        response = await fetch(`http://localhost:8000/test-cases/${existingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testCaseData),
+        });
+        
+        if (response.ok) {
+          toast.success('Test case updated');
+        } else {
+          toast.error('Failed to update');
+        }
       } else {
-        toast.error('Failed to save');
+        // Create new test case
+        response = await fetch('http://localhost:8000/test-cases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testCaseData),
+        });
+
+        if (response.ok) {
+          toast.success('Test case saved');
+        } else {
+          toast.error('Failed to save');
+        }
       }
     } catch (error) {
+      console.error('[Save] Error:', error);
       toast.error('Failed to save');
     }
   };

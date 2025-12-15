@@ -4,6 +4,7 @@ export interface TestRunData {
   run_id: string;
   org_id: string;
   project_id: string;
+  test_name?: string;
   test_cases: Array<{
     case_id: string;
     status: 'passed' | 'failed' | 'skipped';
@@ -11,30 +12,63 @@ export interface TestRunData {
     error?: string;
     screenshots?: string[];
     logs?: string[];
+    step_number?: number;
   }>;
   metadata: {
     environment: string;
     browser: string;
     timestamp: string;
     duration: number;
+    failed_step?: number;
+    error_message?: string;
+    screenshot_path?: string;
   };
 }
 
+const STORAGE_KEY = 'qaai_test_results';
+
 export class ResultsIngestionService {
   private results: Map<string, TestRunData> = new Map();
+
+  constructor() {
+    // Load from localStorage on initialization
+    this.loadFromStorage();
+  }
+
+  private loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.forEach((item: TestRunData) => {
+          this.results.set(item.run_id, item);
+        });
+        console.log(`[ResultsService] Loaded ${this.results.size} results from storage`);
+      }
+    } catch (e) {
+      console.error('[ResultsService] Failed to load from storage:', e);
+    }
+  }
+
+  private saveToStorage(): void {
+    try {
+      const data = Array.from(this.results.values());
+      // Keep only last 100 results
+      const trimmed = data.slice(-100);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    } catch (e) {
+      console.error('[ResultsService] Failed to save to storage:', e);
+    }
+  }
 
   async ingestResults(runData: TestRunData): Promise<void> {
     // Store the results
     this.results.set(runData.run_id, runData);
     
-    // In a real implementation, this would:
-    // 1. Validate the data
-    // 2. Store in database
-    // 3. Trigger notifications
-    // 4. Update analytics
-    // 5. Send to external systems (Jira, Slack, etc.)
+    // Persist to localStorage
+    this.saveToStorage();
     
-    console.log(`Ingested results for run ${runData.run_id}:`, runData);
+    console.log(`[ResultsService] Ingested results for run ${runData.run_id}:`, runData);
   }
 
   getResults(runId: string): TestRunData | undefined {
@@ -43,6 +77,11 @@ export class ResultsIngestionService {
 
   getAllResults(): TestRunData[] {
     return Array.from(this.results.values());
+  }
+  
+  clearResults(): void {
+    this.results.clear();
+    localStorage.removeItem(STORAGE_KEY);
   }
 
   getResultsByProject(projectId: string): TestRunData[] {
