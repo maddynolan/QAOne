@@ -1417,6 +1417,61 @@
         });
       });
       
+      // Process Salesforce Lightning comboboxes and custom dropdowns
+      const comboboxes = this.deepQuery([
+        'lightning-combobox',
+        'lightning-picklist',
+        '[role="combobox"]',
+        '[part="combobox"]',
+        '.slds-combobox',
+        '.slds-dropdown-trigger',
+        '[data-type="picklist"]',
+        // Generic custom dropdowns with labels
+        '.combobox-container',
+        '[class*="combobox"]',
+        '[class*="dropdown"][class*="trigger"]'
+      ].join(', '));
+      
+      comboboxes.slice(0, 30).forEach(el => {
+        // Try multiple ways to find the label
+        let label = el.getAttribute('label') || 
+                    el.getAttribute('aria-label') ||
+                    el.getAttribute('placeholder') ||
+                    el.querySelector('label')?.textContent?.trim() ||
+                    el.closest('.slds-form-element')?.querySelector('label')?.textContent?.trim() ||
+                    el.closest('[class*="form-element"]')?.querySelector('label')?.textContent?.trim();
+        
+        // Check for "for" attribute on nearby labels
+        if (!label && el.id) {
+          const labelEl = document.querySelector(`label[for="${el.id}"]`);
+          if (labelEl) label = labelEl.textContent?.trim();
+        }
+        
+        if (!label || label.length > 60) return;
+        
+        // Skip if we already have this from standard inputs
+        const labelKey = label.toLowerCase();
+        if (seenLabels.has(labelKey)) return;
+        seenLabels.set(labelKey, 1);
+        
+        // Use getBestSelector for robust selectors
+        const fullSelector = this.smartSelector ? this.smartSelector.getBestSelector(el) : null;
+        
+        results.push({
+          label,
+          type: 'combobox',
+          actionType: 'click',  // Comboboxes are clicked to open
+          tagName: el.tagName.toLowerCase(),
+          role: el.getAttribute('role') || 'combobox',
+          selectorObj: fullSelector,
+          selector: fullSelector?.playwright ? `page.${fullSelector.playwright}` : `page.getByRole('combobox', { name: '${this.escapeSelector(label)}' })`,
+          // Element metadata
+          id: el.id,
+          className: el.className,
+          elementType: 'dropdown',
+        });
+      });
+      
       return results;
     }
 
@@ -2457,13 +2512,14 @@
         return `${tag}[role="${role}"]`;
       }
       
-      // Return tag with :first or :nth-child to make it more specific
+      // Return tag with :first-of-type to make it more specific
       // NEVER return just 'body' or 'html'
+      // NOTE: ':first' alone is NOT valid CSS - must use ':first-child' or ':first-of-type'
       if (tag === 'body' || tag === 'html') {
         return 'div'; // Fallback to div, which will fail gracefully
       }
       
-      return `${tag}:first`;
+      return `${tag}:first-of-type`;
     }
     
     getRelativePath(target, ancestor) {
