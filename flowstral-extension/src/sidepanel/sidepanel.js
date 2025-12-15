@@ -3343,7 +3343,7 @@ Date: ${new Date().toISOString()}
         
         // Automation metadata
         automationConfig: {
-          startUrl: this.state.startUrl || this.state.analysis?.url || '',
+          startUrl: this.state.startUrl || this.state.pageAnalysis?.url || '',
           framework: 'playwright',
           canRunAutomated: true,
           canRunManual: true,
@@ -3447,8 +3447,8 @@ Date: ${new Date().toISOString()}
     try {
       // Convert to Workflow Editor node format
       const nodes = [];
-      // Use recording startUrl first, then analysis URL as fallback
-      const startUrl = this.state.startUrl || this.state.analysis?.url || '';
+      // Use recording startUrl first, then page analysis URL as fallback
+      const startUrl = this.state.startUrl || this.state.pageAnalysis?.url || '';
       
       // Add Navigate node first if we have a URL
       if (startUrl) {
@@ -4187,7 +4187,7 @@ Date: ${new Date().toISOString()}
         workflow: {
           name: `Workflow ${new Date().toLocaleString()}`,
           steps: actions,
-          startUrl: this.state.startUrl || this.state.analysis?.url || '',
+          startUrl: this.state.startUrl || this.state.pageAnalysis?.url || '',
           createdAt: Date.now(),
           // NEW: Include assertions summary
           hasAssertions: actions.some(a => a.assertion?.enabled),
@@ -4287,7 +4287,7 @@ Date: ${new Date().toISOString()}
       const workflowData = {
         name: `Flow ${new Date().toLocaleString()}`,
         steps: actions,
-        startUrl: this.state.startUrl || this.state.analysis?.url || 'Unknown',
+        startUrl: this.state.startUrl || this.state.pageAnalysis?.url || 'Unknown',
         createdAt: Date.now()
       };
       
@@ -4384,7 +4384,7 @@ Date: ${new Date().toISOString()}
       id: `TC-${Date.now()}`,
       name: `Manual Test - ${new Date().toLocaleString()}`,
       description: 'Test case generated from recorded workflow',
-      preconditions: `Navigate to: ${this.state.startUrl || this.state.analysis?.url || 'Application URL'}`,
+      preconditions: `Navigate to: ${this.state.startUrl || this.state.pageAnalysis?.url || 'Application URL'}`,
       steps: this.workflowSteps.map((step, idx) => ({
         stepNumber: idx + 1,
         action: this.getManualTestAction(step),
