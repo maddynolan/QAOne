@@ -2039,7 +2039,8 @@ Date: ${new Date().toISOString()}
     try {
       // Convert recorded actions to Workflow Editor node format
       const nodes = [];
-      const startUrl = this.state.startUrl || '';
+      // Use the TEST STARTING URL input field value, not state.startUrl
+      const startUrl = this.elements.baseUrlInput?.value || this.state.startUrl || '';
       
       // Add Navigate node first if we have a start URL
       if (startUrl) {
@@ -3537,8 +3538,8 @@ Date: ${new Date().toISOString()}
     try {
       // Convert to Workflow Editor node format
       const nodes = [];
-      // Use recording startUrl first, then page analysis URL as fallback
-      const startUrl = this.state.startUrl || this.state.pageAnalysis?.url || '';
+      // Use TEST STARTING URL input field, then page analysis URL as fallback
+      const startUrl = this.elements.baseUrlInput?.value || this.state.startUrl || this.state.pageAnalysis?.url || '';
       
       // Add Navigate node first if we have a URL
       if (startUrl) {
@@ -3945,7 +3946,17 @@ Date: ${new Date().toISOString()}
       return;
     }
     
-    container.innerHTML = testData.map((data, idx) => `
+    // Add "Fill All Fields" button at the top
+    container.innerHTML = `
+      <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+        <button class="btn btn-primary fill-all-btn" style="flex: 1; padding: 8px; font-size: 12px; background: linear-gradient(135deg, #8B5CF6, #38BDF8); border: none; border-radius: 6px; color: white; cursor: pointer;">
+          ✨ Fill All Fields on Page
+        </button>
+        <button class="btn btn-secondary add-all-steps-btn" style="flex: 1; padding: 8px; font-size: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: white; cursor: pointer;">
+          + Add to Workflow
+        </button>
+      </div>
+    ` + testData.map((data, idx) => `
       <div class="action-item" style="padding: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 6px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
           <span style="font-weight: 500; color: #fff; font-size: 12px;">
@@ -3994,6 +4005,60 @@ Date: ${new Date().toISOString()}
         await this.fillFieldWithValue(data, value);
       });
     });
+    
+    // Add event listener for "Fill All Fields" button
+    const fillAllBtn = container.querySelector('.fill-all-btn');
+    if (fillAllBtn) {
+      fillAllBtn.addEventListener('click', async () => {
+        this.addLog('info', '✨ Filling all fields...');
+        let filledCount = 0;
+        let errorCount = 0;
+        
+        for (let idx = 0; idx < this.generatedTestData.length; idx++) {
+          const data = this.generatedTestData[idx];
+          const input = container.querySelector(`input[data-index="${idx}"]`);
+          const value = input?.value || data.value;
+          
+          try {
+            await this.fillFieldWithValue(data, value);
+            filledCount++;
+            // Small delay between fills to allow page updates
+            await new Promise(r => setTimeout(r, 100));
+          } catch (e) {
+            errorCount++;
+          }
+        }
+        
+        if (errorCount > 0) {
+          this.addLog('warning', `Filled ${filledCount} fields, ${errorCount} failed`);
+        } else {
+          this.addLog('success', `✅ Filled all ${filledCount} fields!`);
+        }
+      });
+    }
+    
+    // Add event listener for "Add to Workflow" button
+    const addAllBtn = container.querySelector('.add-all-steps-btn');
+    if (addAllBtn) {
+      addAllBtn.addEventListener('click', () => {
+        this.addLog('info', '➕ Adding all fields to workflow...');
+        
+        for (const data of this.generatedTestData) {
+          // Add as input step to workflow
+          this.addToWorkflow({
+            type: 'fill',
+            element: 'input',
+            text: data.fieldName,
+            label: data.fieldName,
+            selector: data.selector,
+            value: data.value,
+            description: `Fill "${data.fieldName}" with test data`
+          }, { value: data.value });
+        }
+        
+        this.addLog('success', `✅ Added ${this.generatedTestData.length} input steps to workflow`);
+      });
+    }
   }
   
   /**

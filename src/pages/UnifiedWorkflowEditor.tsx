@@ -320,6 +320,48 @@ function getStepDescription(step: TestStep): string {
   }
 }
 
+/**
+ * Generate synthetic test data based on field name/type
+ */
+function generateTestValue(fieldNameOrTarget: string): string {
+  const text = fieldNameOrTarget.toLowerCase();
+  
+  // Common test data patterns
+  const testData: Record<string, () => string> = {
+    email: () => `test.user${Math.floor(Math.random() * 10000)}@example.com`,
+    phone: () => `555-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
+    firstName: () => ['John', 'Jane', 'Alex', 'Sam', 'Taylor'][Math.floor(Math.random() * 5)],
+    lastName: () => ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones'][Math.floor(Math.random() * 5)],
+    fullName: () => `${testData.firstName()} ${testData.lastName()}`,
+    password: () => 'Test@1234!',
+    company: () => ['Acme Corp', 'Tech Solutions', 'Global Inc', 'Digital Labs'][Math.floor(Math.random() * 4)],
+    street: () => `${Math.floor(Math.random() * 9999)} Main Street`,
+    city: () => ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'][Math.floor(Math.random() * 5)],
+    state: () => ['CA', 'TX', 'NY', 'FL', 'IL'][Math.floor(Math.random() * 5)],
+    zipCode: () => `${Math.floor(Math.random() * 90000 + 10000)}`,
+    date: () => new Date(Date.now() + Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    number: () => `${Math.floor(Math.random() * 1000)}`,
+    text: () => ['Test input', 'Sample data', 'Example text'][Math.floor(Math.random() * 3)],
+  };
+  
+  // Match field patterns
+  if (/email/.test(text)) return testData.email();
+  if (/phone|tel|mobile/.test(text)) return testData.phone();
+  if (/first\s*name|fname/.test(text)) return testData.firstName();
+  if (/last\s*name|lname/.test(text)) return testData.lastName();
+  if (/name/.test(text) && !/user|company/.test(text)) return testData.fullName();
+  if (/password|pwd/.test(text)) return testData.password();
+  if (/company|org|business/.test(text)) return testData.company();
+  if (/street|address/.test(text)) return testData.street();
+  if (/city/.test(text)) return testData.city();
+  if (/state|province/.test(text)) return testData.state();
+  if (/zip|postal/.test(text)) return testData.zipCode();
+  if (/date|dob|birth/.test(text)) return testData.date();
+  if (/amount|price|number/.test(text)) return testData.number();
+  
+  return testData.text();
+}
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -777,6 +819,30 @@ export default function UnifiedWorkflowEditor() {
     }
   };
 
+  // Generate test data for all input steps
+  const generateAllTestData = () => {
+    let count = 0;
+    setTestCase(prev => ({
+      ...prev,
+      steps: prev.steps.map(step => {
+        if (step.type === 'input' && !step.value) {
+          count++;
+          return {
+            ...step,
+            value: generateTestValue(step.name || step.target || 'text')
+          };
+        }
+        return step;
+      }),
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
+    }));
+    if (count > 0) {
+      toast.success(`Generated test data for ${count} input fields`);
+    } else {
+      toast.info('No empty input fields to fill');
+    }
+  };
+
   // Export handler
   const handleExport = (mode: ExportMode) => {
     const code = generateCode(mode);
@@ -848,6 +914,17 @@ export default function UnifiedWorkflowEditor() {
                 <Settings className="h-4 w-4" />
               </Button>
               
+              {/* Generate Test Data */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={generateAllTestData}
+                title="Generate test data for all input fields"
+              >
+                <Zap className="h-4 w-4 mr-1" />
+                Fill Data
+              </Button>
+
               {/* Export Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1390,7 +1467,21 @@ function StepEditor({ step, onUpdate, onClose, onShowBlackbox }: StepEditorProps
 
       {step.type === 'input' && (
         <div className="space-y-2">
-          <Label>Value to Enter</Label>
+          <div className="flex items-center justify-between">
+            <Label>Value to Enter</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs text-primary"
+              onClick={() => {
+                const generated = generateTestValue(step.name || step.target || '');
+                onUpdate({ value: generated });
+              }}
+            >
+              <Zap className="h-3 w-3 mr-1" />
+              Generate
+            </Button>
+          </div>
           <Input
             value={step.value || ''}
             onChange={(e) => onUpdate({ value: e.target.value })}
