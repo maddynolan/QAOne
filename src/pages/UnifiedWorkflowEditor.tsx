@@ -231,7 +231,7 @@ function extractTargetName(selector?: string, eventData?: any): string {
   if (eventData?.element?.textContent) return eventData.element.textContent.slice(0, 30);
   
   // Parse getByRole
-  const roleMatch = selector.match(/getByRole\(['"](\w+)['"](?:,\s*\{\s*name:\s*['"]([^'"]+)['"]/);
+  const roleMatch = selector.match(/getByRole\(['"](\w+)['"](?:,\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\})?/);
   if (roleMatch) {
     const [, role, name] = roleMatch;
     return name ? `${name}` : role;
