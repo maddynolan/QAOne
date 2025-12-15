@@ -783,7 +783,12 @@ export default function EnhancedWorkflowEditorPage() {
   // Generate full script based on selected framework
   const generateFullScript = useCallback(() => {
     const sortedNodes = [...nodes].sort((a, b) => a.position.y - b.position.y);
-    const testName = workflowName.toLowerCase().replace(/\s+/g, '_');
+    // Sanitize test name: replace ALL non-alphanumeric chars with underscore, remove leading/trailing underscores
+    const testName = workflowName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')  // Replace ALL non-alphanumeric with underscore
+      .replace(/^_+|_+$/g, '')       // Remove leading/trailing underscores
+      .substring(0, 50) || 'recorded_test';  // Limit length, fallback if empty
     const appTypeName = APP_TYPES.find(a => a.id === appType)?.name || 'Generic';
     
     let script = '';

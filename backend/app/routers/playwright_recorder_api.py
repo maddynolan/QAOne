@@ -1604,6 +1604,21 @@ async def generate_script(request: GenerateScriptRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
 
 
+def _sanitize_test_name(name: str) -> str:
+    """
+    Sanitize test name to be a valid Python/TypeScript identifier.
+    Removes special characters like /, :, ,, - and converts to snake_case.
+    """
+    import re
+    if not name:
+        return "recorded_test"
+    # Replace all non-alphanumeric characters with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9]+', '_', name.lower())
+    # Remove leading/trailing underscores and limit length
+    sanitized = re.sub(r'^_+|_+$', '', sanitized)[:50]
+    return sanitized or "recorded_test"
+
+
 @router.post("/execute")
 async def execute_script(request: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -1621,7 +1636,8 @@ async def execute_script(request: Dict[str, Any]) -> Dict[str, Any]:
         timeout = request.get("timeout", 30000)
         execution_id = request.get("execution_id")  # For WebSocket progress tracking
         step_names = request.get("step_names", [])  # Step names for progress
-        workflow_name = request.get("workflow_name", "flowstral_recorded_test")
+        # Sanitize workflow name to be a valid Python identifier
+        workflow_name = _sanitize_test_name(request.get("workflow_name", "flowstral_recorded_test"))
         
         logger.info(f"[FLOWSTRAL] Executing script (language={language}, browser={browser}, headless={headless}, execution_id={execution_id})")
         
