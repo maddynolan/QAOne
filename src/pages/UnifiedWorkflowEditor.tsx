@@ -1,5 +1,5 @@
 /**
- * Unified Test Builder - v3.0
+ * Unified Test Builder - v3.1
  * 
  * THE ONLY test builder you need. One unified test case that can:
  * - Run as automated UI test
@@ -18,28 +18,27 @@
  * Color scheme: Purple primary (#8B5CF6), Cyan accent (#38BDF8)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Play, Save, Download, Upload, Plus, Trash2, Copy,
+  Play, Save, Download, Plus, Trash2, Copy,
   ArrowUp, ArrowDown, Eye, EyeOff, Code, Settings,
   Zap, Globe, MousePointer, Type, Clock, CheckCircle,
-  Navigation, AlertCircle, Sparkles, Package, Wand2,
+  Navigation, AlertCircle, Package, Wand2,
   ChevronRight, ChevronDown, MoreHorizontal, Target,
   Layers, RefreshCw, FileText, Monitor, Server, Gauge,
-  Video, Camera, Search, Filter, X, Check, Edit, Info,
-  Database, ToggleLeft, ToggleRight, FolderPlus, History,
-  ExternalLink, Clipboard, BookOpen, Share2
+  Video, Camera, Search, X, Edit,
+  Database, ToggleLeft, ToggleRight, FolderPlus,
+  BookOpen, Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
@@ -60,7 +59,7 @@ type StepType =
   | 'screenshot' | 'visual_compare'
   | 'extract' | 'store_variable'
   | 'condition' | 'loop'
-  | 'module' // Reusable module reference
+  | 'module'
   | 'custom';
 
 interface StepAssertion {
@@ -85,6 +84,9 @@ interface TestStep {
   url?: string;
   waitTime?: number;
   
+  // Human-readable target (for No-Code view)
+  target?: string;  // e.g., "Submit Button", "Email Field"
+  
   // Fallback (blackbox)
   fallback?: BlackboxLocator;
   
@@ -107,7 +109,7 @@ interface TestStep {
   expectedResult?: string;
   
   // Variables
-  storeAs?: string;  // Store result in variable
+  storeAs?: string;
   
   // Module reference
   moduleId?: string;
@@ -191,7 +193,7 @@ const STEP_CATEGORIES = {
   data: {
     label: 'Data & Variables',
     steps: [
-      { type: 'extract', label: 'Extract Value', icon: Clipboard, color: 'bg-teal-500 text-white' },
+      { type: 'extract', label: 'Extract Value', icon: Copy, color: 'bg-teal-500 text-white' },
       { type: 'store_variable', label: 'Store Variable', icon: FolderPlus, color: 'bg-teal-600 text-white' },
     ]
   },
@@ -212,6 +214,111 @@ const getStepInfo = (type: StepType) => {
   }
   return { type, label: type, icon: Zap, color: 'bg-gray-500 text-white' };
 };
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Extract human-readable target name from selector
+ * e.g., getByRole('button', { name: 'Submit' }) -> "Submit button"
+ */
+function extractTargetName(selector?: string, eventData?: any): string {
+  if (!selector) return '';
+  
+  // Check if we have text/label from event data
+  if (eventData?.text) return eventData.text;
+  if (eventData?.element?.textContent) return eventData.element.textContent.slice(0, 30);
+  
+  // Parse getByRole
+  const roleMatch = selector.match(/getByRole\(['"](\w+)['"](?:,\s*\{\s*name:\s*['"]([^'"]+)['"]/);
+  if (roleMatch) {
+    const [, role, name] = roleMatch;
+    return name ? `${name}` : role;
+  }
+  
+  // Parse getByText
+  const textMatch = selector.match(/getByText\(['"]([^'"]+)['"]\)/);
+  if (textMatch) return textMatch[1];
+  
+  // Parse getByLabel
+  const labelMatch = selector.match(/getByLabel\(['"]([^'"]+)['"]\)/);
+  if (labelMatch) return `${labelMatch[1]} field`;
+  
+  // Parse getByPlaceholder
+  const placeholderMatch = selector.match(/getByPlaceholder\(['"]([^'"]+)['"]\)/);
+  if (placeholderMatch) return `${placeholderMatch[1]} field`;
+  
+  // Parse locator with text
+  const locatorTextMatch = selector.match(/locator\([^)]*text=['"]([^'"]+)['"]/);
+  if (locatorTextMatch) return locatorTextMatch[1];
+  
+  // Parse data-testid
+  const testIdMatch = selector.match(/\[data-testid=['"]([^'"]+)['"]\]/);
+  if (testIdMatch) return testIdMatch[1].replace(/-/g, ' ');
+  
+  // Parse aria-label
+  const ariaMatch = selector.match(/\[aria-label=['"]([^'"]+)['"]\]/);
+  if (ariaMatch) return ariaMatch[1];
+  
+  return '';
+}
+
+/**
+ * Get friendly step description for No-Code view
+ */
+function getStepDescription(step: TestStep): string {
+  switch (step.type) {
+    case 'navigate':
+      if (step.url) {
+        try {
+          const url = new URL(step.url);
+          return `Go to ${url.hostname}${url.pathname !== '/' ? url.pathname : ''}`;
+        } catch {
+          return step.url.slice(0, 40);
+        }
+      }
+      return 'Navigate to page';
+    
+    case 'click':
+      return step.target || step.name || 'Click element';
+    
+    case 'input':
+      if (step.value) {
+        const preview = step.value.length > 20 ? step.value.slice(0, 20) + '...' : step.value;
+        return `Type "${preview}"`;
+      }
+      return step.target ? `Type in ${step.target}` : 'Enter text';
+    
+    case 'select':
+      return step.value ? `Select "${step.value}"` : 'Select option';
+    
+    case 'hover':
+      return step.target || 'Hover over element';
+    
+    case 'wait':
+      return `Wait ${step.waitTime || 1000}ms`;
+    
+    case 'wait_for_element':
+      return step.target || 'Wait for element';
+    
+    case 'assert':
+    case 'verify':
+      return step.expectedResult || 'Verify condition';
+    
+    case 'api':
+      return `${step.method || 'GET'} ${step.endpoint || 'API call'}`;
+    
+    case 'db_query':
+      return 'Execute database query';
+    
+    case 'screenshot':
+      return 'Take screenshot';
+    
+    default:
+      return step.description || '';
+  }
+}
 
 // ============================================================================
 // MAIN COMPONENT
@@ -278,13 +385,23 @@ export default function UnifiedWorkflowEditor() {
     if (data) {
       try {
         const parsed = JSON.parse(decodeURIComponent(data));
-        if (parsed.events || parsed.steps) {
-          const steps = parsed.events 
-            ? convertRecordedEvents(parsed.events, parsed.startUrl)
-            : parsed.steps.map(convertWorkflowStep);
+        console.log('[Builder] Loading from URL data:', parsed);
+        if (parsed.events || parsed.steps || parsed.nodes) {
+          let steps: TestStep[] = [];
+          
+          if (parsed.events) {
+            steps = convertRecordedEvents(parsed.events, parsed.startUrl);
+          } else if (parsed.nodes) {
+            steps = convertWorkflowNodes(parsed.nodes, parsed.startUrl);
+          } else if (parsed.steps) {
+            steps = parsed.steps.map(convertWorkflowStep);
+          }
+          
+          console.log('[Builder] Converted steps:', steps.length);
+          
           setTestCase(prev => ({
             ...prev,
-            name: parsed.name || parsed.title || 'Recorded Test',
+            name: parsed.name || parsed.workflowName || parsed.title || 'Recorded Test',
             description: parsed.description || '',
             steps,
             settings: {
@@ -301,8 +418,12 @@ export default function UnifiedWorkflowEditor() {
       const saved = localStorage.getItem('unified_test_case');
       if (saved) {
         try {
-          setTestCase(JSON.parse(saved));
-        } catch (e) {}
+          const parsed = JSON.parse(saved);
+          console.log('[Builder] Loading from localStorage:', parsed.steps?.length, 'steps');
+          setTestCase(parsed);
+        } catch (e) {
+          console.error('Failed to load from localStorage:', e);
+        }
       }
     }
   }, [searchParams]);
@@ -317,10 +438,12 @@ export default function UnifiedWorkflowEditor() {
     localStorage.setItem('unified_test_history', JSON.stringify(testHistory));
   }, [testHistory]);
 
-  // Convert recorded events to steps
+  // Convert recorded events to steps (from raw events)
   const convertRecordedEvents = (events: any[], startUrl?: string): TestStep[] => {
+    console.log('[Builder] Converting events:', events.length, 'startUrl:', startUrl);
     const steps: TestStep[] = [];
     
+    // Always add navigate step first if we have a URL
     if (startUrl) {
       steps.push({
         id: `step_${Date.now()}_nav`,
@@ -332,6 +455,7 @@ export default function UnifiedWorkflowEditor() {
       });
     }
     
+    // Convert ALL events - no limit
     events.forEach((event, idx) => {
       const step: TestStep = {
         id: `step_${Date.now()}_${idx}`,
@@ -339,13 +463,70 @@ export default function UnifiedWorkflowEditor() {
         name: generateStepName(event),
         selector: event.selector,
         value: event.value,
+        target: extractTargetName(event.selector, event),
         enabled: true,
         expectedResult: generateExpectedResult(event),
       };
       steps.push(step);
     });
     
+    console.log('[Builder] Converted to steps:', steps.length);
     return steps;
+  };
+
+  // Convert workflow nodes (from sidepanel)
+  const convertWorkflowNodes = (nodes: any[], startUrl?: string): TestStep[] => {
+    console.log('[Builder] Converting nodes:', nodes.length, 'startUrl:', startUrl);
+    const steps: TestStep[] = [];
+    
+    // Add navigate step first if we have a URL
+    if (startUrl) {
+      steps.push({
+        id: `step_${Date.now()}_nav`,
+        type: 'navigate',
+        name: 'Open Application',
+        url: startUrl,
+        enabled: true,
+        expectedResult: 'Page loads successfully',
+      });
+    }
+    
+    // Convert ALL nodes - no limit
+    nodes.forEach((node, idx) => {
+      const nodeData = node.data || node;
+      const step: TestStep = {
+        id: node.id || `step_${Date.now()}_${idx}`,
+        type: mapEventType(node.type || nodeData.type || 'click'),
+        name: node.label || nodeData.label || generateNodeName(node),
+        selector: nodeData.selector || node.selector,
+        value: nodeData.value || node.value,
+        url: nodeData.url || node.url,
+        target: extractTargetName(nodeData.selector || node.selector, nodeData),
+        enabled: true,
+        expectedResult: nodeData.manualStep?.expectedResult || nodeData.expectedResult || '',
+        assertion: nodeData.assertion,
+      };
+      steps.push(step);
+    });
+    
+    console.log('[Builder] Converted nodes to steps:', steps.length);
+    return steps;
+  };
+
+  const generateNodeName = (node: any): string => {
+    const nodeData = node.data || node;
+    const type = node.type || nodeData.type || 'click';
+    
+    if (type === 'navigate') return 'Navigate';
+    if (type === 'input' || type === 'fill') {
+      const val = nodeData.value || node.value || '';
+      return `Enter "${val.slice(0, 15)}${val.length > 15 ? '...' : ''}"`;
+    }
+    if (type === 'click') {
+      const target = extractTargetName(nodeData.selector || node.selector, nodeData);
+      return target ? `Click "${target}"` : 'Click element';
+    }
+    return type.charAt(0).toUpperCase() + type.slice(1);
   };
 
   const mapEventType = (type: string): StepType => {
@@ -367,11 +548,15 @@ export default function UnifiedWorkflowEditor() {
   const generateStepName = (event: any): string => {
     const type = event.type || 'click';
     if (type === 'input' || type === 'fill') {
-      return `Enter "${(event.value || '').slice(0, 20)}..."`;
+      const val = event.value || '';
+      return `Enter "${val.slice(0, 15)}${val.length > 15 ? '...' : ''}"`;
     }
     if (type === 'click') {
       const text = event.element?.textContent || event.text || '';
-      return text ? `Click "${text.slice(0, 25)}"` : 'Click element';
+      if (text) return `Click "${text.slice(0, 20)}"`;
+      const target = extractTargetName(event.selector, event);
+      if (target) return `Click "${target}"`;
+      return 'Click element';
     }
     return type.charAt(0).toUpperCase() + type.slice(1);
   };
@@ -386,11 +571,12 @@ export default function UnifiedWorkflowEditor() {
 
   const convertWorkflowStep = (node: any): TestStep => ({
     id: node.id || `step_${Date.now()}`,
-    type: node.type || 'click',
+    type: mapEventType(node.type || 'click'),
     name: node.label || node.name || 'Step',
     selector: node.data?.selector || node.selector,
     value: node.data?.value || node.value,
     url: node.data?.url || node.url,
+    target: extractTargetName(node.data?.selector || node.selector, node.data),
     enabled: true,
     expectedResult: node.data?.manualStep?.expectedResult || node.expectedResult || '',
     assertion: node.data?.assertion,
@@ -465,6 +651,7 @@ export default function UnifiedWorkflowEditor() {
       selector: ms.selector,
       value: ms.value,
       waitTime: ms.waitTime,
+      target: extractTargetName(ms.selector),
       enabled: true,
       expectedResult: ms.description || '',
     }));
@@ -829,6 +1016,7 @@ export default function UnifiedWorkflowEditor() {
                   </div>
                 ) : (
                   <div className="space-y-2 max-w-3xl mx-auto">
+                    {/* Show ALL steps - no limit */}
                     {testCase.steps.map((step, index) => (
                       <StepCard
                         key={step.id}
@@ -991,7 +1179,7 @@ export default function UnifiedWorkflowEditor() {
 }
 
 // ============================================================================
-// STEP CARD COMPONENT
+// STEP CARD COMPONENT - No-Code Friendly
 // ============================================================================
 
 interface StepCardProps {
@@ -1022,6 +1210,9 @@ function StepCard({
   executionStatus,
 }: StepCardProps) {
   const info = getStepInfo(step.type);
+  
+  // Get human-readable description (NO selectors shown)
+  const description = getStepDescription(step);
 
   return (
     <div
@@ -1038,15 +1229,16 @@ function StepCard({
     >
       {/* Step Number & Icon */}
       <div className="flex flex-col items-center">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${info.color}`}>
-          <info.icon className="h-4 w-4" />
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${info.color}`}>
+          {index + 1}
         </div>
         {!isLast && <div className="w-0.5 h-4 bg-border mt-1" />}
       </div>
 
-      {/* Content */}
+      {/* Content - NO CODE/SELECTOR shown */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
+          <info.icon className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium">{step.name}</span>
           {!step.enabled && (
             <Badge variant="secondary" className="text-xs">Disabled</Badge>
@@ -1064,14 +1256,12 @@ function StepCard({
             </Badge>
           )}
         </div>
-        <div className="text-sm text-muted-foreground truncate">
-          {step.type === 'navigate' && step.url}
-          {step.type === 'click' && (step.selector?.slice(0, 50) || 'Click element')}
-          {step.type === 'input' && `Enter: ${step.value || '...'}`}
-          {step.type === 'wait' && `${step.waitTime || 1000}ms`}
-          {step.type === 'api' && `${step.method || 'GET'} ${step.endpoint || ''}`}
-          {step.type === 'db_query' && 'Execute query'}
-        </div>
+        {/* Show human-readable description, not selector */}
+        {description && (
+          <div className="text-sm text-muted-foreground mt-1">
+            {description}
+          </div>
+        )}
         {step.expectedResult && (
           <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
             <CheckCircle className="h-3 w-3" />
@@ -1115,7 +1305,7 @@ function StepCard({
 }
 
 // ============================================================================
-// STEP EDITOR COMPONENT
+// STEP EDITOR COMPONENT - Shows technical details only when editing
 // ============================================================================
 
 interface StepEditorProps {
@@ -1157,20 +1347,45 @@ function StepEditor({ step, onUpdate, onClose, onShowBlackbox }: StepEditorProps
       )}
 
       {['click', 'input', 'select', 'hover', 'assert'].includes(step.type) && (
-        <div className="space-y-2">
-          <Label>Selector</Label>
-          <Textarea
-            value={step.selector || ''}
-            onChange={(e) => onUpdate({ selector: e.target.value })}
-            placeholder="Enter selector..."
-            className="font-mono text-sm"
-            rows={2}
-          />
-          <Button variant="outline" size="sm" className="w-full" onClick={onShowBlackbox}>
-            <Wand2 className="h-4 w-4 mr-1" />
-            Add Fallback Strategy
-          </Button>
-        </div>
+        <>
+          {/* Human-readable target name */}
+          <div className="space-y-2">
+            <Label>Target Element</Label>
+            <Input
+              value={step.target || ''}
+              onChange={(e) => onUpdate({ target: e.target.value })}
+              placeholder="e.g., Submit Button, Email Field"
+            />
+            <p className="text-xs text-muted-foreground">Human-readable name for this element</p>
+          </div>
+          
+          {/* Technical selector - collapsed by default */}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between text-xs">
+                <span className="flex items-center gap-1">
+                  <Code className="h-3 w-3" />
+                  Technical Details
+                </span>
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              <Label className="text-xs">Selector (for automation)</Label>
+              <Textarea
+                value={step.selector || ''}
+                onChange={(e) => onUpdate({ selector: e.target.value })}
+                placeholder="Enter selector..."
+                className="font-mono text-xs"
+                rows={2}
+              />
+              <Button variant="outline" size="sm" className="w-full" onClick={onShowBlackbox}>
+                <Wand2 className="h-4 w-4 mr-1" />
+                Add Fallback Strategy
+              </Button>
+            </CollapsibleContent>
+          </Collapsible>
+        </>
       )}
 
       {step.type === 'input' && (
@@ -1471,7 +1686,7 @@ export default async function () {
   const page = browser.newPage();
   
   try {
-${tc.steps.filter(s => s.enabled).map((step, i) => {
+${tc.steps.filter(s => s.enabled).map((step) => {
   if (step.type === 'navigate') return `    await page.goto('${step.url || tc.settings.baseUrl || ''}');`;
   if (step.type === 'click' && step.selector) return `    await page.locator('${step.selector}').click();`;
   if (step.type === 'input' && step.selector) return `    await page.locator('${step.selector}').fill('${step.value || ''}');`;
@@ -1501,27 +1716,13 @@ function generateManualDoc(tc: UnifiedTestCase): string {
     }
     
     doc += `### Step ${index + 1}: ${step.name}\n\n`;
-    doc += `**Action:** ${step.manualAction || getManualAction(step)}\n\n`;
+    doc += `**Action:** ${step.manualAction || getStepDescription(step)}\n\n`;
     doc += `**Expected Result:** ${step.expectedResult || 'TBD'}\n\n`;
     doc += `**Status:** [ ] Pass  [ ] Fail  [ ] Blocked\n\n`;
     doc += `---\n\n`;
   });
   
   return doc;
-}
-
-function getManualAction(step: TestStep): string {
-  switch (step.type) {
-    case 'navigate': return `Navigate to ${step.url || 'URL'}`;
-    case 'click': return `Click on element (${step.selector?.slice(0, 30) || 'TBD'})`;
-    case 'input': return `Enter "${step.value || ''}" into field`;
-    case 'select': return `Select option "${step.value || ''}"`;
-    case 'wait': return `Wait for ${step.waitTime || 1000}ms`;
-    case 'assert': return `Verify element is visible`;
-    case 'api': return `Call ${step.method || 'GET'} ${step.endpoint || '/api'}`;
-    case 'db_query': return `Execute database query`;
-    default: return step.type;
-  }
 }
 
 function convertSelector(selector: string): string {

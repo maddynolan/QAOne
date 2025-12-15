@@ -73,24 +73,32 @@ class SidebarController {
       if (changeInfo.status === 'complete' && tab.active) {
         console.log('[Sidebar] Tab updated:', tab.url, 'previous:', this.currentPageUrl);
         
-        // Check if URL changed (or first load)
-        if (!this.currentPageUrl || this.currentPageUrl !== tab.url) {
-          console.log('[Sidebar] Page navigated from', this.currentPageUrl, 'to', tab.url);
-          
-          // Skip chrome:// and extension pages
-          if (!tab.url?.startsWith('chrome://') && !tab.url?.startsWith('chrome-extension://')) {
-            this.addLog('info', '🔄 Page navigated - refreshing analysis...');
-            
-            // Clear old analysis
-            this.state.pageAnalysis = null;
-            this.state.suggestions = [];
-            
-            // Auto-refresh analysis after navigation (give page time to load)
-            setTimeout(() => {
-              this.refreshPageAnalysis();
-            }, 1000);
-          }
+        // Skip chrome:// and extension pages
+        if (tab.url?.startsWith('chrome://') || tab.url?.startsWith('chrome-extension://')) {
+          this.currentPageUrl = tab.url;
+          return;
         }
+        
+        // Check if URL changed - compare full URL including path
+        const urlChanged = !this.currentPageUrl || this.currentPageUrl !== tab.url;
+        
+        if (urlChanged) {
+          console.log('[Sidebar] Page navigated from', this.currentPageUrl, 'to', tab.url);
+          this.addLog('info', '🔄 Page navigated - refreshing analysis...');
+          
+          // Clear old analysis immediately
+          this.state.pageAnalysis = null;
+          this.state.suggestions = [];
+          this.renderPageAnalysis();
+          this.renderSuggestions();
+          
+          // Auto-refresh analysis after navigation (give page time to load)
+          setTimeout(() => {
+            this.refreshPageAnalysis();
+          }, 1500);  // Increased to 1.5s for page load
+        }
+        
+        // Always update current URL
         this.currentPageUrl = tab.url;
       }
     });
@@ -2069,14 +2077,15 @@ Date: ${new Date().toISOString()}
         });
       });
       
-      // Build the workflow state for the editor
+      // Build the workflow state for the editor (include startUrl!)
       const workflowState = {
         workflowName: `Recording - ${new Date().toLocaleString()}`,
         appType: this.options.appType || 'generic',
-        nodes: nodes
+        nodes: nodes,
+        startUrl: startUrl  // Include startUrl for builder
       };
       
-      console.log('[Sidebar] Exporting recorded actions to Workflow Editor:', workflowState);
+      console.log('[Sidebar] Exporting recorded actions to Test Builder:', workflowState, 'Total nodes:', nodes.length);
       
       // Get frontend URL
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
@@ -3588,14 +3597,15 @@ Date: ${new Date().toISOString()}
         });
       }
       
-      // Build the workflow state
+      // Build the workflow state (include startUrl!)
       const workflowState = {
         workflowName: `Recorded Workflow - ${new Date().toLocaleString()}`,
         appType: this.options.appType || 'generic',
-        nodes: nodes
+        nodes: nodes,
+        startUrl: startUrl  // Include startUrl for builder
       };
       
-      console.log('[Sidebar] Exporting to Workflow Editor:', workflowState);
+      console.log('[Sidebar] Exporting to Test Builder:', workflowState, 'Total nodes:', nodes.length);
       
       // Get frontend URL
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
