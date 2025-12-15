@@ -915,6 +915,7 @@ playwright>=1.40.0
 # This file provides the 'page' fixture used by pytest-playwright
 
 import pytest
+from pathlib import Path
 
 # Register pytest-playwright plugin
 pytest_plugins = ['pytest_playwright']
@@ -927,6 +928,28 @@ def browser_context_args(browser_context_args):
         "viewport": {"width": 1920, "height": 1080},
         "ignore_https_errors": True,
     }
+
+# Capture screenshot on test failure
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    
+    if report.when == "call" and report.failed:
+        # Get the page fixture if available
+        page = item.funcargs.get("page")
+        if page:
+            # Create test-results directory
+            test_results_dir = Path(item.config.rootdir) / "test-results"
+            test_results_dir.mkdir(exist_ok=True)
+            
+            # Save screenshot with test name
+            screenshot_path = test_results_dir / f"{item.name}_failure.png"
+            try:
+                page.screenshot(path=str(screenshot_path), full_page=True)
+                print(f"\\n📸 Screenshot saved: {screenshot_path}")
+            except Exception as e:
+                print(f"\\n⚠️ Could not capture screenshot: {e}")
 """)
                 logger.info(f"Created conftest.py at: {conftest_file}")
             
