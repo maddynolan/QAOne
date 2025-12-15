@@ -298,7 +298,11 @@ export default function EnhancedWorkflowEditorPage() {
   // NEW: Blackbox mode - hide code for non-technical users
   const [blackboxMode, setBlackboxMode] = useState(false);
   const [testMode, setTestMode] = useState<'manual' | 'automated' | 'both'>('both');
-  
+
+  // Save test case dialog state
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveTestCaseName, setSaveTestCaseName] = useState('');
+
   // Workflow state
   const [workflowName, setWorkflowName] = useState('New Workflow');
   const [appType, setAppType] = useState('generic');
@@ -1095,16 +1099,23 @@ ${workflowName.replace(/\s+/g, ' ')}
     return testCase;
   }, [generateUnifiedTestCase]);
 
+  // Open save dialog with default name
+  const openSaveDialog = useCallback(() => {
+    setSaveTestCaseName(workflowName || 'New Test Case');
+    setShowSaveDialog(true);
+  }, [workflowName]);
+
   // Save unified test case to backend
-  const saveUnifiedTestCase = useCallback(async () => {
+  const saveUnifiedTestCase = useCallback(async (customName?: string) => {
     const testCase = generateUnifiedTestCase();
+    const testCaseName = customName || testCase.name;
     
     try {
       const response = await fetch('http://localhost:8000/test-cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: testCase.name,
+          title: testCaseName,
           description: testCase.description,
           type: 'unified',
           priority: testCase.priority,
@@ -1127,7 +1138,8 @@ ${workflowName.replace(/\s+/g, ' ')}
       
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Test case saved! ID: ${result.id || 'Created'}`);
+        toast.success(`Test case "${testCaseName}" saved! ID: ${result.id || 'Created'}`);
+        setShowSaveDialog(false);
         return result;
       } else {
         const error = await response.text();
@@ -1544,7 +1556,7 @@ ${workflowName.replace(/\s+/g, ' ')}
             )}
             
             {/* Save Test Case - always visible */}
-            <Button variant="outline" onClick={saveUnifiedTestCase} disabled={nodes.length === 0}>
+            <Button variant="outline" onClick={openSaveDialog} disabled={nodes.length === 0}>
               <Save className="h-4 w-4 mr-2" />
               Save Test Case
             </Button>
@@ -2125,10 +2137,10 @@ ${workflowName.replace(/\s+/g, ' ')}
             
             {/* Run Results */}
             {runResult && (
-              <div className={`border-t max-h-48 overflow-y-auto ${runResult.success || runResult.status === 'passed' ? 'bg-green-900' : 'bg-red-900'}`}>
+              <div className={`border-t max-h-48 overflow-y-auto ${runResult.success || runResult.status === 'passed' || runResult.status === 'success' ? 'bg-green-900' : 'bg-red-900'}`}>
                 <div className="p-2 flex items-center justify-between text-white text-xs">
                   <span className="flex items-center gap-2">
-                    {runResult.success || runResult.status === 'passed' ? (
+                    {runResult.success || runResult.status === 'passed' || runResult.status === 'success' ? (
                       <>
                         <CheckCircle className="h-4 w-4 text-green-400" />
                         Test Passed
@@ -2681,6 +2693,43 @@ ${workflowName.replace(/\s+/g, ' ')}
             >
               <Save className="h-4 w-4 mr-2" />
               Save to Suite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Test Case Dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Save Test Case</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="testCaseName">Test Case Name</Label>
+              <Input
+                id="testCaseName"
+                value={saveTestCaseName}
+                onChange={(e) => setSaveTestCaseName(e.target.value)}
+                placeholder="Enter test case name..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && saveTestCaseName.trim()) {
+                    saveUnifiedTestCase(saveTestCaseName.trim());
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => saveUnifiedTestCase(saveTestCaseName.trim())}
+              disabled={!saveTestCaseName.trim()}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
