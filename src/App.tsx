@@ -52,6 +52,7 @@ import Analytics from "./pages/Analytics";
 import ElementRepository from "./pages/ElementRepository";
 import CICDWizard from "./pages/CICDWizard";
 import EnhancedWorkflowEditor from "./pages/EnhancedWorkflowEditor";
+import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
 import TestResultsDashboard from "./pages/TestResultsDashboard";
 import TestSuites from "./pages/TestSuites";
 import ScheduledRuns from "./pages/ScheduledRuns";
