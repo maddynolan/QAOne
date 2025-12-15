@@ -530,16 +530,29 @@ export default function EnhancedWorkflowEditorPage() {
     const getFrameworkSelector = (sel: string): string => {
       if (!sel) return '';
       
-      // Handle Playwright-style selectors
+      // Handle Playwright JS-style selectors -> convert to Python if needed
       if (sel.includes('getByRole')) {
         const match = sel.match(/getByRole\(['"]([^'"]+)['"],\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\}/);
         if (match) {
           const [, role, name] = match;
           switch (framework) {
+            case 'playwright-python':
+              return `page.get_by_role("${role}", name="${name}")`;
             case 'selenium-java':
               return `By.xpath("//${role === 'button' ? 'button' : '*'}[contains(text(), '${name}')]")`;
             case 'cypress':
               return `'${role}:contains("${name}")'`;
+            default:
+              return sel;
+          }
+        }
+        // Handle simple getByRole without name
+        const simpleMatch = sel.match(/getByRole\(['"]([^'"]+)['"]\)/);
+        if (simpleMatch) {
+          const [, role] = simpleMatch;
+          switch (framework) {
+            case 'playwright-python':
+              return `page.get_by_role("${role}")`;
             default:
               return sel;
           }
@@ -551,6 +564,8 @@ export default function EnhancedWorkflowEditorPage() {
         if (match) {
           const [, label] = match;
           switch (framework) {
+            case 'playwright-python':
+              return `page.get_by_label("${label}")`;
             case 'selenium-java':
               return `By.xpath("//label[contains(text(), '${label}')]//following::input[1]")`;
             case 'cypress':
@@ -566,6 +581,8 @@ export default function EnhancedWorkflowEditorPage() {
         if (match) {
           const [, text] = match;
           switch (framework) {
+            case 'playwright-python':
+              return `page.get_by_text("${text}")`;
             case 'selenium-java':
               return `By.xpath("//*[contains(text(), '${text}')]")`;
             case 'cypress':
@@ -576,6 +593,24 @@ export default function EnhancedWorkflowEditorPage() {
         }
       }
       
+      // Handle page.getByX style (with page. prefix)
+      if (sel.includes('page.getBy')) {
+        if (framework === 'playwright-python') {
+          // Convert camelCase to snake_case for Python
+          return sel
+            .replace(/\.getByRole\(/g, '.get_by_role(')
+            .replace(/\.getByText\(/g, '.get_by_text(')
+            .replace(/\.getByLabel\(/g, '.get_by_label(')
+            .replace(/\.getByPlaceholder\(/g, '.get_by_placeholder(')
+            .replace(/\.getByAltText\(/g, '.get_by_alt_text(')
+            .replace(/\.getByTitle\(/g, '.get_by_title(')
+            .replace(/\.getByTestId\(/g, '.get_by_test_id(')
+            .replace(/{ name: ['"]([^'"]+)['"] }/g, 'name="$1"')
+            .replace(/{ exact: (true|false) }/g, 'exact=$1');
+        }
+        return sel;
+      }
+      
       // Handle CSS selectors
       if (sel.startsWith('#') || sel.startsWith('.') || sel.includes('[')) {
         switch (framework) {
@@ -583,6 +618,8 @@ export default function EnhancedWorkflowEditorPage() {
             return `By.cssSelector("${sel}")`;
           case 'cypress':
             return `'${sel}'`;
+          case 'playwright-python':
+            return `page.locator("${sel}")`;
           default:
             return `page.locator('${sel}')`;
         }
@@ -600,13 +637,13 @@ export default function EnhancedWorkflowEditorPage() {
           case 'navigate':
             return `    page.goto("${url}")\n    page.wait_for_load_state("domcontentloaded")`;
           case 'click':
-            return `    ${selector || "page.get_by_role('button', name='Submit')"}.click()`;
+            return `    ${frameworkSelector || "page.get_by_role('button', name='Submit')"}.click()`;
           case 'input':
-            return `    ${selector || "page.get_by_label('Email')"}.fill("${value}")`;
+            return `    ${frameworkSelector || "page.get_by_label('Email')"}.fill("${value}")`;
           case 'wait':
             return `    page.wait_for_timeout(${waitTime})`;
           case 'assert':
-            return `    expect(${selector || "page.get_by_text('Success')"}).to_be_visible()`;
+            return `    expect(${frameworkSelector || "page.get_by_text('Success')"}).to_be_visible()`;
           default:
             return `    # ${node.type}: ${node.label}`;
         }
@@ -2216,7 +2253,14 @@ ${workflowName.replace(/\s+/g, ' ')}
                                       size="sm"
                                       className="text-xs"
                                       onClick={() => {
-                                        const templates: Record<string, string> = {
+                                        // Use Python-style selectors for Python frameworks
+                                        const isPython = framework === 'playwright-python' || framework === 'selenium-python';
+                                        const templates: Record<string, string> = isPython ? {
+                                          getByRole: 'page.get_by_role("button", name="")',
+                                          getByText: 'page.get_by_text("")',
+                                          getByLabel: 'page.get_by_label("")',
+                                          locator: 'page.locator("")',
+                                        } : {
                                           getByRole: "page.getByRole('button', { name: '' })",
                                           getByText: "page.getByText('')",
                                           getByLabel: "page.getByLabel('')",
