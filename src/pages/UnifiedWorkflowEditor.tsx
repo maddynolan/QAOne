@@ -761,49 +761,101 @@ export default function UnifiedWorkflowEditor() {
 
       const result = await response.json();
       const logs = result.output ? result.output.split('\n') : [];
+      const fullOutput = result.output || '';
+      
+      console.log('[Test Run] Full output:', fullOutput);
+      console.log('[Test Run] Exit code:', result.exit_code, 'Status:', result.status);
       
       // More robust failure detection - check exit code AND output for failure markers
-      const hasFailureMarker = logs.some(line => 
-        line.includes('TEST FAILED') || 
-        line.includes('FAILED:') || 
-        line.includes('Error:') ||
-        line.includes('Traceback') ||
-        line.includes('sys.exit(1)')
-      );
-      const hasSuccessMarker = logs.some(line => line.includes('TEST PASSED'));
+      const hasFailureMarker = 
+        fullOutput.includes('TEST FAILED') || 
+        fullOutput.includes('FAILED:') ||
+        fullOutput.includes('Step') && fullOutput.includes('FAILED') ||
+        fullOutput.includes('Traceback') ||
+        fullOutput.includes('Exception') ||
+        fullOutput.includes('sys.exit(1)') ||
+        result.exit_code !== 0;
+        
+      const hasSuccessMarker = fullOutput.includes('TEST PASSED') || fullOutput.includes('All steps completed successfully');
       
-      // Only pass if exit_code is 0 AND we see success marker AND no failure markers
-      const passed = (result.exit_code === 0 || result.status === 'success') && 
-                     hasSuccessMarker && 
-                     !hasFailureMarker;
+      // Pass only if no failure markers AND (success marker OR exit code 0)
+      const passed = !hasFailureMarker && (hasSuccessMarker || result.exit_code === 0);
       
-      // Extract failure details from logs
-      let failedStep = null;
-      let errorMessage = null;
-      let screenshotPath = null;
+      // Extract failure details from logs - check multiple patterns
+      let failedStep: number | null = null;
+      let errorMessage: string | null = null;
+      let screenshotPath: string | null = null;
       
-      logs.forEach(line => {
-        if (line.includes('FAILED at step')) {
-          const match = line.match(/step (\d+)/);
-          if (match) failedStep = parseInt(match[1]);
+      // Pattern 1: "TEST FAILED at step X" or "FAILED at step X"
+      const stepMatch = fullOutput.match(/(?:TEST )?FAILED at step (\d+)/i);
+      if (stepMatch) {
+        failedStep = parseInt(stepMatch[1]);
+      }
+      
+      // Pattern 2: "Step X FAILED:" or "✗ Step X FAILED"
+      if (!failedStep) {
+        const stepMatch2 = fullOutput.match(/Step (\d+).*?FAILED/i);
+        if (stepMatch2) {
+          failedStep = parseInt(stepMatch2[1]);
         }
-        if (line.includes('Error:') && !errorMessage) {
-          errorMessage = line.replace('Error:', '').trim();
+      }
+      
+      // Pattern 3: Look for "failed_step" in output
+      if (!failedStep) {
+        const stepMatch3 = fullOutput.match(/failed_step['":\s]+(\d+)/i);
+        if (stepMatch3) {
+          failedStep = parseInt(stepMatch3[1]);
         }
-        if (line.includes('Screenshot:')) {
-          screenshotPath = line.replace('Screenshot:', '').trim();
+      }
+      
+      // Extract error message - look for multiple patterns
+      const errorPatterns = [
+        /Error:\s*(.+?)(?:\n|$)/,
+        /Exception:\s*(.+?)(?:\n|$)/,
+        /error_message['":\s]+['"]?([^'"}\n]+)/,
+        /TimeoutError:\s*(.+?)(?:\n|$)/,
+        /playwright\._impl\._errors\.(\w+Error):\s*(.+?)(?:\n|$)/,
+      ];
+      
+      for (const pattern of errorPatterns) {
+        const match = fullOutput.match(pattern);
+        if (match) {
+          errorMessage = match[2] || match[1];
+          break;
         }
-      });
+      }
+      
+      // Extract screenshot path
+      const screenshotMatch = fullOutput.match(/Screenshot(?:\ssaved)?:\s*(.+\.png)/i);
+      if (screenshotMatch) {
+        screenshotPath = screenshotMatch[1].trim();
+      }
+      
+      // If we detected a failure but couldn't find the step, default to 1
+      if (!passed && !failedStep && !hasSuccessMarker) {
+        failedStep = 1; // Assume first step failed if we can't determine
+      }
+      
+      // If no error message but we have Traceback, try to extract it
+      if (!errorMessage && fullOutput.includes('Traceback')) {
+        const lines = fullOutput.split('\n');
+        const lastLine = lines.filter(l => l.trim() && !l.startsWith(' ')).pop();
+        if (lastLine && lastLine.includes('Error')) {
+          errorMessage = lastLine;
+        }
+      }
+      
+      console.log('[Test Run] Detected - passed:', passed, 'failedStep:', failedStep, 'error:', errorMessage);
       
       setExecutionResult(prev => ({
         ...prev,
         status: passed ? 'passed' : 'failed',
         logs,
-        currentStep: failedStep || testCase.steps.length,
+        currentStep: failedStep || (passed ? testCase.steps.length : 1),
         results: testCase.steps.map((step, idx) => ({
           stepId: step.id,
-          status: failedStep && idx + 1 >= failedStep ? 'failed' : 'passed',
-          error: failedStep && idx + 1 === failedStep ? errorMessage : undefined,
+          status: passed ? 'passed' : (failedStep && idx + 1 >= failedStep ? 'failed' : 'passed'),
+          error: failedStep && idx + 1 === failedStep ? errorMessage || undefined : undefined,
         })),
       }));
 
@@ -815,16 +867,19 @@ export default function UnifiedWorkflowEditor() {
         timestamp: new Date().toISOString(),
         duration: result.duration || 0,
         steps: testCase.steps.length,
-        failedStep,
-        errorMessage: errorMessage?.slice(0, 100),
+        failedStep: passed ? null : failedStep,
+        errorMessage: passed ? null : (errorMessage?.slice(0, 100) || 'Check logs for details'),
         screenshotPath,
+        logs: logs.slice(-10), // Store last 10 log lines
       };
       setTestHistory(prev => [historyEntry, ...prev.slice(0, 49)]);
 
       if (passed) {
         toast.success('✅ Test passed!');
       } else {
-        toast.error(`❌ Test failed at step ${failedStep}: ${errorMessage?.slice(0, 50) || 'Unknown error'}`);
+        const stepInfo = failedStep ? `step ${failedStep}` : 'test';
+        const errorInfo = errorMessage?.slice(0, 40) || 'Check logs';
+        toast.error(`❌ Failed at ${stepInfo}: ${errorInfo}`);
       }
     } catch (error) {
       setExecutionResult(prev => ({ ...prev, status: 'failed', logs: ['Execution error'] }));
