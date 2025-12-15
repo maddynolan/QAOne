@@ -213,6 +213,11 @@ const App = () => {
                   <EnhancedWorkflowEditor />
                 </ProtectedRoute>
               } />
+              <Route path="/builder" element={
+                <ProtectedRoute>
+                  <UnifiedWorkflowEditor />
+                </ProtectedRoute>
+              } />
               <Route path="/nexus" element={
                 <ProtectedRoute>
                   <Layout><Blaze /></Layout>

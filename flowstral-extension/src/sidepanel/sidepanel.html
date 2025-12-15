@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flowstral Recorder</title>
+  <title>QAAI Recorder</title>
   <style>
+    /* =========================================
+       QAAI RECORDER - COLOR SCHEME MATCHED
+       Primary: #8B5CF6 (Purple)
+       Accent: #38BDF8 (Cyan)
+       ========================================= */
+    
     * {
       margin: 0;
       padding: 0;
@@ -13,17 +19,17 @@
 
     body {
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-      background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+      background: linear-gradient(180deg, #0f0f14 0%, #151520 50%, #0f0f14 100%);
       color: #ffffff;
       min-height: 100vh;
       overflow-x: hidden;
     }
 
-    /* Header */
+    /* Header - Purple Gradient */
     .header {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(56, 189, 248, 0.1) 100%);
       padding: 14px 16px;
-      border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+      border-bottom: 1px solid rgba(139, 92, 246, 0.3);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -45,19 +51,23 @@
     .logo {
       width: 36px;
       height: 36px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #38BDF8 100%);
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 18px;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
     }
 
     .header h1 {
       font-size: 15px;
       font-weight: 600;
       letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #8B5CF6, #38BDF8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     .header-subtitle {
@@ -80,17 +90,17 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #ff4757;
+      background: #ef4444;
     }
 
     .server-dot.connected {
-      background: #4ade80;
+      background: #22c55e;
     }
 
     /* Tab Bar */
     .tab-bar {
       display: flex;
-      background: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.3);
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       position: sticky;
       top: 68px;
@@ -119,9 +129,9 @@
     }
 
     .tab.active {
-      color: #667eea;
-      border-bottom-color: #667eea;
-      background: rgba(102, 126, 234, 0.1);
+      color: #8B5CF6;
+      border-bottom-color: #8B5CF6;
+      background: rgba(139, 92, 246, 0.1);
     }
 
     .tab-icon {
@@ -180,11 +190,11 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #4ade80;
+      background: #22c55e;
     }
 
     .recording-dot.active {
-      background: #ff4757;
+      background: #ef4444;
       animation: pulse 1.5s infinite;
     }
 
@@ -193,7 +203,7 @@
       50% { opacity: 0.5; transform: scale(1.3); }
     }
 
-    /* Buttons */
+    /* Buttons - Purple/Cyan Theme */
     .controls {
       display: flex;
       gap: 8px;
@@ -218,37 +228,37 @@
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
       color: white;
     }
 
     .btn-primary:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
     }
 
     .btn-danger {
-      background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
       color: white;
     }
 
     .btn-danger:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
     }
 
     .btn-success {
-      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
       color: white;
     }
 
     .btn-success:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
+      box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
     }
 
     .btn-ai {
-      background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #38BDF8 100%);
       color: white;
       position: relative;
       overflow: hidden;
@@ -256,7 +266,7 @@
 
     .btn-ai:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
     }
 
     .btn-ai::before {
@@ -287,7 +297,8 @@
     }
 
     .btn-secondary:hover:not(:disabled) {
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(139, 92, 246, 0.15);
+      border-color: rgba(139, 92, 246, 0.3);
     }
 
     .btn:disabled {
@@ -345,7 +356,7 @@
     }
 
     .toggle.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #38BDF8 100%);
     }
 
     .toggle.active::after {
@@ -402,7 +413,7 @@
       width: 26px;
       height: 26px;
       border-radius: 6px;
-      background: rgba(102, 126, 234, 0.2);
+      background: rgba(139, 92, 246, 0.2);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -417,7 +428,7 @@
 
     .action-type {
       font-weight: 600;
-      color: #667eea;
+      color: #8B5CF6;
       text-transform: capitalize;
     }
 
@@ -494,8 +505,8 @@
 
     .script-editor:focus {
       outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+      border-color: #8B5CF6;
+      box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
     }
 
     .badge {
@@ -503,7 +514,7 @@
       padding: 2px 8px;
       font-size: 9px;
       font-weight: 600;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #38BDF8 100%);
       border-radius: 10px;
       text-transform: uppercase;
     }
@@ -552,8 +563,8 @@
       gap: 4px;
     }
 
-    .stat.passed { color: #4ade80; }
-    .stat.failed { color: #ff4757; }
+    .stat.passed { color: #22c55e; }
+    .stat.failed { color: #ef4444; }
     .stat.duration { color: rgba(255, 255, 255, 0.6); }
 
     /* Logs Area */
@@ -585,23 +596,23 @@
     }
 
     .log-entry.error {
-      background: rgba(255, 71, 87, 0.1);
+      background: rgba(239, 68, 68, 0.1);
     }
 
     .log-entry.error .message {
-      color: #ff6b81;
+      color: #f87171;
     }
 
     .log-entry.success {
-      background: rgba(74, 222, 128, 0.1);
+      background: rgba(34, 197, 94, 0.1);
     }
 
     .log-entry.success .message {
-      color: #4ade80;
+      color: #22c55e;
     }
 
     .log-entry.info .message {
-      color: #9cdcfe;
+      color: #38BDF8;
     }
 
     /* Settings Section */
@@ -643,20 +654,14 @@
 
     .toggle-item:hover {
       background: rgba(255, 255, 255, 0.06);
-      border-color: rgba(102, 126, 234, 0.3);
+      border-color: rgba(139, 92, 246, 0.3);
     }
 
     .toggle-item input[type="checkbox"] {
       width: 16px;
       height: 16px;
-      accent-color: #667eea;
+      accent-color: #8B5CF6;
       cursor: pointer;
-    }
-
-    .toggle-label {
-      font-size: 12px;
-      font-weight: 500;
-      color: rgba(255, 255, 255, 0.9);
     }
 
     .toggle-hint {
@@ -690,8 +695,8 @@
 
     .form-control:focus {
       outline: none;
-      border-color: #667eea;
-      background: rgba(255, 255, 255, 0.08);
+      border-color: #8B5CF6;
+      background: rgba(139, 92, 246, 0.1);
     }
 
     textarea.form-control {
@@ -719,8 +724,8 @@
       align-items: center;
       justify-content: space-between;
       padding: 6px 8px;
-      background: rgba(102, 126, 234, 0.1);
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.2);
       border-radius: 6px;
       font-size: 11px;
     }
@@ -736,7 +741,7 @@
     .assertion-item .remove-btn {
       background: transparent;
       border: none;
-      color: #ff4757;
+      color: #ef4444;
       cursor: pointer;
       padding: 2px 6px;
       font-size: 12px;
@@ -759,14 +764,14 @@
     }
 
     select.form-control option {
-      background: #1a1a2e;
+      background: #1a1a24;
       color: #ffffff;
       padding: 10px;
     }
 
     select.form-control optgroup {
-      background: #16213e;
-      color: #667eea;
+      background: #15151f;
+      color: #8B5CF6;
       font-weight: 600;
     }
 
@@ -782,18 +787,12 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(139, 92, 246, 0.4);
       border-radius: 3px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-
-    /* Hide scrollbar for cleaner look but keep functionality */
-    .actions-list::-webkit-scrollbar,
-    .logs-area::-webkit-scrollbar {
-      width: 4px;
+      background: rgba(139, 92, 246, 0.6);
     }
 
     /* Format Grid for Test Case Generation */
@@ -819,8 +818,8 @@
     }
 
     .format-btn:hover:not(:disabled) {
-      border-color: #667eea;
-      background: rgba(102, 126, 234, 0.15);
+      border-color: #8B5CF6;
+      background: rgba(139, 92, 246, 0.15);
       transform: translateY(-1px);
     }
 
@@ -843,7 +842,7 @@
       display: none !important;
     }
 
-    /* Suggestion Item Styles (Agentic Phase 3) */
+    /* Suggestion Item Styles */
     .suggestion-item {
       padding: 10px 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -855,7 +854,7 @@
     }
 
     .suggestion-item:hover {
-      background: rgba(102, 126, 234, 0.1);
+      background: rgba(139, 92, 246, 0.1);
     }
 
     .suggestion-icon {
@@ -870,11 +869,11 @@
     }
 
     .suggestion-icon.button {
-      background: rgba(74, 222, 128, 0.2);
+      background: rgba(34, 197, 94, 0.2);
     }
 
     .suggestion-icon.link {
-      background: rgba(96, 165, 250, 0.2);
+      background: rgba(56, 189, 248, 0.2);
     }
 
     .suggestion-icon.input {
@@ -882,7 +881,7 @@
     }
 
     .suggestion-icon.flow {
-      background: rgba(168, 85, 247, 0.2);
+      background: rgba(139, 92, 246, 0.2);
     }
 
     .suggestion-details {
@@ -932,7 +931,7 @@
     }
 
     .exec-btn {
-      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
       color: white;
     }
 
@@ -946,7 +945,7 @@
     }
 
     .add-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(139, 92, 246, 0.2);
     }
 
     /* Analysis badge */
@@ -959,53 +958,48 @@
       text-transform: uppercase;
     }
 
-    .analysis-badge.login { background: rgba(255, 71, 87, 0.2); color: #ff6b81; }
-    .analysis-badge.dashboard { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
+    .analysis-badge.login { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .analysis-badge.dashboard { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
     .analysis-badge.form { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-    .analysis-badge.list { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+    .analysis-badge.list { background: rgba(56, 189, 248, 0.2); color: #38BDF8; }
     .analysis-badge.generic { background: rgba(255, 255, 255, 0.1); color: #a0a0a0; }
 
     /* Workflow Steps Styling */
     #workflowSection {
-      background: linear-gradient(135deg, rgba(74, 222, 128, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-      border: 1px solid rgba(74, 222, 128, 0.3);
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 163, 74, 0.05) 100%);
+      border: 1px solid rgba(34, 197, 94, 0.3);
       border-radius: 10px;
       padding: 12px;
     }
-    
+
     #workflowStepsList .action-item {
       background: rgba(0, 0, 0, 0.2);
-      border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+      border-bottom: 1px solid rgba(34, 197, 94, 0.1);
     }
-    
+
     #workflowStepsList .action-item:hover {
-      background: rgba(74, 222, 128, 0.1);
+      background: rgba(34, 197, 94, 0.1);
     }
 
     /* Failed Elements Styling */
     #failedElementsSection {
-      background: linear-gradient(135deg, rgba(255, 71, 87, 0.1) 0%, rgba(255, 107, 129, 0.05) 100%);
-      border: 1px solid rgba(255, 71, 87, 0.3);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       border-radius: 10px;
       padding: 12px;
     }
-    
+
     /* Pointing Mode Progress */
     .pointing-progress {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.1) 100%);
-      border: 1px solid rgba(102, 126, 234, 0.4);
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(56, 189, 248, 0.1) 100%);
+      border: 1px solid rgba(139, 92, 246, 0.4);
       border-radius: 8px;
       padding: 12px;
       text-align: center;
       animation: pulse 1.5s infinite;
     }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    
-    /* Constraints Modal */
+
+    /* Modal */
     .modal {
       position: fixed;
       top: 0;
@@ -1019,28 +1013,28 @@
       justify-content: center;
       padding: 16px;
     }
-    
+
     .modal-content {
       width: 100%;
       max-width: 350px;
     }
-    
+
     .constraint-section {
       background: rgba(255, 255, 255, 0.05);
       padding: 10px;
       border-radius: 6px;
     }
-    
+
     .preset-btn {
       font-size: 10px !important;
       padding: 4px 8px !important;
     }
-    
+
     .preset-btn.active {
-      background: var(--accent-color);
+      background: #8B5CF6;
       color: white;
     }
-    
+
     .constraint-item {
       display: flex;
       justify-content: space-between;
@@ -1051,7 +1045,7 @@
       margin-bottom: 4px;
       font-size: 11px;
     }
-    
+
     .constraint-item .remove-btn {
       background: transparent;
       border: none;
@@ -1068,8 +1062,8 @@
       <div class="logo-section">
         <div class="logo">🎯</div>
         <div>
-          <h1>Flowstral Recorder</h1>
-          <div class="header-subtitle">Record • Generate • Run</div>
+          <h1>QAAI Recorder</h1>
+          <div class="header-subtitle">Record • Build • Test</div>
         </div>
       </div>
       <div class="server-status" id="serverStatus">
@@ -1103,15 +1097,15 @@
 
   <!-- ==================== RECORD TAB ==================== -->
   <div class="tab-content active" id="tab-record">
-    <!-- Base URL Input - IMPORTANT for correct test generation -->
-    <div class="settings-section" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.1) 100%); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-      <div class="section-title" style="color: #fbbf24; margin-bottom: 8px;">
+    <!-- Base URL Input -->
+    <div class="settings-section" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(56, 189, 248, 0.1) 100%); border: 1px solid rgba(139, 92, 246, 0.4); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+      <div class="section-title" style="color: #8B5CF6; margin-bottom: 8px;">
         🎯 Test Starting URL
       </div>
       <div class="form-group" style="margin-bottom: 0;">
-        <input type="text" class="form-control" id="baseUrlInput" value="http://localhost:3000" placeholder="http://localhost:3000" style="border-color: rgba(245, 158, 11, 0.5); background: rgba(0,0,0,0.3);">
+        <input type="text" class="form-control" id="baseUrlInput" value="http://localhost:3000" placeholder="http://localhost:3000" style="border-color: rgba(139, 92, 246, 0.5); background: rgba(0,0,0,0.3);">
       </div>
-      <p style="font-size: 10px; color: rgba(251, 191, 36, 0.8); margin-top: 6px;">
+      <p style="font-size: 10px; color: rgba(139, 92, 246, 0.8); margin-top: 6px;">
         💡 Generated test starts with: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">page.goto('this URL')</code>
       </p>
     </div>
@@ -1137,7 +1131,7 @@
     </div>
     <div class="controls" style="margin-top: 8px;">
       <button class="btn btn-success" id="saveTestCaseBtn" title="Save as Test Case for review" disabled>💾 Save Test Case</button>
-      <button class="btn btn-secondary" id="openWorkflowBtn" title="Open in Workflow Editor" disabled>🔗 Workflow</button>
+      <button class="btn btn-secondary" id="openWorkflowBtn" title="Open in Workflow Editor" disabled>🔗 Builder</button>
     </div>
 
     <div class="actions-container">
@@ -1154,7 +1148,7 @@
     </div>
   </div>
 
-  <!-- ==================== SUGGEST TAB (Agentic Phase 3) ==================== -->
+  <!-- ==================== SUGGEST TAB ==================== -->
   <div class="tab-content" id="tab-suggest">
     <!-- Page Analysis Summary -->
     <div class="status-bar" id="pageAnalysisBar">
@@ -1178,19 +1172,19 @@
       <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
         <div class="toggle-row" style="margin: 0; padding: 8px;">
           <span>🔘 Buttons</span>
-          <span id="countButtons" style="font-weight: 600; color: #667eea;">0</span>
+          <span id="countButtons" style="font-weight: 600; color: #8B5CF6;">0</span>
         </div>
         <div class="toggle-row" style="margin: 0; padding: 8px;">
           <span>🔗 Links</span>
-          <span id="countLinks" style="font-weight: 600; color: #667eea;">0</span>
+          <span id="countLinks" style="font-weight: 600; color: #8B5CF6;">0</span>
         </div>
         <div class="toggle-row" style="margin: 0; padding: 8px;">
           <span>📋 Inputs</span>
-          <span id="countInputs" style="font-weight: 600; color: #667eea;">0</span>
+          <span id="countInputs" style="font-weight: 600; color: #8B5CF6;">0</span>
         </div>
         <div class="toggle-row" style="margin: 0; padding: 8px;">
           <span>📝 Headings</span>
-          <span id="countHeadings" style="font-weight: 600; color: #667eea;">0</span>
+          <span id="countHeadings" style="font-weight: 600; color: #8B5CF6;">0</span>
         </div>
       </div>
     </div>
@@ -1206,7 +1200,7 @@
       <span class="toggle-label">👁️ Show Selector Code</span>
       <div class="toggle" id="showCodeToggle"></div>
     </div>
-    
+
     <!-- Filter Options -->
     <div class="form-group" style="margin-bottom: 8px;">
       <select class="form-control" id="suggestionFilter">
@@ -1220,7 +1214,7 @@
         <option value="nav">📍 Navigation</option>
       </select>
     </div>
-    
+
     <!-- Test Data Generation -->
     <div class="form-group" style="margin-bottom: 12px; display: flex; gap: 4px;">
       <button class="btn btn-secondary" id="generateTestDataBtn" style="flex: 1;">
@@ -1230,10 +1224,10 @@
         ⚙️
       </button>
     </div>
-    
-    <!-- Data Constraints Modal (hidden by default) -->
+
+    <!-- Data Constraints Modal -->
     <div id="constraintsModal" class="modal" style="display: none;">
-      <div class="modal-content" style="background: #1e1e2e; border-radius: 8px; padding: 16px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-content" style="background: #1e1e28; border-radius: 8px; padding: 16px; max-height: 80vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 style="margin: 0; color: #fff;">📋 Data Generation Rules</h3>
           <button id="closeConstraintsModal" class="btn btn-sm">✕</button>
@@ -1324,8 +1318,8 @@
       <div id="testDataList" class="actions-container" style="max-height: 250px; overflow-y: auto;">
       </div>
     </div>
-    
-    <!-- Workflow Steps (elements added for flow) -->
+
+    <!-- Workflow Steps -->
     <div class="settings-section" id="workflowSection" style="display: none;">
       <div class="section-title" style="display: flex; justify-content: space-between;">
         <span>📋 Workflow Steps</span>
@@ -1340,20 +1334,20 @@
       </div>
       <div class="controls" style="margin-top: 8px; flex-wrap: wrap;">
         <button class="btn btn-success" id="saveTestCaseFromWorkflow" disabled>💾 Save Test Case</button>
-        <button class="btn btn-primary" id="openWorkflowEditorBtn" disabled>🔗 Open in Workflow Editor</button>
+        <button class="btn btn-primary" id="openWorkflowEditorBtn" disabled>🔗 Open in Builder</button>
       </div>
       <div class="controls" style="margin-top: 4px;">
         <button class="btn btn-secondary" id="clearWorkflowBtn" style="flex: 1;">🗑️ Clear</button>
       </div>
     </div>
 
-    <!-- Failed Elements (need manual fix) -->
+    <!-- Failed Elements -->
     <div class="settings-section" id="failedElementsSection" style="display: none;">
-      <div class="section-title" style="color: #ff6b81;">
+      <div class="section-title" style="color: #f87171;">
         ⚠️ Failed Elements
         <span id="failedCount" style="font-size: 10px; margin-left: 8px;">0</span>
       </div>
-      <div id="failedElementsList" class="actions-container" style="max-height: 150px; overflow-y: auto; border-color: rgba(255, 71, 87, 0.3);">
+      <div id="failedElementsList" class="actions-container" style="max-height: 150px; overflow-y: auto; border-color: rgba(239, 68, 68, 0.3);">
       </div>
     </div>
 
@@ -1383,7 +1377,7 @@
       <pre class="script-preview" id="scriptPreview">// Record actions and click Generate to see script...</pre>
     </div>
 
-    <!-- POM Classes Section (shown when POM is enabled and generated) -->
+    <!-- POM Classes Section -->
     <div class="settings-section" id="pomSection" style="margin-top: 16px; display: none;">
       <div class="section-title" style="cursor: pointer;" id="pomToggle">
         📦 Page Object Classes 
@@ -1401,7 +1395,7 @@
       </div>
     </div>
 
-    <!-- Test Data Section (shown when data-driven is enabled and generated) -->
+    <!-- Test Data Section -->
     <div class="settings-section" id="testDataSection" style="margin-top: 16px; display: none;">
       <div class="section-title" style="cursor: pointer;" id="testDataToggle">
         📊 Test Data Parameters
@@ -1558,7 +1552,6 @@
         <button class="btn btn-secondary" id="addAssertionBtn" style="width: 100%;">➕ Add Assertion</button>
       </div>
       <div class="assertions-list" id="assertionsList" style="margin-top: 8px; max-height: 120px; overflow-y: auto;">
-        <!-- Added assertions will appear here -->
       </div>
     </div>
 
@@ -1566,7 +1559,7 @@
     <div class="settings-section">
       <div class="section-title">✨ AI Enhancement</div>
       <p style="font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
-        Use GPT-4o-mini to improve test names, descriptions, and suggest assertions.
+        Use AI to improve test names, descriptions, and suggest assertions.
       </p>
       <button class="btn btn-ai" id="enhanceAIBtn" style="width: 100%;" disabled>
         ✨ Enhance Test Case with AI
@@ -1577,7 +1570,7 @@
     <div class="settings-section">
       <div class="section-title">💾 Save Recording</div>
       <p style="font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
-        Recording is auto-saved. Use Trace page for approval workflow and test case creation.
+        Recording is auto-saved. Use Trace page for approval workflow.
       </p>
       <div class="save-options" style="display: flex; flex-direction: column; gap: 8px;">
         <button class="btn btn-primary" id="saveWithAssertionsBtn" style="width: 100%;" disabled>
@@ -1678,7 +1671,6 @@
           </optgroup>
         </select>
       </div>
-      <p style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Auto-detect works for most apps. Select manually if detection fails.</p>
     </div>
 
     <div class="settings-section">
@@ -1706,7 +1698,6 @@
           </optgroup>
         </select>
       </div>
-      <p style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">Select target framework for script generation.</p>
     </div>
 
     <div class="settings-section">
