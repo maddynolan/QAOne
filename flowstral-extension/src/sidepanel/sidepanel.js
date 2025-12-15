@@ -2062,10 +2062,10 @@ Date: ${new Date().toISOString()}
       
       // Get frontend URL
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
-      const workflowUrl = `${frontendUrl}/workflow-editor`;
+      const builderUrl = `${frontendUrl}/builder`;
       
-      // Open the workflow editor tab
-      const tab = await chrome.tabs.create({ url: workflowUrl });
+      // Open the unified test builder tab
+      const tab = await chrome.tabs.create({ url: builderUrl });
       
       // Wait for tab to load then inject the data into localStorage
       const self = this;
@@ -2073,24 +2073,53 @@ Date: ${new Date().toISOString()}
         if (tabId === tab.id && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
           
-          // Inject script to set localStorage
+          // Inject script to set localStorage (unified test case format)
           chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: (data) => {
-              console.log('[Workflow Editor Import] Importing from recording:', data);
-              localStorage.setItem('workflow_editor_state', JSON.stringify(data));
+              console.log('[Test Builder Import] Importing from recording:', data);
+              // Convert to unified test case format
+              const unifiedTestCase = {
+                id: `tc_${Date.now()}`,
+                name: data.workflowName || 'Recorded Test',
+                description: '',
+                tags: [],
+                steps: data.nodes.map((node, idx) => ({
+                  id: `step_${Date.now()}_${idx}`,
+                  type: node.type || 'click',
+                  name: node.label || 'Step',
+                  selector: node.data?.selector,
+                  value: node.data?.value,
+                  url: node.data?.url,
+                  enabled: true,
+                  expectedResult: node.data?.manualStep?.expectedResult || '',
+                })),
+                variables: [],
+                settings: {
+                  baseUrl: data.startUrl || '',
+                  timeout: 30000,
+                  retries: 0,
+                  parallelizable: false,
+                },
+                metadata: {
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  version: 1,
+                },
+              };
+              localStorage.setItem('unified_test_case', JSON.stringify(unifiedTestCase));
               setTimeout(() => window.location.reload(), 100);
             },
             args: [workflowState]
           }).then(() => {
-            self.addLog('success', '✅ Recording loaded in Workflow Editor!');
+            self.addLog('success', '✅ Recording loaded in Test Builder!');
           }).catch(err => {
             console.error('[Sidebar] Inject error:', err);
           });
         }
       });
       
-      this.addLog('success', `Opening Workflow Editor with ${nodes.length} nodes...`);
+      this.addLog('success', `Opening Test Builder with ${nodes.length} steps...`);
       
       if (this.elements.openWorkflowBtn) {
         const originalText = this.elements.openWorkflowBtn.textContent;
@@ -3539,12 +3568,12 @@ Date: ${new Date().toISOString()}
       
       // Get frontend URL
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
-      const workflowEditorUrl = `${frontendUrl}/workflow-editor`;
+      const builderUrl = `${frontendUrl}/builder`;
       
-      this.addLog('info', `Opening Workflow Editor with ${nodes.length} nodes...`);
+      this.addLog('info', `Opening Test Builder with ${nodes.length} steps...`);
       
-      // Open the workflow editor tab first
-      const tab = await chrome.tabs.create({ url: workflowEditorUrl });
+      // Open the unified test builder tab first
+      const tab = await chrome.tabs.create({ url: builderUrl });
       
       // Wait for tab to load, then inject data into localStorage
       const self = this;
@@ -3552,18 +3581,47 @@ Date: ${new Date().toISOString()}
         if (tabId === tab.id && info.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
           
-          // Inject script to set localStorage
+          // Inject script to set localStorage (unified test case format)
           chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: (data) => {
-              console.log('[Workflow Editor Import] Importing workflow:', data);
-              localStorage.setItem('workflow_editor_state', JSON.stringify(data));
+              console.log('[Test Builder Import] Importing workflow:', data);
+              // Convert to unified test case format
+              const unifiedTestCase = {
+                id: `tc_${Date.now()}`,
+                name: data.workflowName || 'Recorded Test',
+                description: '',
+                tags: [],
+                steps: data.nodes.map((node, idx) => ({
+                  id: `step_${Date.now()}_${idx}`,
+                  type: node.type || 'click',
+                  name: node.label || 'Step',
+                  selector: node.data?.selector,
+                  value: node.data?.value,
+                  url: node.data?.url,
+                  enabled: true,
+                  expectedResult: node.data?.manualStep?.expectedResult || '',
+                })),
+                variables: [],
+                settings: {
+                  baseUrl: data.startUrl || '',
+                  timeout: 30000,
+                  retries: 0,
+                  parallelizable: false,
+                },
+                metadata: {
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  version: 1,
+                },
+              };
+              localStorage.setItem('unified_test_case', JSON.stringify(unifiedTestCase));
               // Reload to pick up the new state
               setTimeout(() => window.location.reload(), 100);
             },
             args: [workflowState]
           }).then(() => {
-            self.addLog('success', '✅ Workflow loaded in editor!');
+            self.addLog('success', '✅ Test loaded in builder!');
           }).catch(err => {
             console.error('[Sidebar] Inject error:', err);
             self.addLog('error', 'Could not import: ' + err.message);
@@ -3572,12 +3630,12 @@ Date: ${new Date().toISOString()}
       });
       
     } catch (error) {
-      console.error('[Sidebar] Open workflow editor error:', error);
+      console.error('[Sidebar] Open test builder error:', error);
       this.addLog('error', 'Failed to open: ' + error.message);
       
       // Try to open anyway
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
-      chrome.tabs.create({ url: `${frontendUrl}/workflow-editor` });
+      chrome.tabs.create({ url: `${frontendUrl}/builder` });
     }
   }
   

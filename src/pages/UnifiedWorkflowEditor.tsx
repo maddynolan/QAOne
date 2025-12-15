@@ -1,13 +1,19 @@
 /**
- * Unified Workflow Editor - v3.0 (Rearchitected)
+ * Unified Test Builder - v3.0
  * 
- * Clean, focused test builder that supports:
- * - Manual test cases
- * - Automated UI tests (Playwright)
- * - API tests
- * - Performance tests
+ * THE ONLY test builder you need. One unified test case that can:
+ * - Run as automated UI test
+ * - Execute API tests
+ * - Query databases
+ * - Run performance tests
+ * - Generate manual test documentation
  * 
- * All from a single unified test case format.
+ * Features:
+ * - No-Code / Code toggle (framework abstracted)
+ * - Recorder integration
+ * - Reusable modules
+ * - Blackbox fallback strategies
+ * - All assertion types
  * 
  * Color scheme: Purple primary (#8B5CF6), Cyan accent (#38BDF8)
  */
@@ -21,55 +27,96 @@ import {
   Navigation, AlertCircle, Sparkles, Package, Wand2,
   ChevronRight, ChevronDown, MoreHorizontal, Target,
   Layers, RefreshCw, FileText, Monitor, Server, Gauge,
-  Video, Camera, Search, Filter, X, Check, Edit, Info
+  Video, Camera, Search, Filter, X, Check, Edit, Info,
+  Database, ToggleLeft, ToggleRight, FolderPlus, History,
+  ExternalLink, Clipboard, BookOpen, Share2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { Layout } from '@/components/Layout';
-import { useExecutionWebSocket } from '@/hooks/useExecutionWebSocket';
+import { ReusableModulesManager, ModuleStep } from '@/components/ReusableModulesManager';
+import { BlackboxLocatorStrategies, BlackboxLocator } from '@/components/BlackboxLocatorStrategies';
 
 // ============================================================================
 // TYPES - Unified Test Case Schema
 // ============================================================================
 
-type StepType = 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'api' | 'screenshot';
+type StepType = 
+  | 'navigate' | 'click' | 'input' | 'select' | 'hover' | 'scroll'
+  | 'wait' | 'wait_for_element' | 'wait_for_text'
+  | 'assert' | 'verify'
+  | 'api' | 'graphql'
+  | 'db_query' | 'db_assert'
+  | 'screenshot' | 'visual_compare'
+  | 'extract' | 'store_variable'
+  | 'condition' | 'loop'
+  | 'module' // Reusable module reference
+  | 'custom';
+
+interface StepAssertion {
+  enabled: boolean;
+  type: string;
+  target?: string;
+  expected?: string;
+  operator?: 'equals' | 'contains' | 'greater' | 'less' | 'matches';
+  softAssert?: boolean;
+}
 
 interface TestStep {
   id: string;
   type: StepType;
   name: string;
   description?: string;
+  enabled: boolean;
+  
   // UI Actions
   selector?: string;
   value?: string;
   url?: string;
   waitTime?: number;
-  // API Actions
+  
+  // Fallback (blackbox)
+  fallback?: BlackboxLocator;
+  
+  // API
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   endpoint?: string;
   headers?: Record<string, string>;
   body?: string;
-  // Assertions
-  assertion?: {
-    type: string;
-    target?: string;
-    expected?: string;
-  };
-  // Blackbox fallback
-  fallbackStrategy?: 'ocr' | 'coordinates' | 'image' | 'ai';
-  fallbackConfig?: any;
-  // Metadata
-  isEnabled: boolean;
-  expectedResult?: string;  // For manual testing
+  
+  // Database
+  dbType?: 'postgres' | 'mysql' | 'mongodb' | 'salesforce_soql';
+  query?: string;
+  connectionString?: string;
+  
+  // Assertion
+  assertion?: StepAssertion;
+  
+  // Manual test info
+  manualAction?: string;
+  expectedResult?: string;
+  
+  // Variables
+  storeAs?: string;  // Store result in variable
+  
+  // Module reference
+  moduleId?: string;
+}
+
+interface TestVariable {
+  name: string;
+  value: string;
+  type: 'static' | 'env' | 'generated' | 'extracted';
 }
 
 interface UnifiedTestCase {
@@ -78,60 +125,92 @@ interface UnifiedTestCase {
   description: string;
   tags: string[];
   steps: TestStep[];
-  variables: Record<string, string>;
-  createdAt: string;
-  updatedAt: string;
+  variables: TestVariable[];
+  settings: {
+    baseUrl?: string;
+    timeout: number;
+    retries: number;
+    parallelizable: boolean;
+  };
+  metadata: {
+    createdAt: string;
+    updatedAt: string;
+    author?: string;
+    version: number;
+  };
 }
 
-type ExportMode = 'manual' | 'playwright' | 'api' | 'performance';
+type ExportMode = 'automation' | 'api' | 'database' | 'performance' | 'manual';
+type ViewMode = 'no-code' | 'code';
 
 // ============================================================================
 // STEP TYPE DEFINITIONS
 // ============================================================================
 
-const STEP_TYPES: Record<StepType, { label: string; icon: any; color: string; description: string }> = {
-  navigate: { 
-    label: 'Navigate', 
-    icon: Navigation, 
-    color: 'bg-primary text-primary-foreground',
-    description: 'Go to a URL'
+const STEP_CATEGORIES = {
+  ui: {
+    label: 'UI Actions',
+    steps: [
+      { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-primary text-white' },
+      { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-cyan-500 text-white' },
+      { type: 'input', label: 'Type Text', icon: Type, color: 'bg-emerald-500 text-white' },
+      { type: 'select', label: 'Select Option', icon: ChevronDown, color: 'bg-blue-500 text-white' },
+      { type: 'hover', label: 'Hover', icon: Target, color: 'bg-indigo-500 text-white' },
+    ]
   },
-  click: { 
-    label: 'Click', 
-    icon: MousePointer, 
-    color: 'bg-cyan-500 text-white',
-    description: 'Click an element'
+  wait: {
+    label: 'Wait & Sync',
+    steps: [
+      { type: 'wait', label: 'Wait', icon: Clock, color: 'bg-amber-500 text-white' },
+      { type: 'wait_for_element', label: 'Wait for Element', icon: Eye, color: 'bg-amber-600 text-white' },
+      { type: 'wait_for_text', label: 'Wait for Text', icon: Search, color: 'bg-amber-700 text-white' },
+    ]
   },
-  input: { 
-    label: 'Input', 
-    icon: Type, 
-    color: 'bg-emerald-500 text-white',
-    description: 'Enter text into a field'
+  verify: {
+    label: 'Verify & Assert',
+    steps: [
+      { type: 'assert', label: 'Assert', icon: CheckCircle, color: 'bg-green-500 text-white' },
+      { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-violet-500 text-white' },
+      { type: 'visual_compare', label: 'Visual Compare', icon: Eye, color: 'bg-violet-600 text-white' },
+    ]
   },
-  wait: { 
-    label: 'Wait', 
-    icon: Clock, 
-    color: 'bg-amber-500 text-white',
-    description: 'Wait for time or element'
+  api: {
+    label: 'API & Backend',
+    steps: [
+      { type: 'api', label: 'API Call', icon: Globe, color: 'bg-blue-600 text-white' },
+      { type: 'graphql', label: 'GraphQL', icon: Zap, color: 'bg-pink-500 text-white' },
+    ]
   },
-  assert: { 
-    label: 'Assert', 
-    icon: CheckCircle, 
-    color: 'bg-green-500 text-white',
-    description: 'Verify a condition'
+  db: {
+    label: 'Database',
+    steps: [
+      { type: 'db_query', label: 'DB Query', icon: Database, color: 'bg-orange-500 text-white' },
+      { type: 'db_assert', label: 'DB Assert', icon: CheckCircle, color: 'bg-orange-600 text-white' },
+    ]
   },
-  api: { 
-    label: 'API Call', 
-    icon: Globe, 
-    color: 'bg-blue-500 text-white',
-    description: 'Make an API request'
+  data: {
+    label: 'Data & Variables',
+    steps: [
+      { type: 'extract', label: 'Extract Value', icon: Clipboard, color: 'bg-teal-500 text-white' },
+      { type: 'store_variable', label: 'Store Variable', icon: FolderPlus, color: 'bg-teal-600 text-white' },
+    ]
   },
-  screenshot: { 
-    label: 'Screenshot', 
-    icon: Camera, 
-    color: 'bg-violet-500 text-white',
-    description: 'Capture the screen'
+  logic: {
+    label: 'Logic & Flow',
+    steps: [
+      { type: 'condition', label: 'If/Then', icon: Share2, color: 'bg-purple-500 text-white' },
+      { type: 'loop', label: 'Loop', icon: RefreshCw, color: 'bg-purple-600 text-white' },
+      { type: 'module', label: 'Use Module', icon: Package, color: 'bg-purple-700 text-white' },
+    ]
   },
+};
+
+const getStepInfo = (type: StepType) => {
+  for (const category of Object.values(STEP_CATEGORIES)) {
+    const step = category.steps.find(s => s.type === type);
+    if (step) return step;
+  }
+  return { type, label: type, icon: Zap, color: 'bg-gray-500 text-white' };
 };
 
 // ============================================================================
@@ -142,38 +221,52 @@ export default function UnifiedWorkflowEditor() {
   const [searchParams] = useSearchParams();
   
   // Test case state
-  const [testCase, setTestCase] = useState<UnifiedTestCase>({
+  const [testCase, setTestCase] = useState<UnifiedTestCase>(() => ({
     id: `tc_${Date.now()}`,
     name: 'New Test Case',
     description: '',
     tags: [],
     steps: [],
-    variables: {},
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+    variables: [],
+    settings: {
+      timeout: 30000,
+      retries: 0,
+      parallelizable: false,
+    },
+    metadata: {
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      version: 1,
+    },
+  }));
   
   // UI state
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'build' | 'code' | 'run'>('build');
-  const [exportMode, setExportMode] = useState<ExportMode>('playwright');
+  const [viewMode, setViewMode] = useState<ViewMode>('no-code');
+  const [exportMode, setExportMode] = useState<ExportMode>('automation');
   const [isRunning, setIsRunning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showModules, setShowModules] = useState(false);
+  const [showBlackbox, setShowBlackbox] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(['ui', 'verify']);
   
   // Execution state
-  const [executionProgress, setExecutionProgress] = useState({
+  const [executionResult, setExecutionResult] = useState<{
+    status: 'idle' | 'running' | 'passed' | 'failed';
+    currentStep: number;
+    results: { stepId: string; status: string; duration?: number; error?: string }[];
+    logs: string[];
+  }>({
+    status: 'idle',
     currentStep: 0,
-    status: 'idle' as 'idle' | 'running' | 'passed' | 'failed',
-    results: [] as { stepId: string; status: string; duration?: number; error?: string }[],
+    results: [],
+    logs: [],
   });
 
-  // Settings
-  const [settings, setSettings] = useState({
-    browser: 'chromium',
-    headless: false,
-    timeout: 30000,
-    baseUrl: '',
+  // Test history
+  const [testHistory, setTestHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('unified_test_history');
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Selected step
@@ -185,13 +278,19 @@ export default function UnifiedWorkflowEditor() {
     if (data) {
       try {
         const parsed = JSON.parse(decodeURIComponent(data));
-        if (parsed.events) {
-          // Convert from recorder format
-          const steps = convertRecordedEvents(parsed.events, parsed.startUrl);
+        if (parsed.events || parsed.steps) {
+          const steps = parsed.events 
+            ? convertRecordedEvents(parsed.events, parsed.startUrl)
+            : parsed.steps.map(convertWorkflowStep);
           setTestCase(prev => ({
             ...prev,
-            name: parsed.name || 'Recorded Test',
+            name: parsed.name || parsed.title || 'Recorded Test',
+            description: parsed.description || '',
             steps,
+            settings: {
+              ...prev.settings,
+              baseUrl: parsed.startUrl || parsed.baseUrl || '',
+            },
           }));
         }
       } catch (e) {
@@ -213,32 +312,35 @@ export default function UnifiedWorkflowEditor() {
     localStorage.setItem('unified_test_case', JSON.stringify(testCase));
   }, [testCase]);
 
+  // Save history
+  useEffect(() => {
+    localStorage.setItem('unified_test_history', JSON.stringify(testHistory));
+  }, [testHistory]);
+
   // Convert recorded events to steps
   const convertRecordedEvents = (events: any[], startUrl?: string): TestStep[] => {
     const steps: TestStep[] = [];
     
     if (startUrl) {
       steps.push({
-        id: `step_${Date.now()}_0`,
+        id: `step_${Date.now()}_nav`,
         type: 'navigate',
-        name: 'Navigate to page',
+        name: 'Open Application',
         url: startUrl,
-        isEnabled: true,
+        enabled: true,
         expectedResult: 'Page loads successfully',
       });
     }
     
     events.forEach((event, idx) => {
       const step: TestStep = {
-        id: `step_${Date.now()}_${idx + 1}`,
-        type: event.type || 'click',
-        name: event.type === 'input' ? `Enter ${event.value?.slice(0, 20) || 'text'}` : 
-              event.type === 'click' ? `Click ${event.element?.textContent?.slice(0, 20) || 'element'}` :
-              event.type || 'Action',
+        id: `step_${Date.now()}_${idx}`,
+        type: mapEventType(event.type),
+        name: generateStepName(event),
         selector: event.selector,
         value: event.value,
-        isEnabled: true,
-        expectedResult: '',
+        enabled: true,
+        expectedResult: generateExpectedResult(event),
       };
       steps.push(step);
     });
@@ -246,20 +348,69 @@ export default function UnifiedWorkflowEditor() {
     return steps;
   };
 
+  const mapEventType = (type: string): StepType => {
+    const map: Record<string, StepType> = {
+      'click': 'click',
+      'input': 'input',
+      'type': 'input',
+      'fill': 'input',
+      'select': 'select',
+      'navigate': 'navigate',
+      'goto': 'navigate',
+      'wait': 'wait',
+      'assert': 'assert',
+      'hover': 'hover',
+    };
+    return map[type] || 'click';
+  };
+
+  const generateStepName = (event: any): string => {
+    const type = event.type || 'click';
+    if (type === 'input' || type === 'fill') {
+      return `Enter "${(event.value || '').slice(0, 20)}..."`;
+    }
+    if (type === 'click') {
+      const text = event.element?.textContent || event.text || '';
+      return text ? `Click "${text.slice(0, 25)}"` : 'Click element';
+    }
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  };
+
+  const generateExpectedResult = (event: any): string => {
+    const type = event.type || 'click';
+    if (type === 'click') return 'Element is clicked successfully';
+    if (type === 'input') return 'Text is entered in the field';
+    if (type === 'navigate') return 'Page navigates successfully';
+    return '';
+  };
+
+  const convertWorkflowStep = (node: any): TestStep => ({
+    id: node.id || `step_${Date.now()}`,
+    type: node.type || 'click',
+    name: node.label || node.name || 'Step',
+    selector: node.data?.selector || node.selector,
+    value: node.data?.value || node.value,
+    url: node.data?.url || node.url,
+    enabled: true,
+    expectedResult: node.data?.manualStep?.expectedResult || node.expectedResult || '',
+    assertion: node.data?.assertion,
+  });
+
   // Step operations
   const addStep = (type: StepType) => {
+    const info = getStepInfo(type);
     const newStep: TestStep = {
       id: `step_${Date.now()}`,
       type,
-      name: STEP_TYPES[type].label,
-      isEnabled: true,
+      name: info.label,
+      enabled: true,
       expectedResult: '',
     };
     
     setTestCase(prev => ({
       ...prev,
       steps: [...prev.steps, newStep],
-      updatedAt: new Date().toISOString(),
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
     }));
     setSelectedStepId(newStep.id);
   };
@@ -268,7 +419,7 @@ export default function UnifiedWorkflowEditor() {
     setTestCase(prev => ({
       ...prev,
       steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s),
-      updatedAt: new Date().toISOString(),
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
     }));
   };
 
@@ -276,57 +427,84 @@ export default function UnifiedWorkflowEditor() {
     setTestCase(prev => ({
       ...prev,
       steps: prev.steps.filter(s => s.id !== stepId),
-      updatedAt: new Date().toISOString(),
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
     }));
-    if (selectedStepId === stepId) {
-      setSelectedStepId(null);
-    }
+    if (selectedStepId === stepId) setSelectedStepId(null);
   };
 
   const moveStep = (stepId: string, direction: 'up' | 'down') => {
     setTestCase(prev => {
       const idx = prev.steps.findIndex(s => s.id === stepId);
       if (idx === -1) return prev;
-      
       const newIdx = direction === 'up' ? idx - 1 : idx + 1;
       if (newIdx < 0 || newIdx >= prev.steps.length) return prev;
-      
       const newSteps = [...prev.steps];
       [newSteps[idx], newSteps[newIdx]] = [newSteps[newIdx], newSteps[idx]];
-      
-      return { ...prev, steps: newSteps, updatedAt: new Date().toISOString() };
+      return { ...prev, steps: newSteps, metadata: { ...prev.metadata, updatedAt: new Date().toISOString() } };
     });
   };
 
   const duplicateStep = (stepId: string) => {
     const step = testCase.steps.find(s => s.id === stepId);
     if (!step) return;
-    
     const newStep = { ...step, id: `step_${Date.now()}`, name: `${step.name} (Copy)` };
     const idx = testCase.steps.findIndex(s => s.id === stepId);
-    
     setTestCase(prev => {
       const newSteps = [...prev.steps];
       newSteps.splice(idx + 1, 0, newStep);
-      return { ...prev, steps: newSteps, updatedAt: new Date().toISOString() };
+      return { ...prev, steps: newSteps, metadata: { ...prev.metadata, updatedAt: new Date().toISOString() } };
     });
   };
 
-  // Generate code
+  // Import module steps
+  const handleImportModule = (moduleSteps: ModuleStep[]) => {
+    const newSteps = moduleSteps.map((ms, idx) => ({
+      id: `step_${Date.now()}_${idx}`,
+      type: ms.type as StepType,
+      name: ms.label,
+      selector: ms.selector,
+      value: ms.value,
+      waitTime: ms.waitTime,
+      enabled: true,
+      expectedResult: ms.description || '',
+    }));
+    
+    setTestCase(prev => ({
+      ...prev,
+      steps: [...prev.steps, ...newSteps],
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
+    }));
+    toast.success(`Imported ${newSteps.length} steps from module`);
+  };
+
+  // Blackbox fallback
+  const handleBlackboxLocator = (locator: BlackboxLocator, _code: string) => {
+    if (selectedStepId) {
+      updateStep(selectedStepId, { fallback: locator });
+      toast.success(`Fallback strategy added: ${locator.type}`);
+    }
+    setShowBlackbox(false);
+  };
+
+  // Generate code for export
   const generateCode = useCallback((mode: ExportMode): string => {
+    const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+    
     switch (mode) {
-      case 'playwright':
-        return generatePlaywrightCode(testCase, settings);
-      case 'manual':
-        return generateManualTestCase(testCase);
+      case 'automation':
+        return generateAutomationCode(testCase, safeName);
       case 'api':
-        return generateAPITestCode(testCase);
+        return generateAPICode(testCase, safeName);
+      case 'database':
+        return generateDBCode(testCase, safeName);
       case 'performance':
-        return generatePerformanceScript(testCase);
+        return generatePerformanceCode(testCase, safeName);
+      case 'manual':
+        return generateManualDoc(testCase);
       default:
         return '';
     }
-  }, [testCase, settings]);
+  }, [testCase]);
 
   // Run test
   const runTest = async () => {
@@ -336,37 +514,45 @@ export default function UnifiedWorkflowEditor() {
     }
 
     setIsRunning(true);
-    setActiveTab('run');
-    setExecutionProgress({ currentStep: 0, status: 'running', results: [] });
+    setExecutionResult({ status: 'running', currentStep: 0, results: [], logs: [] });
 
     try {
-      const code = generateCode('playwright');
+      const code = generateCode('automation');
       const response = await fetch('http://localhost:8000/api/playwright-recorder/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           script: code,
           language: 'python',
-          browser: settings.browser,
-          headless: settings.headless,
+          browser: 'chromium',
+          headless: false,
           workflow_name: testCase.name.replace(/[^a-z0-9]+/gi, '_'),
         }),
       });
 
       const result = await response.json();
+      const passed = result.status === 'success' || result.exit_code === 0;
       
-      setExecutionProgress(prev => ({
+      setExecutionResult(prev => ({
         ...prev,
-        status: result.status === 'success' || result.exit_code === 0 ? 'passed' : 'failed',
+        status: passed ? 'passed' : 'failed',
+        logs: result.output ? result.output.split('\n') : [],
       }));
 
-      if (result.status === 'success' || result.exit_code === 0) {
-        toast.success('Test passed!');
-      } else {
-        toast.error('Test failed');
-      }
+      // Save to history
+      const historyEntry = {
+        id: `run_${Date.now()}`,
+        testName: testCase.name,
+        status: passed ? 'passed' : 'failed',
+        timestamp: new Date().toISOString(),
+        duration: result.duration || 0,
+        steps: testCase.steps.length,
+      };
+      setTestHistory(prev => [historyEntry, ...prev.slice(0, 49)]);
+
+      toast[passed ? 'success' : 'error'](passed ? 'Test passed!' : 'Test failed');
     } catch (error) {
-      setExecutionProgress(prev => ({ ...prev, status: 'failed' }));
+      setExecutionResult(prev => ({ ...prev, status: 'failed', logs: ['Execution error'] }));
       toast.error('Execution failed');
     } finally {
       setIsRunning(false);
@@ -404,6 +590,21 @@ export default function UnifiedWorkflowEditor() {
     }
   };
 
+  // Export handler
+  const handleExport = (mode: ExportMode) => {
+    const code = generateCode(mode);
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    const ext = mode === 'manual' ? 'md' : mode === 'performance' ? 'js' : 'py';
+    a.download = `${testCase.name.replace(/[^a-z0-9]+/gi, '_')}_${mode}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported as ${mode}`);
+  };
+
   return (
     <Layout>
       <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-background">
@@ -412,7 +613,7 @@ export default function UnifiedWorkflowEditor() {
           <div className="flex items-center justify-between">
             {/* Left: Title */}
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg gradient-primary">
+              <div className="p-2 rounded-lg gradient-primary shadow-lg">
                 <Layers className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -425,27 +626,33 @@ export default function UnifiedWorkflowEditor() {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>{testCase.steps.length} steps</span>
                   <span>•</span>
-                  <span>Last saved {new Date(testCase.updatedAt).toLocaleTimeString()}</span>
+                  <span>v{testCase.metadata.version}</span>
                 </div>
               </div>
             </div>
 
-            {/* Center: Mode Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
-              {(['build', 'code', 'run'] as const).map(tab => (
+            {/* Center: View Toggle */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
                 <Button
-                  key={tab}
-                  variant={activeTab === tab ? 'default' : 'ghost'}
+                  variant={viewMode === 'no-code' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setActiveTab(tab)}
-                  className={activeTab === tab ? 'gradient-primary text-white' : ''}
+                  onClick={() => setViewMode('no-code')}
+                  className={viewMode === 'no-code' ? 'gradient-primary text-white' : ''}
                 >
-                  {tab === 'build' && <Edit className="h-4 w-4 mr-1" />}
-                  {tab === 'code' && <Code className="h-4 w-4 mr-1" />}
-                  {tab === 'run' && <Play className="h-4 w-4 mr-1" />}
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  <ToggleLeft className="h-4 w-4 mr-1" />
+                  No-Code
                 </Button>
-              ))}
+                <Button
+                  variant={viewMode === 'code' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('code')}
+                  className={viewMode === 'code' ? 'gradient-primary text-white' : ''}
+                >
+                  <Code className="h-4 w-4 mr-1" />
+                  Code
+                </Button>
+              </div>
             </div>
 
             {/* Right: Actions */}
@@ -453,6 +660,42 @@ export default function UnifiedWorkflowEditor() {
               <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
                 <Settings className="h-4 w-4" />
               </Button>
+              
+              {/* Export Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-1" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Export As</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport('automation')}>
+                    <Monitor className="h-4 w-4 mr-2" />
+                    Automation Test
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('api')}>
+                    <Globe className="h-4 w-4 mr-2" />
+                    API Test
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('database')}>
+                    <Database className="h-4 w-4 mr-2" />
+                    Database Test
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport('performance')}>
+                    <Gauge className="h-4 w-4 mr-2" />
+                    Performance Test
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleExport('manual')}>
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Manual Test Doc
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <Button variant="outline" size="sm" onClick={saveTestCase}>
                 <Save className="h-4 w-4 mr-1" />
                 Save
@@ -468,7 +711,7 @@ export default function UnifiedWorkflowEditor() {
                 ) : (
                   <Play className="h-4 w-4 mr-1" />
                 )}
-                Run Test
+                Run
               </Button>
             </div>
           </div>
@@ -476,107 +719,109 @@ export default function UnifiedWorkflowEditor() {
 
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel: Actions */}
-          <aside className="w-56 flex-none border-r bg-card p-3 overflow-y-auto">
-            <div className="space-y-4">
-              {/* Add Steps */}
-              <div>
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Add Step
-                </h3>
-                <div className="space-y-1">
-                  {Object.entries(STEP_TYPES).map(([type, info]) => (
-                    <Button
-                      key={type}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => addStep(type as StepType)}
-                    >
-                      <div className={`p-1 rounded mr-2 ${info.color}`}>
-                        <info.icon className="h-3 w-3" />
-                      </div>
-                      {info.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
+          {/* Left Panel: Step Types */}
+          <aside className="w-56 flex-none border-r bg-card overflow-y-auto">
+            <div className="p-3 space-y-2">
               {/* Quick Actions */}
-              <div className="border-t pt-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Tools
-                </h3>
-                <div className="space-y-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => setShowModules(true)}
-                  >
-                    <Package className="h-4 w-4 mr-2 text-purple-500" />
-                    Modules
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => window.open('/trace', '_blank')}
-                  >
-                    <Video className="h-4 w-4 mr-2 text-red-500" />
-                    Record
-                  </Button>
-                </div>
+              <div className="flex gap-1 mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => setShowModules(true)}
+                >
+                  <Package className="h-3 w-3 mr-1" />
+                  Modules
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => window.open('/flowstral', '_blank')}
+                >
+                  <Video className="h-3 w-3 mr-1" />
+                  Record
+                </Button>
               </div>
 
-              {/* Export Options */}
-              <div className="border-t pt-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Export As
-                </h3>
-                <div className="space-y-1">
-                  {([
-                    { mode: 'playwright', label: 'Playwright', icon: Monitor },
-                    { mode: 'manual', label: 'Manual Test', icon: FileText },
-                    { mode: 'api', label: 'API Test', icon: Server },
-                    { mode: 'performance', label: 'Performance', icon: Gauge },
-                  ] as const).map(({ mode, label, icon: Icon }) => (
-                    <Button
-                      key={mode}
-                      variant={exportMode === mode ? 'secondary' : 'ghost'}
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        setExportMode(mode);
-                        setActiveTab('code');
-                      }}
-                    >
-                      <Icon className="h-4 w-4 mr-2" />
-                      {label}
+              {/* Step Categories */}
+              {Object.entries(STEP_CATEGORIES).map(([key, category]) => (
+                <Collapsible
+                  key={key}
+                  open={expandedCategories.includes(key)}
+                  onOpenChange={(open) => {
+                    setExpandedCategories(prev => 
+                      open ? [...prev, key] : prev.filter(k => k !== key)
+                    );
+                  }}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-between text-xs">
+                      {category.label}
+                      <ChevronRight className={`h-3 w-3 transition-transform ${expandedCategories.includes(key) ? 'rotate-90' : ''}`} />
                     </Button>
-                  ))}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-1 mt-1">
+                    {category.steps.map((step) => (
+                      <Button
+                        key={step.type}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start pl-4 text-xs"
+                        onClick={() => addStep(step.type as StepType)}
+                      >
+                        <div className={`p-1 rounded mr-2 ${step.color}`}>
+                          <step.icon className="h-3 w-3" />
+                        </div>
+                        {step.label}
+                      </Button>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              ))}
+
+              {/* Execution Status */}
+              {executionResult.status !== 'idle' && (
+                <div className={`mt-4 p-3 rounded-lg border ${
+                  executionResult.status === 'passed' ? 'bg-green-50 border-green-200' :
+                  executionResult.status === 'failed' ? 'bg-red-50 border-red-200' :
+                  'bg-blue-50 border-blue-200'
+                }`}>
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {executionResult.status === 'running' && <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />}
+                    {executionResult.status === 'passed' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                    {executionResult.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                    <span className={
+                      executionResult.status === 'passed' ? 'text-green-700' :
+                      executionResult.status === 'failed' ? 'text-red-700' :
+                      'text-blue-700'
+                    }>
+                      {executionResult.status === 'running' ? 'Running...' :
+                       executionResult.status === 'passed' ? 'Passed' : 'Failed'}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </aside>
 
           {/* Center: Steps List or Code View */}
           <main className="flex-1 overflow-hidden flex flex-col">
-            {activeTab === 'build' && (
+            {viewMode === 'no-code' ? (
               <div className="flex-1 overflow-y-auto p-4">
                 {testCase.steps.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                     <div className="p-4 rounded-full bg-muted mb-4">
                       <Layers className="h-8 w-8" />
                     </div>
-                    <h3 className="text-lg font-medium mb-1">No steps yet</h3>
+                    <h3 className="text-lg font-medium mb-1">Start building your test</h3>
                     <p className="text-sm mb-4">Add steps from the left panel or record from browser</p>
                     <div className="flex gap-2">
                       <Button onClick={() => addStep('navigate')} variant="outline">
                         <Plus className="h-4 w-4 mr-1" />
                         Add Step
                       </Button>
-                      <Button onClick={() => window.open('/trace', '_blank')} className="gradient-primary text-white">
+                      <Button onClick={() => window.open('/flowstral', '_blank')} className="gradient-primary text-white">
                         <Video className="h-4 w-4 mr-1" />
                         Record
                       </Button>
@@ -597,19 +842,28 @@ export default function UnifiedWorkflowEditor() {
                         onDuplicate={() => duplicateStep(step.id)}
                         isFirst={index === 0}
                         isLast={index === testCase.steps.length - 1}
+                        executionStatus={executionResult.results.find(r => r.stepId === step.id)?.status}
                       />
                     ))}
                   </div>
                 )}
               </div>
-            )}
-
-            {activeTab === 'code' && (
+            ) : (
+              /* Code View */
               <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-none px-4 py-2 border-b bg-muted/50 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">{exportMode.toUpperCase()}</Badge>
-                    <span className="text-sm text-muted-foreground">Generated Code</span>
+                    {(['automation', 'api', 'database', 'performance', 'manual'] as ExportMode[]).map(mode => (
+                      <Button
+                        key={mode}
+                        variant={exportMode === mode ? 'default' : 'ghost'}
+                        size="sm"
+                        onClick={() => setExportMode(mode)}
+                        className={exportMode === mode ? 'bg-primary text-white' : ''}
+                      >
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </Button>
+                    ))}
                   </div>
                   <Button
                     variant="outline"
@@ -624,257 +878,57 @@ export default function UnifiedWorkflowEditor() {
                   </Button>
                 </div>
                 <div className="flex-1 overflow-auto">
-                  <pre className="p-4 text-sm font-mono bg-slate-900 text-slate-100 min-h-full">
+                  <pre className="p-4 text-sm font-mono bg-slate-900 text-slate-100 min-h-full whitespace-pre-wrap">
                     {generateCode(exportMode)}
                   </pre>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'run' && (
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="max-w-3xl mx-auto space-y-4">
-                  {/* Execution Status */}
-                  <Card className={
-                    executionProgress.status === 'passed' ? 'border-green-300 bg-green-50' :
-                    executionProgress.status === 'failed' ? 'border-red-300 bg-red-50' :
-                    'border-border'
-                  }>
-                    <CardContent className="py-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {executionProgress.status === 'idle' && (
-                            <div className="p-2 rounded-full bg-muted">
-                              <Play className="h-5 w-5" />
-                            </div>
-                          )}
-                          {executionProgress.status === 'running' && (
-                            <div className="p-2 rounded-full bg-blue-100">
-                              <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
-                            </div>
-                          )}
-                          {executionProgress.status === 'passed' && (
-                            <div className="p-2 rounded-full bg-green-100">
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            </div>
-                          )}
-                          {executionProgress.status === 'failed' && (
-                            <div className="p-2 rounded-full bg-red-100">
-                              <AlertCircle className="h-5 w-5 text-red-600" />
-                            </div>
-                          )}
-                          <div>
-                            <h3 className="font-semibold">
-                              {executionProgress.status === 'idle' && 'Ready to run'}
-                              {executionProgress.status === 'running' && 'Running...'}
-                              {executionProgress.status === 'passed' && 'Test Passed'}
-                              {executionProgress.status === 'failed' && 'Test Failed'}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {testCase.steps.length} steps total
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={runTest}
-                          disabled={isRunning}
-                          className="gradient-primary text-white"
-                        >
-                          {isRunning ? 'Running...' : 'Run Again'}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Steps Progress */}
-                  <div className="space-y-2">
-                    {testCase.steps.map((step, index) => {
-                      const result = executionProgress.results.find(r => r.stepId === step.id);
-                      return (
-                        <div
-                          key={step.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border ${
-                            result?.status === 'passed' ? 'bg-green-50 border-green-200' :
-                            result?.status === 'failed' ? 'bg-red-50 border-red-200' :
-                            executionProgress.currentStep === index && executionProgress.status === 'running'
-                              ? 'bg-blue-50 border-blue-200' :
-                            'bg-card'
-                          }`}
-                        >
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                            result?.status === 'passed' ? 'bg-green-500 text-white' :
-                            result?.status === 'failed' ? 'bg-red-500 text-white' :
-                            'bg-muted'
-                          }`}>
-                            {result?.status === 'passed' ? <Check className="h-3 w-3" /> :
-                             result?.status === 'failed' ? <X className="h-3 w-3" /> :
-                             index + 1}
-                          </div>
-                          <div className="flex-1">
-                            <span className="font-medium">{step.name}</span>
-                            {result?.duration && (
-                              <span className="text-xs text-muted-foreground ml-2">
-                                {result.duration}ms
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
             )}
           </main>
 
           {/* Right Panel: Step Editor */}
-          {selectedStep && activeTab === 'build' && (
-            <aside className="w-80 flex-none border-l bg-card p-4 overflow-y-auto">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Edit Step</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedStepId(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {/* Step Name */}
-                <div className="space-y-2">
-                  <Label>Step Name</Label>
-                  <Input
-                    value={selectedStep.name}
-                    onChange={(e) => updateStep(selectedStep.id, { name: e.target.value })}
-                  />
-                </div>
-
-                {/* Type-specific fields */}
-                {selectedStep.type === 'navigate' && (
-                  <div className="space-y-2">
-                    <Label>URL</Label>
-                    <Input
-                      value={selectedStep.url || ''}
-                      onChange={(e) => updateStep(selectedStep.id, { url: e.target.value })}
-                      placeholder="https://example.com"
-                    />
-                  </div>
-                )}
-
-                {(selectedStep.type === 'click' || selectedStep.type === 'input' || selectedStep.type === 'assert') && (
-                  <div className="space-y-2">
-                    <Label>Selector</Label>
-                    <Textarea
-                      value={selectedStep.selector || ''}
-                      onChange={(e) => updateStep(selectedStep.id, { selector: e.target.value })}
-                      placeholder="page.get_by_role('button', name='Submit')"
-                      className="font-mono text-sm"
-                      rows={2}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Use Playwright selectors or enable blackbox mode below
-                    </p>
-                  </div>
-                )}
-
-                {selectedStep.type === 'input' && (
-                  <div className="space-y-2">
-                    <Label>Value</Label>
-                    <Input
-                      value={selectedStep.value || ''}
-                      onChange={(e) => updateStep(selectedStep.id, { value: e.target.value })}
-                      placeholder="Text to enter"
-                    />
-                  </div>
-                )}
-
-                {selectedStep.type === 'wait' && (
-                  <div className="space-y-2">
-                    <Label>Wait Time (ms)</Label>
-                    <Input
-                      type="number"
-                      value={selectedStep.waitTime || 1000}
-                      onChange={(e) => updateStep(selectedStep.id, { waitTime: parseInt(e.target.value) })}
-                    />
-                  </div>
-                )}
-
-                {selectedStep.type === 'api' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Method</Label>
-                      <Select
-                        value={selectedStep.method || 'GET'}
-                        onValueChange={(v) => updateStep(selectedStep.id, { method: v as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Endpoint</Label>
-                      <Input
-                        value={selectedStep.endpoint || ''}
-                        onChange={(e) => updateStep(selectedStep.id, { endpoint: e.target.value })}
-                        placeholder="/api/users"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Expected Result (for manual testing) */}
-                <div className="space-y-2 border-t pt-4">
-                  <Label>Expected Result</Label>
-                  <Textarea
-                    value={selectedStep.expectedResult || ''}
-                    onChange={(e) => updateStep(selectedStep.id, { expectedResult: e.target.value })}
-                    placeholder="What should happen after this step?"
-                    rows={2}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Used for manual test documentation
-                  </p>
-                </div>
-
-                {/* Blackbox Fallback */}
-                {(selectedStep.type === 'click' || selectedStep.type === 'input') && (
-                  <div className="space-y-2 border-t pt-4">
-                    <div className="flex items-center justify-between">
-                      <Label>Blackbox Fallback</Label>
-                      <Badge variant="outline" className="text-xs">
-                        <Wand2 className="h-3 w-3 mr-1" />
-                        When selector fails
-                      </Badge>
-                    </div>
-                    <Select
-                      value={selectedStep.fallbackStrategy || ''}
-                      onValueChange={(v) => updateStep(selectedStep.id, { fallbackStrategy: v as any })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        <SelectItem value="ocr">OCR Text Detection</SelectItem>
-                        <SelectItem value="coordinates">Fixed Coordinates</SelectItem>
-                        <SelectItem value="image">Image Matching</SelectItem>
-                        <SelectItem value="ai">AI Detection</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
+          {selectedStep && viewMode === 'no-code' && (
+            <aside className="w-80 flex-none border-l bg-card overflow-y-auto">
+              <StepEditor
+                step={selectedStep}
+                onUpdate={(updates) => updateStep(selectedStep.id, updates)}
+                onClose={() => setSelectedStepId(null)}
+                onShowBlackbox={() => setShowBlackbox(true)}
+              />
             </aside>
           )}
         </div>
+
+        {/* Modules Dialog */}
+        <Dialog open={showModules} onOpenChange={setShowModules}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Reusable Modules</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto">
+              <ReusableModulesManager
+                currentNodes={testCase.steps.map(s => ({ ...s, data: s }))}
+                appType="generic"
+                onImportModule={handleImportModule}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Blackbox Strategies Dialog */}
+        <Dialog open={showBlackbox} onOpenChange={setShowBlackbox}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Fallback Locator Strategy</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-auto">
+              <BlackboxLocatorStrategies
+                onLocatorSelected={handleBlackboxLocator}
+                framework="playwright-python"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Settings Dialog */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
@@ -884,35 +938,13 @@ export default function UnifiedWorkflowEditor() {
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Browser</Label>
-                <Select
-                  value={settings.browser}
-                  onValueChange={(v) => setSettings(prev => ({ ...prev, browser: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="chromium">Chromium</SelectItem>
-                    <SelectItem value="firefox">Firefox</SelectItem>
-                    <SelectItem value="webkit">WebKit</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between">
-                <Label>Headless Mode</Label>
-                <input
-                  type="checkbox"
-                  checked={settings.headless}
-                  onChange={(e) => setSettings(prev => ({ ...prev, headless: e.target.checked }))}
-                  className="rounded"
-                />
-              </div>
-              <div className="space-y-2">
                 <Label>Base URL</Label>
                 <Input
-                  value={settings.baseUrl}
-                  onChange={(e) => setSettings(prev => ({ ...prev, baseUrl: e.target.value }))}
+                  value={testCase.settings.baseUrl || ''}
+                  onChange={(e) => setTestCase(prev => ({
+                    ...prev,
+                    settings: { ...prev.settings, baseUrl: e.target.value }
+                  }))}
                   placeholder="https://example.com"
                 />
               </div>
@@ -920,8 +952,31 @@ export default function UnifiedWorkflowEditor() {
                 <Label>Timeout (ms)</Label>
                 <Input
                   type="number"
-                  value={settings.timeout}
-                  onChange={(e) => setSettings(prev => ({ ...prev, timeout: parseInt(e.target.value) }))}
+                  value={testCase.settings.timeout}
+                  onChange={(e) => setTestCase(prev => ({
+                    ...prev,
+                    settings: { ...prev.settings, timeout: parseInt(e.target.value) }
+                  }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Retries</Label>
+                <Input
+                  type="number"
+                  value={testCase.settings.retries}
+                  onChange={(e) => setTestCase(prev => ({
+                    ...prev,
+                    settings: { ...prev.settings, retries: parseInt(e.target.value) }
+                  }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={testCase.description}
+                  onChange={(e) => setTestCase(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="What does this test verify?"
+                  rows={3}
                 />
               </div>
             </div>
@@ -950,6 +1005,7 @@ interface StepCardProps {
   onDuplicate: () => void;
   isFirst: boolean;
   isLast: boolean;
+  executionStatus?: string;
 }
 
 function StepCard({
@@ -963,22 +1019,27 @@ function StepCard({
   onDuplicate,
   isFirst,
   isLast,
+  executionStatus,
 }: StepCardProps) {
-  const stepInfo = STEP_TYPES[step.type];
+  const info = getStepInfo(step.type);
 
   return (
     <div
       className={`group relative flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
         isSelected
           ? 'ring-2 ring-primary bg-primary/5 border-primary'
+          : executionStatus === 'passed'
+          ? 'bg-green-50 border-green-200'
+          : executionStatus === 'failed'
+          ? 'bg-red-50 border-red-200'
           : 'bg-card hover:border-primary/50'
       }`}
       onClick={onSelect}
     >
-      {/* Step Number */}
+      {/* Step Number & Icon */}
       <div className="flex flex-col items-center">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stepInfo.color}`}>
-          <stepInfo.icon className="h-4 w-4" />
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${info.color}`}>
+          <info.icon className="h-4 w-4" />
         </div>
         {!isLast && <div className="w-0.5 h-4 bg-border mt-1" />}
       </div>
@@ -987,13 +1048,19 @@ function StepCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium">{step.name}</span>
-          {!step.isEnabled && (
+          {!step.enabled && (
             <Badge variant="secondary" className="text-xs">Disabled</Badge>
           )}
-          {step.fallbackStrategy && (
-            <Badge variant="outline" className="text-xs">
+          {step.fallback && (
+            <Badge variant="outline" className="text-xs bg-amber-50">
               <Wand2 className="h-3 w-3 mr-1" />
-              {step.fallbackStrategy}
+              Fallback
+            </Badge>
+          )}
+          {step.assertion?.enabled && (
+            <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Assert
             </Badge>
           )}
         </div>
@@ -1002,9 +1069,8 @@ function StepCard({
           {step.type === 'click' && (step.selector?.slice(0, 50) || 'Click element')}
           {step.type === 'input' && `Enter: ${step.value || '...'}`}
           {step.type === 'wait' && `${step.waitTime || 1000}ms`}
-          {step.type === 'assert' && (step.selector?.slice(0, 50) || 'Verify element')}
-          {step.type === 'api' && `${step.method || 'GET'} ${step.endpoint || '/api'}`}
-          {step.type === 'screenshot' && 'Capture screenshot'}
+          {step.type === 'api' && `${step.method || 'GET'} ${step.endpoint || ''}`}
+          {step.type === 'db_query' && 'Execute query'}
         </div>
         {step.expectedResult && (
           <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
@@ -1016,20 +1082,10 @@ function StepCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => { e.stopPropagation(); onMove('up'); }}
-          disabled={isFirst}
-        >
+        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onMove('up'); }} disabled={isFirst}>
           <ArrowUp className="h-4 w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => { e.stopPropagation(); onMove('down'); }}
-          disabled={isLast}
-        >
+        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onMove('down'); }} disabled={isLast}>
           <ArrowDown className="h-4 w-4" />
         </Button>
         <DropdownMenu>
@@ -1043,14 +1099,8 @@ function StepCard({
               <Copy className="h-4 w-4 mr-2" />
               Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onUpdate({ isEnabled: !step.isEnabled })}
-            >
-              {step.isEnabled ? (
-                <><EyeOff className="h-4 w-4 mr-2" />Disable</>
-              ) : (
-                <><Eye className="h-4 w-4 mr-2" />Enable</>
-              )}
+            <DropdownMenuItem onClick={() => onUpdate({ enabled: !step.enabled })}>
+              {step.enabled ? <><EyeOff className="h-4 w-4 mr-2" />Disable</> : <><Eye className="h-4 w-4 mr-2" />Enable</>}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete} className="text-destructive">
@@ -1065,15 +1115,184 @@ function StepCard({
 }
 
 // ============================================================================
+// STEP EDITOR COMPONENT
+// ============================================================================
+
+interface StepEditorProps {
+  step: TestStep;
+  onUpdate: (updates: Partial<TestStep>) => void;
+  onClose: () => void;
+  onShowBlackbox: () => void;
+}
+
+function StepEditor({ step, onUpdate, onClose, onShowBlackbox }: StepEditorProps) {
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Edit Step</h3>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Step Name */}
+      <div className="space-y-2">
+        <Label>Step Name</Label>
+        <Input
+          value={step.name}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+        />
+      </div>
+
+      {/* Type-specific fields */}
+      {step.type === 'navigate' && (
+        <div className="space-y-2">
+          <Label>URL</Label>
+          <Input
+            value={step.url || ''}
+            onChange={(e) => onUpdate({ url: e.target.value })}
+            placeholder="https://example.com"
+          />
+        </div>
+      )}
+
+      {['click', 'input', 'select', 'hover', 'assert'].includes(step.type) && (
+        <div className="space-y-2">
+          <Label>Selector</Label>
+          <Textarea
+            value={step.selector || ''}
+            onChange={(e) => onUpdate({ selector: e.target.value })}
+            placeholder="Enter selector..."
+            className="font-mono text-sm"
+            rows={2}
+          />
+          <Button variant="outline" size="sm" className="w-full" onClick={onShowBlackbox}>
+            <Wand2 className="h-4 w-4 mr-1" />
+            Add Fallback Strategy
+          </Button>
+        </div>
+      )}
+
+      {step.type === 'input' && (
+        <div className="space-y-2">
+          <Label>Value to Enter</Label>
+          <Input
+            value={step.value || ''}
+            onChange={(e) => onUpdate({ value: e.target.value })}
+            placeholder="Text to enter"
+          />
+        </div>
+      )}
+
+      {step.type === 'wait' && (
+        <div className="space-y-2">
+          <Label>Wait Time (ms)</Label>
+          <Input
+            type="number"
+            value={step.waitTime || 1000}
+            onChange={(e) => onUpdate({ waitTime: parseInt(e.target.value) })}
+          />
+        </div>
+      )}
+
+      {step.type === 'api' && (
+        <>
+          <div className="space-y-2">
+            <Label>Method</Label>
+            <Select value={step.method || 'GET'} onValueChange={(v) => onUpdate({ method: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Endpoint</Label>
+            <Input
+              value={step.endpoint || ''}
+              onChange={(e) => onUpdate({ endpoint: e.target.value })}
+              placeholder="/api/users"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Body (JSON)</Label>
+            <Textarea
+              value={step.body || ''}
+              onChange={(e) => onUpdate({ body: e.target.value })}
+              placeholder='{"key": "value"}'
+              className="font-mono text-sm"
+              rows={3}
+            />
+          </div>
+        </>
+      )}
+
+      {step.type === 'db_query' && (
+        <>
+          <div className="space-y-2">
+            <Label>Database Type</Label>
+            <Select value={step.dbType || 'postgres'} onValueChange={(v) => onUpdate({ dbType: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="postgres">PostgreSQL</SelectItem>
+                <SelectItem value="mysql">MySQL</SelectItem>
+                <SelectItem value="mongodb">MongoDB</SelectItem>
+                <SelectItem value="salesforce_soql">Salesforce SOQL</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Query</Label>
+            <Textarea
+              value={step.query || ''}
+              onChange={(e) => onUpdate({ query: e.target.value })}
+              placeholder="SELECT * FROM users WHERE id = $1"
+              className="font-mono text-sm"
+              rows={3}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Expected Result (for all steps) */}
+      <div className="space-y-2 border-t pt-4">
+        <Label>Expected Result</Label>
+        <Textarea
+          value={step.expectedResult || ''}
+          onChange={(e) => onUpdate({ expectedResult: e.target.value })}
+          placeholder="What should happen after this step?"
+          rows={2}
+        />
+        <p className="text-xs text-muted-foreground">
+          Used for manual test documentation and assertions
+        </p>
+      </div>
+
+      {/* Store Result */}
+      <div className="space-y-2">
+        <Label>Store Result As (Variable)</Label>
+        <Input
+          value={step.storeAs || ''}
+          onChange={(e) => onUpdate({ storeAs: e.target.value })}
+          placeholder="e.g., response_data"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // CODE GENERATION FUNCTIONS
 // ============================================================================
 
-function generatePlaywrightCode(testCase: UnifiedTestCase, settings: any): string {
-  const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
-  
+function generateAutomationCode(tc: UnifiedTestCase, safeName: string): string {
   let code = `"""
-${testCase.name}
-${testCase.description || 'Generated by QAAI Unified Workflow Editor'}
+${tc.name}
+${tc.description || 'Generated by QAAI Unified Test Builder'}
+
+Tags: ${tc.tags.join(', ') || 'none'}
 """
 
 import pytest
@@ -1086,11 +1305,11 @@ def page(browser):
     page.close()
 
 def test_${safeName}(page: Page):
-    """${testCase.description || testCase.name}"""
+    """${tc.description || tc.name}"""
 `;
 
-  testCase.steps.forEach((step, index) => {
-    if (!step.isEnabled) {
+  tc.steps.forEach((step, index) => {
+    if (!step.enabled) {
       code += `\n    # Step ${index + 1}: ${step.name} (DISABLED)\n`;
       return;
     }
@@ -1099,92 +1318,63 @@ def test_${safeName}(page: Page):
 
     switch (step.type) {
       case 'navigate':
-        code += `    page.goto("${step.url || ''}")\n`;
+        code += `    page.goto("${step.url || tc.settings.baseUrl || ''}")\n`;
         code += `    page.wait_for_load_state("domcontentloaded")\n`;
         break;
       case 'click':
-        if (step.selector) {
-          code += `    page.${convertSelector(step.selector)}.click()\n`;
-        }
+        code += `    page.${convertSelector(step.selector || '')}.click()\n`;
         break;
       case 'input':
-        if (step.selector) {
-          code += `    page.${convertSelector(step.selector)}.fill("${step.value || ''}")\n`;
-        }
+        code += `    page.${convertSelector(step.selector || '')}.fill("${step.value || ''}")\n`;
+        break;
+      case 'select':
+        code += `    page.${convertSelector(step.selector || '')}.select_option("${step.value || ''}")\n`;
+        break;
+      case 'hover':
+        code += `    page.${convertSelector(step.selector || '')}.hover()\n`;
         break;
       case 'wait':
         code += `    page.wait_for_timeout(${step.waitTime || 1000})\n`;
         break;
+      case 'wait_for_element':
+        code += `    page.${convertSelector(step.selector || '')}.wait_for(state="visible")\n`;
+        break;
       case 'assert':
-        if (step.selector) {
-          code += `    expect(page.${convertSelector(step.selector)}).to_be_visible()\n`;
-        }
+        code += `    expect(page.${convertSelector(step.selector || '')}).to_be_visible()\n`;
         break;
       case 'screenshot':
         code += `    page.screenshot(path="step_${index + 1}_${safeName}.png")\n`;
         break;
+      case 'api':
+        code += `    # API call handled separately\n`;
+        break;
+    }
+
+    // Add assertion if enabled
+    if (step.assertion?.enabled && step.assertion.target) {
+      code += `    expect(page.${convertSelector(step.assertion.target)}).to_be_visible()\n`;
     }
   });
 
   code += `\n    print("Test completed successfully")`;
-  
   return code;
 }
 
-function generateManualTestCase(testCase: UnifiedTestCase): string {
-  let doc = `# ${testCase.name}\n\n`;
-  doc += `**Description:** ${testCase.description || 'N/A'}\n\n`;
-  doc += `**Tags:** ${testCase.tags.join(', ') || 'None'}\n\n`;
-  doc += `---\n\n`;
-  doc += `## Test Steps\n\n`;
-  
-  testCase.steps.forEach((step, index) => {
-    doc += `### Step ${index + 1}: ${step.name}\n\n`;
-    
-    switch (step.type) {
-      case 'navigate':
-        doc += `**Action:** Navigate to ${step.url || 'URL'}\n\n`;
-        break;
-      case 'click':
-        doc += `**Action:** Click on element\n`;
-        doc += `- Selector: \`${step.selector || 'TBD'}\`\n\n`;
-        break;
-      case 'input':
-        doc += `**Action:** Enter text "${step.value || ''}"\n`;
-        doc += `- Field: \`${step.selector || 'TBD'}\`\n\n`;
-        break;
-      case 'wait':
-        doc += `**Action:** Wait for ${step.waitTime || 1000}ms\n\n`;
-        break;
-      case 'assert':
-        doc += `**Action:** Verify condition\n`;
-        doc += `- Element: \`${step.selector || 'TBD'}\`\n\n`;
-        break;
-    }
-    
-    doc += `**Expected Result:** ${step.expectedResult || 'TBD'}\n\n`;
-    doc += `**Status:** [ ] Pass  [ ] Fail  [ ] Blocked\n\n`;
-    doc += `---\n\n`;
-  });
-  
-  return doc;
-}
-
-function generateAPITestCode(testCase: UnifiedTestCase): string {
+function generateAPICode(tc: UnifiedTestCase, safeName: string): string {
   let code = `"""
-${testCase.name} - API Test
-Generated by QAAI
+${tc.name} - API Test
+${tc.description || 'Generated by QAAI'}
 """
 
 import pytest
 import requests
 
-BASE_URL = "${testCase.variables?.baseUrl || 'http://localhost:8000'}"
+BASE_URL = "${tc.settings.baseUrl || 'http://localhost:8000'}"
 
-class Test${testCase.name.replace(/[^a-z0-9]+/gi, '')}:
+class Test${safeName.replace(/_/g, '')}:
 `;
 
-  const apiSteps = testCase.steps.filter(s => s.type === 'api');
+  const apiSteps = tc.steps.filter(s => s.type === 'api' && s.enabled);
   
   if (apiSteps.length === 0) {
     code += `    def test_placeholder(self):
@@ -1193,9 +1383,9 @@ class Test${testCase.name.replace(/[^a-z0-9]+/gi, '')}:
 `;
   } else {
     apiSteps.forEach((step, index) => {
-      const safeName = step.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+      const stepName = step.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       code += `
-    def test_${index + 1}_${safeName}(self):
+    def test_${index + 1}_${stepName}(self):
         """${step.name}"""
         response = requests.${(step.method || 'GET').toLowerCase()}(
             f"{BASE_URL}${step.endpoint || '/'}",
@@ -1204,18 +1394,59 @@ class Test${testCase.name.replace(/[^a-z0-9]+/gi, '')}:
         )
         assert response.status_code in [200, 201, 204], f"Expected 2xx, got {response.status_code}"
 `;
+      if (step.storeAs) {
+        code += `        ${step.storeAs} = response.json()\n`;
+      }
     });
   }
   
   return code;
 }
 
-function generatePerformanceScript(testCase: UnifiedTestCase): string {
-  const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+function generateDBCode(tc: UnifiedTestCase, safeName: string): string {
+  let code = `"""
+${tc.name} - Database Test
+${tc.description || 'Generated by QAAI'}
+"""
+
+import pytest
+import psycopg2
+# from pymongo import MongoClient  # For MongoDB
+# from simple_salesforce import Salesforce  # For SOQL
+
+class Test${safeName.replace(/_/g, '')}:
+`;
+
+  const dbSteps = tc.steps.filter(s => (s.type === 'db_query' || s.type === 'db_assert') && s.enabled);
   
-  let code = `// K6 Performance Test Script
-// ${testCase.name}
-// Generated by QAAI
+  if (dbSteps.length === 0) {
+    code += `    def test_placeholder(self):
+        """No database steps defined"""
+        pass
+`;
+  } else {
+    dbSteps.forEach((step, index) => {
+      const stepName = step.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+      code += `
+    def test_${index + 1}_${stepName}(self):
+        """${step.name}"""
+        # Connection would be configured via environment variables
+        query = """${step.query || 'SELECT 1'}"""
+        # Execute query and verify results
+        # result = cursor.execute(query)
+        # assert result is not None
+        pass
+`;
+    });
+  }
+  
+  return code;
+}
+
+function generatePerformanceCode(tc: UnifiedTestCase, safeName: string): string {
+  return `// K6 Performance Test Script
+// ${tc.name}
+// ${tc.description || 'Generated by QAAI'}
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
@@ -1223,21 +1454,16 @@ import { browser } from 'k6/experimental/browser';
 
 export const options = {
   scenarios: {
-    ui: {
+    ui_test: {
       executor: 'shared-iterations',
       vus: 10,
       iterations: 50,
-      options: {
-        browser: {
-          type: 'chromium',
-        },
-      },
+      options: { browser: { type: 'chromium' } },
     },
   },
   thresholds: {
-    checks: ['rate>0.9'],
+    checks: ['rate>0.95'],
     browser_web_vital_lcp: ['p(95)<2500'],
-    browser_web_vital_fcp: ['p(95)<1500'],
   },
 };
 
@@ -1245,35 +1471,12 @@ export default async function () {
   const page = browser.newPage();
   
   try {
-`;
-
-  testCase.steps.forEach((step, index) => {
-    if (!step.isEnabled) return;
-    
-    switch (step.type) {
-      case 'navigate':
-        code += `    // Step ${index + 1}: ${step.name}
-    await page.goto('${step.url || ''}');
-`;
-        break;
-      case 'click':
-        if (step.selector) {
-          code += `    // Step ${index + 1}: ${step.name}
-    await page.locator('${step.selector}').click();
-`;
-        }
-        break;
-      case 'input':
-        if (step.selector) {
-          code += `    // Step ${index + 1}: ${step.name}
-    await page.locator('${step.selector}').fill('${step.value || ''}');
-`;
-        }
-        break;
-    }
-  });
-
-  code += `
+${tc.steps.filter(s => s.enabled).map((step, i) => {
+  if (step.type === 'navigate') return `    await page.goto('${step.url || tc.settings.baseUrl || ''}');`;
+  if (step.type === 'click' && step.selector) return `    await page.locator('${step.selector}').click();`;
+  if (step.type === 'input' && step.selector) return `    await page.locator('${step.selector}').fill('${step.value || ''}');`;
+  return '';
+}).filter(Boolean).join('\n')}
   } finally {
     page.close();
   }
@@ -1281,16 +1484,50 @@ export default async function () {
   sleep(1);
 }
 `;
-  
-  return code;
 }
 
-// Helper to convert JS-style selectors to Python
+function generateManualDoc(tc: UnifiedTestCase): string {
+  let doc = `# ${tc.name}\n\n`;
+  doc += `**Description:** ${tc.description || 'N/A'}\n\n`;
+  doc += `**Tags:** ${tc.tags.join(', ') || 'None'}\n\n`;
+  doc += `**Timeout:** ${tc.settings.timeout}ms\n\n`;
+  doc += `---\n\n`;
+  doc += `## Test Steps\n\n`;
+  
+  tc.steps.forEach((step, index) => {
+    if (!step.enabled) {
+      doc += `### ~~Step ${index + 1}: ${step.name}~~ (Disabled)\n\n`;
+      return;
+    }
+    
+    doc += `### Step ${index + 1}: ${step.name}\n\n`;
+    doc += `**Action:** ${step.manualAction || getManualAction(step)}\n\n`;
+    doc += `**Expected Result:** ${step.expectedResult || 'TBD'}\n\n`;
+    doc += `**Status:** [ ] Pass  [ ] Fail  [ ] Blocked\n\n`;
+    doc += `---\n\n`;
+  });
+  
+  return doc;
+}
+
+function getManualAction(step: TestStep): string {
+  switch (step.type) {
+    case 'navigate': return `Navigate to ${step.url || 'URL'}`;
+    case 'click': return `Click on element (${step.selector?.slice(0, 30) || 'TBD'})`;
+    case 'input': return `Enter "${step.value || ''}" into field`;
+    case 'select': return `Select option "${step.value || ''}"`;
+    case 'wait': return `Wait for ${step.waitTime || 1000}ms`;
+    case 'assert': return `Verify element is visible`;
+    case 'api': return `Call ${step.method || 'GET'} ${step.endpoint || '/api'}`;
+    case 'db_query': return `Execute database query`;
+    default: return step.type;
+  }
+}
+
 function convertSelector(selector: string): string {
-  // Already Python style
+  if (!selector) return 'locator("body")';
   if (selector.includes('get_by_')) return selector.replace(/^page\./, '');
   
-  // Convert JS to Python
   return selector
     .replace(/getByRole\(['"](\w+)['"],\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\}\)/g, 'get_by_role("$1", name="$2")')
     .replace(/getByRole\(['"](\w+)['"]\)/g, 'get_by_role("$1")')
@@ -1298,5 +1535,5 @@ function convertSelector(selector: string): string {
     .replace(/getByLabel\(['"]([^'"]+)['"]\)/g, 'get_by_label("$1")')
     .replace(/getByPlaceholder\(['"]([^'"]+)['"]\)/g, 'get_by_placeholder("$1")')
     .replace(/locator\(['"]([^'"]+)['"]\)/g, 'locator("$1")')
-    .replace(/^page\./, '');
+    .replace(/^page\./, '') || 'locator("body")';
 }

@@ -50,7 +50,6 @@ const navigationGroups = [
     items: [
       { title: "Trace (Record)", url: "/flowstral", icon: Video, highlight: true, description: "Record browser actions" },
       { title: "Test Builder", url: "/builder", icon: Layers, highlight: true, description: "Unified test builder" },
-      { title: "Workflow Editor", url: "/workflow-editor", icon: Workflow, description: "Legacy visual builder" },
       { title: "Elements", url: "/elements", icon: MousePointerClick, description: "Element repository" },
     ],
   },
