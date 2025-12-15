@@ -446,11 +446,127 @@ export default function EnhancedWorkflowEditorPage() {
     localStorage.setItem('workflow_editor_state', JSON.stringify(state));
   }, [workflowName, appType, nodes]);
 
+  // Convert Playwright JS-style selectors to framework-specific syntax
+  const convertSelectorToFramework = useCallback((sel: string): string => {
+    if (!sel) return '';
+    
+    // Handle Playwright JS-style selectors -> convert to Python if needed
+    if (sel.includes('getByRole')) {
+      const match = sel.match(/getByRole\(['"]([^'"]+)['"],\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\}/);
+      if (match) {
+        const [, role, name] = match;
+        switch (framework) {
+          case 'playwright-python':
+            return `page.get_by_role("${role}", name="${name}")`;
+          case 'selenium-java':
+            return `By.xpath("//${role === 'button' ? 'button' : '*'}[contains(text(), '${name}')]")`;
+          case 'cypress':
+            return `'${role}:contains("${name}")'`;
+          default:
+            return sel;
+        }
+      }
+      // Handle simple getByRole without name
+      const simpleMatch = sel.match(/getByRole\(['"]([^'"]+)['"]\)/);
+      if (simpleMatch) {
+        const [, role] = simpleMatch;
+        switch (framework) {
+          case 'playwright-python':
+            return `page.get_by_role("${role}")`;
+          default:
+            return sel;
+        }
+      }
+    }
+    
+    if (sel.includes('getByLabel')) {
+      const match = sel.match(/getByLabel\(['"]([^'"]+)['"]\)/);
+      if (match) {
+        const [, label] = match;
+        switch (framework) {
+          case 'playwright-python':
+            return `page.get_by_label("${label}")`;
+          case 'selenium-java':
+            return `By.xpath("//label[contains(text(), '${label}')]//following::input[1]")`;
+          case 'cypress':
+            return `'input[aria-label="${label}"], label:contains("${label}") + input'`;
+          default:
+            return sel;
+        }
+      }
+    }
+    
+    if (sel.includes('getByText')) {
+      // Handle getByText with exact option
+      const exactMatch = sel.match(/getByText\(['"]([^'"]+)['"],\s*\{\s*exact:\s*(true|false)\s*\}/);
+      if (exactMatch) {
+        const [, text, exact] = exactMatch;
+        switch (framework) {
+          case 'playwright-python':
+            return `page.get_by_text("${text}", exact=${exact === 'true' ? 'True' : 'False'})`;
+          default:
+            return sel;
+        }
+      }
+      // Handle simple getByText
+      const match = sel.match(/getByText\(['"]([^'"]+)['"]\)/);
+      if (match) {
+        const [, text] = match;
+        switch (framework) {
+          case 'playwright-python':
+            return `page.get_by_text("${text}")`;
+          case 'selenium-java':
+            return `By.xpath("//*[contains(text(), '${text}')]")`;
+          case 'cypress':
+            return `':contains("${text}")'`;
+          default:
+            return sel;
+        }
+      }
+    }
+    
+    // Handle page.getByX style (with page. prefix)
+    if (sel.includes('page.getBy')) {
+      if (framework === 'playwright-python') {
+        // Convert camelCase to snake_case for Python
+        return sel
+          .replace(/\.getByRole\(/g, '.get_by_role(')
+          .replace(/\.getByText\(/g, '.get_by_text(')
+          .replace(/\.getByLabel\(/g, '.get_by_label(')
+          .replace(/\.getByPlaceholder\(/g, '.get_by_placeholder(')
+          .replace(/\.getByAltText\(/g, '.get_by_alt_text(')
+          .replace(/\.getByTitle\(/g, '.get_by_title(')
+          .replace(/\.getByTestId\(/g, '.get_by_test_id(')
+          .replace(/\{ name: ['"]([^'"]+)['"] \}/g, 'name="$1"')
+          .replace(/\{ exact: (true|false) \}/g, (_, val) => `exact=${val === 'true' ? 'True' : 'False'}`);
+      }
+      return sel;
+    }
+    
+    // Handle CSS selectors
+    if (sel.startsWith('#') || sel.startsWith('.') || sel.includes('[')) {
+      switch (framework) {
+        case 'selenium-java':
+          return `By.cssSelector("${sel}")`;
+        case 'cypress':
+          return `'${sel}'`;
+        case 'playwright-python':
+          return `page.locator("${sel}")`;
+        default:
+          return `page.locator('${sel}')`;
+      }
+    }
+    
+    return sel;
+  }, [framework]);
+
   // Generate assertion code based on framework
   const generateAssertionCode = useCallback((assertion: NodeAssertion, nodeSelector?: string): string => {
     if (!assertion?.enabled) return '';
     
-    const target = assertion.target || nodeSelector || '';
+    const rawTarget = assertion.target || nodeSelector || '';
+    // Convert target selector to framework-specific syntax
+    const target = convertSelectorToFramework(rawTarget);
     const expected = assertion.expected || '';
     
     switch (framework) {
@@ -517,7 +633,7 @@ export default function EnhancedWorkflowEditorPage() {
       default:
         return `    # Assertion: ${assertion.type}`;
     }
-  }, [framework]);
+  }, [framework, convertSelectorToFramework]);
 
   // Generate code for a single node based on framework
   const generateNodeCode = useCallback((node: WorkflowNode, includeAssertion: boolean = true): string => {
@@ -526,109 +642,8 @@ export default function EnhancedWorkflowEditorPage() {
     const value = node.data.value || '';
     const waitTime = node.data.waitTime || 1000;
     
-    // Convert Playwright-style selectors to framework-specific
-    const getFrameworkSelector = (sel: string): string => {
-      if (!sel) return '';
-      
-      // Handle Playwright JS-style selectors -> convert to Python if needed
-      if (sel.includes('getByRole')) {
-        const match = sel.match(/getByRole\(['"]([^'"]+)['"],\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\}/);
-        if (match) {
-          const [, role, name] = match;
-          switch (framework) {
-            case 'playwright-python':
-              return `page.get_by_role("${role}", name="${name}")`;
-            case 'selenium-java':
-              return `By.xpath("//${role === 'button' ? 'button' : '*'}[contains(text(), '${name}')]")`;
-            case 'cypress':
-              return `'${role}:contains("${name}")'`;
-            default:
-              return sel;
-          }
-        }
-        // Handle simple getByRole without name
-        const simpleMatch = sel.match(/getByRole\(['"]([^'"]+)['"]\)/);
-        if (simpleMatch) {
-          const [, role] = simpleMatch;
-          switch (framework) {
-            case 'playwright-python':
-              return `page.get_by_role("${role}")`;
-            default:
-              return sel;
-          }
-        }
-      }
-      
-      if (sel.includes('getByLabel')) {
-        const match = sel.match(/getByLabel\(['"]([^'"]+)['"]\)/);
-        if (match) {
-          const [, label] = match;
-          switch (framework) {
-            case 'playwright-python':
-              return `page.get_by_label("${label}")`;
-            case 'selenium-java':
-              return `By.xpath("//label[contains(text(), '${label}')]//following::input[1]")`;
-            case 'cypress':
-              return `'input[aria-label="${label}"], label:contains("${label}") + input'`;
-            default:
-              return sel;
-          }
-        }
-      }
-      
-      if (sel.includes('getByText')) {
-        const match = sel.match(/getByText\(['"]([^'"]+)['"]\)/);
-        if (match) {
-          const [, text] = match;
-          switch (framework) {
-            case 'playwright-python':
-              return `page.get_by_text("${text}")`;
-            case 'selenium-java':
-              return `By.xpath("//*[contains(text(), '${text}')]")`;
-            case 'cypress':
-              return `':contains("${text}")'`;
-            default:
-              return sel;
-          }
-        }
-      }
-      
-      // Handle page.getByX style (with page. prefix)
-      if (sel.includes('page.getBy')) {
-        if (framework === 'playwright-python') {
-          // Convert camelCase to snake_case for Python
-          return sel
-            .replace(/\.getByRole\(/g, '.get_by_role(')
-            .replace(/\.getByText\(/g, '.get_by_text(')
-            .replace(/\.getByLabel\(/g, '.get_by_label(')
-            .replace(/\.getByPlaceholder\(/g, '.get_by_placeholder(')
-            .replace(/\.getByAltText\(/g, '.get_by_alt_text(')
-            .replace(/\.getByTitle\(/g, '.get_by_title(')
-            .replace(/\.getByTestId\(/g, '.get_by_test_id(')
-            .replace(/{ name: ['"]([^'"]+)['"] }/g, 'name="$1"')
-            .replace(/{ exact: (true|false) }/g, 'exact=$1');
-        }
-        return sel;
-      }
-      
-      // Handle CSS selectors
-      if (sel.startsWith('#') || sel.startsWith('.') || sel.includes('[')) {
-        switch (framework) {
-          case 'selenium-java':
-            return `By.cssSelector("${sel}")`;
-          case 'cypress':
-            return `'${sel}'`;
-          case 'playwright-python':
-            return `page.locator("${sel}")`;
-          default:
-            return `page.locator('${sel}')`;
-        }
-      }
-      
-      return sel;
-    };
-    
-    const frameworkSelector = getFrameworkSelector(selector);
+    // Use the shared selector conversion function
+    const frameworkSelector = convertSelectorToFramework(selector);
     
     switch (framework) {
       // ===== PLAYWRIGHT PYTHON =====
@@ -736,7 +751,7 @@ export default function EnhancedWorkflowEditorPage() {
       default:
         return `    // Unknown framework: ${node.type}`;
     }
-  }, [appType, framework]);
+  }, [appType, framework, convertSelectorToFramework]);
 
   // Generate complete node code including assertion
   const generateNodeCodeWithAssertion = useCallback((node: WorkflowNode): string => {
