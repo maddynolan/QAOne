@@ -302,6 +302,7 @@ export default function EnhancedWorkflowEditorPage() {
   // Save test case dialog state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveTestCaseName, setSaveTestCaseName] = useState('');
+  const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
 
   // Workflow state
   const [workflowName, setWorkflowName] = useState('New Workflow');
@@ -347,7 +348,15 @@ export default function EnhancedWorkflowEditorPage() {
     passedSteps: number;
     healedCount: number;
     screenshots: string[];
-  }>>([]);
+  }>>(() => {
+    // Load from localStorage on init
+    try {
+      const saved = localStorage.getItem('workflow_test_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [showResultsPanel, setShowResultsPanel] = useState(false);
 
   // Real-time execution WebSocket
@@ -1099,23 +1108,36 @@ ${workflowName.replace(/\s+/g, ' ')}
     return testCase;
   }, [generateUnifiedTestCase]);
 
-  // Open save dialog with default name
+  // Open save dialog OR save directly if already saved once
   const openSaveDialog = useCallback(() => {
-    setSaveTestCaseName(workflowName || 'New Test Case');
-    setShowSaveDialog(true);
-  }, [workflowName]);
+    if (savedTestCaseId) {
+      // Already saved before, update directly without dialog
+      saveUnifiedTestCase(workflowName);
+    } else {
+      // First time - show dialog to enter name
+      setSaveTestCaseName(workflowName || 'New Test Case');
+      setShowSaveDialog(true);
+    }
+  }, [workflowName, savedTestCaseId]);
 
   // Save unified test case to backend
   const saveUnifiedTestCase = useCallback(async (customName?: string) => {
     const testCase = generateUnifiedTestCase();
-    const testCaseName = customName || testCase.name;
+    const testCaseName = customName || workflowName || testCase.name;
     
     try {
-      const response = await fetch('http://localhost:8000/test-cases', {
-        method: 'POST',
+      // If already saved, update existing; otherwise create new
+      const isUpdate = !!savedTestCaseId;
+      const url = isUpdate 
+        ? `http://localhost:8000/test-cases/${savedTestCaseId}`
+        : 'http://localhost:8000/test-cases';
+      
+      const response = await fetch(url, {
+        method: isUpdate ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: testCaseName,
+          name: testCaseName,
           description: testCase.description,
           type: 'unified',
           priority: testCase.priority,
@@ -1138,8 +1160,13 @@ ${workflowName.replace(/\s+/g, ' ')}
       
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Test case "${testCaseName}" saved! ID: ${result.id || 'Created'}`);
+        const newId = result.id || savedTestCaseId;
+        setSavedTestCaseId(newId);
         setShowSaveDialog(false);
+        toast.success(isUpdate 
+          ? `Test case "${testCaseName}" updated!` 
+          : `Test case "${testCaseName}" saved! ID: ${newId}`
+        );
         return result;
       } else {
         const error = await response.text();
@@ -1148,7 +1175,7 @@ ${workflowName.replace(/\s+/g, ' ')}
     } catch (error: any) {
       toast.error(`Error saving test case: ${error.message}`);
     }
-  }, [generateUnifiedTestCase]);
+  }, [generateUnifiedTestCase, workflowName, savedTestCaseId]);
 
   // Add new node
   const addNode = (type: NodeType) => {
@@ -1364,7 +1391,16 @@ ${workflowName.replace(/\s+/g, ' ')}
         healedCount: healedSelectors.length,
         screenshots: screenshots.map((s: any) => s.path || s.base64)
       };
-      setTestHistory(prev => [historyEntry, ...prev.slice(0, 49)]); // Keep last 50
+      setTestHistory(prev => {
+        const newHistory = [historyEntry, ...prev.slice(0, 49)];
+        // Also persist to localStorage for Results Dashboard
+        try {
+          localStorage.setItem('workflow_test_history', JSON.stringify(newHistory));
+        } catch (e) {
+          console.error('Failed to save test history:', e);
+        }
+        return newHistory;
+      });
 
       if (passed) {
         toast.success(`✅ Test passed! ${healedSelectors.length > 0 ? `(${healedSelectors.length} elements self-healed)` : ''}`);

@@ -161,7 +161,7 @@ export default function TestResultsDashboard() {
     setIsLoading(true);
     try {
       // Load from backend
-      const response = await fetch(`http://localhost:8000/api/test-runs?limit=100&time_range=${selectedTimeRange}&environment=${selectedEnvironment}`);
+      const response = await fetch(`http://localhost:8000/test-runs?limit=100&time_range=${selectedTimeRange}&environment=${selectedEnvironment}`);
       if (response.ok) {
         const data = await response.json();
         const runs = (data.test_runs || data.runs || data || []).map((run: any) => ({

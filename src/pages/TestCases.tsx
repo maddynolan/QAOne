@@ -60,11 +60,16 @@ export default function TestCases() {
         
         if (response.ok) {
           const data = await response.json();
-          const backendCases = data.test_cases || data || [];
+          // Handle different response formats: {value: [...]} or {test_cases: [...]} or [...]
+          const backendCases = Array.isArray(data) ? data : (data.value || data.test_cases || []);
           // Merge, avoiding duplicates by ID
           backendCases.forEach((tc: TestCase) => {
             if (!allCases.some(c => c.id === tc.id)) {
-              allCases.push(tc);
+              // Use title as fallback for name
+              allCases.push({
+                ...tc,
+                name: tc.name || tc.title || `Test Case ${tc.id?.slice(0, 8) || 'Unknown'}`
+              });
             }
           });
         }
