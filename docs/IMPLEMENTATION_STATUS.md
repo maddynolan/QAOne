@@ -15,6 +15,16 @@
    - Phase 3: Advanced (model routing, prompt versioning)
    - Phase 4: Observability (metrics, monitoring)
 
+6. **LLM Cost Optimization** - ✅ **NEW - COMPLETE**
+   - SQLite-backed persistent cache (survives restarts)
+   - Semantic similarity matching (similar prompts hit cache)
+   - Per-task TTL configuration (7 days for selectors, 4 hours for debugging)
+   - Anthropic prompt caching integration (90% savings on system prompts)
+   - Model tiering (Haiku for simple tasks, Sonnet for complex)
+   - Cache statistics API endpoints
+   - **Expected savings: 80-95% cost reduction**
+   - **Docs:** `docs/LLM_COST_OPTIMIZATION.md`
+
 2. **LLM Fine-Tuning Infrastructure** - ✅ **Phase 1.1 COMPLETE**
    - Data collection system implemented
    - Quality tracking and rating UI
