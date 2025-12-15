@@ -1111,17 +1111,66 @@
     }
 
     /**
-     * Collect all buttons with FULL selector data (same as recording)
-     * INCREASED LIMIT and better duplicate handling
+     * Collect all buttons AND clickable elements with FULL selector data
+     * Now includes clickable cards, divs, list items - not just standard buttons
      */
     collectButtons() {
-      const elements = this.deepQuery('button, [role="button"], input[type="submit"], input[type="button"], a.btn, a.button, .slds-button');
+      // Standard button selectors
+      const standardButtons = this.deepQuery('button, [role="button"], input[type="submit"], input[type="button"], a.btn, a.button, .slds-button');
+      
+      // Extended selectors for clickable elements (cards, options, etc.)
+      const clickableElements = this.deepQuery([
+        '[role="option"]',
+        '[role="menuitem"]', 
+        '[role="listitem"]',
+        '[role="tab"]',
+        '[role="radio"]',
+        '[role="checkbox"]',
+        '[tabindex="0"]',
+        '[onclick]',
+        '[data-action]',
+        '[data-click]',
+        '[data-testid*="button"]',
+        '[data-testid*="card"]',
+        '[data-testid*="option"]',
+        // Common card/clickable patterns
+        '.card[class*="clickable"]',
+        '.card[class*="selectable"]',
+        'div[class*="option"]',
+        'div[class*="choice"]',
+        'div[class*="select"]',
+        'li[class*="option"]',
+        'li[class*="item"][class*="click"]',
+        // Cursor pointer detection via style
+      ].join(', '));
+      
+      // Also find elements with cursor: pointer CSS
+      const cursorPointerElements = Array.from(document.querySelectorAll('div, li, span, article, section'))
+        .filter(el => {
+          if (!this.isVisible(el)) return false;
+          const style = window.getComputedStyle(el);
+          const hasCursor = style.cursor === 'pointer';
+          const hasText = this.getElementText(el)?.length > 0 && this.getElementText(el)?.length < 80;
+          // Make sure it's a "leaf" clickable (not a container with clickable children)
+          const hasNoClickableChildren = !el.querySelector('button, a, [role="button"]');
+          return hasCursor && hasText && hasNoClickableChildren;
+        });
+      
+      // Combine and deduplicate
+      const allElements = [...standardButtons, ...clickableElements, ...cursorPointerElements];
+      const seen = new Set();
+      const uniqueElements = allElements.filter(el => {
+        if (seen.has(el)) return false;
+        seen.add(el);
+        return true;
+      });
+      
       const seenTexts = new Map();  // Track text -> count for duplicates
       
-      // Increased limit from 50 to 100 for comprehensive coverage
-      return elements.slice(0, 100).map(el => {
+      // Increased limit from 50 to 150 for comprehensive coverage
+      return uniqueElements.slice(0, 150).map(el => {
         const text = this.getElementText(el);
-        if (!text || text.length > 60) return null;
+        if (!text || text.length > 80) return null;
         
         // Track duplicates - don't skip, but mark them
         const count = seenTexts.get(text) || 0;
@@ -1130,10 +1179,20 @@
         // Use the SAME getBestSelector as recording for robust selectors with fallbacks
         const fullSelector = this.smartSelector ? this.smartSelector.getBestSelector(el) : null;
         
+        // Determine element type for better labeling
+        const tagName = el.tagName.toLowerCase();
+        const role = el.getAttribute('role');
+        let elementType = 'button';
+        if (role === 'option' || role === 'radio' || role === 'checkbox') elementType = 'option';
+        else if (role === 'tab') elementType = 'tab';
+        else if (role === 'menuitem') elementType = 'menuitem';
+        else if (tagName === 'div' || tagName === 'li') elementType = 'card';
+        
         return {
           text,
           duplicateIndex: count,  // 0 = first, 1 = second, etc.
-          tagName: el.tagName.toLowerCase(),
+          tagName,
+          elementType,
           selectorObj: fullSelector,
           selector: fullSelector?.playwright ? `page.${fullSelector.playwright}` : this.generateSelector(el, 'button', text),
           ariaLabel: el.getAttribute('aria-label'),
@@ -1141,7 +1200,7 @@
           id: el.id,
           className: el.className,
           name: el.name,
-          role: el.getAttribute('role'),
+          role,
           // Add parent context for duplicate handling
           parentId: el.parentElement?.id,
           parentClass: el.parentElement?.className?.split(' ')[0],

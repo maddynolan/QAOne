@@ -2464,13 +2464,23 @@ Date: ${new Date().toISOString()}
       return baseDesc;
     };
     
-    // Add ALL button suggestions (increased from 5 to 30)
-    (analysis.buttons || []).slice(0, 30).forEach(btn => {
+    // Add ALL button/clickable suggestions (increased from 5 to 50)
+    (analysis.buttons || []).slice(0, 50).forEach(btn => {
       if (!btn.disabled) {
-        const baseDesc = `Click "${btn.text}" button`;
+        // Use element type from analysis (button, card, option, tab, menuitem)
+        const elementType = btn.elementType || 'button';
+        const elementLabel = {
+          'button': 'button',
+          'card': 'card',
+          'option': 'option',
+          'tab': 'tab',
+          'menuitem': 'menu item'
+        }[elementType] || elementType;
+        
+        const baseDesc = `Click "${btn.text}" ${elementLabel}`;
         suggestions.push({
           type: 'click',
-          element: 'button',
+          element: elementType,
           text: btn.text,
           selector: btn.selector,
           selectorObj: btn.selectorObj,
@@ -2685,7 +2695,11 @@ Date: ${new Date().toISOString()}
         'radio': 'RADIO',
         'checkbox': 'CHECKBOX',
         'dropdown': 'DROPDOWN',
-        'heading': 'HEADING'
+        'heading': 'HEADING',
+        'card': 'CARD',
+        'option': 'OPTION',
+        'tab': 'TAB',
+        'menuitem': 'MENU ITEM'
       };
       
       const actionLabel = actionLabels[effectiveType] || effectiveType.toUpperCase();
@@ -2757,6 +2771,10 @@ Date: ${new Date().toISOString()}
       'link': '🔗',
       'input': '📝',
       'radio': '🔘',
+      'card': '📋',
+      'option': '☑️',
+      'tab': '📑',
+      'menuitem': '📌',
       'checkbox': '☑️',
       'dropdown': '📋',
       'flow': '⚡',
