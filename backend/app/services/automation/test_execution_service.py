@@ -14,6 +14,7 @@ import asyncio
 import re
 import sys
 import shutil
+import glob
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -1369,6 +1370,59 @@ export default defineConfig({
         
         return execution_result
     
+    async def _ensure_test_dependencies(self) -> bool:
+        """
+        Ensure pytest and pytest-playwright are installed.
+        Auto-installs silently if not present (first-time setup).
+        Returns True if dependencies are ready.
+        """
+        # Check if pytest is available
+        try:
+            result = subprocess.run(
+                ["python", "-m", "pytest", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                shell=os.name == 'nt'
+            )
+            if result.returncode == 0:
+                return True
+        except:
+            pass
+        
+        # pytest not found - install silently
+        logger.info("🔧 First-time setup: Installing test dependencies (pytest, pytest-playwright)...")
+        
+        # Emit WebSocket event if we have an active execution
+        if hasattr(self, '_current_execution_id') and self._current_execution_id:
+            await self._emit_ws_event("log", level="info", message="🔧 First-time setup: Installing test dependencies...")
+        
+        try:
+            # Install pytest and pytest-playwright silently
+            install_result = subprocess.run(
+                ["python", "-m", "pip", "install", "pytest", "pytest-playwright", "-q", "--disable-pip-version-check"],
+                capture_output=True,
+                text=True,
+                timeout=120,  # 2 minutes max for installation
+                shell=os.name == 'nt'
+            )
+            
+            if install_result.returncode == 0:
+                logger.info("✅ Test dependencies installed successfully")
+                if hasattr(self, '_current_execution_id') and self._current_execution_id:
+                    await self._emit_ws_event("log", level="info", message="✅ Test dependencies installed successfully")
+                return True
+            else:
+                logger.error(f"Failed to install dependencies: {install_result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error("Dependency installation timed out")
+            return False
+        except Exception as e:
+            logger.error(f"Error installing dependencies: {e}")
+            return False
+
     async def _run_playwright_python_test(
         self,
         test_file: Path,
@@ -1379,26 +1433,28 @@ export default defineConfig({
         """Run Playwright Python test using pytest."""
         project_dir = test_file.parent
         
-        # Build command - try python -m pytest first, then pytest, then playwright test
-        # Check if pytest is available
+        # Ensure test dependencies are installed (auto-install on first run)
+        deps_ready = await self._ensure_test_dependencies()
+        
+        # Build command - try python -m pytest first, then pytest
         pytest_cmd = None
-        try:
-            # Try python -m pytest first (works if pytest is installed as module)
-            result = subprocess.run(
-                ["python", "-m", "pytest", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                shell=os.name == 'nt'
-            )
-            if result.returncode == 0:
-                pytest_cmd = ["python", "-m", "pytest"]
-        except:
-            pass
+        if deps_ready:
+            try:
+                result = subprocess.run(
+                    ["python", "-m", "pytest", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    shell=os.name == 'nt'
+                )
+                if result.returncode == 0:
+                    pytest_cmd = ["python", "-m", "pytest"]
+            except:
+                pass
         
         if not pytest_cmd:
             try:
-                # Try pytest directly
+                # Try pytest directly as fallback
                 result = subprocess.run(
                     ["pytest", "--version"],
                     capture_output=True,
@@ -1413,10 +1469,9 @@ export default defineConfig({
         
         if pytest_cmd:
             # Use explicit file path to avoid import issues
-            # pytest needs the file path, not just the directory
             cmd = pytest_cmd + [str(test_file.name), "-v", "--tb=short", "--no-header"]
             
-            # Add --headed flag if not running headless (to show browser window)
+            # Add --headed flag if not running headless
             if not headless:
                 cmd.append("--headed")
                 logger.info("Running with visible browser (--headed flag)")
@@ -1424,15 +1479,11 @@ export default defineConfig({
             # Set browser type
             cmd.append(f"--browser={browser}")
         else:
-            # Fallback: Execute Python test file directly (Playwright Python doesn't have 'test' command)
-            logger.warning("pytest not found, executing Python test file directly")
-            # Playwright Python tests are just Python files - execute them directly
-            # But we need to ensure playwright is imported and page fixture is available
-            # For now, install pytest-playwright if available, otherwise error
-            logger.error("pytest is required for Python Playwright tests. Please install: pip install pytest pytest-playwright")
+            # Dependencies couldn't be installed - provide helpful error
+            logger.error("Could not set up test environment. Please try: pip install pytest pytest-playwright")
             raise RuntimeError(
-                "pytest is required for Python Playwright test execution. "
-                "Please install pytest: pip install pytest pytest-playwright"
+                "Could not set up test environment automatically. "
+                "Please run manually: pip install pytest pytest-playwright"
             )
         
         # Set browser path - use the standard ms-playwright location
@@ -1441,6 +1492,31 @@ export default defineConfig({
         if not os.path.exists(browsers_path):
             # Fallback to USERPROFILE if LOCALAPPDATA doesn't have it
             browsers_path = os.path.join(os.environ.get("USERPROFILE", ""), "AppData", "Local", "ms-playwright")
+        
+        # Check if browsers are installed, auto-install if not
+        if not glob.glob(os.path.join(browsers_path, f"{browser}*")):
+            logger.info(f"🔧 First-time setup: Installing Playwright {browser} browser...")
+            if hasattr(self, '_current_execution_id') and self._current_execution_id:
+                await self._emit_ws_event("log", level="info", message=f"🔧 Installing {browser} browser (first-time setup)...")
+            
+            try:
+                # Install the specific browser
+                install_cmd = ["python", "-m", "playwright", "install", browser]
+                install_result = subprocess.run(
+                    install_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,  # 5 minutes for browser download
+                    shell=os.name == 'nt'
+                )
+                if install_result.returncode == 0:
+                    logger.info(f"✅ {browser} browser installed successfully")
+                    if hasattr(self, '_current_execution_id') and self._current_execution_id:
+                        await self._emit_ws_event("log", level="info", message=f"✅ {browser} browser installed")
+                else:
+                    logger.warning(f"Browser install returned non-zero: {install_result.stderr}")
+            except Exception as e:
+                logger.warning(f"Could not auto-install browser: {e}")
         
         env = {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": browsers_path}
         logger.info(f"Using PLAYWRIGHT_BROWSERS_PATH: {browsers_path}")
