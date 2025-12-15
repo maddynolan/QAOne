@@ -759,27 +759,47 @@ export default function UnifiedWorkflowEditor() {
         }),
       });
 
-      const result = await response.json();
-      const logs = result.output ? result.output.split('\n') : [];
-      const fullOutput = result.output || '';
+      const responseData = await response.json();
       
-      console.log('[Test Run] Full output:', fullOutput);
-      console.log('[Test Run] Exit code:', result.exit_code, 'Status:', result.status);
+      // The backend wraps the result in execution_result
+      const result = responseData.execution_result || responseData;
+      
+      // Get output from stdout or output field
+      const fullOutput = result.stdout || result.output || '';
+      const logs = fullOutput ? fullOutput.split('\n') : [];
+      const stderr = result.stderr || '';
+      
+      console.log('[Test Run] Response:', responseData);
+      console.log('[Test Run] Full stdout:', fullOutput);
+      console.log('[Test Run] Stderr:', stderr);
+      console.log('[Test Run] Exit code:', result.exit_code, 'Status:', result.status || responseData.status);
+      
+      // Combine stdout and stderr for error detection
+      const allOutput = fullOutput + '\n' + stderr;
+      
+      // Check exit code - treat undefined as success if status is 'success'
+      const exitCode = result.exit_code;
+      const isExitCodeFailure = exitCode !== undefined && exitCode !== null && exitCode !== 0;
       
       // More robust failure detection - check exit code AND output for failure markers
       const hasFailureMarker = 
-        fullOutput.includes('TEST FAILED') || 
-        fullOutput.includes('FAILED:') ||
-        fullOutput.includes('Step') && fullOutput.includes('FAILED') ||
-        fullOutput.includes('Traceback') ||
-        fullOutput.includes('Exception') ||
-        fullOutput.includes('sys.exit(1)') ||
-        result.exit_code !== 0;
+        allOutput.includes('TEST FAILED') || 
+        allOutput.includes('FAILED:') ||
+        (allOutput.includes('Step') && allOutput.includes('FAILED')) ||
+        allOutput.includes('Traceback') ||
+        allOutput.includes('Exception:') ||
+        allOutput.includes('sys.exit(1)') ||
+        allOutput.includes('Error:') ||
+        isExitCodeFailure;
         
-      const hasSuccessMarker = fullOutput.includes('TEST PASSED') || fullOutput.includes('All steps completed successfully');
+      const hasSuccessMarker = 
+        allOutput.includes('TEST PASSED') || 
+        allOutput.includes('All steps completed successfully') ||
+        allOutput.includes('Test completed successfully') ||
+        ((result.status === 'success' || responseData.status === 'success') && !hasFailureMarker);
       
-      // Pass only if no failure markers AND (success marker OR exit code 0)
-      const passed = !hasFailureMarker && (hasSuccessMarker || result.exit_code === 0);
+      // Pass if: success marker AND no explicit failure markers
+      const passed = hasSuccessMarker && !hasFailureMarker;
       
       // Extract failure details from logs - check multiple patterns
       let failedStep: number | null = null;
@@ -787,14 +807,14 @@ export default function UnifiedWorkflowEditor() {
       let screenshotPath: string | null = null;
       
       // Pattern 1: "TEST FAILED at step X" or "FAILED at step X"
-      const stepMatch = fullOutput.match(/(?:TEST )?FAILED at step (\d+)/i);
+      const stepMatch = allOutput.match(/(?:TEST )?FAILED at step (\d+)/i);
       if (stepMatch) {
         failedStep = parseInt(stepMatch[1]);
       }
       
       // Pattern 2: "Step X FAILED:" or "✗ Step X FAILED"
       if (!failedStep) {
-        const stepMatch2 = fullOutput.match(/Step (\d+).*?FAILED/i);
+        const stepMatch2 = allOutput.match(/Step (\d+).*?FAILED/i);
         if (stepMatch2) {
           failedStep = parseInt(stepMatch2[1]);
         }
@@ -802,7 +822,7 @@ export default function UnifiedWorkflowEditor() {
       
       // Pattern 3: Look for "failed_step" in output
       if (!failedStep) {
-        const stepMatch3 = fullOutput.match(/failed_step['":\s]+(\d+)/i);
+        const stepMatch3 = allOutput.match(/failed_step['":\s]+(\d+)/i);
         if (stepMatch3) {
           failedStep = parseInt(stepMatch3[1]);
         }
@@ -818,7 +838,7 @@ export default function UnifiedWorkflowEditor() {
       ];
       
       for (const pattern of errorPatterns) {
-        const match = fullOutput.match(pattern);
+        const match = allOutput.match(pattern);
         if (match) {
           errorMessage = match[2] || match[1];
           break;
@@ -826,7 +846,7 @@ export default function UnifiedWorkflowEditor() {
       }
       
       // Extract screenshot path
-      const screenshotMatch = fullOutput.match(/Screenshot(?:\ssaved)?:\s*(.+\.png)/i);
+      const screenshotMatch = allOutput.match(/Screenshot(?:\ssaved)?:\s*(.+\.png)/i);
       if (screenshotMatch) {
         screenshotPath = screenshotMatch[1].trim();
       }
@@ -837,8 +857,8 @@ export default function UnifiedWorkflowEditor() {
       }
       
       // If no error message but we have Traceback, try to extract it
-      if (!errorMessage && fullOutput.includes('Traceback')) {
-        const lines = fullOutput.split('\n');
+      if (!errorMessage && allOutput.includes('Traceback')) {
+        const lines = allOutput.split('\n');
         const lastLine = lines.filter(l => l.trim() && !l.startsWith(' ')).pop();
         if (lastLine && lastLine.includes('Error')) {
           errorMessage = lastLine;
@@ -847,10 +867,17 @@ export default function UnifiedWorkflowEditor() {
       
       console.log('[Test Run] Detected - passed:', passed, 'failedStep:', failedStep, 'error:', errorMessage);
       
+      // Combine logs for display
+      const allLogs = [...logs];
+      if (stderr) {
+        allLogs.push('--- STDERR ---');
+        allLogs.push(...stderr.split('\n'));
+      }
+      
       setExecutionResult(prev => ({
         ...prev,
         status: passed ? 'passed' : 'failed',
-        logs,
+        logs: allLogs,
         currentStep: failedStep || (passed ? testCase.steps.length : 1),
         results: testCase.steps.map((step, idx) => ({
           stepId: step.id,
