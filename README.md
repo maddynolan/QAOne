@@ -1,432 +1,331 @@
-# Flowstral Engine
-
-**Enterprise-grade Playwright script generator with auto-healing locators for 25+ enterprise applications**
-
-Flowstral is designed to work with your recorder tool to generate robust, self-healing Playwright test scripts that handle the unique challenges of enterprise web applications like Salesforce, Workday, ServiceNow, SAP, and more.
-
-## Features
-
-- **🔍 Automatic Application Detection**: Identifies 25+ enterprise applications and applies appropriate strategies
-- **🔧 Auto-Healing Locators**: Generates multiple locator strategies with automatic fallback
-- **🌑 Shadow DOM Support**: Full support for Shadow DOM piercing (Salesforce Lightning, ServiceNow, etc.)
-- **🖼️ Frame Handling**: Robust iframe navigation for complex multi-frame applications
-- **⏱️ Smart Wait Strategies**: Application-specific wait conditions that know when the app is ready
-- **📝 Clean Script Generation**: Produces readable, maintainable Playwright scripts
-- **🏗️ Page Object Model**: Optional POM generation for better test organization
-- **🩹 Runtime Healing**: Self-healing capabilities during test execution
-
-## Supported Applications
-
-| Application | Shadow DOM | Special Handling |
-|-------------|------------|------------------|
-| Salesforce Lightning | ✅ | LWC components, Aura |
-| Workday | ✅ | UXI widgets |
-| ServiceNow | ✅ | Now components |
-| SAP Fiori/UI5 | ❌ | UI5 controls |
-| Pega | ❌ | Constellation UI |
-| Oracle Fusion | ❌ | ADF framework |
-| Dynamics 365 | ❌ | PCF controls |
-| NetSuite | ❌ | ExtJS widgets |
-| SuccessFactors | ❌ | BizX platform |
-| Concur | ❌ | Travel/Expense |
-| Veeva | ✅ | Vault/CRM (Lightning-based) |
-| Coupa | ❌ | Procurement |
-| Ariba | ❌ | Sourcing |
-| Zendesk | ❌ | Garden components |
-| HubSpot | ❌ | React-based |
-| Zoho | ✅ | ZC components |
-| Jira | ❌ | Atlaskit |
-| Confluence | ❌ | Atlaskit |
-| Anaplan | ❌ | Grid controls |
-| Monday.com | ❌ | Board UI |
-| Asana | ❌ | Task UI |
-| Tableau | ❌ | Visualizations |
-| Power BI | ❌ | Report visuals |
-| Freshworks | ❌ | Support widgets |
-| Snowflake | ❌ | Worksheets |
-
-## Installation
-
-```bash
-npm install flowstral-engine
-```
-
-## Quick Start
-
-```typescript
-import { createFlowstral } from 'flowstral-engine';
-
-// Initialize Flowstral
-const flowstral = createFlowstral({
-  generatePageObjects: true,
-  includeAutoHealing: true,
-});
-
-// Start recording
-const session = flowstral.startRecording('My Test');
-
-// Get injection scripts for your recorder
-const scripts = flowstral.getInjectionScripts();
-
-// Inject into browser and record...
-
-// Stop and generate script
-const result = await flowstral.stopRecording();
-console.log(result.script);
-```
-
-## Architecture
-
-### 1. Application Detection
-
-Flowstral automatically detects which enterprise application is being tested:
-
-```typescript
-import { ApplicationDetector } from 'flowstral-engine';
-
-const detector = new ApplicationDetector();
-const script = detector.getDetectionScript();
-
-// Inject into browser, then process results:
-const fingerprint = detector.detectApplication(detectionContext);
-// Returns: { application: 'salesforce', confidence: 95, shadowDomEnabled: true, ... }
-```
-
-### 2. Auto-Healing Locator Engine
-
-Generates multiple locator strategies with automatic prioritization:
-
-```typescript
-import { AutoHealingLocatorEngine } from 'flowstral-engine';
-
-const engine = new AutoHealingLocatorEngine(fingerprint);
-const locator = engine.generateAutoHealingLocator(element);
-
-// Returns:
-// {
-//   primary: { type: 'data-attribute', playwrightCode: "page.locator('[data-automation-id=\"save\"]')", ... },
-//   fallbacks: [
-//     { type: 'role', playwrightCode: "page.getByRole('button', { name: 'Save' })", ... },
-//     { type: 'text', playwrightCode: "page.getByText('Save')", ... },
-//     ...
-//   ],
-//   elementSignature: { tagName: 'BUTTON', textContent: 'Save', ... }
-// }
-```
-
-### 3. Application-Specific Handlers
-
-Each application has custom handling for its unique challenges:
-
-```typescript
-import { ApplicationHandlerFactory } from 'flowstral-engine';
-
-const handler = ApplicationHandlerFactory.getHandler(fingerprint);
-
-// Get shadow DOM piercing script
-const shadowScript = handler.getShadowDomPiercingScript();
-
-// Get stability wait code
-const waitCode = handler.getStabilityWaitCode();
-
-// Get component interaction code
-const interactionCode = handler.getComponentInteractionCode(
-  component,
-  'await element.click()'
-);
-```
-
-### 4. Script Generation
-
-Generate clean, production-ready Playwright scripts:
-
-```typescript
-import { PlaywrightScriptGenerator, PageObjectGenerator } from 'flowstral-engine';
-
-const scriptGen = new PlaywrightScriptGenerator(fingerprint);
-const script = scriptGen.generateScript(session);
-
-const pageObjGen = new PageObjectGenerator(fingerprint);
-const pageObject = pageObjGen.generatePageObject(session);
-```
-
-### 5. Runtime Healing
-
-Self-healing capabilities during test execution:
-
-```typescript
-import { createHealingRuntime, createTestUtilities } from 'flowstral-engine';
-
-const healing = createHealingRuntime(page, fingerprint);
-const utils = createTestUtilities(page, fingerprint);
-
-// Wait for application-specific loading to complete
-await utils.wait.waitForApplicationReady();
-
-// Find element with auto-healing
-const element = await healing.findWithHealing(autoHealingLocator);
-
-// Get healing statistics
-const stats = healing.getHealingStats();
-const suggestions = healing.suggestImprovements();
-```
-
-## Locator Strategy Priority
-
-For each application, Flowstral uses a customized priority order:
-
-### Salesforce Lightning
-1. `data-target-selection-name` attributes
-2. Role-based (`getByRole`)
-3. Text-based (`getByText`)
-4. Label-based (`getByLabel`)
-5. ARIA attributes
-6. Test ID attributes
-7. CSS selectors
-8. XPath (last resort)
-
-### Workday
-1. `data-automation-id` attributes
-2. `data-uxi-widget-type` attributes
-3. Role-based
-4. Label-based
-5. Text-based
-6. CSS selectors
-
-### ServiceNow
-1. `data-testid` attributes
-2. `sn-atf-*` attributes
-3. Role-based
-4. Text-based
-5. CSS selectors
-
-## Shadow DOM Handling
-
-For applications using Shadow DOM (Salesforce, ServiceNow, Workday), Flowstral:
-
-1. **Records shadow paths**: Tracks the complete path through shadow boundaries
-2. **Generates piercing selectors**: Creates locators that work through shadow DOM
-3. **Provides fallback strategies**: Multiple ways to reach shadow DOM elements
-
-```typescript
-// Generated locator for Salesforce Lightning component
-page.locator('lightning-record-form')
-    .locator('lightning-input-field[data-field-id="Name"]')
-    .locator('input');
-
-// Or using evaluate for complex scenarios
-await page.evaluate(() => {
-  const host = document.querySelector('lightning-record-form');
-  const shadow = host.shadowRoot;
-  const input = shadow.querySelector('lightning-input-field');
-  return input.shadowRoot.querySelector('input');
-});
-```
-
-## Wait Strategies
-
-Each application has custom wait conditions:
-
-```typescript
-// Salesforce: Wait for Lightning to finish rendering
-await page.waitForFunction(() => {
-  const spinners = document.querySelectorAll('lightning-spinner');
-  const loading = document.querySelector('[data-aura-state="LOADING"]');
-  return spinners.length === 0 && !loading;
-});
-
-// Workday: Wait for UXI components
-await page.waitForFunction(() => {
-  const spinners = document.querySelectorAll('.wd-spinner');
-  return spinners.length === 0;
-});
-
-// SAP Fiori: Wait for UI5 busy indicator
-await page.waitForFunction(() => {
-  return !sap.ui.core.BusyIndicator.isOpen();
-});
-```
-
-## Anti-Patterns
-
-Flowstral automatically avoids unstable locators:
-
-| Pattern | Reason | Alternative |
-|---------|--------|-------------|
-| Aura rendered-by IDs | Change every render | Use data-target-selection-name |
-| SAP __id prefixes | Session-specific | Use text or label |
-| Oracle ADF pt1: IDs | Dynamic | Use role or text |
-| React/Angular hashes | Build-specific | Use test IDs or roles |
-| Ember view IDs | Instance-specific | Use data attributes |
-
-## Generated Script Example
-
-```typescript
-import { test, expect, Page, Locator } from '@playwright/test';
-
-// Auto-healing locator helper
-async function findWithHealing(
-  page: Page,
-  strategies: { locator: string; type: string }[],
-  timeout: number = 10000
-): Promise<Locator> {
-  for (const strategy of strategies) {
-    try {
-      let locator: Locator;
-      switch (strategy.type) {
-        case 'role':
-          locator = page.getByRole(strategy.locator as any);
-          break;
-        case 'text':
-          locator = page.getByText(strategy.locator);
-          break;
-        default:
-          locator = page.locator(strategy.locator);
-      }
-      await locator.waitFor({ state: 'visible', timeout: 2000 });
-      return locator;
-    } catch (e) {
-      continue;
-    }
-  }
-  throw new Error('Element not found');
-}
-
-// Workday stability wait
-async function waitForWorkday(page: Page) {
-  await page.waitForLoadState('networkidle');
-  await page.waitForFunction(() => {
-    const spinners = document.querySelectorAll('.wd-spinner');
-    return spinners.length === 0;
-  });
-}
-
-test.describe('Workday Automated Tests', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.setViewportSize({ width: 1920, height: 1080 });
-  });
-
-  test('mycompany.workday.com - 12/6/2024', async ({ page }) => {
-    // Navigate to application
-    await page.goto('https://mycompany.workday.com/d/home');
-    await waitForWorkday(page);
-
-    // Click Time Off button
-    const timeOffButton = await findWithHealing(page, [
-      { locator: '[data-automation-id="timeOffButton"]', type: 'css' },
-      { locator: 'button', type: 'role' },
-      { locator: 'Time Off', type: 'text' },
-    ]);
-    await timeOffButton.click();
-    await waitForWorkday(page);
-
-    // Fill start date
-    const startDate = await findWithHealing(page, [
-      { locator: '[data-automation-id="startDate"]', type: 'css' },
-      { locator: 'Start Date', type: 'label' },
-    ]);
-    await startDate.fill('2024-03-15');
-
-    // Click Submit
-    const submitButton = await findWithHealing(page, [
-      { locator: '[data-automation-id="submitButton"]', type: 'css' },
-      { locator: 'button', type: 'role' },
-      { locator: 'Submit', type: 'text' },
-    ]);
-    await submitButton.click();
-  });
-});
-```
-
-## API Reference
-
-### FlowstralEngine
-
-```typescript
-class FlowstralEngine {
-  constructor(config?: Partial<FlowstralConfig>);
-  startSession(sessionId: string, url: string): RecordingContext;
-  processDetectionResult(sessionId: string, data: any): ApplicationFingerprint;
-  processElement(sessionId: string, element: any): RecordedElement;
-  processAction(sessionId: string, action: any): RecordedAction;
-  endSession(sessionId: string): { session, script, pageObject? };
-  getInjectionScripts(): { detector, collector, recorder };
-}
-```
-
-### AutoHealingLocatorEngine
-
-```typescript
-class AutoHealingLocatorEngine {
-  constructor(fingerprint: ApplicationFingerprint);
-  generateAutoHealingLocator(element: RecordedElement): AutoHealingLocator;
-}
-```
-
-### ApplicationHandlerFactory
-
-```typescript
-class ApplicationHandlerFactory {
-  static getHandler(fingerprint: ApplicationFingerprint): ApplicationHandler;
-}
-
-abstract class ApplicationHandler {
-  getShadowDomPiercingScript(): string;
-  getCustomWaitConditions(): WaitCondition[];
-  transformElement(element: RecordedElement): RecordedElement;
-  getFrameHandlingCode(framePath: string[]): string;
-  getStabilityWaitCode(): string;
-  getComponentInteractionCode(component, action): string;
-}
-```
-
-### LocatorHealingRuntime
-
-```typescript
-class LocatorHealingRuntime {
-  constructor(page: Page, application: EnterpriseApplication);
-  findWithHealing(locator: AutoHealingLocator, timeout?: number): Promise<Locator>;
-  getHealingStats(): HealingStats;
-  suggestImprovements(): Suggestion[];
-  generateHealingReport(): string;
-}
-```
-
-## Configuration
-
-```typescript
-interface FlowstralConfig {
-  // Locator settings
-  maxFallbackStrategies: number;        // Default: 5
-  preferredLocatorTypes: string[];      // Default: ['role', 'text', 'label', 'testid']
-  avoidDynamicSelectors: boolean;       // Default: true
-  
-  // Script settings
-  generatePageObjects: boolean;         // Default: true
-  includeComments: boolean;             // Default: true
-  includeAutoHealing: boolean;          // Default: true
-  testFramework: 'playwright';          // Currently only Playwright
-  
-  // Recording settings
-  captureScreenshots: boolean;          // Default: false
-  waitForNetworkIdle: boolean;          // Default: true
-  defaultTimeout: number;               // Default: 30000
-  
-  // Application overrides
-  applicationOverrides: {
-    [app: string]: Partial<FlowstralConfig>
-  };
-}
-```
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines and submit PRs to our GitHub repository.
-
-## License
-
-MIT License - see LICENSE file for details.
+# QAAI - AI-Powered QA Automation Platform
+
+<p align="center">
+  <img src="public/aristrace-logo.svg" alt="QAAI Logo" width="200">
+</p>
+
+<p align="center">
+  <strong>Enterprise-grade test automation with AI-powered test generation and self-healing</strong>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#documentation">Documentation</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#contributing">Contributing</a>
+</p>
 
 ---
 
-**Built for enterprise testing reliability** 🏢
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| 🎬 **Visual Test Recording** | Browser extension captures interactions, generates Playwright scripts |
+| 🤖 **AI Test Generation** | Generate tests from requirements using Claude or local Ollama |
+| 🔧 **Self-Healing Tests** | Automatically fix broken selectors during execution |
+| 📊 **Real-Time Dashboard** | Live execution progress with WebSocket updates |
+| 🏢 **Multi-Framework Export** | Playwright (Python/TS), Selenium, Cypress support |
+| 📱 **Enterprise App Support** | Smart selectors for Salesforce, ServiceNow, Workday, etc. |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** 18+ and npm
+- **Python** 3.10+
+- **Chrome** browser (for Flowstral extension)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/maddynolan/QAOne.git
+cd QAOne
+```
+
+### 2. Start the Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The backend will be running at `http://localhost:8000`
+
+### 3. Start the Frontend
+
+```bash
+# In the root directory
+npm install
+npm run dev
+```
+
+The frontend will be running at `http://localhost:5173`
+
+### 4. Install the Browser Extension
+
+1. Open Chrome and go to `chrome://extensions`
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked"
+4. Select the `flowstral-extension` directory
+5. Pin the extension to your toolbar
+
+### 5. Configure AI (Optional)
+
+#### For Anthropic Claude:
+```bash
+# In backend/.env
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+#### For Local Ollama:
+```bash
+# Install Ollama from https://ollama.ai
+ollama pull qwen2.5:7b
+
+# In backend/.env
+OLLAMA_URL=http://localhost:11434
+```
+
+---
+
+## Usage
+
+### Recording a Test
+
+1. Navigate to any website
+2. Click the Flowstral extension icon
+3. Click **Start Recording**
+4. Perform your test steps
+5. Click **Stop Recording**
+6. Click **Open in Workflow Editor**
+
+### Running a Test
+
+1. In the Workflow Editor, click **Run**
+2. Watch real-time progress
+3. View results and any self-healed selectors
+
+### Saving Tests
+
+1. Click **Save Test Case**
+2. Enter a name
+3. Test is saved and visible in Test Cases tab
+
+---
+
+## Project Structure
+
+```
+QAAI/
+├── backend/                    # FastAPI Python backend
+│   ├── app/
+│   │   ├── main.py            # Application entry
+│   │   ├── routers/           # API endpoints
+│   │   ├── services/          # Business logic
+│   │   └── utils/             # Helpers
+│   └── logs/                  # Application logs
+│
+├── src/                       # React TypeScript frontend
+│   ├── pages/                 # Route components
+│   ├── components/            # Reusable UI components
+│   ├── hooks/                 # Custom React hooks
+│   └── lib/                   # Services and utilities
+│
+├── flowstral-extension/       # Chrome recording extension
+│   └── src/
+│       ├── content/           # Page injection script
+│       ├── background/        # Service worker
+│       └── sidepanel/         # Extension UI
+│
+├── supabase/                  # Database migrations
+│   └── migrations/
+│
+└── docs/                      # Documentation
+    ├── ARCHITECTURE.md
+    ├── BACKEND_REFERENCE.md
+    ├── FRONTEND_REFERENCE.md
+    ├── FLOWSTRAL_EXTENSION.md
+    └── DATABASE_SCHEMA.md
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/ARCHITECTURE.md) | System overview, technology stack, data flow |
+| [Backend Reference](docs/BACKEND_REFERENCE.md) | API routers, services, database operations |
+| [Frontend Reference](docs/FRONTEND_REFERENCE.md) | Pages, components, hooks, state management |
+| [Flowstral Extension](docs/FLOWSTRAL_EXTENSION.md) | Browser extension architecture and usage |
+| [Database Schema](docs/DATABASE_SCHEMA.md) | Tables, types, migrations, RLS policies |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              QAAI Platform                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐    │
+│  │   React Frontend │────▶│  FastAPI Backend │────▶│   PostgreSQL/    │    │
+│  │   (TypeScript)   │◀────│    (Python)      │◀────│   SQLite DB      │    │
+│  └──────────────────┘     └──────────────────┘     └──────────────────┘    │
+│          │                        │                                         │
+│          │                        ├─────────────────────────────────────┐   │
+│          ▼                        ▼                                     ▼   │
+│  ┌──────────────────┐    ┌──────────────────┐             ┌─────────────┐  │
+│  │ Flowstral Chrome │    │   LLM Services   │             │  Playwright │  │
+│  │    Extension     │    │ (Claude/Ollama)  │             │   Runtime   │  │
+│  └──────────────────┘    └──────────────────┘             └─────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Key Technologies
+
+### Backend
+- **FastAPI** - High-performance Python web framework
+- **Playwright** - Browser automation
+- **PostgreSQL/SQLite** - Database
+- **WebSocket** - Real-time communication
+
+### Frontend
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - Component library
+
+### AI/ML
+- **Anthropic Claude** - Cloud LLM
+- **Ollama** - Local LLM
+- **Prompt Caching** - Cost optimization
+
+---
+
+## API Endpoints
+
+### Test Cases
+```
+GET    /test-cases           # List all
+POST   /test-cases           # Create
+GET    /test-cases/{id}      # Get one
+PUT    /test-cases/{id}      # Update
+DELETE /test-cases/{id}      # Delete
+```
+
+### Test Execution
+```
+POST   /api/playwright-recorder/execute  # Run test
+WS     /test-runs/ws/{execution_id}      # Real-time updates
+```
+
+### Flowstral Recording
+```
+POST   /api/flowstral/sessions           # Create session
+POST   /api/flowstral/events/batch       # Submit events
+GET    /api/flowstral/sessions/{id}/script  # Get script
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Backend (.env)
+ANTHROPIC_API_KEY=sk-ant-...     # Claude API key
+OLLAMA_URL=http://localhost:11434 # Local Ollama
+DATABASE_URL=postgresql://...     # PostgreSQL (optional)
+SECRET_KEY=your-secret-key        # JWT signing
+
+# Frontend (.env)
+VITE_API_URL=http://localhost:8000
+```
+
+---
+
+## Development
+
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+pytest
+
+# Frontend tests
+npm test
+```
+
+### Viewing Logs
+
+```powershell
+# Windows
+Get-Content backend\logs\app.log -Tail 50 -Wait
+
+# Linux/Mac
+tail -f backend/logs/app.log
+```
+
+### Database Migrations
+
+```bash
+# Apply migrations
+supabase db push
+
+# Or manual
+psql $DATABASE_URL -f supabase/migrations/001_initial_schema.sql
+```
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Backend won't start | Check Python version (3.10+), install requirements |
+| Extension not recording | Reload extension, refresh target page |
+| Tests failing | Check backend logs, verify Playwright installed |
+| WebSocket disconnecting | Ensure backend is running, check firewall |
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## License
+
+This project is proprietary software. All rights reserved.
+
+---
+
+## Support
+
+- **Documentation**: See `/docs` directory
+- **Issues**: GitHub Issues
+- **Email**: support@qaai.io
+
+---
+
+<p align="center">
+  Made with ❤️ by the QAAI Team
+</p>
