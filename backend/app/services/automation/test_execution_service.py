@@ -947,9 +947,9 @@ def pytest_runtest_makereport(item, call):
             screenshot_path = test_results_dir / f"{item.name}_failure.png"
             try:
                 page.screenshot(path=str(screenshot_path), full_page=True)
-                print(f"\\n📸 Screenshot saved: {screenshot_path}")
+                print(f"\\n[Screenshot saved: {screenshot_path}]")
             except Exception as e:
-                print(f"\\n⚠️ Could not capture screenshot: {e}")
+                print(f"\\n[Warning] Could not capture screenshot: {e}")
 """)
                 logger.info(f"Created conftest.py at: {conftest_file}")
             
