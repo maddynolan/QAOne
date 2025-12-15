@@ -2253,7 +2253,8 @@ ${workflowName.replace(/\s+/g, ' ')}
                             </div>
                           )}
                           
-                          {['click', 'input', 'assert'].includes(selectedNode.type) && (
+                          {/* Selector fields - hide in manual test mode */}
+                          {['click', 'input', 'assert'].includes(selectedNode.type) && testMode !== 'manual' && (
                             <>
                               <div>
                                 <Label>Selector</Label>
@@ -2382,8 +2383,8 @@ ${workflowName.replace(/\s+/g, ' ')}
                                   </Select>
                                 </div>
                                 
-                                {/* Target Selector (if needed) */}
-                                {ASSERTION_OPTIONS.find(o => o.value === selectedNode.data.assertion?.type)?.needsTarget && (
+                                {/* Target Selector (if needed) - hide in manual mode */}
+                                {testMode !== 'manual' && ASSERTION_OPTIONS.find(o => o.value === selectedNode.data.assertion?.type)?.needsTarget && (
                                   <div>
                                     <Label className="text-xs">Target Element</Label>
                                     <Input
@@ -2427,9 +2428,9 @@ ${workflowName.replace(/\s+/g, ' ')}
                                 )}
                                 
                                 {/* Preview assertion as manual step */}
-                                <div className="bg-white rounded p-2 border">
-                                  <p className="text-xs text-muted-foreground mb-1">Manual Test Expected Result:</p>
-                                  <p className="text-xs font-medium text-green-700">
+                                <div className="bg-white rounded p-3 border border-green-200">
+                                  <p className="text-xs text-muted-foreground mb-2">Manual Test Expected Result:</p>
+                                  <p className="text-sm font-medium text-green-700 whitespace-normal break-words leading-relaxed">
                                     ✅ {getAssertionDescription(selectedNode.data.assertion as NodeAssertion)}
                                   </p>
                                 </div>
