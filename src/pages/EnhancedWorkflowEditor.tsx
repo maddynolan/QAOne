@@ -29,6 +29,8 @@ import { useExecutionWebSocket } from '@/hooks/useExecutionWebSocket';
 import { TestSuite } from '@/components/FlowstralWorkflowEditor/TestSuiteManager';
 import VariableStore, { WorkflowVariable, DataSource } from '@/components/FlowstralWorkflowEditor/VariableStore';
 import CICDExporter from '@/components/FlowstralWorkflowEditor/CICDExporter';
+import SalesforceValidationPanel from '@/components/SalesforceValidationPanel';
+import { WorkflowValidationResult } from '@/lib/salesforce-service';
 
 // Application types for smart locator generation
 const APP_TYPES = [
@@ -303,6 +305,9 @@ export default function EnhancedWorkflowEditorPage() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveTestCaseName, setSaveTestCaseName] = useState('');
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
+
+  // Salesforce validation state
+  const [sfValidationResult, setSfValidationResult] = useState<WorkflowValidationResult | null>(null);
 
   // Workflow state
   const [workflowName, setWorkflowName] = useState('New Workflow');
@@ -1274,6 +1279,28 @@ ${workflowName.replace(/\s+/g, ' ')}
     return LOCATOR_STRATEGIES[appType]?.recommendations || LOCATOR_STRATEGIES.generic.recommendations;
   };
 
+  // Get Salesforce validation status for a specific node
+  const getNodeValidationStatus = useCallback((nodeIndex: number): {
+    valid: boolean;
+    warnings: string[];
+    suggestions: string[];
+  } | null => {
+    if (!sfValidationResult || appType !== 'salesforce') {
+      return null;
+    }
+    
+    const stepValidation = sfValidationResult.steps.find(s => s.step_index === nodeIndex);
+    if (!stepValidation) {
+      return null;
+    }
+    
+    return {
+      valid: stepValidation.step_valid,
+      warnings: stepValidation.warnings,
+      suggestions: stepValidation.suggestions,
+    };
+  }, [sfValidationResult, appType]);
+
   // Run the workflow
   const [isRunning, setIsRunning] = useState(false);
   const [runResult, setRunResult] = useState<any>(null);
@@ -2021,6 +2048,25 @@ ${workflowName.replace(/\s+/g, ' ')}
                           Schedule Runs
                         </Button>
                       </div>
+                      
+                      {/* Salesforce Validation Panel - Show only for Salesforce app type */}
+                      {appType === 'salesforce' && (
+                        <div className="border-t pt-3 mt-3">
+                          <SalesforceValidationPanel
+                            nodes={nodes}
+                            appType={appType}
+                            onValidationComplete={(result) => {
+                              setSfValidationResult(result);
+                              if (result.workflow_valid) {
+                                toast.success(`Validation passed: ${result.valid_steps}/${result.total_steps} steps valid`);
+                              } else {
+                                toast.warning(`Validation issues: ${result.warnings_count} warnings found`);
+                              }
+                            }}
+                            isVisible={true}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
               </div>
@@ -2088,6 +2134,20 @@ ${workflowName.replace(/\s+/g, ' ')}
                                   ✓ Assert
                                 </Badge>
                               )}
+                              {/* Salesforce Validation Indicator */}
+                              {(() => {
+                                const validation = getNodeValidationStatus(index);
+                                if (!validation) return null;
+                                return validation.valid ? (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
+                                    ☁️ Valid
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-300" title={validation.warnings.join(', ')}>
+                                    ⚠️ {validation.warnings.length} issue{validation.warnings.length > 1 ? 's' : ''}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                             <div className="text-xs text-muted-foreground truncate">
                               {node.type === 'navigate' && node.data.url}

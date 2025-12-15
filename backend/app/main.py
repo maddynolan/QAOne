@@ -7100,6 +7100,10 @@ app.include_router(compliance_router)
 from app.routers.enhanced_api_testing_api import router as enhanced_api_testing_router
 app.include_router(enhanced_api_testing_router)
 
+# Salesforce Metadata Validation API
+from app.routers.salesforce_api import router as salesforce_router
+app.include_router(salesforce_router)
+
 # Framework Analyzer - Analyze and convert automation frameworks
 from app.routers.framework_analyzer_api import router as framework_analyzer_router
 app.include_router(framework_analyzer_router)
