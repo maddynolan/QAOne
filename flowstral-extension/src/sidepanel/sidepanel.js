@@ -59,19 +59,37 @@ class SidebarController {
     // Track current URL to detect navigation
     this.currentPageUrl = null;
     
+    // Initialize current URL from active tab
+    chrome.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+      if (tabs[0]) {
+        this.currentPageUrl = tabs[0].url;
+        console.log('[Sidebar] Initial page URL:', this.currentPageUrl);
+      }
+    });
+    
     // Listen for tab updates (navigation) to auto-refresh analysis
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       // Only care about the active tab and when loading completes
       if (changeInfo.status === 'complete' && tab.active) {
-        // Check if URL changed
-        if (this.currentPageUrl && this.currentPageUrl !== tab.url) {
+        console.log('[Sidebar] Tab updated:', tab.url, 'previous:', this.currentPageUrl);
+        
+        // Check if URL changed (or first load)
+        if (!this.currentPageUrl || this.currentPageUrl !== tab.url) {
           console.log('[Sidebar] Page navigated from', this.currentPageUrl, 'to', tab.url);
-          this.addLog('info', '🔄 Page navigated - refreshing analysis...');
           
-          // Auto-refresh analysis after navigation
-          setTimeout(() => {
-            this.refreshPageAnalysis();
-          }, 500);
+          // Skip chrome:// and extension pages
+          if (!tab.url?.startsWith('chrome://') && !tab.url?.startsWith('chrome-extension://')) {
+            this.addLog('info', '🔄 Page navigated - refreshing analysis...');
+            
+            // Clear old analysis
+            this.state.pageAnalysis = null;
+            this.state.suggestions = [];
+            
+            // Auto-refresh analysis after navigation (give page time to load)
+            setTimeout(() => {
+              this.refreshPageAnalysis();
+            }, 1000);
+          }
         }
         this.currentPageUrl = tab.url;
       }
@@ -2343,28 +2361,41 @@ Date: ${new Date().toISOString()}
       // Request analysis from content script - target MAIN FRAME only (frameId: 0)
       let response;
       try {
+        console.log('[Sidebar] Sending ANALYZE_PAGE to tab', tab.id, 'URL:', tab.url);
         response = await chrome.tabs.sendMessage(tab.id, { type: 'ANALYZE_PAGE' }, { frameId: 0 });
         console.log('[Sidebar] Analysis response:', response);
       } catch (sendError) {
         // Content script not loaded - inject it first
         console.log('[Sidebar] Content script not loaded, injecting...', sendError.message);
-        this.addLog('info', 'Injecting content script...');
+        this.addLog('info', 'Content script not loaded - injecting...');
         
         try {
+          // First inject the content script
           await chrome.scripting.executeScript({
             target: { tabId: tab.id, frameIds: [0] },  // Main frame only
             files: ['src/content/content.js']
           });
           
-          // Wait a moment for script to initialize
-          await new Promise(r => setTimeout(r, 500));
+          console.log('[Sidebar] Content script injected, waiting for initialization...');
+          
+          // Wait for script to initialize
+          await new Promise(r => setTimeout(r, 1000));
           
           // Retry the message
+          console.log('[Sidebar] Retrying ANALYZE_PAGE...');
           response = await chrome.tabs.sendMessage(tab.id, { type: 'ANALYZE_PAGE' }, { frameId: 0 });
           console.log('[Sidebar] Analysis response after injection:', response);
         } catch (injectError) {
-          console.error('[Sidebar] Injection failed:', injectError);
-          this.addLog('error', 'Could not inject content script: ' + injectError.message);
+          console.error('[Sidebar] Injection/retry failed:', injectError);
+          
+          // More helpful error message
+          if (injectError.message?.includes('Cannot access')) {
+            this.addLog('error', 'Cannot analyze this page (restricted access)');
+          } else if (injectError.message?.includes('No frame')) {
+            this.addLog('error', 'Page not fully loaded - try again in a moment');
+          } else {
+            this.addLog('error', 'Could not analyze page: ' + injectError.message);
+          }
           return;
         }
       }

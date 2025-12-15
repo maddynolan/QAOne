@@ -518,7 +518,7 @@ export default function UnifiedWorkflowEditor() {
 
     try {
       const code = generateCode('automation');
-      const response = await fetch('http://localhost:8000/api/playwright-recorder/execute', {
+      const response = await fetch('http://localhost:8000/api/flowstral/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
