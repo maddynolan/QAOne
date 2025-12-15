@@ -760,15 +760,54 @@ export default function UnifiedWorkflowEditor() {
       });
 
       const result = await response.json();
-      const passed = result.status === 'success' || result.exit_code === 0;
+      const logs = result.output ? result.output.split('\n') : [];
+      
+      // More robust failure detection - check exit code AND output for failure markers
+      const hasFailureMarker = logs.some(line => 
+        line.includes('TEST FAILED') || 
+        line.includes('FAILED:') || 
+        line.includes('Error:') ||
+        line.includes('Traceback') ||
+        line.includes('sys.exit(1)')
+      );
+      const hasSuccessMarker = logs.some(line => line.includes('TEST PASSED'));
+      
+      // Only pass if exit_code is 0 AND we see success marker AND no failure markers
+      const passed = (result.exit_code === 0 || result.status === 'success') && 
+                     hasSuccessMarker && 
+                     !hasFailureMarker;
+      
+      // Extract failure details from logs
+      let failedStep = null;
+      let errorMessage = null;
+      let screenshotPath = null;
+      
+      logs.forEach(line => {
+        if (line.includes('FAILED at step')) {
+          const match = line.match(/step (\d+)/);
+          if (match) failedStep = parseInt(match[1]);
+        }
+        if (line.includes('Error:') && !errorMessage) {
+          errorMessage = line.replace('Error:', '').trim();
+        }
+        if (line.includes('Screenshot:')) {
+          screenshotPath = line.replace('Screenshot:', '').trim();
+        }
+      });
       
       setExecutionResult(prev => ({
         ...prev,
         status: passed ? 'passed' : 'failed',
-        logs: result.output ? result.output.split('\n') : [],
+        logs,
+        currentStep: failedStep || testCase.steps.length,
+        results: testCase.steps.map((step, idx) => ({
+          stepId: step.id,
+          status: failedStep && idx + 1 >= failedStep ? 'failed' : 'passed',
+          error: failedStep && idx + 1 === failedStep ? errorMessage : undefined,
+        })),
       }));
 
-      // Save to history
+      // Save to history with more details
       const historyEntry = {
         id: `run_${Date.now()}`,
         testName: testCase.name,
@@ -776,10 +815,17 @@ export default function UnifiedWorkflowEditor() {
         timestamp: new Date().toISOString(),
         duration: result.duration || 0,
         steps: testCase.steps.length,
+        failedStep,
+        errorMessage: errorMessage?.slice(0, 100),
+        screenshotPath,
       };
       setTestHistory(prev => [historyEntry, ...prev.slice(0, 49)]);
 
-      toast[passed ? 'success' : 'error'](passed ? 'Test passed!' : 'Test failed');
+      if (passed) {
+        toast.success('✅ Test passed!');
+      } else {
+        toast.error(`❌ Test failed at step ${failedStep}: ${errorMessage?.slice(0, 50) || 'Unknown error'}`);
+      }
     } catch (error) {
       setExecutionResult(prev => ({ ...prev, status: 'failed', logs: ['Execution error'] }));
       toast.error('Execution failed');
@@ -1044,14 +1090,14 @@ export default function UnifiedWorkflowEditor() {
                 </Collapsible>
               ))}
 
-              {/* Execution Status */}
+              {/* Execution Status & Results */}
               {executionResult.status !== 'idle' && (
                 <div className={`mt-4 p-3 rounded-lg border ${
                   executionResult.status === 'passed' ? 'bg-green-50 border-green-200' :
                   executionResult.status === 'failed' ? 'bg-red-50 border-red-200' :
                   'bg-blue-50 border-blue-200'
                 }`}>
-                  <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="flex items-center gap-2 text-sm font-medium mb-2">
                     {executionResult.status === 'running' && <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />}
                     {executionResult.status === 'passed' && <CheckCircle className="h-4 w-4 text-green-600" />}
                     {executionResult.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
@@ -1063,6 +1109,76 @@ export default function UnifiedWorkflowEditor() {
                       {executionResult.status === 'running' ? 'Running...' :
                        executionResult.status === 'passed' ? 'Passed' : 'Failed'}
                     </span>
+                  </div>
+                  {executionResult.status === 'failed' && executionResult.currentStep && (
+                    <div className="text-xs text-red-600 mb-2">
+                      Failed at step {executionResult.currentStep}
+                    </div>
+                  )}
+                  {executionResult.logs.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        View logs ({executionResult.logs.filter(l => l.trim()).length} lines)
+                      </summary>
+                      <div className="mt-2 max-h-32 overflow-auto bg-slate-900 text-slate-100 p-2 rounded font-mono text-[10px]">
+                        {executionResult.logs.slice(-20).map((line, i) => (
+                          <div key={i} className={
+                            line.includes('FAILED') || line.includes('Error') ? 'text-red-400' :
+                            line.includes('PASSED') || line.includes('✓') ? 'text-green-400' :
+                            ''
+                          }>{line}</div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {/* Test Run History */}
+              {testHistory.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center justify-between">
+                    <span>Recent Runs</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 text-xs px-1"
+                      onClick={() => setTestHistory([])}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-auto">
+                    {testHistory.slice(0, 5).map((run) => (
+                      <div 
+                        key={run.id} 
+                        className={`p-2 rounded text-xs border ${
+                          run.status === 'passed' 
+                            ? 'bg-green-50 border-green-200' 
+                            : 'bg-red-50 border-red-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            {run.status === 'passed' 
+                              ? <CheckCircle className="h-3 w-3 text-green-600" />
+                              : <AlertCircle className="h-3 w-3 text-red-600" />
+                            }
+                            <span className="font-medium truncate max-w-[100px]">
+                              {run.testName?.slice(0, 15) || 'Test'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(run.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        {run.status === 'failed' && run.failedStep && (
+                          <div className="text-[10px] text-red-600 mt-1 truncate">
+                            Step {run.failedStep}: {run.errorMessage?.slice(0, 30) || 'Error'}...
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1601,13 +1717,30 @@ ${tc.description || 'Generated by QAAI Unified Test Builder'}
 Tags: ${tc.tags.join(', ') || 'none'}
 """
 
+import sys
+import os
+import traceback
+from datetime import datetime
 from playwright.sync_api import sync_playwright, expect
+
+# Test result tracking
+test_results = {
+    "status": "passed",
+    "steps_passed": 0,
+    "steps_failed": 0,
+    "failed_step": None,
+    "error_message": None,
+    "screenshot_path": None
+}
 
 def test_${safeName}():
     """${tc.description || tc.name}"""
+    global test_results
+    
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
+        page.set_default_timeout(30000)  # 30 second timeout
         
         try:
 `;
@@ -1618,55 +1751,110 @@ def test_${safeName}():
       return;
     }
 
-    code += `\n            # Step ${index + 1}: ${step.name}\n`;
+    // Wrap each step in try/except
+    code += `
+            # Step ${index + 1}: ${step.name}
+            try:
+`;
 
+    const indent = '                ';
+    
     switch (step.type) {
       case 'navigate':
-        code += `            page.goto("${step.url || tc.settings.baseUrl || ''}")\n`;
-        code += `            page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}page.goto("${step.url || tc.settings.baseUrl || ''}")\n`;
+        code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
         break;
       case 'click':
-        code += `            page.${convertSelector(step.selector || '')}.click()\n`;
+        // For elements that might have duplicates, use .first() for safety
+        const clickSelector = convertSelector(step.selector || '');
+        code += `${indent}element = page.${clickSelector}\n`;
+        code += `${indent}if element.count() > 1:\n`;
+        code += `${indent}    print(f"WARNING: Multiple elements found ({element.count()}), clicking first one")\n`;
+        code += `${indent}    element.first.click()\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    element.click()\n`;
         break;
       case 'input':
-        code += `            page.${convertSelector(step.selector || '')}.fill("${step.value || ''}")\n`;
+        code += `${indent}page.${convertSelector(step.selector || '')}.fill("${step.value || ''}")\n`;
         break;
       case 'select':
-        code += `            page.${convertSelector(step.selector || '')}.select_option("${step.value || ''}")\n`;
+        code += `${indent}page.${convertSelector(step.selector || '')}.select_option("${step.value || ''}")\n`;
         break;
       case 'hover':
-        code += `            page.${convertSelector(step.selector || '')}.hover()\n`;
+        code += `${indent}page.${convertSelector(step.selector || '')}.hover()\n`;
         break;
       case 'wait':
-        code += `            page.wait_for_timeout(${step.waitTime || 1000})\n`;
+        code += `${indent}page.wait_for_timeout(${step.waitTime || 1000})\n`;
         break;
       case 'wait_for_element':
-        code += `            page.${convertSelector(step.selector || '')}.wait_for(state="visible")\n`;
+        code += `${indent}page.${convertSelector(step.selector || '')}.wait_for(state="visible")\n`;
         break;
       case 'assert':
-        code += `            expect(page.${convertSelector(step.selector || '')}).to_be_visible()\n`;
+        code += `${indent}expect(page.${convertSelector(step.selector || '')}).to_be_visible()\n`;
         break;
       case 'screenshot':
-        code += `            page.screenshot(path="step_${index + 1}_${safeName}.png")\n`;
+        code += `${indent}page.screenshot(path="step_${index + 1}_${safeName}.png")\n`;
         break;
       case 'api':
-        code += `            # API call handled separately\n`;
+        code += `${indent}pass  # API call handled separately\n`;
         break;
+      default:
+        code += `${indent}pass  # Unknown step type\n`;
     }
 
-    // Add assertion if enabled
-    if (step.assertion?.enabled && step.assertion.target) {
-      code += `            expect(page.${convertSelector(step.assertion.target)}).to_be_visible()\n`;
-    }
+    code += `                test_results["steps_passed"] += 1
+                print(f"✓ Step ${index + 1}: ${step.name}")
+            except Exception as step_error:
+                test_results["status"] = "failed"
+                test_results["steps_failed"] += 1
+                test_results["failed_step"] = ${index + 1}
+                test_results["error_message"] = str(step_error)
+                
+                # Take screenshot on failure
+                screenshot_path = f"failure_step_${index + 1}_{safeName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                try:
+                    page.screenshot(path=screenshot_path, full_page=True)
+                    test_results["screenshot_path"] = screenshot_path
+                    print(f"📸 Screenshot saved: {screenshot_path}")
+                except:
+                    pass
+                
+                print(f"✗ Step ${index + 1} FAILED: ${step.name}")
+                print(f"  Error: {step_error}")
+                
+                # Keep browser open for 5 seconds so user can see the failure
+                print("⏳ Keeping browser open for 5 seconds...")
+                page.wait_for_timeout(5000)
+                raise step_error
+`;
   });
 
   code += `
-            print("Test completed successfully")
+            print("\\n" + "="*50)
+            print("✅ TEST PASSED - All steps completed successfully")
+            print("="*50)
+            
+        except Exception as e:
+            print("\\n" + "="*50)
+            print(f"❌ TEST FAILED at step {test_results['failed_step']}")
+            print(f"Error: {test_results['error_message']}")
+            if test_results['screenshot_path']:
+                print(f"Screenshot: {test_results['screenshot_path']}")
+            print("="*50)
+            sys.exit(1)  # Exit with error code
+            
         finally:
             browser.close()
+    
+    return test_results
 
 if __name__ == "__main__":
-    test_${safeName}()
+    result = test_${safeName}()
+    print(f"\\nFinal Result: {result['status'].upper()}")
+    print(f"Steps Passed: {result['steps_passed']}")
+    if result['status'] == 'failed':
+        print(f"Failed at Step: {result['failed_step']}")
+        sys.exit(1)
 `;
   return code;
 }
