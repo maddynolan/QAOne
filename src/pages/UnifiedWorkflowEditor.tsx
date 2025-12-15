@@ -400,6 +400,11 @@ export default function UnifiedWorkflowEditor() {
   const [showBlackbox, setShowBlackbox] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['ui', 'verify']);
   
+  // Saved state - tracks if this test case exists in backend
+  const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
+  
   // Execution state
   const [executionResult, setExecutionResult] = useState<{
     status: 'idle' | 'running' | 'passed' | 'failed';
@@ -943,76 +948,89 @@ export default function UnifiedWorkflowEditor() {
     }
   };
 
-  // Save test case (create or update if exists)
+  // Build test case data for API
+  const buildTestCaseData = (name?: string) => ({
+    title: name || testCase.name,
+    name: name || testCase.name,
+    description: testCase.description,
+    test_type: 'unified',
+    steps: testCase.steps.map((s, i) => ({
+      step_number: i + 1,
+      action: s.name,
+      expected_result: s.expectedResult || '',
+      assertion_type: s.assertionType || null,
+      assertion_target: s.assertionTarget || null,
+      assertion_value: s.assertionValue || null,
+      test_data: JSON.stringify(s),
+    })),
+    tags: testCase.tags,
+    unified_data: JSON.stringify(testCase),
+  });
+
+  // Save test case - update if exists, create if new
   const saveTestCase = async () => {
     try {
-      // First, search for existing test case by name
-      let existingId: string | null = null;
+      const testCaseData = buildTestCaseData();
       
-      try {
-        const searchResponse = await fetch(
-          `http://localhost:8000/test-cases/search/${encodeURIComponent(testCase.name)}`
-        );
-        if (searchResponse.ok) {
-          const searchResults = await searchResponse.json();
-          // Find exact match by name
-          const exactMatch = searchResults.find(
-            (tc: any) => tc.name === testCase.name || tc.title === testCase.name
-          );
-          if (exactMatch) {
-            existingId = exactMatch.id;
-          }
-        }
-      } catch (e) {
-        console.log('[Save] No existing test case found, will create new');
-      }
-      
-      const testCaseData = {
-        title: testCase.name,
-        name: testCase.name,
-        description: testCase.description,
-        test_type: 'unified',
-        steps: testCase.steps.map((s, i) => ({
-          step_number: i + 1,
-          action: s.name,
-          expected_result: s.expectedResult || '',
-          test_data: JSON.stringify(s),
-        })),
-        tags: testCase.tags,
-        // Store the full unified test case for later retrieval
-        unified_data: JSON.stringify(testCase),
-      };
-      
-      let response;
-      if (existingId) {
+      if (savedTestCaseId) {
         // Update existing test case
-        response = await fetch(`http://localhost:8000/test-cases/${existingId}`, {
+        const response = await fetch(`http://localhost:8000/test-cases/${savedTestCaseId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(testCaseData),
         });
         
         if (response.ok) {
-          toast.success('Test case updated');
+          toast.success('✅ Test case updated');
         } else {
           toast.error('Failed to update');
         }
       } else {
         // Create new test case
-        response = await fetch('http://localhost:8000/test-cases', {
+        const response = await fetch('http://localhost:8000/test-cases', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(testCaseData),
         });
 
         if (response.ok) {
-          toast.success('Test case saved');
+          const data = await response.json();
+          setSavedTestCaseId(data.id);
+          toast.success('✅ Test case saved');
         } else {
           toast.error('Failed to save');
         }
       }
     } catch (error) {
       console.error('[Save] Error:', error);
+      toast.error('Failed to save');
+    }
+  };
+  
+  // Save As - always create new with different name
+  const saveTestCaseAs = async (newName: string) => {
+    try {
+      const testCaseData = buildTestCaseData(newName);
+      
+      const response = await fetch('http://localhost:8000/test-cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testCaseData),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Update current test case name and ID
+        setTestCase(prev => ({ ...prev, name: newName }));
+        setSavedTestCaseId(data.id);
+        toast.success(`✅ Saved as "${newName}"`);
+        setShowSaveAsDialog(false);
+        setSaveAsName('');
+      } else {
+        toast.error('Failed to save');
+      }
+    } catch (error) {
+      console.error('[SaveAs] Error:', error);
       toast.error('Failed to save');
     }
   };
@@ -1158,10 +1176,28 @@ export default function UnifiedWorkflowEditor() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button variant="outline" size="sm" onClick={saveTestCase}>
-                <Save className="h-4 w-4 mr-1" />
-                Save
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Save className="h-4 w-4 mr-1" />
+                    Save
+                    <ChevronDown className="h-3 w-3 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={saveTestCase}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {savedTestCaseId ? 'Save (Update)' : 'Save'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    setSaveAsName(testCase.name + ' - Copy');
+                    setShowSaveAsDialog(true);
+                  }}>
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    Save As...
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button 
                 size="sm" 
                 onClick={runTest}
@@ -1518,6 +1554,35 @@ export default function UnifiedWorkflowEditor() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        
+        {/* Save As Dialog */}
+        <Dialog open={showSaveAsDialog} onOpenChange={setShowSaveAsDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save As New Test Case</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Test Case Name</Label>
+                <Input
+                  value={saveAsName}
+                  onChange={(e) => setSaveAsName(e.target.value)}
+                  placeholder="Enter new test case name"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSaveAsDialog(false)}>Cancel</Button>
+              <Button 
+                onClick={() => saveTestCaseAs(saveAsName)}
+                disabled={!saveAsName.trim()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
@@ -1652,6 +1717,106 @@ function StepCard({
 // ============================================================================
 // STEP EDITOR COMPONENT - Shows technical details only when editing
 // ============================================================================
+
+// ============================================================================
+// ASSERTION BUILDER HELPERS
+// ============================================================================
+
+function getAssertionSuggestions(stepType: StepType, assertionType: string) {
+  const suggestions: Record<string, { expectedResult: string }> = {
+    element_visible: { expectedResult: 'Element should be visible on the page' },
+    element_hidden: { expectedResult: 'Element should not be visible' },
+    text_contains: { expectedResult: 'Text should contain the expected value' },
+    text_equals: { expectedResult: 'Text should match exactly' },
+    url_contains: { expectedResult: 'URL should contain the expected path' },
+    url_equals: { expectedResult: 'URL should match exactly' },
+    value_equals: { expectedResult: 'Input value should match' },
+    element_enabled: { expectedResult: 'Element should be enabled and interactive' },
+    element_disabled: { expectedResult: 'Element should be disabled' },
+    count_equals: { expectedResult: 'Number of matching elements should equal expected count' },
+    page_title: { expectedResult: 'Page title should match' },
+    toast_message: { expectedResult: 'Toast/notification should appear with message' },
+  };
+  return suggestions[assertionType] || { expectedResult: '' };
+}
+
+function generateExpectedResultText(assertionType: string, value: string, target?: string): string {
+  const targetText = target ? ` for "${target}"` : '';
+  
+  switch (assertionType) {
+    case 'element_visible':
+      return `Element${targetText} should be visible`;
+    case 'element_hidden':
+      return `Element${targetText} should be hidden`;
+    case 'text_contains':
+      return `Text should contain "${value}"${targetText}`;
+    case 'text_equals':
+      return `Text should equal "${value}"${targetText}`;
+    case 'url_contains':
+      return `URL should contain "${value}"`;
+    case 'url_equals':
+      return `URL should be "${value}"`;
+    case 'value_equals':
+      return `Input value should be "${value}"${targetText}`;
+    case 'element_enabled':
+      return `Element${targetText} should be enabled`;
+    case 'element_disabled':
+      return `Element${targetText} should be disabled`;
+    case 'count_equals':
+      return `Should find exactly ${value} matching elements`;
+    case 'page_title':
+      return `Page title should be "${value}"`;
+    case 'toast_message':
+      return `Should see message: "${value}"`;
+    case 'attribute_equals':
+      return `Attribute should equal "${value}"`;
+    default:
+      return value;
+  }
+}
+
+function getQuickSuggestions(stepType: StepType): Array<{ label: string; type: string; expected?: string; text: string }> {
+  const baseSuggestions = {
+    navigate: [
+      { label: 'Page loads', type: 'element_visible', text: 'Page should load successfully' },
+      { label: 'URL matches', type: 'url_contains', expected: '/', text: 'URL should be correct' },
+      { label: 'Title correct', type: 'page_title', expected: '', text: 'Page title should be correct' },
+    ],
+    click: [
+      { label: 'Element appears', type: 'element_visible', text: 'Expected element should appear after click' },
+      { label: 'Page changes', type: 'url_contains', text: 'Should navigate to new page' },
+      { label: 'Modal opens', type: 'element_visible', text: 'Modal/dialog should open' },
+      { label: 'Success message', type: 'toast_message', expected: 'Success', text: 'Success message should appear' },
+    ],
+    input: [
+      { label: 'Value accepted', type: 'value_equals', text: 'Input should accept the value' },
+      { label: 'No errors', type: 'element_hidden', text: 'No validation errors should appear' },
+      { label: 'Validation shows', type: 'element_visible', text: 'Validation message should appear' },
+    ],
+    select: [
+      { label: 'Option selected', type: 'value_equals', text: 'Selected option should be set' },
+      { label: 'Form updates', type: 'element_visible', text: 'Dependent fields should update' },
+    ],
+    wait: [
+      { label: 'Element ready', type: 'element_visible', text: 'Element should be ready for interaction' },
+    ],
+    assert: [
+      { label: 'Condition met', type: 'custom', text: 'Assertion condition should be true' },
+    ],
+    api: [
+      { label: 'Status 200', type: 'custom', expected: '200', text: 'API should return success status' },
+      { label: 'Response valid', type: 'custom', text: 'Response should contain expected data' },
+    ],
+    db_query: [
+      { label: 'Records found', type: 'count_equals', expected: '1', text: 'Query should return expected records' },
+      { label: 'Data matches', type: 'custom', text: 'Query results should match expected data' },
+    ],
+  };
+  
+  return baseSuggestions[stepType as keyof typeof baseSuggestions] || [
+    { label: 'Verify success', type: 'element_visible', text: 'Step should complete successfully' },
+  ];
+}
 
 interface StepEditorProps {
   step: TestStep;
@@ -1830,18 +1995,125 @@ function StepEditor({ step, onUpdate, onClose, onShowBlackbox }: StepEditorProps
         </>
       )}
 
-      {/* Expected Result (for all steps) */}
-      <div className="space-y-2 border-t pt-4">
-        <Label>Expected Result</Label>
-        <Textarea
-          value={step.expectedResult || ''}
-          onChange={(e) => onUpdate({ expectedResult: e.target.value })}
-          placeholder="What should happen after this step?"
-          rows={2}
-        />
-        <p className="text-xs text-muted-foreground">
-          Used for manual test documentation and assertions
-        </p>
+      {/* Expected Result with Assertion Builder */}
+      <div className="space-y-3 border-t pt-4">
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            Expected Result & Verification
+          </Label>
+        </div>
+        
+        {/* Assertion Type Selector */}
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">What do you want to verify?</Label>
+          <Select
+            value={step.assertion?.type || ''}
+            onValueChange={(value) => {
+              const suggestions = getAssertionSuggestions(step.type, value);
+              onUpdate({ 
+                assertion: { 
+                  ...step.assertion, 
+                  enabled: true, 
+                  type: value,
+                  target: step.assertion?.target || step.selector || '',
+                },
+                expectedResult: step.expectedResult || suggestions.expectedResult
+              });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select verification type..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="element_visible">✓ Element is visible</SelectItem>
+              <SelectItem value="element_hidden">✗ Element is hidden</SelectItem>
+              <SelectItem value="text_contains">📝 Text contains...</SelectItem>
+              <SelectItem value="text_equals">📝 Text equals exactly...</SelectItem>
+              <SelectItem value="url_contains">🔗 URL contains...</SelectItem>
+              <SelectItem value="url_equals">🔗 URL equals...</SelectItem>
+              <SelectItem value="value_equals">📋 Input value equals...</SelectItem>
+              <SelectItem value="element_enabled">✓ Element is enabled</SelectItem>
+              <SelectItem value="element_disabled">✗ Element is disabled</SelectItem>
+              <SelectItem value="count_equals">🔢 Element count equals...</SelectItem>
+              <SelectItem value="attribute_equals">🏷️ Attribute equals...</SelectItem>
+              <SelectItem value="page_title">📄 Page title...</SelectItem>
+              <SelectItem value="toast_message">💬 Toast/Alert message...</SelectItem>
+              <SelectItem value="custom">✏️ Custom verification</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Dynamic fields based on assertion type */}
+        {step.assertion?.type && ['text_contains', 'text_equals', 'value_equals', 'url_contains', 'url_equals', 'count_equals', 'page_title', 'toast_message', 'attribute_equals'].includes(step.assertion.type) && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              {step.assertion.type === 'count_equals' ? 'Expected count:' : 
+               step.assertion.type.includes('url') ? 'Expected URL value:' :
+               step.assertion.type === 'page_title' ? 'Expected page title:' :
+               step.assertion.type === 'toast_message' ? 'Expected message:' :
+               'Expected value:'}
+            </Label>
+            <Input
+              value={step.assertion?.expected || ''}
+              onChange={(e) => {
+                const newAssertion = { ...step.assertion, expected: e.target.value };
+                onUpdate({ 
+                  assertion: newAssertion,
+                  expectedResult: generateExpectedResultText(step.assertion?.type || '', e.target.value, step.target)
+                });
+              }}
+              placeholder={
+                step.assertion.type === 'text_contains' ? 'Text to look for...' :
+                step.assertion.type === 'url_contains' ? '/dashboard, /success, etc.' :
+                step.assertion.type === 'toast_message' ? 'Success! Account created' :
+                'Expected value...'
+              }
+            />
+          </div>
+        )}
+        
+        {/* Target element for certain assertions */}
+        {step.assertion?.type && ['element_visible', 'element_hidden', 'text_contains', 'text_equals', 'count_equals', 'attribute_equals'].includes(step.assertion.type) && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Target element (optional):</Label>
+            <Input
+              value={step.assertion?.target || ''}
+              onChange={(e) => onUpdate({ assertion: { ...step.assertion, target: e.target.value } })}
+              placeholder={step.selector || 'Leave blank to use step selector'}
+            />
+          </div>
+        )}
+        
+        {/* Quick suggestion chips based on step type */}
+        <div className="flex flex-wrap gap-1">
+          {getQuickSuggestions(step.type).map((suggestion, idx) => (
+            <button
+              key={idx}
+              onClick={() => {
+                onUpdate({
+                  assertion: { enabled: true, type: suggestion.type, expected: suggestion.expected },
+                  expectedResult: suggestion.text
+                });
+              }}
+              className="text-xs px-2 py-1 bg-muted hover:bg-muted/80 rounded-full transition-colors"
+            >
+              💡 {suggestion.label}
+            </button>
+          ))}
+        </div>
+        
+        {/* Free-form expected result */}
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Expected Result (human-readable)</Label>
+          <Textarea
+            value={step.expectedResult || ''}
+            onChange={(e) => onUpdate({ expectedResult: e.target.value })}
+            placeholder="Describe what should happen after this step..."
+            rows={2}
+            className="text-sm"
+          />
+        </div>
       </div>
 
       {/* Store Result */}
@@ -1871,6 +2143,7 @@ Tags: ${tc.tags.join(', ') || 'none'}
 
 import sys
 import os
+import re
 import traceback
 from datetime import datetime
 from playwright.sync_api import sync_playwright, expect
@@ -1952,6 +2225,11 @@ def test_${safeName}():
         break;
       default:
         code += `${indent}pass  # Unknown step type\n`;
+    }
+    
+    // Add assertion code if defined
+    if (step.assertion?.enabled && step.assertion?.type) {
+      code += generateAssertionCode(step.assertion, step, index, indent);
     }
 
     code += `                test_results["steps_passed"] += 1
@@ -2161,6 +2439,72 @@ function generateManualDoc(tc: UnifiedTestCase): string {
   return doc;
 }
 
+// Generate Playwright assertion code from structured assertion
+function generateAssertionCode(assertion: StepAssertion, step: TestStep, stepIndex: number, indent: string): string {
+  let code = '';
+  const target = assertion.target || step.selector || '';
+  const expected = assertion.expected || '';
+  const selector = convertSelector(target);
+  
+  code += `${indent}# Verify: ${step.expectedResult || assertion.type}\n`;
+  
+  switch (assertion.type) {
+    case 'element_visible':
+      code += `${indent}expect(page.${selector}).to_be_visible()\n`;
+      break;
+    case 'element_hidden':
+      code += `${indent}expect(page.${selector}).to_be_hidden()\n`;
+      break;
+    case 'text_contains':
+      if (target) {
+        code += `${indent}expect(page.${selector}).to_contain_text("${expected}")\n`;
+      } else {
+        code += `${indent}expect(page.locator("body")).to_contain_text("${expected}")\n`;
+      }
+      break;
+    case 'text_equals':
+      code += `${indent}expect(page.${selector}).to_have_text("${expected}")\n`;
+      break;
+    case 'url_contains':
+      code += `${indent}expect(page).to_have_url(re.compile(r".*${expected}.*"))\n`;
+      break;
+    case 'url_equals':
+      code += `${indent}expect(page).to_have_url("${expected}")\n`;
+      break;
+    case 'value_equals':
+      code += `${indent}expect(page.${selector}).to_have_value("${expected}")\n`;
+      break;
+    case 'element_enabled':
+      code += `${indent}expect(page.${selector}).to_be_enabled()\n`;
+      break;
+    case 'element_disabled':
+      code += `${indent}expect(page.${selector}).to_be_disabled()\n`;
+      break;
+    case 'count_equals':
+      code += `${indent}expect(page.${selector}).to_have_count(${expected || 1})\n`;
+      break;
+    case 'page_title':
+      code += `${indent}expect(page).to_have_title("${expected}")\n`;
+      break;
+    case 'toast_message':
+      // Common toast selectors
+      code += `${indent}expect(page.locator('[role="alert"], .toast, .notification, [class*="toast"], [class*="snackbar"]').filter(has_text="${expected}")).to_be_visible(timeout=5000)\n`;
+      break;
+    case 'attribute_equals':
+      const [attr, val] = expected.split('=');
+      code += `${indent}expect(page.${selector}).to_have_attribute("${attr || 'class'}", "${val || ''}")\n`;
+      break;
+    case 'custom':
+      code += `${indent}# Custom assertion: ${expected || 'verify expected result'}\n`;
+      code += `${indent}pass  # Implement custom verification\n`;
+      break;
+    default:
+      code += `${indent}# TODO: Verify ${assertion.type}\n`;
+  }
+  
+  return code;
+}
+
 function convertSelector(selector: string): string {
   if (!selector) return 'locator("body")';
   if (selector.includes('get_by_')) return selector.replace(/^page\./, '');
@@ -2174,3 +2518,4 @@ function convertSelector(selector: string): string {
     .replace(/locator\(['"]([^'"]+)['"]\)/g, 'locator("$1")')
     .replace(/^page\./, '') || 'locator("body")';
 }
+
