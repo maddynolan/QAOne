@@ -2583,7 +2583,8 @@ def test_${safeName}():
                 test_results["error_message"] = str(step_error)
                 
                 # Take screenshot on failure
-                screenshot_path = f"failure_step_${index + 1}_${safeName}_{'{datetime.now().strftime("%Y%m%d_%H%M%S")}'}.png"
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                screenshot_path = f"failure_step_${index + 1}_${safeName}_{timestamp}.png"
                 try:
                     page.screenshot(path=screenshot_path, full_page=True)
                     test_results["screenshot_path"] = screenshot_path
@@ -3108,6 +3109,7 @@ function convertSelector(selector: string): string {
     .replace(/locator\(['"]([^'"]+)['"]\)/g, 'locator("$1")')
     .replace(/^page\./, '') || 'locator("body")';
 }
+
 
 
 
