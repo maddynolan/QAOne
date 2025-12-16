@@ -253,9 +253,81 @@ src/
 
 ### Key Pages
 
-#### 1. Enhanced Workflow Editor (`pages/EnhancedWorkflowEditor.tsx`)
+#### 1. Unified Test Builder (`pages/UnifiedWorkflowEditor.tsx`) - **NEW (Dec 2024)**
 
-The main visual test builder with ~2700 lines of code.
+The primary test building interface with ~3100 lines of code, replacing the legacy workflow editor.
+
+**Key Features:**
+- **No-Code / Code View Toggle**: Switch between human-readable steps and technical selectors
+- **Multi-Export Formats**: Automation (Playwright), API, Database, Performance (K6), Manual
+- **Save / Save As**: Update existing test cases or create new ones
+- **Assertion Builder**: Structured UI for defining expected results with auto-generated code
+- **Import Test Cases as Preconditions**: Reuse common test flows
+- **Documentation Formats**: Export to ISTQB, Gherkin/BDD, Markdown
+- **Duplicate Element Handling**: Detect and target specific elements with nth() selector
+- **Robust Failure Detection**: Screenshot on failure, error message extraction, failed step identification
+- **Real Data Integration**: Dashboard shows actual test run results (not mock data)
+
+**Unified Test Case Model:**
+```typescript
+interface UnifiedTestCase {
+  id: string;
+  name: string;
+  description: string;
+  type: 'ui' | 'api' | 'database' | 'performance' | 'manual';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  tags: string[];
+  steps: TestStep[];
+  preconditions: PreconditionRef[];  // Imported test cases
+  requirements: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TestStep {
+  id: string;
+  type: 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'api' | 'database' | 'scroll' | 'hover' | 'select';
+  target: string;           // Human-readable description
+  selector?: string;        // Technical selector (hidden in No-Code view)
+  value?: string;
+  expectedResult?: string;  // Human-readable expected result
+  elementIndex?: number;    // For duplicate elements (nth selector)
+  
+  // Assertion details
+  assertionType?: string;   // element_visible, text_contains, url_equals, etc.
+  assertionTarget?: string; // Element to verify
+  assertionValue?: string;  // Expected value
+  assertionDescription?: string;
+}
+```
+
+**Core State Management:**
+```typescript
+// Test case state
+const [testCase, setTestCase] = useState<UnifiedTestCase>({...});
+const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
+const [viewMode, setViewMode] = useState<'no-code' | 'code'>('no-code');
+
+// Execution state
+const [isRunning, setIsRunning] = useState(false);
+const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'passed' | 'failed'>('idle');
+const [failedStep, setFailedStep] = useState<number | null>(null);
+const [errorMessage, setErrorMessage] = useState<string | null>(null);
+const [screenshotPath, setScreenshotPath] = useState<string | null>(null);
+```
+
+**Code Generation with Duplicate Handling:**
+```python
+# Generated code for click with elementIndex
+element = page.get_by_role("button", name="Create account")
+if element.count() > 1:
+    print(f"⚠️ Multiple elements found ({element.count()}), clicking index 2")
+element.nth(2).click()  # Uses elementIndex from step
+```
+
+#### 2. Enhanced Workflow Editor (`pages/EnhancedWorkflowEditor.tsx`)
+
+Legacy visual test builder with ~2800 lines of code (maintained for compatibility).
 
 **Features:**
 - Visual node-based workflow design
@@ -726,3 +798,8 @@ services:
 ---
 
 *This documentation is auto-generated and maintained. Last updated: December 2024*
+
+
+
+
+

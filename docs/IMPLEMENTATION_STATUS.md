@@ -1,7 +1,7 @@
 # 🎯 QA AI Platform - Complete Implementation Status
 
-**Last Updated:** 2025-01-XX (Auto-updated)  
-**Current Phase:** Phase 1.2 - Real-Time Execution & UI Enhancements
+**Last Updated:** 2024-12-15  
+**Current Phase:** Phase 2.0 - Unified Test Builder & Advanced Features
 
 ---
 
@@ -53,6 +53,32 @@
    - Test Results Dashboard (`/results-dashboard`)
    - Self-Healing page (`/self-healing`)
    - Navigation links in sidebar
+
+7. **Unified Test Builder** - ✅ **NEW - COMPLETE (Dec 2024)**
+   - No-Code / Code view toggle (hide technical selectors)
+   - Multi-export formats (Automation, API, Database, Performance, Manual)
+   - Save / Save As functionality (update existing or create new)
+   - Assertion Builder (structured expected results → code generation)
+   - Import Test Cases as Preconditions (reuse common flows)
+   - Documentation formats (ISTQB, Gherkin/BDD, Markdown)
+   - Duplicate element handling (nth() selector for multiple matches)
+   - Robust failure detection (screenshots, error extraction, step identification)
+   - **File:** `src/pages/UnifiedWorkflowEditor.tsx` (~3100 lines)
+
+8. **Real Data Dashboard** - ✅ **NEW - COMPLETE (Dec 2024)**
+   - Results Ingestion Service with localStorage persistence
+   - Dashboard shows actual test run data (no more mock data)
+   - Pass rate, execution time, automation rate calculated from runs
+   - Recent activity populated from test history
+   - **File:** `src/lib/results-ingestion-service.ts`
+
+9. **Browser Extension Enhancements** - ✅ **NEW - COMPLETE (Dec 2024)**
+   - Duplicate element detection in Suggest tab
+   - Visual indicator showing "⚠️ X found" for duplicates
+   - Element index tracking for nth() selector generation
+   - Auto-refresh page analysis on navigation
+   - Improved combobox and custom element detection
+   - **File:** `flowstral-extension/src/sidepanel/sidepanel.js`
 
 ---
 
@@ -294,37 +320,58 @@ python scripts/export_finetuning_data.py --output training_data.jsonl --model 7b
 
 ---
 
-## 📋 Next Steps (Phase 1.3)
+## 📋 Next Steps (Phase 2.1)
 
-### Recently Completed ✅
-1. **Real-Time WebSocket Execution**
-   - Backend WebSocket manager
-   - Frontend React hook
-   - Integration in Workflow Editor
-   - Self-healing event notifications
+### Recently Completed ✅ (Dec 2024)
 
-2. **Navigation & UI**
-   - Self-Healing page route (`/self-healing`)
-   - Results Dashboard in sidebar
-   - Self-Healing in Tools menu
+1. **Unified Test Builder**
+   - Replaced legacy workflow editor
+   - No-Code/Code view toggle
+   - Multi-export formats
+   - Save/Save As functionality
+   - Assertion Builder UI
+   - Import preconditions
+   - ISTQB/Gherkin/Markdown export
+
+2. **Duplicate Element Handling**
+   - Detection in recorder Suggest tab
+   - Visual indicators (⚠️ X found)
+   - Element index in step data
+   - nth() selector generation
+
+3. **Real Data Integration**
+   - Results Ingestion Service
+   - Dashboard with actual metrics
+   - Test run history persistence
+   - Failure details display
+
+4. **Bug Fixes**
+   - f-string syntax in screenshot code
+   - Navigation URL from recorder
+   - Combobox detection
+   - Invalid CSS selectors
+   - Regex syntax errors
 
 ### Immediate (This Week)
-1. **Start Data Collection** ⏳
+1. **Continue Data Collection** ⏳
    - Generate test cases using the platform
    - Rate generations (aim for 4-5 stars)
    - Submit corrections for poor outputs
    - Target: 500+ high-quality examples
 
-2. **Test WebSocket Integration**
-   - Run tests via Workflow Editor
-   - Verify real-time progress updates
-   - Test self-healing notifications
+2. **Test the New Features**
+   - Run full test flows with duplicate elements
+   - Verify assertion code generation
+   - Test precondition imports
+   - Validate documentation exports
 
 ### Future Enhancements
 - [ ] Video recording playback (embedded player)
 - [ ] Model Registry (A/B testing)
 - [ ] Multi-tenant support
 - [ ] Plugin API for IDE extensions
+- [ ] OCR fallback improvements
+- [ ] Visual element matching
 
 ---
 

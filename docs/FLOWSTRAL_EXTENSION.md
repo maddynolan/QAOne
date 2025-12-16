@@ -558,6 +558,84 @@ function toPythonSelector(selector) {
 
 ---
 
+## Duplicate Element Handling (NEW - Dec 2024)
+
+The extension now detects and handles duplicate elements (e.g., multiple "Create account" buttons).
+
+### Detection in Suggest Tab
+
+```javascript
+// First pass: count duplicates by text/label
+const duplicateCounts = new Map();
+for (const element of elements) {
+  const key = element.textContent || element.ariaLabel || element.name;
+  duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
+}
+
+// Second pass: assign indices
+function makeUniqueDescription(element, baseDescription) {
+  const key = element.textContent || element.ariaLabel || element.name;
+  const total = duplicateCounts.get(key) || 1;
+  
+  if (total > 1) {
+    const index = getCurrentIndexForKey(key);
+    return {
+      description: `${baseDescription} (${index + 1} of ${total})`,
+      elementIndex: index,
+      totalDuplicates: total,
+      hasDuplicates: true
+    };
+  }
+  
+  return { description: baseDescription, elementIndex: 0, totalDuplicates: 1, hasDuplicates: false };
+}
+```
+
+### UI Indicators
+
+```javascript
+// Render suggestion with duplicate badge
+function renderSuggestion(suggestion) {
+  const badge = suggestion.hasDuplicates 
+    ? `<span class="duplicate-badge">⚠️ ${suggestion.totalDuplicates} found</span>`
+    : '';
+  
+  return `
+    <div class="suggestion-item">
+      <span class="suggestion-label">${suggestion.description}</span>
+      ${badge}
+    </div>
+  `;
+}
+```
+
+### Export to Builder
+
+When exporting to the Unified Test Builder, duplicate information is included:
+
+```javascript
+const step = {
+  type: 'click',
+  target: 'Click: Create account (2 of 4)',
+  selector: "get_by_role('button', name='Create account')",
+  elementIndex: 1,           // 0-indexed, so "2 of 4" = index 1
+  totalDuplicates: 4,
+  hasDuplicates: true
+};
+```
+
+### Generated Code with nth()
+
+```python
+# In Unified Test Builder code generation
+element = page.get_by_role("button", name="Create account")
+if element.count() > 1:
+    print(f"⚠️ Multiple elements found ({element.count()}), clicking index 2")
+element.nth(1).click()  # Index 1 = second element (0-indexed)
+```
+
+---
+
 ## Backend Integration
 
 ### API Endpoints Used
@@ -695,3 +773,8 @@ Right-click side panel → Inspect
 ---
 
 *Last updated: December 2024*
+
+
+
+
+

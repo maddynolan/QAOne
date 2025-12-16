@@ -364,6 +364,127 @@ const loadTestCases = async () => {
 - Script preview
 - Export to Workflow Editor
 
+### Unified Test Builder (`pages/UnifiedWorkflowEditor.tsx`) - **NEW (Dec 2024)**
+
+**Purpose:** Primary test building interface, replacing legacy workflow editor.
+
+**File Size:** ~3100 lines
+
+**Key Features:**
+- **No-Code / Code View Toggle**: Hide/show technical selectors
+- **Multi-Export Formats**: Automation, API, Database, Performance, Manual
+- **Save / Save As**: Update existing or create new test cases
+- **Assertion Builder**: Structured expected results with code generation
+- **Import Test Cases**: Use other test cases as preconditions
+- **Documentation Formats**: ISTQB, Gherkin/BDD, Markdown export
+- **Duplicate Element Handling**: nth() selector for multiple matches
+- **Robust Failure Detection**: Screenshots, error extraction, step identification
+
+**Core State:**
+```typescript
+// Test case state
+const [testCase, setTestCase] = useState<UnifiedTestCase>({...});
+const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
+const [viewMode, setViewMode] = useState<'no-code' | 'code'>('no-code');
+
+// Execution state  
+const [isRunning, setIsRunning] = useState(false);
+const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'passed' | 'failed'>('idle');
+const [failedStep, setFailedStep] = useState<number | null>(null);
+const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+// Dialog states
+const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+const [showImportDialog, setShowImportDialog] = useState(false);
+const [showFormatDialog, setShowFormatDialog] = useState(false);
+```
+
+**Key Functions:**
+```typescript
+// Save test case (create or update)
+const saveTestCase = async () => {
+  if (savedTestCaseId) {
+    // PUT to update existing
+    await fetch(`${API_BASE_URL}/test-cases/${savedTestCaseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(buildTestCaseData())
+    });
+  } else {
+    // POST to create new
+    const response = await fetch(`${API_BASE_URL}/test-cases`, {
+      method: 'POST',
+      body: JSON.stringify(buildTestCaseData())
+    });
+    const data = await response.json();
+    setSavedTestCaseId(data.id);
+  }
+};
+
+// Run test with failure detection
+const runTest = async () => {
+  const code = generateAutomationCode();
+  const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
+    method: 'POST',
+    body: JSON.stringify({ script: code, language: 'python' })
+  });
+  
+  const result = await response.json();
+  
+  // Parse output for failure indicators
+  const fullOutput = result.output || '';
+  const patterns = ['TEST FAILED', 'FAILED:', 'Step \\d+ FAILED', 'Traceback'];
+  // ... detect failedStep, errorMessage, screenshotPath
+  
+  // Ingest results
+  resultsIngestionService.ingestResults({
+    test_case_id: savedTestCaseId,
+    status: passed ? 'passed' : 'failed',
+    metadata: { failed_step: failedStep, error_message, screenshot_path }
+  });
+};
+
+// Generate documentation formats
+const generateISTQBFormat = () => { /* ISTQB format output */ };
+const generateGherkinFormat = () => { /* Gherkin BDD format */ };
+const generateMarkdownFormat = () => { /* Markdown documentation */ };
+```
+
+### Dashboard (`pages/Dashboard.tsx`) - **Updated (Dec 2024)**
+
+**Purpose:** Executive dashboard with real-time quality metrics.
+
+**Key Updates:**
+- Now uses `resultsIngestionService` for real data (no more mock data)
+- Dynamic pass rate, execution time, and automation rate calculations
+- Recent activity shows actual test runs
+
+```typescript
+const loadDashboardData = () => {
+  const results = resultsIngestionService.getAllResults();
+  
+  const passed = results.filter(r => r.status === 'passed').length;
+  const passRate = results.length > 0 ? (passed / results.length * 100) : 0;
+  
+  const avgDuration = results.reduce((sum, r) => sum + r.duration_ms, 0) / results.length;
+  
+  setStats({
+    passRate: passRate.toFixed(1),
+    testsRun: results.length,
+    avgExecutionTime: `${(avgDuration / 1000).toFixed(1)}s`,
+    // ...
+  });
+};
+```
+
+### Results Page (`pages/Results.tsx`) - **Updated (Dec 2024)**
+
+**Purpose:** Display test run history with failure details.
+
+**Key Updates:**
+- Shows `failedStep`, `errorMessage`, `screenshotPath` from metadata
+- Refresh and Clear All buttons
+- View Screenshot functionality
+
 ---
 
 ## Components
@@ -614,7 +735,7 @@ Client for test execution API.
 ```typescript
 class TestExecutionService {
   async executeTest(request: ExecuteTestRequest): Promise<ExecutionResult> {
-    const response = await fetch(`${API_BASE_URL}/api/playwright-recorder/execute`, {
+    const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request)
@@ -626,6 +747,96 @@ class TestExecutionService {
     const response = await fetch(`${API_BASE_URL}/test-runs/${id}`);
     return response.json();
   }
+
+### Results Ingestion Service (`lib/results-ingestion-service.ts`) - **NEW (Dec 2024)**
+
+Persists test run results to localStorage with rich metadata.
+
+```typescript
+interface TestRunData {
+  id: string;
+  test_case_id?: string;
+  test_name?: string;
+  status: 'passed' | 'failed' | 'error' | 'skipped';
+  duration_ms: number;
+  started_at: string;
+  completed_at: string;
+  environment?: string;
+  metadata?: {
+    failed_step?: number | null;
+    error_message?: string | null;
+    screenshot_path?: string | null;
+    browser?: string;
+    steps_total?: number;
+    steps_passed?: number;
+  };
+}
+
+class ResultsIngestionService {
+  private results: TestRunData[] = [];
+  private readonly STORAGE_KEY = 'qaai_test_results';
+  private readonly MAX_RESULTS = 100;
+
+  constructor() {
+    this.loadFromStorage();
+  }
+
+  async ingestResults(data: TestRunData): Promise<void> {
+    this.results.unshift(data);
+    this.saveToStorage();
+  }
+
+  getAllResults(): TestRunData[] {
+    return this.results;
+  }
+
+  getResultsByStatus(status: string): TestRunData[] {
+    return this.results.filter(r => r.status === status);
+  }
+
+  clearResults(): void {
+    this.results = [];
+    localStorage.removeItem(this.STORAGE_KEY);
+  }
+
+  private loadFromStorage(): void {
+    const stored = localStorage.getItem(this.STORAGE_KEY);
+    if (stored) {
+      this.results = JSON.parse(stored);
+    }
+  }
+
+  private saveToStorage(): void {
+    // Keep only last MAX_RESULTS to prevent localStorage overflow
+    const toSave = this.results.slice(0, this.MAX_RESULTS);
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(toSave));
+  }
+}
+
+export const resultsIngestionService = new ResultsIngestionService();
+```
+
+**Usage in Dashboard/Results:**
+```typescript
+// In Dashboard.tsx
+const results = resultsIngestionService.getAllResults();
+const passed = results.filter(r => r.status === 'passed').length;
+const passRate = (passed / results.length * 100).toFixed(1);
+
+// In UnifiedWorkflowEditor.tsx after test run
+resultsIngestionService.ingestResults({
+  id: `run_${Date.now()}`,
+  test_case_id: savedTestCaseId,
+  test_name: testCase.name,
+  status: passed ? 'passed' : 'failed',
+  duration_ms: executionTime,
+  metadata: {
+    failed_step: failedStep,
+    error_message: errorMessage,
+    screenshot_path: screenshotPath
+  }
+});
+```
 }
 
 export const testExecutionService = new TestExecutionService();
@@ -795,3 +1006,8 @@ Defined in `index.css`:
 ---
 
 *Last updated: December 2024*
+
+
+
+
+
