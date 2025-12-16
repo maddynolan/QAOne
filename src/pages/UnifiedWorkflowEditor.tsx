@@ -27,7 +27,7 @@ import {
   Navigation, AlertCircle, Package, Wand2,
   ChevronRight, ChevronDown, MoreHorizontal, Target,
   Layers, RefreshCw, FileText, Monitor, Server, Gauge,
-  Video, Camera, Search, X, Edit,
+  Video, Camera, Search, X, XCircle, Edit,
   Database, ToggleLeft, ToggleRight, FolderPlus,
   BookOpen, Share2
 } from 'lucide-react';
@@ -122,11 +122,19 @@ interface TestVariable {
   type: 'static' | 'env' | 'generated' | 'extracted';
 }
 
+// Precondition test case reference
+interface PreconditionRef {
+  testCaseId: string;
+  testCaseName: string;
+  enabled: boolean;
+}
+
 interface UnifiedTestCase {
   id: string;
   name: string;
   description: string;
   tags: string[];
+  preconditions: PreconditionRef[]; // Referenced test cases to run first
   steps: TestStep[];
   variables: TestVariable[];
   settings: {
@@ -376,6 +384,7 @@ export default function UnifiedWorkflowEditor() {
     name: 'New Test Case',
     description: '',
     tags: [],
+    preconditions: [], // Test cases to run before this one
     steps: [],
     variables: [],
     settings: {
@@ -404,6 +413,15 @@ export default function UnifiedWorkflowEditor() {
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
   const [saveAsName, setSaveAsName] = useState('');
+  
+  // Import test case as precondition
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [availableTestCases, setAvailableTestCases] = useState<Array<{ id: string; name: string; description?: string; steps?: number }>>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  
+  // Format view dialog (ISTQB/Gherkin)
+  const [showFormatDialog, setShowFormatDialog] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<'istqb' | 'gherkin' | 'markdown'>('istqb');
   
   // Execution state
   const [executionResult, setExecutionResult] = useState<{
@@ -1034,6 +1052,70 @@ export default function UnifiedWorkflowEditor() {
       toast.error('Failed to save');
     }
   };
+  
+  // Load available test cases for import
+  const loadAvailableTestCases = async () => {
+    setImportLoading(true);
+    try {
+      const response = await fetch('http://localhost:8000/test-cases?limit=100');
+      if (response.ok) {
+        const data = await response.json();
+        // Filter out current test case and format the list
+        const testCases = (Array.isArray(data) ? data : [])
+          .filter((tc: any) => tc.id !== testCase.id && tc.id !== savedTestCaseId)
+          .map((tc: any) => ({
+            id: tc.id,
+            name: tc.name || tc.title || 'Unnamed Test',
+            description: tc.description,
+            steps: tc.steps?.length || 0,
+          }));
+        setAvailableTestCases(testCases);
+      }
+    } catch (error) {
+      console.error('[Import] Error loading test cases:', error);
+      toast.error('Failed to load test cases');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+  
+  // Add test case as precondition
+  const addPrecondition = (testCaseId: string, testCaseName: string) => {
+    // Check if already added
+    if (testCase.preconditions?.some(p => p.testCaseId === testCaseId)) {
+      toast.error('Test case already added as precondition');
+      return;
+    }
+    
+    setTestCase(prev => ({
+      ...prev,
+      preconditions: [
+        ...(prev.preconditions || []),
+        { testCaseId, testCaseName, enabled: true }
+      ],
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
+    }));
+    toast.success(`Added "${testCaseName}" as precondition`);
+  };
+  
+  // Remove precondition
+  const removePrecondition = (testCaseId: string) => {
+    setTestCase(prev => ({
+      ...prev,
+      preconditions: (prev.preconditions || []).filter(p => p.testCaseId !== testCaseId),
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() },
+    }));
+  };
+  
+  // Toggle precondition enabled
+  const togglePrecondition = (testCaseId: string) => {
+    setTestCase(prev => ({
+      ...prev,
+      preconditions: (prev.preconditions || []).map(p => 
+        p.testCaseId === testCaseId ? { ...p, enabled: !p.enabled } : p
+      ),
+    }));
+  };
 
   // Generate test data for all input steps
   const generateAllTestData = () => {
@@ -1172,6 +1254,26 @@ export default function UnifiedWorkflowEditor() {
                   <DropdownMenuItem onClick={() => handleExport('manual')}>
                     <BookOpen className="h-4 w-4 mr-2" />
                     Manual Test Doc
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">View Formats</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => {
+                    setSelectedFormat('istqb');
+                    setShowFormatDialog(true);
+                  }}>
+                    📋 ISTQB Format
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    setSelectedFormat('gherkin');
+                    setShowFormatDialog(true);
+                  }}>
+                    🥒 Gherkin/BDD Format
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    setSelectedFormat('markdown');
+                    setShowFormatDialog(true);
+                  }}>
+                    📝 Markdown Format
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1396,24 +1498,90 @@ export default function UnifiedWorkflowEditor() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-w-3xl mx-auto">
-                    {/* Show ALL steps - no limit */}
-                    {testCase.steps.map((step, index) => (
-                      <StepCard
-                        key={step.id}
-                        step={step}
-                        index={index}
-                        isSelected={selectedStepId === step.id}
-                        onSelect={() => setSelectedStepId(step.id)}
-                        onUpdate={(updates) => updateStep(step.id, updates)}
-                        onDelete={() => deleteStep(step.id)}
-                        onMove={(dir) => moveStep(step.id, dir)}
-                        onDuplicate={() => duplicateStep(step.id)}
-                        isFirst={index === 0}
-                        isLast={index === testCase.steps.length - 1}
-                        executionStatus={executionResult.results.find(r => r.stepId === step.id)?.status}
-                      />
-                    ))}
+                  <div className="space-y-4 max-w-3xl mx-auto">
+                    {/* Preconditions Section */}
+                    {(testCase.preconditions?.length > 0 || true) && (
+                      <div className="border rounded-lg p-3 bg-amber-50/50 dark:bg-amber-950/20">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <FolderPlus className="h-4 w-4 text-amber-600" />
+                            <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                              Preconditions (Run First)
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              loadAvailableTestCases();
+                              setShowImportDialog(true);
+                            }}
+                            className="h-7 text-xs"
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Import Test Case
+                          </Button>
+                        </div>
+                        
+                        {testCase.preconditions?.length > 0 ? (
+                          <div className="space-y-1">
+                            {testCase.preconditions.map((precond, idx) => (
+                              <div 
+                                key={precond.testCaseId} 
+                                className={`flex items-center justify-between p-2 rounded-md ${
+                                  precond.enabled ? 'bg-white dark:bg-gray-800' : 'bg-gray-100 dark:bg-gray-900 opacity-60'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={precond.enabled}
+                                    onChange={() => togglePrecondition(precond.testCaseId)}
+                                    className="h-4 w-4"
+                                  />
+                                  <span className={`text-sm ${!precond.enabled && 'line-through text-muted-foreground'}`}>
+                                    {precond.testCaseName}
+                                  </span>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removePrecondition(precond.testCaseId)}
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No preconditions. Import existing test cases to run before this test.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Test Steps */}
+                    <div className="space-y-2">
+                      {testCase.steps.map((step, index) => (
+                        <StepCard
+                          key={step.id}
+                          step={step}
+                          index={index}
+                          isSelected={selectedStepId === step.id}
+                          onSelect={() => setSelectedStepId(step.id)}
+                          onUpdate={(updates) => updateStep(step.id, updates)}
+                          onDelete={() => deleteStep(step.id)}
+                          onMove={(dir) => moveStep(step.id, dir)}
+                          onDuplicate={() => duplicateStep(step.id)}
+                          isFirst={index === 0}
+                          isLast={index === testCase.steps.length - 1}
+                          executionStatus={executionResult.results.find(r => r.stepId === step.id)?.status}
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1580,6 +1748,129 @@ export default function UnifiedWorkflowEditor() {
               >
                 Save
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Import Test Case Dialog */}
+        <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FolderPlus className="h-5 w-5 text-amber-500" />
+                Import Test Case as Precondition
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Select test cases to run before this test. They will execute in order as setup steps.
+            </p>
+            <div className="flex-1 overflow-y-auto border rounded-md">
+              {importLoading ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <RefreshCw className="h-6 w-6 mx-auto animate-spin mb-2" />
+                  Loading test cases...
+                </div>
+              ) : availableTestCases.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No saved test cases found.</p>
+                  <p className="text-xs mt-1">Save some test cases first to import them here.</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {availableTestCases.map(tc => (
+                    <div 
+                      key={tc.id}
+                      className="p-3 hover:bg-muted/50 flex items-center justify-between"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{tc.name}</div>
+                        {tc.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">{tc.description}</div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {tc.steps || 0} steps
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          addPrecondition(tc.id, tc.name);
+                        }}
+                        disabled={testCase.preconditions?.some(p => p.testCaseId === tc.id)}
+                      >
+                        {testCase.preconditions?.some(p => p.testCaseId === tc.id) ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Added
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowImportDialog(false)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Format View Dialog (ISTQB/Gherkin) */}
+        <Dialog open={showFormatDialog} onOpenChange={setShowFormatDialog}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-500" />
+                Test Case Documentation
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex gap-2 mb-2">
+              {(['istqb', 'gherkin', 'markdown'] as const).map(fmt => (
+                <Button
+                  key={fmt}
+                  size="sm"
+                  variant={selectedFormat === fmt ? 'default' : 'outline'}
+                  onClick={() => setSelectedFormat(fmt)}
+                >
+                  {fmt === 'istqb' ? '📋 ISTQB' : fmt === 'gherkin' ? '🥒 Gherkin' : '📝 Markdown'}
+                </Button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-auto border rounded-md p-4 bg-muted/30">
+              <pre className="text-sm whitespace-pre-wrap font-mono">
+                {selectedFormat === 'istqb' 
+                  ? generateISTQBFormat(testCase)
+                  : selectedFormat === 'gherkin'
+                  ? generateGherkinFormat(testCase)
+                  : generateMarkdownFormat(testCase)
+                }
+              </pre>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const content = selectedFormat === 'istqb' 
+                    ? generateISTQBFormat(testCase)
+                    : selectedFormat === 'gherkin'
+                    ? generateGherkinFormat(testCase)
+                    : generateMarkdownFormat(testCase);
+                  navigator.clipboard.writeText(content);
+                  toast.success('Copied to clipboard!');
+                }}
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy
+              </Button>
+              <Button onClick={() => setShowFormatDialog(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -2439,6 +2730,254 @@ function generateManualDoc(tc: UnifiedTestCase): string {
   return doc;
 }
 
+// Generate ISTQB format test case
+function generateISTQBFormat(tc: UnifiedTestCase): string {
+  let doc = `┌─────────────────────────────────────────────────────────────────┐
+│                    TEST CASE SPECIFICATION                       │
+└─────────────────────────────────────────────────────────────────┘
+
+TEST CASE ID: ${tc.id}
+TEST CASE NAME: ${tc.name}
+VERSION: ${tc.metadata.version}
+CREATED: ${new Date(tc.metadata.createdAt).toLocaleDateString()}
+AUTHOR: ${tc.metadata.author || 'N/A'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESCRIPTION:
+${tc.description || 'No description provided'}
+
+TAGS: ${tc.tags.join(', ') || 'None'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRECONDITIONS:
+`;
+
+  if (tc.preconditions?.length > 0) {
+    tc.preconditions.forEach((pre, idx) => {
+      doc += `${idx + 1}. Execute test case: ${pre.testCaseName} (${pre.enabled ? 'Enabled' : 'Disabled'})\n`;
+    });
+  } else {
+    doc += `• None specified\n`;
+  }
+
+  doc += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TEST STEPS:
+┌────┬────────────────────────┬────────────────────────┬──────────┐
+│ #  │ ACTION                 │ EXPECTED RESULT        │ STATUS   │
+├────┼────────────────────────┼────────────────────────┼──────────┤
+`;
+
+  tc.steps.forEach((step, index) => {
+    const action = (step.manualAction || getStepDescription(step)).slice(0, 22).padEnd(22);
+    const expected = (step.expectedResult || 'Verify success').slice(0, 22).padEnd(22);
+    const status = step.enabled ? '[ ]      ' : 'SKIP     ';
+    doc += `│ ${String(index + 1).padStart(2)} │ ${action} │ ${expected} │ ${status}│\n`;
+  });
+
+  doc += `└────┴────────────────────────┴────────────────────────┴──────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TEST DATA:
+${tc.variables.length > 0 
+  ? tc.variables.map(v => `• ${v.name}: ${v.value}`).join('\n')
+  : '• No test data specified'}
+
+ENVIRONMENT:
+• Base URL: ${tc.settings.baseUrl || 'Not specified'}
+• Timeout: ${tc.settings.timeout}ms
+• Retries: ${tc.settings.retries}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EXECUTION SUMMARY:
+• Total Steps: ${tc.steps.length}
+• Enabled Steps: ${tc.steps.filter(s => s.enabled).length}
+• Disabled Steps: ${tc.steps.filter(s => !s.enabled).length}
+
+RESULT: [ ] PASS  [ ] FAIL  [ ] BLOCKED
+
+NOTES:
+_________________________________________________________________
+`;
+
+  return doc;
+}
+
+// Generate Gherkin/BDD format
+function generateGherkinFormat(tc: UnifiedTestCase): string {
+  const tagLine = tc.tags.length > 0 ? tc.tags.map(t => `@${t.replace(/\s+/g, '_')}`).join(' ') : '@automated';
+  
+  let doc = `${tagLine}
+Feature: ${tc.name}
+  ${tc.description || 'Automated test case'}
+
+`;
+
+  // Add background for preconditions if any
+  if (tc.preconditions?.length > 0) {
+    doc += `  Background:
+    Given the following test cases have been executed:
+`;
+    tc.preconditions.forEach(pre => {
+      if (pre.enabled) {
+        doc += `      | ${pre.testCaseName} |
+`;
+      }
+    });
+    doc += `
+`;
+  }
+
+  doc += `  Scenario: ${tc.name}
+`;
+
+  // Group steps by type for better Gherkin flow
+  let hasGiven = false;
+  let hasWhen = false;
+  
+  tc.steps.forEach((step, index) => {
+    if (!step.enabled) {
+      doc += `    # DISABLED: ${step.name}\n`;
+      return;
+    }
+    
+    let keyword = 'And';
+    
+    // First navigate is Given
+    if (step.type === 'navigate' && !hasGiven) {
+      keyword = 'Given';
+      hasGiven = true;
+    }
+    // Actions (click, input, select) are When
+    else if (['click', 'input', 'select', 'hover'].includes(step.type) && !hasWhen) {
+      keyword = 'When';
+      hasWhen = true;
+    }
+    // Assertions are Then
+    else if (['assert', 'verify'].includes(step.type)) {
+      keyword = 'Then';
+    }
+    // Continue with And for same type
+    else if (hasGiven && step.type === 'navigate') {
+      keyword = 'And';
+    }
+    else if (hasWhen && ['click', 'input', 'select', 'hover'].includes(step.type)) {
+      keyword = 'And';
+    }
+    
+    const description = getStepDescription(step);
+    doc += `    ${keyword} ${description}\n`;
+    
+    if (step.expectedResult) {
+      doc += `    Then ${step.expectedResult}\n`;
+    }
+  });
+
+  doc += `
+
+  # ─────────────────────────────────────────────
+  # Test Data
+  # ─────────────────────────────────────────────
+`;
+
+  if (tc.variables.length > 0) {
+    doc += `  Examples:
+    | variable | value |
+`;
+    tc.variables.forEach(v => {
+      doc += `    | ${v.name} | ${v.value} |
+`;
+    });
+  }
+
+  return doc;
+}
+
+// Generate Markdown format (similar to manual doc but cleaner)
+function generateMarkdownFormat(tc: UnifiedTestCase): string {
+  let doc = `# 📋 ${tc.name}
+
+> ${tc.description || 'No description provided'}
+
+**Test ID:** \`${tc.id}\`  
+**Tags:** ${tc.tags.map(t => `\`${t}\``).join(', ') || 'None'}  
+**Created:** ${new Date(tc.metadata.createdAt).toLocaleDateString()}
+
+---
+
+## 🔗 Preconditions
+
+`;
+
+  if (tc.preconditions?.length > 0) {
+    tc.preconditions.forEach((pre, idx) => {
+      const icon = pre.enabled ? '✅' : '⏭️';
+      doc += `${idx + 1}. ${icon} **${pre.testCaseName}**\n`;
+    });
+  } else {
+    doc += `_No preconditions defined_\n`;
+  }
+
+  doc += `
+---
+
+## 📝 Test Steps
+
+| # | Step | Action | Expected Result | Status |
+|---|------|--------|-----------------|--------|
+`;
+
+  tc.steps.forEach((step, index) => {
+    const status = step.enabled ? '⬜' : '⏭️ Skip';
+    const action = step.manualAction || getStepDescription(step);
+    const expected = step.expectedResult || 'Verify success';
+    doc += `| ${index + 1} | ${step.name} | ${action} | ${expected} | ${status} |\n`;
+  });
+
+  doc += `
+---
+
+## 🔧 Test Configuration
+
+- **Base URL:** ${tc.settings.baseUrl || 'Not specified'}
+- **Timeout:** ${tc.settings.timeout}ms
+- **Retries:** ${tc.settings.retries}
+- **Parallelizable:** ${tc.settings.parallelizable ? 'Yes' : 'No'}
+
+`;
+
+  if (tc.variables.length > 0) {
+    doc += `## 📊 Test Data
+
+| Variable | Value | Type |
+|----------|-------|------|
+`;
+    tc.variables.forEach(v => {
+      doc += `| ${v.name} | ${v.value} | ${v.type} |\n`;
+    });
+  }
+
+  doc += `
+---
+
+## ✅ Execution Result
+
+- [ ] **PASS** - All steps completed successfully
+- [ ] **FAIL** - One or more steps failed
+- [ ] **BLOCKED** - Unable to execute
+
+**Notes:**
+_Add execution notes here..._
+`;
+
+  return doc;
+}
+
 // Generate Playwright assertion code from structured assertion
 function generateAssertionCode(assertion: StepAssertion, step: TestStep, stepIndex: number, indent: string): string {
   let code = '';
@@ -2518,4 +3057,5 @@ function convertSelector(selector: string): string {
     .replace(/locator\(['"]([^'"]+)['"]\)/g, 'locator("$1")')
     .replace(/^page\./, '') || 'locator("body")';
 }
+
 
