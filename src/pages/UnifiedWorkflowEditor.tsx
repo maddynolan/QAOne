@@ -2171,15 +2171,51 @@ function StepEditor({ step, onUpdate, onClose, onShowBlackbox }: StepEditorProps
                 <ChevronDown className="h-3 w-3" />
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-2 pt-2">
-              <Label className="text-xs">Selector (for automation)</Label>
-              <Textarea
-                value={step.selector || ''}
-                onChange={(e) => onUpdate({ selector: e.target.value })}
-                placeholder="Enter selector..."
-                className="font-mono text-xs"
-                rows={2}
-              />
+            <CollapsibleContent className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Selector (for automation)</Label>
+                <Textarea
+                  value={step.selector || ''}
+                  onChange={(e) => onUpdate({ selector: e.target.value })}
+                  placeholder="Enter selector..."
+                  className="font-mono text-xs"
+                  rows={2}
+                />
+              </div>
+              
+              {/* Element Index for handling duplicates */}
+              {['click', 'input', 'select', 'hover'].includes(step.type) && (
+                <div className="space-y-1">
+                  <Label className="text-xs flex items-center gap-1">
+                    Element Index
+                    <span className="text-muted-foreground">(for duplicate elements)</span>
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={(step as any).elementIndex?.toString() || 'first'}
+                      onValueChange={(value) => onUpdate({ 
+                        elementIndex: value === 'first' ? undefined : parseInt(value) 
+                      } as any)}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="First" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="first">First (default)</SelectItem>
+                        <SelectItem value="0">1st element</SelectItem>
+                        <SelectItem value="1">2nd element</SelectItem>
+                        <SelectItem value="2">3rd element</SelectItem>
+                        <SelectItem value="3">4th element</SelectItem>
+                        <SelectItem value="4">5th element</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      Use when page has multiple matching elements
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               <Button variant="outline" size="sm" className="w-full" onClick={onShowBlackbox}>
                 <Wand2 className="h-4 w-4 mr-1" />
                 Add Fallback Strategy
@@ -2481,14 +2517,29 @@ def test_${safeName}():
         code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
         break;
       case 'click':
-        // For elements that might have duplicates, use .first() for safety
+        // For elements that might have duplicates
         const clickSelector = convertSelector(step.selector || '');
-        code += `${indent}element = page.${clickSelector}\n`;
-        code += `${indent}if element.count() > 1:\n`;
-        code += `${indent}    print(f"WARNING: Multiple elements found ({element.count()}), clicking first one")\n`;
-        code += `${indent}    element.first.click()\n`;
-        code += `${indent}else:\n`;
-        code += `${indent}    element.click()\n`;
+        const elementIndex = (step as any).elementIndex;
+        if (elementIndex !== undefined && elementIndex !== null) {
+          // User specified which element to click
+          code += `${indent}element = page.${clickSelector}\n`;
+          code += `${indent}count = element.count()\n`;
+          code += `${indent}if count > 1:\n`;
+          code += `${indent}    print(f"Found {count} elements, clicking element ${elementIndex + 1} of {count}")\n`;
+          code += `${indent}element.nth(${elementIndex}).click()\n`;
+        } else {
+          // Default: warn if multiple, click first
+          code += `${indent}element = page.${clickSelector}\n`;
+          code += `${indent}count = element.count()\n`;
+          code += `${indent}if count > 1:\n`;
+          code += `${indent}    print(f"⚠️ WARNING: Found {count} matching elements, clicking first one")\n`;
+          code += `${indent}    print("   Consider using elementIndex to specify which element")\n`;
+          code += `${indent}    element.first.click()\n`;
+          code += `${indent}elif count == 1:\n`;
+          code += `${indent}    element.click()\n`;
+          code += `${indent}else:\n`;
+          code += `${indent}    raise Exception("No elements found matching selector")\n`;
+        }
         break;
       case 'input':
         code += `${indent}page.${convertSelector(step.selector || '')}.fill("${step.value || ''}")\n`;
@@ -2524,7 +2575,7 @@ def test_${safeName}():
     }
 
     code += `                test_results["steps_passed"] += 1
-                print(f"✓ Step ${index + 1}: ${step.name}")
+                print(f"✓ Step ${index + 1}: ${step.name.replace(/"/g, '\\"')}")
             except Exception as step_error:
                 test_results["status"] = "failed"
                 test_results["steps_failed"] += 1
@@ -2532,7 +2583,7 @@ def test_${safeName}():
                 test_results["error_message"] = str(step_error)
                 
                 # Take screenshot on failure
-                screenshot_path = f"failure_step_${index + 1}_{safeName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                screenshot_path = f"failure_step_${index + 1}_${safeName}_{'{datetime.now().strftime("%Y%m%d_%H%M%S")}'}.png"
                 try:
                     page.screenshot(path=screenshot_path, full_page=True)
                     test_results["screenshot_path"] = screenshot_path
@@ -2540,7 +2591,7 @@ def test_${safeName}():
                 except:
                     pass
                 
-                print(f"✗ Step ${index + 1} FAILED: ${step.name}")
+                print(f"✗ Step ${index + 1} FAILED: ${step.name.replace(/"/g, '\\"')}")
                 print(f"  Error: {step_error}")
                 
                 # Keep browser open for 5 seconds so user can see the failure
@@ -3057,5 +3108,7 @@ function convertSelector(selector: string): string {
     .replace(/locator\(['"]([^'"]+)['"]\)/g, 'locator("$1")')
     .replace(/^page\./, '') || 'locator("body")';
 }
+
+
 
 

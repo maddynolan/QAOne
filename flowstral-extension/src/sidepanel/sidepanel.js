@@ -2437,13 +2437,31 @@ Date: ${new Date().toISOString()}
   generateLocalSuggestions(analysis) {
     const suggestions = [];
     const seenDescriptions = new Map();  // Track duplicates to add context
+    const duplicateCounts = new Map();   // Count total duplicates by text
+    
+    // First pass: count duplicates by text/label
+    const allElements = [
+      ...(analysis.buttons || []).map(b => ({ ...b, _type: 'button' })),
+      ...(analysis.links || []).map(l => ({ ...l, _type: 'link' })),
+    ];
+    
+    allElements.forEach(el => {
+      const key = (el.text || el.label || '').toLowerCase().trim();
+      if (key) {
+        duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
+      }
+    });
     
     // Helper to make unique descriptions for duplicates
-    const makeUniqueDescription = (baseDesc, element) => {
+    const makeUniqueDescription = (baseDesc, element, elementText) => {
       const count = seenDescriptions.get(baseDesc) || 0;
       seenDescriptions.set(baseDesc, count + 1);
       
-      if (count > 0 || element.duplicateIndex > 0) {
+      // Check total duplicate count for this text
+      const key = (elementText || '').toLowerCase().trim();
+      const totalDuplicates = duplicateCounts.get(key) || 1;
+      
+      if (count > 0 || element.duplicateIndex > 0 || totalDuplicates > 1) {
         // Add context for duplicates - use location, id, or index
         let context = '';
         
@@ -2457,12 +2475,16 @@ Date: ${new Date().toISOString()}
         } else if (element.parentClass) {
           context = `in .${element.parentClass}`;
         } else {
-          context = `(${(element.duplicateIndex || count) + 1})`;
+          context = `(${(element.duplicateIndex || count) + 1} of ${totalDuplicates})`;
         }
         
-        return `${baseDesc} ${context}`;
+        return { 
+          description: `${baseDesc} ${context}`,
+          elementIndex: element.duplicateIndex || count,
+          totalDuplicates 
+        };
       }
-      return baseDesc;
+      return { description: baseDesc, elementIndex: null, totalDuplicates: 1 };
     };
     
     // Add ALL button/clickable suggestions (increased from 5 to 50)
@@ -2479,19 +2501,25 @@ Date: ${new Date().toISOString()}
         }[elementType] || elementType;
         
         const baseDesc = `Click "${btn.text}" ${elementLabel}`;
+        const { description, elementIndex, totalDuplicates } = makeUniqueDescription(baseDesc, btn, btn.text);
+        
         suggestions.push({
           type: 'click',
           element: elementType,
           text: btn.text,
           selector: btn.selector,
           selectorObj: btn.selectorObj,
-          description: makeUniqueDescription(baseDesc, btn),
+          description,
           tagName: btn.tagName,
           id: btn.id,
           className: btn.className,
           name: btn.name,
           role: btn.role,
           ariaLabel: btn.ariaLabel,
+          // Duplicate tracking
+          elementIndex: elementIndex,
+          totalDuplicates: totalDuplicates,
+          hasDuplicates: totalDuplicates > 1,
         });
       }
     });
@@ -2504,20 +2532,25 @@ Date: ${new Date().toISOString()}
         baseDesc = `Click "${link.text}" link [${link.location}]`;
       }
       
+      const { description, elementIndex, totalDuplicates } = makeUniqueDescription(baseDesc, link, link.text);
+      
       suggestions.push({
         type: 'click',
         element: 'link',
         text: link.text,
         selector: link.selector,
         selectorObj: link.selectorObj,
-        description: makeUniqueDescription(baseDesc, link),
+        description,
         tagName: link.tagName,
         id: link.id,
         className: link.className,
         ariaLabel: link.ariaLabel,
         href: link.href,
         location: link.location,
-        duplicateIndex: link.duplicateIndex,
+        // Duplicate tracking
+        elementIndex: elementIndex,
+        totalDuplicates: totalDuplicates,
+        hasDuplicates: totalDuplicates > 1,
       });
     });
     
@@ -2712,6 +2745,11 @@ Date: ${new Date().toISOString()}
         ? `<span style="font-size: 9px; color: #667eea; margin-left: 4px;">[${suggestion.location}]</span>`
         : '';
       
+      // Duplicate warning badge - shows when multiple elements match
+      const duplicateBadge = suggestion.hasDuplicates 
+        ? `<span style="font-size: 9px; color: #f59e0b; background: #fef3c7; padding: 1px 4px; border-radius: 3px; margin-left: 4px;" title="⚠️ ${suggestion.totalDuplicates} elements match this selector. Element ${(suggestion.elementIndex || 0) + 1} of ${suggestion.totalDuplicates} will be targeted.">⚠️ ${suggestion.totalDuplicates} found</span>`
+        : '';
+      
       // Selector code - only show if toggle is on
       const selectorHtml = this.showSelectorCode 
         ? `<div class="suggestion-selector">${(suggestion.selector || '').substring(0, 80)}${suggestion.selector?.length > 80 ? '...' : ''}</div>`
@@ -2722,7 +2760,7 @@ Date: ${new Date().toISOString()}
           ${this.getSuggestionIcon(suggestion)}
         </div>
         <div class="suggestion-details">
-          <div class="suggestion-type">${actionLabel} ${elementLabel}${locationBadge}</div>
+          <div class="suggestion-type">${actionLabel} ${elementLabel}${locationBadge}${duplicateBadge}</div>
           <div class="suggestion-text">${suggestion.text || suggestion.label || suggestion.description}</div>
           ${selectorHtml}
         </div>
@@ -2931,7 +2969,11 @@ Date: ${new Date().toISOString()}
         expectedResult: this.generateExpectedResult(suggestion, assertionConfig || autoAssertion)
       },
       // NEW: Input value for fill actions
-      value: suggestion.value || response?.value || null
+      value: suggestion.value || response?.value || null,
+      // NEW: Element index for handling duplicate elements
+      elementIndex: suggestion.elementIndex,
+      totalDuplicates: suggestion.totalDuplicates || 1,
+      hasDuplicates: suggestion.hasDuplicates || false
     };
     
     this.workflowSteps.push(step);
@@ -3583,7 +3625,11 @@ Date: ${new Date().toISOString()}
               expectedResult: step.assertion?.enabled ? 
                 this.generateExpectedResult(step, step.assertion) : 
                 'Step completes successfully'
-            }
+            },
+            // NEW: Element index for handling duplicates
+            elementIndex: step.elementIndex,
+            totalDuplicates: step.totalDuplicates,
+            hasDuplicates: step.hasDuplicates
           }
         });
       });
