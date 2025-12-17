@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowstral vs Enterprise Performance Testing Tools - Architecture Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .header .meta {
+            margin-top: 20px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 12px 30px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 20px;
+            cursor: pointer;
+            border: none;
+            font-size: 1em;
+        }
+        
+        .download-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        h3 {
+            color: #444;
+            margin: 20px 0 10px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .highlight {
+            background: #e8f5e9;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        
+        .architecture-diagram {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre;
+            line-height: 1.4;
+        }
+        
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .comparison-card {
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .comparison-card.flowstral {
+            border-color: #667eea;
+            background: linear-gradient(to bottom, #f0f4ff 0%, white 100%);
+        }
+        
+        .comparison-card.loadrunner {
+            border-color: #dc3545;
+            background: linear-gradient(to bottom, #fff5f5 0%, white 100%);
+        }
+        
+        .comparison-card h4 {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid currentColor;
+        }
+        
+        .comparison-card.flowstral h4 {
+            color: #667eea;
+        }
+        
+        .comparison-card.loadrunner h4 {
+            color: #dc3545;
+        }
+        
+        .feature-list {
+            list-style: none;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .check {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .cross {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .cost-comparison {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .cost-box {
+            text-align: center;
+            padding: 30px;
+            border-radius: 10px;
+            min-width: 200px;
+        }
+        
+        .cost-box.expensive {
+            background: #ffebee;
+            border: 2px solid #dc3545;
+        }
+        
+        .cost-box.cheap {
+            background: #e8f5e9;
+            border: 2px solid #28a745;
+        }
+        
+        .cost-box .price {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .cost-box.expensive .price {
+            color: #dc3545;
+        }
+        
+        .cost-box.cheap .price {
+            color: #28a745;
+        }
+        
+        .summary-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .summary-box h2 {
+            color: white;
+            border-bottom-color: rgba(255,255,255,0.3);
+        }
+        
+        .key-benefits {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .benefit {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .benefit-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Flowstral Performance Testing Platform</h1>
+        <p class="subtitle">Architecture Comparison: Flowstral vs Enterprise Tools</p>
+        <p class="meta">Version 1.0 | December 2024 | Technical Architecture Document</p>
+        <button class="download-btn no-print" onclick="window.print()">📄 Download as PDF</button>
+    </div>
+
+    <section>
+        <h2>Executive Summary</h2>
+        <p>This document provides a comprehensive architectural comparison between <strong>Flowstral</strong> and traditional enterprise performance testing tools including HP LoadRunner, NeoLoad, and other market alternatives.</p>
+        
+        <table>
+            <tr>
+                <th>Capability</th>
+                <th>Flowstral</th>
+                <th>LoadRunner</th>
+                <th>NeoLoad</th>
+                <th>Gatling</th>
+            </tr>
+            <tr>
+                <td>Recording Method</td>
+                <td class="highlight">Browser-Native</td>
+                <td>Proxy-Based</td>
+                <td>Proxy-Based</td>
+                <td>Code-Only</td>
+            </tr>
+            <tr>
+                <td>Correlation</td>
+                <td class="highlight">Automatic</td>
+                <td>Manual</td>
+                <td>Semi-Auto</td>
+                <td>Manual</td>
+            </tr>
+            <tr>
+                <td>UI + Protocol Unified</td>
+                <td class="highlight">✓ Yes</td>
+                <td>✗ Separate</td>
+                <td>✗ Separate</td>
+                <td>✗ No UI</td>
+            </tr>
+            <tr>
+                <td>Container-Native</td>
+                <td class="highlight">✓ Yes</td>
+                <td>✗ Limited</td>
+                <td>⚠ Partial</td>
+                <td>✓ Yes</td>
+            </tr>
+            <tr>
+                <td>Open Source</td>
+                <td class="highlight">✓ Yes</td>
+                <td>✗ No</td>
+                <td>✗ No</td>
+                <td>✓ Yes</td>
+            </tr>
+            <tr>
+                <td>Annual Cost (1000 users)</td>
+                <td class="highlight">~$500</td>
+                <td>~$85,000</td>
+                <td>~$50,000</td>
+                <td>~$2,000</td>
+            </tr>
+        </table>
+    </section>
+
+    <section class="page-break">
+        <h2>1. Recording Architecture Comparison</h2>
+        
+        <div class="comparison-grid">
+            <div class="comparison-card loadrunner">
+                <h4>❌ Traditional Tools (LoadRunner/NeoLoad)</h4>
+                <div class="architecture-diagram">
+┌──────────┐    ┌─────────────────┐    ┌──────────┐
+│ Browser  │───▶│  PROXY SERVER   │───▶│ Target   │
+│          │    │  (Port 8080)    │    │ App      │
+└──────────┘    │  SSL Intercept  │    └──────────┘
+                └────────┬────────┘
+                         │
+                         ▼
+                ┌─────────────────┐
+                │  C / JavaScript │
+                │     Scripts     │
+                └─────────────────┘</div>
+                <ul class="feature-list">
+                    <li><span class="cross">✗</span> Requires proxy configuration</li>
+                    <li><span class="cross">✗</span> SSL certificate installation</li>
+                    <li><span class="cross">✗</span> Conflicts with corporate proxy</li>
+                    <li><span class="cross">✗</span> Cannot capture Service Workers</li>
+                    <li><span class="cross">✗</span> HTTP/2 issues</li>
+                </ul>
+            </div>
+            
+            <div class="comparison-card flowstral">
+                <h4>✓ Flowstral (Browser-Native)</h4>
+                <div class="architecture-diagram">
+┌─────────────────────────────────────────┐
+│           CHROME BROWSER                │
+│  ┌─────────────────────────────────┐   │
+│  │     FLOWSTRAL EXTENSION         │   │
+│  │                                 │   │
+│  │  chrome.webRequest API          │   │
+│  │  • Direct capture               │   │
+│  │  • No proxy needed              │   │
+│  │  • Auto-correlation             │   │
+│  └─────────────────────────────────┘   │
+│                  │                      │
+│                  ▼                      │
+│         ┌───────────────┐               │
+│         │   HAR + JSON  │               │
+│         └───────────────┘               │
+└─────────────────────────────────────────┘</div>
+                <ul class="feature-list">
+                    <li><span class="check">✓</span> No proxy configuration</li>
+                    <li><span class="check">✓</span> No SSL certificates</li>
+                    <li><span class="check">✓</span> Works with corporate proxy</li>
+                    <li><span class="check">✓</span> Captures all traffic</li>
+                    <li><span class="check">✓</span> Full HTTP/2 support</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h2>2. Correlation: The Critical Difference</h2>
+        
+        <h3>What is Correlation?</h3>
+        <p>Dynamic values (session IDs, tokens) that change per session and must be extracted from responses and reused in subsequent requests.</p>
+        
+        <div class="comparison-grid">
+            <div class="comparison-card loadrunner">
+                <h4>LoadRunner (Manual - Hours of Work)</h4>
+                <div class="architecture-diagram" style="font-size: 11px;">
+// Step 1: Identify dynamic values manually
+// Step 2: Add extraction BEFORE request
+web_reg_save_param("sessionId",
+    "LB=session_id\":\"",
+    "RB=\"",
+    "Ord=1",
+    LAST);
+
+// Step 3: Use in subsequent requests
+web_custom_request("GetData",
+    "Headers=Auth: Bearer {sessionId}",
+    LAST);
+
+// TIME: 2-8 hours per script
+// MAINTENANCE: Breaks when API changes</div>
+            </div>
+            
+            <div class="comparison-card flowstral">
+                <h4>Flowstral (Automatic - Zero Effort)</h4>
+                <div class="architecture-diagram" style="font-size: 11px;">
+// Auto-detected during recording
+{
+  "correlations": [
+    {
+      "name": "session_id",
+      "type": "auto-detected",
+      "pattern": "session_id\":\"([^\"]+)\"",
+      "source": "response.body",
+      "usedIn": [5, 7, 8, 12]
+    }
+  ]
+}
+
+// TIME: 0 seconds (automatic)
+// MAINTENANCE: Self-healing patterns</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="page-break">
+        <h2>3. Load Generation Architecture</h2>
+        
+        <h3>LoadRunner Architecture</h3>
+        <div class="architecture-diagram">
+                         ┌───────────────────────┐
+                         │      CONTROLLER       │
+                         │    (Windows Server)   │
+                         │   License: ~$15,000   │
+                         └───────────┬───────────┘
+                                     │
+            ┌────────────────────────┼────────────────────────┐
+            │                        │                        │
+            ▼                        ▼                        ▼
+   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+   │  LOAD GENERATOR │     │  LOAD GENERATOR │     │  LOAD GENERATOR │
+   │  200 VUsers     │     │  200 VUsers     │     │  200 VUsers     │
+   │  License: $10K  │     │  License: $10K  │     │  License: $10K  │
+   └─────────────────┘     └─────────────────┘     └─────────────────┘
+                                     │
+                                     ▼
+                         ┌───────────────────────┐
+                         │     TARGET SYSTEM     │
+                         └───────────────────────┘</div>
+        
+        <h3>Flowstral Architecture</h3>
+        <div class="architecture-diagram">
+                         ┌───────────────────────┐
+                         │      CONTROLLER       │
+                         │    (Python/FastAPI)   │
+                         │    License: FREE      │
+                         └───────────┬───────────┘
+                                     │
+            ┌────────────────────────┼────────────────────────┐
+            │                        │                        │
+            ▼                        ▼                        ▼
+   ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+   │     WORKER      │     │     WORKER      │     │     WORKER      │
+   │   (Container)   │     │   (Container)   │     │   (Container)   │
+   │   500 VUsers    │     │   500 VUsers    │     │   500 VUsers    │
+   │   Cost: $0.05/h │     │   Cost: $0.05/h │     │   Cost: $0.05/h │
+   └─────────────────┘     └─────────────────┘     └─────────────────┘
+                                     │
+                                     ▼
+                         ┌───────────────────────┐
+                         │     TARGET SYSTEM     │
+                         └───────────────────────┘
+
+   ✓ Kubernetes auto-scaling          ✓ No license limits
+   ✓ Docker-native deployment         ✓ Pay only during tests</div>
+    </section>
+
+    <section>
+        <h2>4. Cost Comparison</h2>
+        
+        <div class="cost-comparison">
+            <div class="cost-box expensive">
+                <h4>LoadRunner</h4>
+                <div class="price">$85,000</div>
+                <p>Per year for 1000 users</p>
+                <small>Controller + Load Generators + Maintenance</small>
+            </div>
+            
+            <div class="cost-box expensive">
+                <h4>NeoLoad</h4>
+                <div class="price">$50,000</div>
+                <p>Per year for 1000 users</p>
+                <small>Enterprise license + Support</small>
+            </div>
+            
+            <div class="cost-box cheap">
+                <h4>Flowstral</h4>
+                <div class="price">~$500</div>
+                <p>Per year for 1000 users</p>
+                <small>Cloud compute only (open source)</small>
+            </div>
+        </div>
+        
+        <h3>3-Year Total Cost of Ownership</h3>
+        <table>
+            <tr>
+                <th>Cost Category</th>
+                <th>LoadRunner</th>
+                <th>NeoLoad</th>
+                <th>Flowstral</th>
+            </tr>
+            <tr>
+                <td>Year 1 (Licenses + Setup)</td>
+                <td>$80,000</td>
+                <td>$73,000</td>
+                <td class="highlight">$0</td>
+            </tr>
+            <tr>
+                <td>Years 2-3 (Maintenance)</td>
+                <td>$36,000</td>
+                <td>$34,000</td>
+                <td class="highlight">$0</td>
+            </tr>
+            <tr>
+                <td>Cloud Execution (50 tests)</td>
+                <td>$5,000</td>
+                <td>$2,500</td>
+                <td class="highlight">$25</td>
+            </tr>
+            <tr>
+                <td><strong>3-Year Total</strong></td>
+                <td><strong>$121,000</strong></td>
+                <td><strong>$109,500</strong></td>
+                <td class="highlight"><strong>$25</strong></td>
+            </tr>
+        </table>
+    </section>
+
+    <section class="page-break">
+        <h2>5. Feature Matrix</h2>
+        
+        <table>
+            <tr>
+                <th>Feature</th>
+                <th>Flowstral</th>
+                <th>LoadRunner</th>
+                <th>NeoLoad</th>
+                <th>Gatling</th>
+                <th>k6</th>
+            </tr>
+            <tr>
+                <td>Browser-native capture</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>✗</td>
+                <td>✗</td>
+                <td>✗</td>
+            </tr>
+            <tr>
+                <td>Auto-correlation</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>⚠</td>
+                <td>✗</td>
+                <td>✗</td>
+            </tr>
+            <tr>
+                <td>Unified UI + Protocol</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>✗</td>
+                <td>✗</td>
+                <td>✗</td>
+            </tr>
+            <tr>
+                <td>HTTP/2 support</td>
+                <td class="highlight">✓</td>
+                <td>⚠</td>
+                <td>⚠</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+            <tr>
+                <td>WebSocket capture</td>
+                <td class="highlight">✓</td>
+                <td>⚠</td>
+                <td>✓</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+            <tr>
+                <td>Container-native</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>⚠</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+            <tr>
+                <td>Kubernetes support</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>⚠</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+            <tr>
+                <td>CI/CD integration</td>
+                <td class="highlight">✓</td>
+                <td>⚠</td>
+                <td>✓</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+            <tr>
+                <td>Users per node</td>
+                <td class="highlight">1000</td>
+                <td>500</td>
+                <td>400</td>
+                <td>800</td>
+                <td>1000</td>
+            </tr>
+            <tr>
+                <td>Open source</td>
+                <td class="highlight">✓</td>
+                <td>✗</td>
+                <td>✗</td>
+                <td>✓</td>
+                <td>✓</td>
+            </tr>
+        </table>
+    </section>
+
+    <section class="summary-box">
+        <h2>Why Choose Flowstral?</h2>
+        <div class="key-benefits">
+            <div class="benefit">
+                <div class="benefit-icon">🎯</div>
+                <h4>Zero Configuration</h4>
+                <p>No proxy, no certs, no hassle. Works instantly.</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">⚡</div>
+                <h4>Auto-Correlation</h4>
+                <p>Save hours of manual scripting with automatic detection.</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">🔄</div>
+                <h4>Unified Testing</h4>
+                <p>UI and protocol testing from single recording.</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">💰</div>
+                <h4>99% Cost Savings</h4>
+                <p>Open source with pay-per-use cloud execution.</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">☁️</div>
+                <h4>Cloud-Native</h4>
+                <p>Docker, Kubernetes, auto-scaling ready.</p>
+            </div>
+            <div class="benefit">
+                <div class="benefit-icon">🚀</div>
+                <h4>Modern Apps Ready</h4>
+                <p>HTTP/2, WebSocket, GraphQL, SPA support.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>© 2024 Flowstral. This document is provided for informational purposes.</p>
+        <p>Version 1.0 | December 2024</p>
+    </footer>
+</body>
+</html>
