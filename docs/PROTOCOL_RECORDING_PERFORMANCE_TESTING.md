@@ -464,6 +464,107 @@ async def run_user(user_id):
 # Same machine can handle 2-3x more users with async
 ```
 
+### Deployment Mode Selection Guide
+
+**CRITICAL: Choose the right deployment mode for accurate results!**
+
+#### When to Use VM-Based Load Generators
+
+| Scenario | Why VMs? |
+|----------|----------|
+| **Official baseline tests** | Most accurate timing (no container overhead) |
+| **Firewall requirements** | Static IPs can be whitelisted |
+| **Soak tests (24h+)** | No pod eviction, stable memory |
+| **Legacy protocols** | Citrix, SAP GUI, custom TCP work better |
+| **Regulatory compliance** | Dedicated infrastructure required |
+| **Behind-firewall apps** | Simpler network topology |
+
+#### When to Use Container/Kubernetes Load Generators
+
+| Scenario | Why Containers? |
+|----------|-----------------|
+| **CI/CD pipeline tests** | Quick spin-up, disposable |
+| **Cost optimization** | Pay only while running |
+| **Elastic scaling** | Scale 100→10000 users automatically |
+| **Development smoke tests** | Fast feedback loop |
+| **Cloud-native apps** | Same environment as production |
+
+#### Container Caveats (Important!)
+
+```
+⚠️ NETWORK OVERHEAD:
+   Container NAT: +0.5-2ms latency
+   Overlay network: +1-3ms latency
+   Total: Your response times will be 1.5-5ms HIGHER than reality!
+
+⚠️ PORT EXHAUSTION:
+   Host ephemeral ports: 32768-60999 (~28K ports)
+   With 60s TIME_WAIT: max ~466 new connections/second/host
+   Solution: Increase port range or use connection pooling
+
+⚠️ NOISY NEIGHBORS:
+   Other pods on same node affect CPU/memory
+   Solution: Use dedicated node pools for load generators
+
+⚠️ POD EVICTION:
+   Long tests may be interrupted by Kubernetes
+   Solution: Use VMs for tests > 4 hours
+```
+
+#### Recommended Hybrid Approach
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   HYBRID DEPLOYMENT STRATEGY                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  CI/CD TESTS (Daily)                BASELINE TESTS (Monthly)    │
+│  ─────────────────                  ────────────────────────    │
+│  ┌──────────────┐                   ┌──────────────┐            │
+│  │ Kubernetes   │                   │  Dedicated   │            │
+│  │ Pods (5-10)  │                   │  VMs (2-4)   │            │
+│  │              │                   │              │            │
+│  │ Quick: 2min  │                   │ Accurate:    │            │
+│  │ Cheap: $0.10 │                   │ No overhead  │            │
+│  │ Purpose:     │                   │ Purpose:     │            │
+│  │ Catch        │                   │ Official     │            │
+│  │ regressions  │                   │ benchmarks   │            │
+│  └──────────────┘                   └──────────────┘            │
+│         │                                  │                     │
+│         └──────────────┬───────────────────┘                     │
+│                        ▼                                         │
+│              Compare Results: Container vs VM                    │
+│              Calculate overhead delta for your app               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Overhead Compensation (Experimental)
+
+If you must compare container results against VM baselines:
+
+```python
+# In load test config
+config = LoadTestConfig(
+    # ... other settings ...
+    compensate_container_overhead=True,
+    estimated_overhead_ms=2.0  # Calibrate for your environment
+)
+
+# Metrics will show both raw and compensated values:
+# avg_response_time_ms: 45.2 (raw)
+# compensated_avg_response_time_ms: 43.2 (minus overhead)
+```
+
+⚠️ **Warning**: Overhead varies by:
+- Network configuration (CNI plugin, overlay type)
+- Cloud provider (AWS EKS vs Azure AKS vs GKE)
+- Time of day (shared infrastructure load)
+
+**Best practice**: Establish your own overhead baseline by running identical tests on VMs and containers.
+
+---
+
 ### Deployment for Scale
 
 **Option 1: Docker Compose (up to 5,000 users)**
@@ -471,10 +572,10 @@ async def run_user(user_id):
 version: '3'
 services:
   controller:
-    image: qaai/load-controller
+    image: flowstral/load-controller
     
   worker-1:
-    image: qaai/load-worker
+    image: flowstral/load-worker
     deploy:
       resources:
         limits:

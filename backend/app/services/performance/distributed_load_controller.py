@@ -1,23 +1,81 @@
 """
 Distributed Load Test Controller
 
-Orchestrates load tests across multiple worker nodes (VMs/containers)
+Orchestrates load tests across multiple worker nodes (VMs OR containers)
 to achieve 1000+ virtual users - similar to LoadRunner's architecture
 but with automatic correlation and modern protocols.
 
 Architecture:
     Controller (this service)
         ↓
-    Worker Nodes (k6, Locust, or custom HTTP executor)
+    Worker Nodes (VM-based OR Container-based)
         ↓
     Target Application
 
-Key Differences from LoadRunner:
-- No proxy needed (HAR-based)
-- Auto-correlation (no manual scripting)
-- Container-native (Kubernetes ready)
-- Real-time WebSocket metrics
-- Open source executors (k6, Locust)
+=============================================================================
+DEPLOYMENT MODE SELECTION GUIDE
+=============================================================================
+
+USE VM-BASED LOAD GENERATORS WHEN YOU NEED:
+-------------------------------------------
+✓ Strict network placement (specific subnets, VLANs)
+✓ Fixed/static IP addresses (for firewall whitelisting)
+✓ Behind-firewall simplicity (no container networking complexity)
+✓ Maximum stability and predictable performance
+✓ Legacy protocol support (Citrix, SAP GUI, custom TCP)
+✓ Hardware-level isolation (no noisy neighbors)
+✓ Long-running soak tests (24h+)
+✓ Regulatory compliance requiring dedicated infrastructure
+✓ Testing applications that block container IP ranges
+
+USE DOCKER/KUBERNETES LOAD GENERATORS WHEN YOU NEED:
+-----------------------------------------------------
+✓ Rapid spin-up/tear-down (tests run < 1 hour)
+✓ Elastic auto-scaling based on metrics
+✓ CI/CD triggered performance tests
+✓ Cost optimization (pay only while running)
+✓ You already have mature K8s in same network zone as SUT
+✓ Standard HTTP/HTTPS/WebSocket protocols
+✓ Disposable test infrastructure
+
+CONTAINER CAVEATS TO BE AWARE OF:
+---------------------------------
+⚠️ Network Overhead:
+   - Container NAT adds 0.5-2ms latency
+   - Overlay networks (Calico, Flannel) add another 1-3ms
+   - This affects measured response times!
+   
+⚠️ Resource Contention:
+   - Shared host CPU/memory can cause inconsistent results
+   - Other pods on same node = "noisy neighbor" problem
+   - Solution: Use dedicated node pools for load generators
+   
+⚠️ Port Exhaustion:
+   - Containers share host's ephemeral port range (32768-60999)
+   - ~28K ports ÷ 60s TIME_WAIT = ~466 new connections/second/host max
+   - Solution: Increase host port range or use connection pooling
+   
+⚠️ DNS Resolution:
+   - K8s CoreDNS adds 1-5ms per lookup
+   - Solution: Use IP addresses or cache DNS
+   
+⚠️ Cold Start:
+   - Pod scheduling takes 2-10 seconds
+   - Image pull can take 30-60 seconds on first run
+   - Solution: Pre-warm pods, use local image cache
+   
+⚠️ Protocol Limitations:
+   - Low-level TCP/UDP manipulation is harder
+   - Some protocols don't work well through CNI
+   - Solution: Use hostNetwork: true (loses some isolation)
+
+RECOMMENDED HYBRID APPROACH:
+----------------------------
+1. Use containers for CI/CD smoke tests (quick, cheap)
+2. Use VMs for official performance baselines (accurate, stable)
+3. Mix both: VM workers for critical paths, containers for scale-out
+
+=============================================================================
 """
 
 import asyncio
@@ -48,6 +106,14 @@ class LoadProfile(Enum):
     CUSTOM = "custom"          # User-defined
 
 
+class DeploymentMode(Enum):
+    """Worker deployment mode - affects performance characteristics"""
+    VM = "vm"                   # Dedicated VM (most accurate, stable)
+    CONTAINER = "container"    # Docker container (flexible, cost-effective)
+    KUBERNETES = "kubernetes"  # K8s pod (auto-scaling, CI/CD friendly)
+    HYBRID = "hybrid"          # Mix of VM and containers
+
+
 @dataclass
 class WorkerNode:
     """Represents a load generator machine/container"""
@@ -60,6 +126,15 @@ class WorkerNode:
     error_count: int = 0
     last_heartbeat: datetime = field(default_factory=datetime.now)
     
+    # Deployment info
+    deployment_mode: DeploymentMode = DeploymentMode.CONTAINER
+    static_ip: Optional[str] = None  # For VM mode - fixed IP for firewall rules
+    network_zone: str = "default"     # Network segment (important for latency)
+    
+    # Capacity hints based on deployment mode
+    max_concurrent_connections: int = 500  # VM: 10K+, Container: 500-2K
+    expected_latency_overhead_ms: float = 0.0  # Container: 1-5ms, VM: 0ms
+    
     @property
     def url(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -68,6 +143,11 @@ class WorkerNode:
     def is_healthy(self) -> bool:
         """Check if worker responded recently"""
         return (datetime.now() - self.last_heartbeat).seconds < 30
+    
+    @property
+    def is_vm_based(self) -> bool:
+        """Check if this is a VM worker (more accurate measurements)"""
+        return self.deployment_mode == DeploymentMode.VM
 
 
 @dataclass
@@ -102,6 +182,71 @@ class LoadTestConfig:
     # Thresholds
     max_response_time_ms: int = 5000
     max_error_rate_percent: float = 5.0
+    
+    # Deployment Configuration
+    deployment_mode: DeploymentMode = DeploymentMode.CONTAINER
+    
+    # Container overhead compensation
+    # Set to True to subtract estimated container/network overhead from measurements
+    # Useful when comparing against VM-based baseline tests
+    compensate_container_overhead: bool = False
+    estimated_overhead_ms: float = 2.0  # Typical container NAT + overlay overhead
+    
+    # Network requirements
+    require_static_ip: bool = False       # If True, only use VM workers
+    require_same_network_zone: bool = True  # Workers must be in same zone as target
+    
+    # Soak test settings
+    is_soak_test: bool = False  # Long-running test (24h+)
+    # For soak tests, VMs are recommended due to:
+    # - Container memory leaks can accumulate
+    # - Pod eviction/rescheduling can interrupt test
+    # - More stable resource allocation
+
+
+@dataclass
+class DeploymentRecommendation:
+    """Recommendation for deployment mode based on test requirements"""
+    recommended_mode: DeploymentMode
+    reason: str
+    warnings: List[str] = field(default_factory=list)
+    
+    @staticmethod
+    def analyze(config: 'LoadTestConfig') -> 'DeploymentRecommendation':
+        """Analyze config and recommend deployment mode"""
+        warnings = []
+        
+        # Check for VM requirements
+        if config.require_static_ip:
+            return DeploymentRecommendation(
+                recommended_mode=DeploymentMode.VM,
+                reason="Static IP required - firewall rules need fixed addresses",
+                warnings=["Ensure VMs are pre-provisioned with whitelisted IPs"]
+            )
+        
+        if config.is_soak_test:
+            return DeploymentRecommendation(
+                recommended_mode=DeploymentMode.VM,
+                reason="Soak test detected - VMs provide stability for 24h+ tests",
+                warnings=[
+                    "Container pods may be evicted during long tests",
+                    "Memory leaks in containers accumulate over time"
+                ]
+            )
+        
+        if config.duration_seconds > 3600:  # > 1 hour
+            warnings.append("Long test duration - consider VM workers for stability")
+        
+        if config.total_virtual_users > 5000:
+            warnings.append("High user count - ensure container port range is sufficient")
+            warnings.append("Consider: sysctl net.ipv4.ip_local_port_range='1024 65535'")
+        
+        # Container is fine for most cases
+        return DeploymentRecommendation(
+            recommended_mode=DeploymentMode.CONTAINER,
+            reason="Standard HTTP test - containers provide cost-effective scaling",
+            warnings=warnings
+        )
 
 
 @dataclass
@@ -121,6 +266,50 @@ class LoadTestMetrics:
     
     # Per-request breakdown
     request_metrics: Dict[str, Dict] = field(default_factory=dict)
+    
+    # Container overhead tracking (for transparency)
+    raw_avg_response_time_ms: float = 0.0  # Before overhead compensation
+    overhead_compensated: bool = False
+    estimated_overhead_ms: float = 0.0
+    
+    # Worker deployment mix
+    vm_workers: int = 0
+    container_workers: int = 0
+    
+    def compensate_overhead(self, overhead_ms: float) -> 'LoadTestMetrics':
+        """
+        Create a copy with container overhead subtracted.
+        
+        Use this when:
+        - Comparing against VM-based baseline tests
+        - Reporting "pure" application response times
+        
+        Do NOT use this when:
+        - You need real end-user latency (includes network)
+        - Comparing tests run on same infrastructure
+        """
+        if overhead_ms <= 0:
+            return self
+            
+        return LoadTestMetrics(
+            timestamp=self.timestamp,
+            total_requests=self.total_requests,
+            successful_requests=self.successful_requests,
+            failed_requests=self.failed_requests,
+            requests_per_second=self.requests_per_second,
+            avg_response_time_ms=max(0, self.avg_response_time_ms - overhead_ms),
+            p50_response_time_ms=max(0, self.p50_response_time_ms - overhead_ms),
+            p95_response_time_ms=max(0, self.p95_response_time_ms - overhead_ms),
+            p99_response_time_ms=max(0, self.p99_response_time_ms - overhead_ms),
+            active_users=self.active_users,
+            error_rate_percent=self.error_rate_percent,
+            request_metrics=self.request_metrics,
+            raw_avg_response_time_ms=self.avg_response_time_ms,
+            overhead_compensated=True,
+            estimated_overhead_ms=overhead_ms,
+            vm_workers=self.vm_workers,
+            container_workers=self.container_workers
+        )
 
 
 class DistributedLoadController:
