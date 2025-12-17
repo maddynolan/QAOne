@@ -346,6 +346,192 @@ One recording creates:
 
 ---
 
+## Distributed Load Testing Architecture
+
+### How LoadRunner Works (For Comparison)
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     LOADRUNNER ARCHITECTURE                              │
+│                                                                          │
+│  ┌───────────────┐                                                      │
+│  │    VuGen      │  Recording (proxy-based, generates C scripts)        │
+│  └───────┬───────┘                                                      │
+│          │                                                               │
+│          ▼                                                               │
+│  ┌───────────────┐     Orchestration (Windows-based, licensed)          │
+│  │  Controller   │────────────────────────────────────┐                 │
+│  └───────┬───────┘                                    │                 │
+│          │                                            │                 │
+│    ┌─────┴─────┬─────────────┬─────────────┐         │                 │
+│    ▼           ▼             ▼             ▼         │                 │
+│ ┌──────┐   ┌──────┐     ┌──────┐     ┌──────┐       │                 │
+│ │ LG 1 │   │ LG 2 │     │ LG 3 │     │ LG 4 │       │                 │
+│ │200 VU│   │200 VU│     │200 VU│     │200 VU│       │                 │
+│ │ $$$  │   │ $$$  │     │ $$$  │     │ $$$  │       │                 │
+│ └──────┘   └──────┘     └──────┘     └──────┘       │                 │
+│    │           │             │             │         │                 │
+│    └───────────┴─────────────┴─────────────┘         │                 │
+│                        │                              │                 │
+│                        ▼                              ▼                 │
+│                 ┌─────────────┐              ┌─────────────┐           │
+│                 │ Target App  │              │  Analysis   │           │
+│                 └─────────────┘              │   Server    │           │
+│                                              └─────────────┘           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+LoadRunner Costs for 1000 Users:
+- Controller License: ~$15,000
+- Load Generator Licenses: 5 x $10,000 = $50,000
+- Analysis License: ~$5,000
+- Annual Maintenance: ~$15,000
+- TOTAL: ~$85,000+ first year
+```
+
+### QAAI Distributed Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        QAAI ARCHITECTURE                                 │
+│                                                                          │
+│  ┌───────────────┐                                                      │
+│  │   Recorder    │  Browser-native (HAR output, auto-correlation)       │
+│  │  (Extension)  │                                                      │
+│  └───────┬───────┘                                                      │
+│          │                                                               │
+│          ▼                                                               │
+│  ┌───────────────┐     Orchestration (Python, container-native)         │
+│  │  Controller   │────────────────────────────────────┐                 │
+│  │  (FastAPI)    │                                    │                 │
+│  └───────┬───────┘                                    │                 │
+│          │                                            │                 │
+│    ┌─────┴─────┬─────────────┬─────────────┐         │                 │
+│    ▼           ▼             ▼             ▼         │                 │
+│ ┌──────┐   ┌──────┐     ┌──────┐     ┌──────┐       │                 │
+│ │Worker│   │Worker│     │Worker│     │Worker│       │                 │
+│ │ 500  │   │ 500  │     │ 500  │     │ 500  │       │                 │
+│ │ FREE │   │ FREE │     │ FREE │     │ FREE │       │                 │
+│ │Docker│   │Docker│     │Docker│     │Docker│       │                 │
+│ └──────┘   └──────┘     └──────┘     └──────┘       │                 │
+│    │           │             │             │         │                 │
+│    └───────────┴─────────────┴─────────────┘         │                 │
+│                        │                              │                 │
+│                        ▼                              ▼                 │
+│                 ┌─────────────┐              ┌─────────────┐           │
+│                 │ Target App  │              │  Real-time  │           │
+│                 └─────────────┘              │  Dashboard  │           │
+│                                              └─────────────┘           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+QAAI Costs for 1000 Users:
+- Software: $0 (open source)
+- Cloud VMs: 2 x t3.large (~$0.08/hr) = ~$0.16/hr
+- For 1-hour test: ~$0.20
+- TOTAL: ~$0.20 per test (vs $85,000 LoadRunner)
+```
+
+### Why LoadRunner Needs Multiple VMs
+
+1. **Memory**: Each virtual user maintains HTTP state (~2-5MB RAM)
+   - 1000 users = 2-5 GB RAM
+   - Plus LoadRunner overhead = 8-10 GB total
+
+2. **CPU**: SSL encryption is CPU-intensive
+   - Each HTTPS request needs encryption/decryption
+   - 200-500 concurrent connections max efficient per CPU
+
+3. **Network**: Connection limits
+   - OS limits on open connections (~65K per IP)
+   - Practical limit ~10K connections per machine
+
+4. **Licensing**: LoadRunner limits users per Load Generator
+   - Typical license: 200-500 users per LG
+   - Forces buying more licenses for scale
+
+### QAAI's Efficiency Advantages
+
+```python
+# LoadRunner uses threads (expensive)
+# Each Vuser = 1 thread = ~2MB stack + context switching
+
+# QAAI uses async (efficient)
+async def run_user(user_id):
+    async with aiohttp.ClientSession() as session:
+        while running:
+            await execute_request(session)
+            await asyncio.sleep(think_time)
+
+# Same machine can handle 2-3x more users with async
+```
+
+### Deployment for Scale
+
+**Option 1: Docker Compose (up to 5,000 users)**
+```yaml
+version: '3'
+services:
+  controller:
+    image: qaai/load-controller
+    
+  worker-1:
+    image: qaai/load-worker
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+  
+  worker-2:
+    image: qaai/load-worker
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+```
+
+**Option 2: Kubernetes (10,000+ users)**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-workers
+spec:
+  replicas: 20  # 20 workers x 500 users = 10,000 users
+  template:
+    spec:
+      containers:
+      - name: worker
+        image: qaai/load-worker
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+```
+
+**Option 3: Cloud Auto-Scaling (unlimited)**
+```
+AWS ECS / GCP Cloud Run / Azure Container Instances
+- Auto-scale based on load
+- Pay only for test duration
+- No idle infrastructure costs
+```
+
+### Capacity Planning
+
+| Target Users | Workers Needed | Memory/Worker | Total Cost/Hour |
+|-------------|----------------|---------------|-----------------|
+| 500         | 1              | 2 GB          | ~$0.05          |
+| 1,000       | 2              | 2 GB each     | ~$0.10          |
+| 5,000       | 5              | 4 GB each     | ~$0.50          |
+| 10,000      | 10             | 4 GB each     | ~$1.00          |
+| 50,000      | 50             | 4 GB each     | ~$5.00          |
+| 100,000     | 100            | 4 GB each     | ~$10.00         |
+
+**LoadRunner equivalent cost for 100,000 users: ~$500,000+**
+
+---
+
 ## Future Enhancements
 
 1. **Correlation Parameterization UI** - Visual editor for extraction rules
