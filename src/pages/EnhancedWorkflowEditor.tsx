@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Workflow, FolderOpen, Variable, Calendar, GitBranch,
   Settings, Play, Save, Download, Upload, ChevronLeft,
@@ -12,7 +12,8 @@ import {
   MousePointer, Type, Clock, CheckCircle, Navigation,
   Code, Eye, EyeOff, Trash2, Copy, ArrowUp, ArrowDown, Lightbulb,
   AlertCircle, Info, Sparkles, FolderPlus, User, Bot, ToggleLeft, ToggleRight,
-  History, Monitor, RefreshCw
+  History, Monitor, RefreshCw, Activity, FileJson, ExternalLink, Gauge, 
+  Timer, TrendingUp, Link2, Key, Server, ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -288,7 +289,9 @@ const LOCATOR_STRATEGIES: Record<string, {
 
 export default function EnhancedWorkflowEditorPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const sessionId = searchParams.get('sessionId') || undefined;
+  const testCaseIdFromUrl = searchParams.get('testCaseId') || undefined;
   
   // Panel states
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -306,8 +309,52 @@ export default function EnhancedWorkflowEditorPage() {
   const [saveTestCaseName, setSaveTestCaseName] = useState('');
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
 
+  // Import test case dialog state
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [availableTestCases, setAvailableTestCases] = useState<Array<{id: string; name: string; description?: string; steps?: any[]; type?: string}>>([]);
+  const [loadingTestCases, setLoadingTestCases] = useState(false);
+  const [importSearchTerm, setImportSearchTerm] = useState('');
+
   // Salesforce validation state
   const [sfValidationResult, setSfValidationResult] = useState<WorkflowValidationResult | null>(null);
+
+  // Protocol/Network capture state (for load testing)
+  const [protocolData, setProtocolData] = useState<{
+    requests: Array<{
+      requestId: string;
+      url: string;
+      method: string;
+      statusCode: number;
+      duration: number;
+      type: string;
+      requestHeaders: Record<string, string>;
+      responseHeaders: Record<string, string>;
+      requestBody?: string;
+      timing?: {
+        dns: number;
+        tcp: number;
+        ssl: number;
+        ttfb: number;
+        download: number;
+      };
+      triggeredBy?: { type: string; description: string };
+    }>;
+    correlations: Array<{ name: string; values: string[] }>;
+    statistics: {
+      totalRequests: number;
+      successfulRequests: number;
+      failedRequests: number;
+      avgDuration: number;
+      p95Duration: number;
+    };
+    linkedActions: Array<{
+      action: { type: string; description: string };
+      requests: Array<{ url: string; method: string; statusCode: number }>;
+    }>;
+  } | null>(null);
+  const [showRequestInspector, setShowRequestInspector] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [showLoadTestModal, setShowLoadTestModal] = useState(false);
 
   // Workflow state
   const [workflowName, setWorkflowName] = useState('New Workflow');
@@ -443,8 +490,72 @@ export default function EnhancedWorkflowEditorPage() {
     }
   }, [wsConnected, wsProgress]);
 
-  // Load saved state
+  // Load unified test case from recorder (injected via localStorage)
   useEffect(() => {
+    const unifiedTestCaseStr = localStorage.getItem('unified_test_case');
+    if (unifiedTestCaseStr) {
+      try {
+        const unifiedTestCase = JSON.parse(unifiedTestCaseStr);
+        console.log('[Builder] Loading unified test case from recorder:', unifiedTestCase.name);
+        
+        // Set workflow name
+        setWorkflowName(unifiedTestCase.name || 'Recorded Test');
+        
+        // Convert steps to nodes
+        const newNodes: WorkflowNode[] = (unifiedTestCase.steps || []).map((step: any, index: number) => ({
+          id: `node-${Date.now()}-${index}`,
+          type: step.type || 'click',
+          label: step.name || `Step ${index + 1}`,
+          position: { x: 50, y: index * 80 + 20 },
+          data: {
+            selector: step.selector || '',
+            selectorObj: step.selectorObj,
+            value: step.value || '',
+            url: step.url || '',
+            description: step.target || step.name || '',
+            manualStep: {
+              action: step.name || '',
+              expectedResult: step.expectedResult || 'Step completes successfully',
+            },
+          },
+        }));
+        
+        setNodes(newNodes);
+        
+        // Load protocol data if present
+        if (unifiedTestCase.network_data && unifiedTestCase.has_protocol_data) {
+          console.log('[Builder] Loading protocol data:', unifiedTestCase.network_data.requests?.length || 0, 'requests');
+          setProtocolData({
+            requests: unifiedTestCase.network_data.requests || [],
+            correlations: unifiedTestCase.network_data.correlations || [],
+            statistics: unifiedTestCase.network_data.statistics || {
+              totalRequests: unifiedTestCase.network_data.requests?.length || 0,
+              successfulRequests: 0,
+              failedRequests: 0,
+              avgDuration: 0,
+              p95Duration: 0,
+            },
+            linkedActions: unifiedTestCase.network_data.linkedActions || [],
+          });
+          toast.success(`Loaded test with ${newNodes.length} steps + ${unifiedTestCase.network_data.requests?.length || 0} HTTP requests`);
+        } else {
+          toast.success(`Loaded test with ${newNodes.length} steps`);
+        }
+        
+        // Clear the localStorage so it doesn't reload on refresh
+        localStorage.removeItem('unified_test_case');
+        
+      } catch (e) {
+        console.error('[Builder] Failed to load unified test case:', e);
+      }
+    }
+  }, []);
+
+  // Load saved state (fallback if no unified test case)
+  useEffect(() => {
+    // Don't load saved state if we just loaded from unified_test_case
+    if (nodes.length > 0) return;
+    
     const savedWorkflow = localStorage.getItem('workflow_editor_state');
     if (savedWorkflow) {
       try {
@@ -456,7 +567,7 @@ export default function EnhancedWorkflowEditorPage() {
         console.error('Failed to load saved workflow:', e);
       }
     }
-  }, []);
+  }, [nodes.length]);
 
   // Auto-save
   useEffect(() => {
@@ -1182,6 +1293,202 @@ ${workflowName.replace(/\s+/g, ' ')}
     }
   }, [generateUnifiedTestCase, workflowName, savedTestCaseId]);
 
+  // Fetch available test cases for import
+  const fetchAvailableTestCases = useCallback(async () => {
+    setLoadingTestCases(true);
+    const allCases: Array<{id: string; name: string; description?: string; steps?: any[]; type?: string}> = [];
+    
+    try {
+      // Load from localStorage
+      const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
+      allCases.push(...local.map((tc: any) => ({
+        id: tc.id,
+        name: tc.name || tc.title || 'Untitled',
+        description: tc.description,
+        steps: tc.steps,
+        type: tc.type || 'manual'
+      })));
+      
+      // Try backend with timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      
+      try {
+        const response = await fetch('http://localhost:8000/test-cases', {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        
+        if (response.ok) {
+          const data = await response.json();
+          const backendCases = Array.isArray(data) ? data : (data.value || data.test_cases || []);
+          backendCases.forEach((tc: any) => {
+            if (!allCases.some(c => c.id === tc.id)) {
+              allCases.push({
+                id: tc.id,
+                name: tc.name || tc.title || `Test Case ${tc.id?.slice(0, 8) || 'Unknown'}`,
+                description: tc.description,
+                steps: tc.steps,
+                type: tc.type || 'manual'
+              });
+            }
+          });
+        }
+      } catch {
+        console.log('Backend timeout/error, using local only');
+      }
+      
+      setAvailableTestCases(allCases);
+    } catch (error) {
+      console.error('Error fetching test cases:', error);
+    } finally {
+      setLoadingTestCases(false);
+    }
+  }, []);
+
+  // Convert test case step to workflow node type
+  const getNodeTypeFromAction = (action: string): NodeType => {
+    const actionLower = action.toLowerCase();
+    if (actionLower.includes('navigate') || actionLower.includes('go to') || actionLower.includes('open')) return 'navigate';
+    if (actionLower.includes('click') || actionLower.includes('press') || actionLower.includes('tap')) return 'click';
+    if (actionLower.includes('enter') || actionLower.includes('type') || actionLower.includes('input') || actionLower.includes('fill')) return 'input';
+    if (actionLower.includes('wait') || actionLower.includes('pause') || actionLower.includes('delay')) return 'wait';
+    if (actionLower.includes('verify') || actionLower.includes('assert') || actionLower.includes('check') || actionLower.includes('confirm') || actionLower.includes('ensure')) return 'assert';
+    if (actionLower.includes('api') || actionLower.includes('request') || actionLower.includes('call')) return 'api';
+    if (actionLower.includes('database') || actionLower.includes('query') || actionLower.includes('sql')) return 'database';
+    if (actionLower.includes('screenshot') || actionLower.includes('capture')) return 'screenshot';
+    if (actionLower.includes('extract') || actionLower.includes('copy') || actionLower.includes('get text')) return 'extract_text';
+    return 'click'; // default
+  };
+
+  // Load test case into the builder
+  const loadTestCaseIntoBuilder = useCallback(async (testCaseId: string) => {
+    try {
+      // First try localStorage
+      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+      let testCase = localCases.find((tc: any) => tc.id === testCaseId);
+      
+      // Try backend if not found locally
+      if (!testCase) {
+        try {
+          const response = await fetch(`http://localhost:8000/test-cases/${testCaseId}`);
+          if (response.ok) {
+            testCase = await response.json();
+          }
+        } catch {
+          console.log('Could not fetch from backend');
+        }
+      }
+      
+      if (!testCase) {
+        toast.error('Test case not found');
+        return;
+      }
+      
+      // Convert test case steps to workflow nodes
+      const steps = testCase.steps || [];
+      const newNodes: WorkflowNode[] = steps.map((step: any, index: number) => {
+        const action = step.action || step.description || '';
+        const nodeType = getNodeTypeFromAction(action);
+        
+        // Extract value from action if it's an input type
+        let value = step.test_data || step.testData || '';
+        if (!value && nodeType === 'input') {
+          const valueMatch = action.match(/["']([^"']+)["']|enter\s+(.+)/i);
+          if (valueMatch) value = valueMatch[1] || valueMatch[2] || '';
+        }
+        
+        // Extract URL for navigate actions
+        let url = '';
+        if (nodeType === 'navigate') {
+          const urlMatch = action.match(/https?:\/\/[^\s]+|to\s+(.+)/i);
+          if (urlMatch) url = urlMatch[0] || '';
+        }
+        
+        return {
+          id: `node-${Date.now()}-${index}`,
+          type: nodeType,
+          label: action.slice(0, 50) || `Step ${index + 1}`,
+          position: { x: 50, y: index * 80 + 20 },
+          data: {
+            url: nodeType === 'navigate' ? url || 'https://' : undefined,
+            value: nodeType === 'input' ? value : undefined,
+            waitTime: nodeType === 'wait' ? 1000 : undefined,
+            selector: step.selector || '',
+            description: action,
+            manualStep: {
+              action: action,
+              expectedResult: step.expected_result || step.expectedResult || 'Step completes successfully',
+            },
+            assertion: step.expected_result || step.expectedResult ? {
+              enabled: true,
+              type: 'visible' as AssertionType,
+              expected: step.expected_result || step.expectedResult,
+            } : undefined,
+          },
+        };
+      });
+      
+      // Update workflow state
+      setNodes(newNodes);
+      setWorkflowName(testCase.name || testCase.title || 'Imported Test Case');
+      setSavedTestCaseId(testCaseId);
+      setShowImportDialog(false);
+      
+      // Try to detect app type from test case
+      if (testCase.tags?.includes('salesforce') || testCase.application?.toLowerCase().includes('salesforce')) {
+        setAppType('salesforce');
+      } else if (testCase.tags?.includes('angular') || testCase.application?.toLowerCase().includes('angular')) {
+        setAppType('angular');
+      } else if (testCase.tags?.includes('react') || testCase.application?.toLowerCase().includes('react')) {
+        setAppType('react');
+      }
+      
+      // Set framework if available
+      if (testCase.automation_data?.framework || testCase.framework) {
+        setFramework(testCase.automation_data?.framework || testCase.framework);
+      }
+      
+      // Load protocol data if available
+      if (testCase.network_data || testCase.protocol_data) {
+        const networkData = testCase.network_data || testCase.protocol_data;
+        setProtocolData({
+          requests: networkData.requests || [],
+          correlations: networkData.correlations || [],
+          statistics: networkData.statistics || {
+            totalRequests: networkData.requests?.length || 0,
+            successfulRequests: 0,
+            failedRequests: 0,
+            avgDuration: 0,
+            p95Duration: 0,
+          },
+          linkedActions: networkData.linked_actions || networkData.linkedActions || [],
+        });
+        toast.success(`Loaded "${testCase.name || testCase.title}" with ${newNodes.length} steps + protocol data`);
+      } else {
+        // Clear any previous protocol data
+        setProtocolData(null);
+        toast.success(`Loaded "${testCase.name || testCase.title}" with ${newNodes.length} steps`);
+      }
+    } catch (error: any) {
+      toast.error(`Error loading test case: ${error.message}`);
+    }
+  }, []);
+
+  // Open import dialog
+  const openImportDialog = useCallback(() => {
+    setImportSearchTerm('');
+    setShowImportDialog(true);
+    fetchAvailableTestCases();
+  }, [fetchAvailableTestCases]);
+
+  // Load test case from URL parameter on mount
+  useEffect(() => {
+    if (testCaseIdFromUrl) {
+      loadTestCaseIntoBuilder(testCaseIdFromUrl);
+    }
+  }, [testCaseIdFromUrl, loadTestCaseIntoBuilder]);
+
   // Add new node
   const addNode = (type: NodeType) => {
     const nodeLabels: Record<NodeType, string> = {
@@ -1617,6 +1924,12 @@ ${workflowName.replace(/\s+/g, ' ')}
               Manual Test
             </Button>
             )}
+            
+            {/* Import Test Case - load existing for debugging/modifying */}
+            <Button variant="outline" onClick={openImportDialog}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import Test Case
+            </Button>
             
             {/* Save Test Case - always visible */}
             <Button variant="outline" onClick={openSaveDialog} disabled={nodes.length === 0}>
@@ -2319,9 +2632,18 @@ ${workflowName.replace(/\s+/g, ' ')}
                 </div>
                 
                 <Tabs value={activeRightTab} onValueChange={setActiveRightTab} className="flex-1 flex flex-col">
-                  <TabsList className="w-full rounded-none border-b grid grid-cols-2">
+                  <TabsList className="w-full rounded-none border-b grid grid-cols-3">
                     <TabsTrigger value="properties" className="text-xs">Step</TabsTrigger>
-                    <TabsTrigger value="variables" className="text-xs">Variables</TabsTrigger>
+                    <TabsTrigger value="variables" className="text-xs">Data</TabsTrigger>
+                    <TabsTrigger value="protocol" className="text-xs flex items-center gap-1">
+                      <Activity className="h-3 w-3" />
+                      Protocol
+                      {protocolData && protocolData.requests.length > 0 && (
+                        <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-1">
+                          {protocolData.requests.length}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
                   </TabsList>
                   
                   <div className="flex-1 overflow-y-auto p-3">
@@ -2694,6 +3016,288 @@ ${workflowName.replace(/\s+/g, ' ')}
                         />
                       </div>
                     </TabsContent>
+
+                    {/* Protocol Tab - HTTP Requests for Load Testing */}
+                    <TabsContent value="protocol" className="m-0 space-y-3">
+                      {/* Protocol Header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-violet-500" />
+                          <span className="text-xs font-medium">Protocol Data</span>
+                        </div>
+                        {protocolData && protocolData.requests.length > 0 && (
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-[10px] px-2"
+                              onClick={() => {
+                                // Export as HAR
+                                const har = {
+                                  log: {
+                                    version: '1.2',
+                                    creator: { name: 'QAAI Builder', version: '1.0' },
+                                    entries: protocolData.requests.map(r => ({
+                                      startedDateTime: new Date().toISOString(),
+                                      time: r.duration,
+                                      request: {
+                                        method: r.method,
+                                        url: r.url,
+                                        httpVersion: 'HTTP/1.1',
+                                        headers: Object.entries(r.requestHeaders || {}).map(([name, value]) => ({ name, value })),
+                                      },
+                                      response: {
+                                        status: r.statusCode,
+                                        statusText: '',
+                                        headers: Object.entries(r.responseHeaders || {}).map(([name, value]) => ({ name, value })),
+                                      },
+                                      timings: r.timing || {},
+                                    })),
+                                  },
+                                };
+                                const blob = new Blob([JSON.stringify(har, null, 2)], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${workflowName.replace(/\s+/g, '_')}_protocol.har`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                toast.success('HAR file exported!');
+                              }}
+                            >
+                              <FileJson className="h-3 w-3 mr-1" />
+                              HAR
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 bg-violet-600 hover:bg-violet-700"
+                              onClick={() => setShowLoadTestModal(true)}
+                            >
+                              <Gauge className="h-3 w-3 mr-1" />
+                              Load Test
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Protocol Info or Empty State */}
+                      {!protocolData || protocolData.requests.length === 0 ? (
+                        <div className="text-center py-6 space-y-3">
+                          <div className="w-12 h-12 mx-auto rounded-full bg-violet-100 flex items-center justify-center">
+                            <Activity className="h-6 w-6 text-violet-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">No Protocol Data</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Enable "Protocol Capture" in the recorder or import a HAR file
+                            </p>
+                          </div>
+                          
+                          {/* Import HAR Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => {
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.accept = '.har,.json';
+                              input.onchange = async (e) => {
+                                const file = (e.target as HTMLInputElement).files?.[0];
+                                if (file) {
+                                  try {
+                                    const text = await file.text();
+                                    const harData = JSON.parse(text);
+                                    const entries = harData?.log?.entries || [];
+                                    
+                                    if (entries.length > 0) {
+                                      // Convert HAR entries to protocol data format
+                                      const requests = entries.map((entry: any, idx: number) => ({
+                                        requestId: `har_${idx}`,
+                                        url: entry.request?.url || '',
+                                        method: entry.request?.method || 'GET',
+                                        statusCode: entry.response?.status || 0,
+                                        duration: entry.time || 0,
+                                        type: 'fetch',
+                                        requestHeaders: (entry.request?.headers || []).reduce((acc: any, h: any) => {
+                                          acc[h.name] = h.value;
+                                          return acc;
+                                        }, {}),
+                                        responseHeaders: (entry.response?.headers || []).reduce((acc: any, h: any) => {
+                                          acc[h.name] = h.value;
+                                          return acc;
+                                        }, {}),
+                                        timing: entry.timings || {},
+                                      }));
+                                      
+                                      setProtocolData({
+                                        requests,
+                                        correlations: [],
+                                        statistics: {
+                                          totalRequests: requests.length,
+                                          successfulRequests: requests.filter((r: any) => r.statusCode >= 200 && r.statusCode < 400).length,
+                                          failedRequests: requests.filter((r: any) => r.statusCode >= 400).length,
+                                          avgDuration: Math.round(requests.reduce((sum: number, r: any) => sum + (r.duration || 0), 0) / requests.length),
+                                          p95Duration: 0,
+                                        },
+                                        linkedActions: [],
+                                      });
+                                      
+                                      toast.success(`Imported ${requests.length} HTTP requests from HAR file!`);
+                                    } else {
+                                      toast.error('No requests found in HAR file');
+                                    }
+                                  } catch (err) {
+                                    toast.error('Invalid HAR file format');
+                                  }
+                                }
+                              };
+                              input.click();
+                            }}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Import HAR File
+                          </Button>
+                          
+                          <div className="bg-violet-50 rounded-lg p-3 text-left">
+                            <p className="text-xs font-medium text-violet-700 mb-2">
+                              🎯 Better than LoadRunner
+                            </p>
+                            <ul className="text-xs text-violet-600 space-y-1">
+                              <li>• No proxy setup needed</li>
+                              <li>• Auto-detects tokens & session IDs</li>
+                              <li>• Links UI actions to API calls</li>
+                              <li>• Export to HAR, k6, JMeter</li>
+                            </ul>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {/* Statistics Summary */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-green-50 rounded-lg p-2 text-center">
+                              <div className="text-lg font-bold text-green-600">
+                                {protocolData.statistics?.totalRequests || protocolData.requests.length}
+                              </div>
+                              <div className="text-[10px] text-green-700">Requests</div>
+                            </div>
+                            <div className="bg-blue-50 rounded-lg p-2 text-center">
+                              <div className="text-lg font-bold text-blue-600">
+                                {protocolData.statistics?.avgDuration || 0}ms
+                              </div>
+                              <div className="text-[10px] text-blue-700">Avg Time</div>
+                            </div>
+                          </div>
+
+                          {/* Correlations Detected */}
+                          {protocolData.correlations && protocolData.correlations.length > 0 && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                              <div className="flex items-center gap-1 mb-1">
+                                <Key className="h-3 w-3 text-amber-600" />
+                                <span className="text-xs font-medium text-amber-700">
+                                  Auto-Detected Correlations
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {protocolData.correlations.map((c, i) => (
+                                  <Badge key={i} variant="outline" className="text-[10px] bg-amber-100 border-amber-300">
+                                    {c.name}: {c.values.length}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <p className="text-[10px] text-amber-600 mt-1">
+                                These will be parameterized in load tests
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Request List */}
+                          <div>
+                            <Label className="text-xs font-medium mb-2 flex items-center gap-1">
+                              <Server className="h-3 w-3" />
+                              HTTP Requests ({protocolData.requests.length})
+                            </Label>
+                            <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                              {protocolData.requests.slice(0, 20).map((req, idx) => (
+                                <div
+                                  key={req.requestId || idx}
+                                  className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                                  onClick={() => {
+                                    setSelectedRequest(req);
+                                    setShowRequestInspector(true);
+                                  }}
+                                >
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-[10px] min-w-[45px] justify-center ${
+                                      req.method === 'GET' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                      req.method === 'POST' ? 'bg-green-100 text-green-700 border-green-300' :
+                                      req.method === 'PUT' ? 'bg-amber-100 text-amber-700 border-amber-300' :
+                                      req.method === 'DELETE' ? 'bg-red-100 text-red-700 border-red-300' :
+                                      'bg-gray-100'
+                                    }`}
+                                  >
+                                    {req.method}
+                                  </Badge>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs truncate font-mono">
+                                      {new URL(req.url).pathname}
+                                    </div>
+                                  </div>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-[10px] ${
+                                      req.statusCode >= 200 && req.statusCode < 300 ? 'bg-green-100 text-green-700' :
+                                      req.statusCode >= 400 ? 'bg-red-100 text-red-700' :
+                                      'bg-gray-100'
+                                    }`}
+                                  >
+                                    {req.statusCode}
+                                  </Badge>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {req.duration}ms
+                                  </span>
+                                </div>
+                              ))}
+                              {protocolData.requests.length > 20 && (
+                                <p className="text-xs text-center text-muted-foreground py-2">
+                                  +{protocolData.requests.length - 20} more requests
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Linked Actions */}
+                          {protocolData.linkedActions && protocolData.linkedActions.length > 0 && (
+                            <div className="border-t pt-3">
+                              <Label className="text-xs font-medium mb-2 flex items-center gap-1">
+                                <Link2 className="h-3 w-3" />
+                                UI → API Mapping
+                              </Label>
+                              <div className="space-y-2">
+                                {protocolData.linkedActions.slice(0, 5).map((link, idx) => (
+                                  <div key={idx} className="bg-gradient-to-r from-violet-50 to-blue-50 rounded-lg p-2">
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <Badge variant="outline" className="bg-violet-100 text-violet-700 text-[10px]">
+                                        {link.action.type}
+                                      </Badge>
+                                      <ArrowRight className="h-3 w-3 text-gray-400" />
+                                      <span className="text-blue-700">
+                                        {link.requests.length} API call{link.requests.length > 1 ? 's' : ''}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-600 mt-1 truncate">
+                                      {link.action.description}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </TabsContent>
                   </div>
                 </Tabs>
               </div>
@@ -2827,6 +3431,338 @@ ${workflowName.replace(/\s+/g, ' ')}
             >
               <Save className="h-4 w-4 mr-2" />
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Test Case Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-blue-500" />
+              Import Test Case
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Load an existing test case into the builder for debugging or modifying test steps.
+            </p>
+            
+            {/* Search */}
+            <div className="relative">
+              <Input
+                placeholder="Search test cases..."
+                value={importSearchTerm}
+                onChange={(e) => setImportSearchTerm(e.target.value)}
+                className="pl-8"
+              />
+              <FolderOpen className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+            
+            {/* Test Cases List */}
+            <div className="border rounded-lg max-h-[400px] overflow-y-auto">
+              {loadingTestCases ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading test cases...</span>
+                </div>
+              ) : availableTestCases.filter(tc => 
+                !importSearchTerm || 
+                tc.name?.toLowerCase().includes(importSearchTerm.toLowerCase()) ||
+                tc.description?.toLowerCase().includes(importSearchTerm.toLowerCase())
+              ).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  <p>No test cases found</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {availableTestCases
+                    .filter(tc => 
+                      !importSearchTerm || 
+                      tc.name?.toLowerCase().includes(importSearchTerm.toLowerCase()) ||
+                      tc.description?.toLowerCase().includes(importSearchTerm.toLowerCase())
+                    )
+                    .map((tc) => (
+                      <div
+                        key={tc.id}
+                        className="p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => loadTestCaseIntoBuilder(tc.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{tc.name}</div>
+                            {tc.description && (
+                              <div className="text-xs text-muted-foreground truncate mt-0.5">
+                                {tc.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <Badge variant="outline" className="text-xs">
+                              {tc.steps?.length || 0} steps
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              {tc.type || 'manual'}
+                            </Badge>
+                            <Button size="sm" variant="ghost" className="h-7 px-2">
+                              <Upload className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={fetchAvailableTestCases} disabled={loadingTestCases}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingTestCases ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Inspector Modal */}
+      <Dialog open={showRequestInspector} onOpenChange={setShowRequestInspector}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-blue-500" />
+              Request Inspector
+            </DialogTitle>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="space-y-4 overflow-y-auto max-h-[60vh]">
+              {/* Request Summary */}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <Badge 
+                  className={`${
+                    selectedRequest.method === 'GET' ? 'bg-blue-500' :
+                    selectedRequest.method === 'POST' ? 'bg-green-500' :
+                    selectedRequest.method === 'PUT' ? 'bg-amber-500' :
+                    selectedRequest.method === 'DELETE' ? 'bg-red-500' :
+                    'bg-gray-500'
+                  }`}
+                >
+                  {selectedRequest.method}
+                </Badge>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-mono truncate">{selectedRequest.url}</p>
+                </div>
+                <Badge 
+                  variant="outline"
+                  className={`${
+                    selectedRequest.statusCode >= 200 && selectedRequest.statusCode < 300 ? 'border-green-500 text-green-600' :
+                    selectedRequest.statusCode >= 400 ? 'border-red-500 text-red-600' :
+                    'border-gray-500'
+                  }`}
+                >
+                  {selectedRequest.statusCode}
+                </Badge>
+              </div>
+
+              {/* Timing Breakdown */}
+              {selectedRequest.timing && (
+                <div>
+                  <Label className="text-xs font-medium">Timing Breakdown</Label>
+                  <div className="grid grid-cols-5 gap-2 mt-2">
+                    {[
+                      { label: 'DNS', value: selectedRequest.timing.dns, color: 'bg-blue-500' },
+                      { label: 'TCP', value: selectedRequest.timing.tcp, color: 'bg-green-500' },
+                      { label: 'SSL', value: selectedRequest.timing.ssl, color: 'bg-purple-500' },
+                      { label: 'TTFB', value: selectedRequest.timing.ttfb, color: 'bg-amber-500' },
+                      { label: 'Download', value: selectedRequest.timing.download, color: 'bg-red-500' },
+                    ].map((t, i) => (
+                      <div key={i} className="text-center">
+                        <div className={`h-2 rounded ${t.color}`} style={{ opacity: Math.max(0.3, (t.value || 0) / 100) }} />
+                        <p className="text-[10px] text-muted-foreground mt-1">{t.label}</p>
+                        <p className="text-xs font-mono">{t.value || 0}ms</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-2 text-xs">
+                    <span className="text-muted-foreground">Total:</span>
+                    <span className="font-medium">{selectedRequest.duration}ms</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Triggered By (UI Action) */}
+              {selectedRequest.triggeredBy && (
+                <div className="bg-violet-50 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-violet-500" />
+                    <span className="text-xs font-medium text-violet-700">Triggered by UI Action</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="outline" className="bg-violet-100">
+                      {selectedRequest.triggeredBy.type}
+                    </Badge>
+                    <span className="text-xs text-violet-600">{selectedRequest.triggeredBy.description}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Request Headers */}
+              <div>
+                <Label className="text-xs font-medium">Request Headers</Label>
+                <div className="mt-2 bg-gray-900 rounded-lg p-3 max-h-[150px] overflow-y-auto">
+                  <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">
+                    {Object.entries(selectedRequest.requestHeaders || {}).map(([k, v]) => `${k}: ${v}`).join('\n') || 'No headers captured'}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Response Headers */}
+              <div>
+                <Label className="text-xs font-medium">Response Headers</Label>
+                <div className="mt-2 bg-gray-900 rounded-lg p-3 max-h-[150px] overflow-y-auto">
+                  <pre className="text-xs text-blue-400 font-mono whitespace-pre-wrap">
+                    {Object.entries(selectedRequest.responseHeaders || {}).map(([k, v]) => `${k}: ${v}`).join('\n') || 'No headers captured'}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Request Body */}
+              {selectedRequest.requestBody && (
+                <div>
+                  <Label className="text-xs font-medium">Request Body</Label>
+                  <div className="mt-2 bg-gray-900 rounded-lg p-3 max-h-[150px] overflow-y-auto">
+                    <pre className="text-xs text-amber-400 font-mono whitespace-pre-wrap">
+                      {typeof selectedRequest.requestBody === 'string' 
+                        ? selectedRequest.requestBody 
+                        : JSON.stringify(selectedRequest.requestBody, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRequestInspector(false)}>
+              Close
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                // Copy as cURL
+                const req = selectedRequest;
+                let curl = `curl -X ${req.method} '${req.url}'`;
+                Object.entries(req.requestHeaders || {}).forEach(([k, v]) => {
+                  curl += ` \\\n  -H '${k}: ${v}'`;
+                });
+                if (req.requestBody) {
+                  curl += ` \\\n  -d '${typeof req.requestBody === 'string' ? req.requestBody : JSON.stringify(req.requestBody)}'`;
+                }
+                navigator.clipboard.writeText(curl);
+                toast.success('Copied as cURL!');
+              }}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy as cURL
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Load Test Modal */}
+      <Dialog open={showLoadTestModal} onOpenChange={setShowLoadTestModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gauge className="h-5 w-5 text-violet-500" />
+              Quick Load Test
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Run a load test using the captured protocol data from this test case.
+            </p>
+            
+            {protocolData && (
+              <div className="bg-violet-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Protocol Data Summary</span>
+                  <Badge variant="secondary">{protocolData.requests.length} requests</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white rounded p-2">
+                    <div className="text-lg font-bold text-green-600">
+                      {protocolData.statistics?.successfulRequests || 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Successful</div>
+                  </div>
+                  <div className="bg-white rounded p-2">
+                    <div className="text-lg font-bold text-blue-600">
+                      {protocolData.statistics?.avgDuration || 0}ms
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Avg Response</div>
+                  </div>
+                  <div className="bg-white rounded p-2">
+                    <div className="text-lg font-bold text-amber-600">
+                      {protocolData.correlations?.length || 0}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">Correlations</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Load Pattern</Label>
+                <Select defaultValue="ramp_up">
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ramp_up">📈 Ramp Up (Gradual increase)</SelectItem>
+                    <SelectItem value="constant">➡️ Constant Load</SelectItem>
+                    <SelectItem value="spike">⚡ Spike Test</SelectItem>
+                    <SelectItem value="stress">🔥 Stress Test</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Virtual Users</Label>
+                  <Input type="number" defaultValue="10" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs">Duration (sec)</Label>
+                  <Input type="number" defaultValue="60" className="mt-1" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLoadTestModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-violet-600 hover:bg-violet-700"
+              onClick={() => {
+                // Navigate to load testing page with protocol data
+                const params = new URLSearchParams({
+                  testCaseId: savedTestCaseId || '',
+                  testCaseName: workflowName,
+                  hasProtocolData: 'true',
+                });
+                window.open(`/load-testing?${params.toString()}`, '_blank');
+                setShowLoadTestModal(false);
+                toast.success('Opening Load Testing page...');
+              }}
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Start Load Test
             </Button>
           </DialogFooter>
         </DialogContent>

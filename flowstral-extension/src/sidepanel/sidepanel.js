@@ -17,6 +17,10 @@ class SidebarController {
       pageAnalysis: null,
       suggestions: [],
       autoAssertions: [],
+      // Network capture (Protocol-level testing)
+      captureNetwork: false,  // Default OFF - enable only for load/performance testing
+      networkRequestCount: 0,
+      hasProtocolData: false,  // True when protocol data has been captured
     };
     
     this.options = {
@@ -130,6 +134,14 @@ class SidebarController {
         console.log('[Sidebar] Actions after push:', this.state.actions.length);
         this.renderActionsList();
         this.updateUI();
+        
+        // Update network request count
+        this.updateNetworkRequestCount();
+      }
+      if (message.type === 'NETWORK_REQUEST_CAPTURED') {
+        // Real-time network request count update
+        this.state.networkRequestCount = message.count || 0;
+        this.updateNetworkRequestDisplay();
       }
       if (message.type === 'RECORDING_STARTED') {
         this.state.recording = true;
@@ -180,6 +192,13 @@ class SidebarController {
       statusText: document.getElementById('statusText'),
       actionCount: document.getElementById('actionCount'),
       liveCount: document.getElementById('liveCount'),
+      
+      // Network capture
+      networkCaptureToggle: document.getElementById('networkCaptureToggle'),
+      networkRequestCount: document.getElementById('networkRequestCount'),
+      protocolActions: document.getElementById('protocolActions'),
+      exportHarBtn: document.getElementById('exportHarBtn'),
+      loadTestBtn: document.getElementById('loadTestBtn'),
       
       // Base URL input
       baseUrlInput: document.getElementById('baseUrlInput'),
@@ -340,6 +359,29 @@ class SidebarController {
     this.elements.saveTestCaseBtn.addEventListener('click', () => this.saveTestCase());
     // Record tab uses openInWorkflowEditorFromRecord
     this.elements.openWorkflowBtn.addEventListener('click', () => this.openInWorkflowEditorFromRecord());
+    
+    // Network capture toggle
+    if (this.elements.networkCaptureToggle) {
+      this.elements.networkCaptureToggle.addEventListener('change', (e) => {
+        this.state.captureNetwork = e.target.checked;
+        chrome.runtime.sendMessage({ 
+          type: 'TOGGLE_NETWORK_CAPTURE', 
+          enabled: this.state.captureNetwork 
+        });
+        console.log('[Sidebar] Network capture toggled:', this.state.captureNetwork);
+        this.updateProtocolActionsVisibility();
+      });
+    }
+
+    // HAR Export button
+    if (this.elements.exportHarBtn) {
+      this.elements.exportHarBtn.addEventListener('click', () => this.exportHAR());
+    }
+
+    // Load Test button
+    if (this.elements.loadTestBtn) {
+      this.elements.loadTestBtn.addEventListener('click', () => this.openLoadTest());
+    }
     
     // AI Enhancement (in Review tab)
     if (this.elements.enhanceAIBtn) {
@@ -842,6 +884,100 @@ class SidebarController {
     if (script) {
       this.elements.scriptPreview.textContent = script;
     }
+    
+    // Update network capture display
+    this.updateNetworkRequestDisplay();
+  }
+
+  /**
+   * Update network request count from background
+   */
+  async updateNetworkRequestCount() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_NETWORK_STATUS' });
+      if (response) {
+        this.state.networkRequestCount = response.requestCount || 0;
+        this.state.captureNetwork = response.enabled;
+        this.updateNetworkRequestDisplay();
+      }
+    } catch (e) {
+      // Background might not be ready
+    }
+  }
+
+  /**
+   * Update network request count display
+   */
+  updateNetworkRequestDisplay() {
+    if (this.elements.networkRequestCount) {
+      if (!this.state.captureNetwork) {
+        // Protocol capture is off
+        this.elements.networkRequestCount.textContent = 'off';
+        this.elements.networkRequestCount.style.color = 'rgba(255, 255, 255, 0.4)';
+      } else if (this.state.recording) {
+        // Actively capturing
+        const count = this.state.networkRequestCount || 0;
+        this.elements.networkRequestCount.textContent = `${count} reqs`;
+        this.elements.networkRequestCount.style.color = '#38BDF8';
+      } else {
+        // Enabled but not recording
+        this.elements.networkRequestCount.textContent = 'ready';
+        this.elements.networkRequestCount.style.color = '#22c55e';
+      }
+    }
+    
+    // Update toggle state
+    if (this.elements.networkCaptureToggle) {
+      this.elements.networkCaptureToggle.checked = this.state.captureNetwork;
+    }
+
+    // Update protocol actions visibility
+    this.updateProtocolActionsVisibility();
+  }
+
+  updateProtocolActionsVisibility() {
+    if (this.elements.protocolActions) {
+      // Show if we have captured protocol data (even after stopping)
+      const hasProtocolData = this.state.hasProtocolData || (this.state.captureNetwork && (this.state.networkRequestCount || 0) > 0);
+      this.elements.protocolActions.style.display = hasProtocolData ? 'flex' : 'none';
+    }
+  }
+
+  async exportHAR() {
+    try {
+      const response = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: 'EXPORT_HAR' }, resolve);
+      });
+      
+      if (response && response.har) {
+        const blob = new Blob([JSON.stringify(response.har, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `qaai_recording_${Date.now()}.har`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showNotification('✅ HAR file exported!', 'success');
+      } else {
+        this.showNotification('❌ No protocol data to export', 'error');
+      }
+    } catch (error) {
+      console.error('[Sidebar] HAR export error:', error);
+      this.showNotification('❌ Failed to export HAR', 'error');
+    }
+  }
+
+  openLoadTest() {
+    // Open the load testing page with protocol data
+    // Use the configured frontend URL (default 8080)
+    const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
+    const loadTestUrl = new URL(`${frontendUrl}/load-testing`);
+    loadTestUrl.searchParams.set('hasProtocolData', 'true');
+    loadTestUrl.searchParams.set('source', 'recorder');
+    
+    // Open in new tab
+    chrome.tabs.create({ url: loadTestUrl.toString() });
+    this.showNotification('🚀 Opening Load Test page...', 'info');
   }
 
   updateScriptLangDisplay() {
@@ -985,14 +1121,32 @@ class SidebarController {
   async stopRecording() {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'STOP_RECORDING' });
-      
+
       this.state.recording = false;
       this.state.paused = false;
       this.state.actions = response?.recording?.actions || [];
       this.state.script = '';
       
+      // Preserve network request count if protocol data was captured
+      const capturedNetworkCount = response?.networkSummary?.totalRequests || 0;
+      this.state.networkRequestCount = capturedNetworkCount;
+      this.state.hasProtocolData = capturedNetworkCount > 0;
+
       this.updateUI();
+      this.updateProtocolActionsVisibility();
       this.addLog('info', `Recording stopped. ${this.state.actions.length} actions captured.`);
+      
+      // Show network summary if protocol data was captured
+      if (response?.networkSummary) {
+        const ns = response.networkSummary;
+        this.addLog('success', `🌐 Protocol data captured: ${ns.totalRequests} HTTP requests`);
+        if (ns.correlations > 0) {
+          this.addLog('info', `Auto-detected ${ns.correlations} correlation patterns (tokens, session IDs)`);
+        }
+        if (ns.statistics?.avgDuration) {
+          this.addLog('info', `Avg response time: ${ns.statistics.avgDuration}ms, P95: ${ns.statistics.p95Duration}ms`);
+        }
+      }
     } catch (error) {
       console.error('[Sidebar] Failed to stop recording:', error);
       this.state.recording = false;
@@ -2063,30 +2217,67 @@ Date: ${new Date().toISOString()}
           (action.type === 'fill' ? 'input' : action.type || 'click');
         const yPos = 50 + ((startUrl ? idx + 1 : idx) * 80);
         
+        // Get clean label text - remove duplicate type prefixes
+        let labelText = action.text || action.description || '';
+        // Remove redundant patterns like "Click: Click" or "Navigate: Navigate"
+        labelText = labelText.replace(/^(Click|Input|Navigate|Select):\s*\1\s*/i, '$1: ');
+        // Remove any leading type prefix for clean labeling
+        const textOnly = labelText.replace(/^(Click|Input|Navigate|Select):\s*/i, '').trim();
+        const cleanLabel = textOnly ? `${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}: ${textOnly}` : nodeType.charAt(0).toUpperCase() + nodeType.slice(1);
+        
         nodes.push({
           id: `node-${idx + 1}`,
           type: nodeType,
-          label: `${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}: ${action.text || action.description || ''}`.substring(0, 50),
+          label: cleanLabel.substring(0, 50),
           position: { x: 100, y: yPos },
           data: {
-            selector: action.selectorObj?.playwright || action.selector || '',
+            // CRITICAL: Preserve full selectorObj for fallback support (same as Suggest)
+            selector: action.selector,  // Keep original (may be object or string)
+            selectorObj: action.selectorObj || (typeof action.selector === 'object' ? action.selector : null),
             selectorMethod: 'playwright',
             value: action.value || '',
             description: action.description || action.text || '',
-            url: action.url || ''
+            url: action.url || '',
+            // Preserve extra attributes for fallback selectors
+            text: action.text || action.innerText,
+            name: action.name,
+            ariaLabel: action.ariaLabel || action['aria-label'],
+            id: action.id,
           }
         });
       });
       
-      // Build the workflow state for the editor (include startUrl!)
+      // Get protocol/network data from background if available
+      let networkData = null;
+      if (this.state.hasProtocolData || this.state.captureNetwork) {
+        try {
+          const response = await new Promise(resolve => {
+            chrome.runtime.sendMessage({ type: 'GET_NETWORK_DATA' }, resolve);
+          });
+          if (response && response.networkData) {
+            networkData = response.networkData;
+            console.log('[Sidebar] Including protocol data:', networkData.requests?.length || 0, 'requests');
+          }
+        } catch (e) {
+          console.warn('[Sidebar] Could not get network data:', e);
+        }
+      }
+
+      // Build the workflow state for the editor (include startUrl and protocol data!)
       const workflowState = {
         workflowName: `Recording - ${new Date().toLocaleString()}`,
         appType: this.options.appType || 'generic',
         nodes: nodes,
-        startUrl: startUrl  // Include startUrl for builder
+        startUrl: startUrl,  // Include startUrl for builder
+        // Include protocol data for load testing
+        networkData: networkData,
+        hasProtocolData: !!networkData && (networkData.requests?.length || 0) > 0,
       };
       
       console.log('[Sidebar] Exporting recorded actions to Test Builder:', workflowState, 'Total nodes:', nodes.length);
+      if (networkData) {
+        console.log('[Sidebar] Protocol data included:', networkData.requests?.length, 'requests,', networkData.correlations?.length || 0, 'correlations');
+      }
       
       // Get frontend URL
       const frontendUrl = this.options.frontendUrl || 'http://localhost:8080';
@@ -2106,6 +2297,8 @@ Date: ${new Date().toISOString()}
             target: { tabId: tab.id },
             func: (data) => {
               console.log('[Test Builder Import] Importing from recording:', data);
+              console.log('[Test Builder Import] Protocol data:', data.hasProtocolData ? 'YES' : 'NO', data.networkData?.requests?.length || 0, 'requests');
+              
               // Convert to unified test case format
               const unifiedTestCase = {
                 id: `tc_${Date.now()}`,
@@ -2116,11 +2309,16 @@ Date: ${new Date().toISOString()}
                   id: `step_${Date.now()}_${idx}`,
                   type: node.type || 'click',
                   name: node.label || 'Step',
-                  selector: node.data?.selector,
+                  // CRITICAL: Preserve full selector data for fallback support (same as Suggest)
+                  selector: typeof node.data?.selector === 'string' ? node.data.selector : 
+                            (node.data?.selector?.playwright || node.data?.selector?.selector || ''),
+                  selectorObj: node.data?.selectorObj || (typeof node.data?.selector === 'object' ? node.data.selector : null),
                   value: node.data?.value,
                   url: node.data?.url,
                   enabled: true,
                   expectedResult: node.data?.manualStep?.expectedResult || '',
+                  // Preserve extra attributes for fallback selectors
+                  target: node.data?.text || node.data?.description,
                 })),
                 variables: [],
                 settings: {
@@ -2134,13 +2332,17 @@ Date: ${new Date().toISOString()}
                   updatedAt: new Date().toISOString(),
                   version: 1,
                 },
+                // PROTOCOL DATA for load testing
+                network_data: data.networkData || null,
+                has_protocol_data: data.hasProtocolData || false,
               };
               localStorage.setItem('unified_test_case', JSON.stringify(unifiedTestCase));
+              console.log('[Test Builder Import] Saved unified_test_case with protocol data:', unifiedTestCase.has_protocol_data);
               setTimeout(() => window.location.reload(), 100);
             },
             args: [workflowState]
           }).then(() => {
-            self.addLog('success', '✅ Recording loaded in Test Builder!');
+            self.addLog('success', '✅ Recording loaded in Test Builder!' + (workflowState.hasProtocolData ? ' (with protocol data)' : ''));
           }).catch(err => {
             console.error('[Sidebar] Inject error:', err);
           });

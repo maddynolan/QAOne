@@ -1,7 +1,13 @@
 /**
  * Background Service Worker
  * Manages recording state across tabs and generates Playwright scripts
+ * 
+ * v2.0 - Added Network Capture for Protocol-Level Testing
+ * Better than LoadRunner/NeoLoad: Browser-native, no proxy needed
  */
+
+// Import Network Capture module
+importScripts('../lib/network-capture.js');
 
 class RecordingManager {
   constructor() {
@@ -15,7 +21,13 @@ class RecordingManager {
       startUrl: null,
       startTime: null,
       metadata: {},
+      // NEW: Network capture settings
+      captureNetwork: false,   // Toggle for network capture (default OFF - enable for load testing)
+      networkData: null,       // Captured HTTP requests
     };
+    
+    // Initialize Network Capture
+    this.networkCapture = new NetworkCapture();
     
     this.init();
   }
@@ -162,9 +174,15 @@ class RecordingManager {
       case 'GET_STATE':
         sendResponse({
           recording: this.state.recording,
+          isRecording: this.state.recording,  // Also send isRecording for content script compatibility
           paused: this.state.paused,
           actionCount: this.state.actions.length,
           startUrl: this.state.startUrl,
+          options: { appType: this.state.appType || 'auto' },
+          // NEW: Network capture status
+          captureNetwork: this.state.captureNetwork,
+          networkRequestCount: this.networkCapture?.completedRequests?.length || 0,
+          sessionId: this.state.sessionId,
         });
         break;
 
@@ -219,6 +237,77 @@ class RecordingManager {
       case 'CLEAR_RECORDING':
         this.clearRecording();
         sendResponse({ success: true });
+        break;
+      
+      // ============ NETWORK CAPTURE CONTROLS ============
+      case 'TOGGLE_NETWORK_CAPTURE':
+        this.state.captureNetwork = message.enabled !== false;
+        console.log('[Background] Network capture toggled:', this.state.captureNetwork);
+        
+        // If already recording, start/stop network capture accordingly
+        if (this.state.recording) {
+          if (this.state.captureNetwork) {
+            try {
+              this.networkCapture.start(this.state.sessionId || `session_${Date.now()}`);
+              console.log('[Background] Network capture started mid-recording');
+            } catch (error) {
+              console.warn('[Background] Failed to start network capture:', error.message);
+            }
+          } else {
+            try {
+              this.networkCapture.stop();
+              console.log('[Background] Network capture stopped mid-recording');
+            } catch (error) {
+              console.warn('[Background] Failed to stop network capture:', error.message);
+            }
+          }
+        }
+        
+        sendResponse({ success: true, captureNetwork: this.state.captureNetwork });
+        break;
+      
+      case 'GET_NETWORK_STATUS':
+        sendResponse({
+          enabled: this.state.captureNetwork,
+          isCapturing: this.state.recording && this.state.captureNetwork,
+          requestCount: this.networkCapture?.completedRequests?.length || 0,
+        });
+        break;
+      
+      case 'GET_NETWORK_DATA':
+        // Return full network capture data (for Builder export)
+        // First check if we have saved network data from a stopped recording
+        if (this.state.networkData && this.state.networkData.requests?.length > 0) {
+          console.log('[Background] GET_NETWORK_DATA: returning saved data with', this.state.networkData.requests.length, 'requests');
+          sendResponse({ networkData: this.state.networkData });
+        } else if (this.networkCapture && this.networkCapture.completedRequests?.length > 0) {
+          // Otherwise get current capture data
+          const liveData = {
+            requests: this.networkCapture.completedRequests || [],
+            statistics: this.networkCapture._calculateStatistics?.() || {},
+            correlations: Array.from(this.networkCapture.detectedCorrelations?.entries() || []).map(([name, values]) => ({
+              name,
+              values: Array.from(values)
+            })),
+          };
+          console.log('[Background] GET_NETWORK_DATA: returning live data with', liveData.requests.length, 'requests');
+          sendResponse({ networkData: liveData });
+        } else {
+          console.log('[Background] GET_NETWORK_DATA: no data available');
+          sendResponse({ networkData: null });
+        }
+        break;
+      
+      case 'EXPORT_HAR':
+        // Export current session as HAR
+        if (this.networkCapture && this.state.networkData) {
+          const har = this.networkCapture.exportAsHAR ? 
+            this.networkCapture.exportAsHAR() : 
+            this._convertToHAR(this.state.networkData);
+          sendResponse({ success: true, har });
+        } else {
+          sendResponse({ success: false, error: 'No network data available' });
+        }
         break;
 
       case 'SAVE_WORKFLOW':
@@ -288,13 +377,21 @@ class RecordingManager {
     }
   }
 
-  async startRecording(tabId) {
+  async startRecording(tabId, options = {}) {
     if (this.state.recording) {
       await this.stopRecording();
     }
 
     // Get the current tab (fast)
     const tab = await chrome.tabs.get(tabId);
+    
+    // Generate session ID for linking UI + Protocol data
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Preserve network capture setting from before (user may have toggled it)
+    const shouldCaptureNetwork = options.captureNetwork !== undefined 
+      ? options.captureNetwork 
+      : this.state.captureNetwork || false;  // Default OFF if not explicitly set
 
     // Set state immediately - CLEAR all old data for fresh start
     this.state = {
@@ -305,22 +402,40 @@ class RecordingManager {
       actions: [],
       startUrl: tab.url,
       startTime: Date.now(),
+      sessionId: sessionId,            // NEW: Unified session ID
+      captureNetwork: shouldCaptureNetwork,
+      networkData: null,
       metadata: {
         title: tab.title,
         timestamp: Date.now(),
         startUrl: tab.url,
+        sessionId: sessionId,
       },
     };
     
     // Clear any old script from storage
     await chrome.storage.local.remove('recorderState');
 
+    // NEW: Start network capture if enabled
+    if (this.state.captureNetwork) {
+      try {
+        this.networkCapture.start(sessionId);
+        console.log('[Background] Network capture started for session:', sessionId);
+      } catch (error) {
+        console.warn('[Background] Network capture failed to start:', error.message);
+      }
+    }
+
     // Update badge immediately (don't wait)
     chrome.action.setBadgeText({ text: 'REC', tabId });
     chrome.action.setBadgeBackgroundColor({ color: '#ff4757', tabId });
 
     // Send message to content script (non-blocking - don't await)
-    chrome.tabs.sendMessage(tabId, { type: 'START_RECORDING' }).then(() => {
+    chrome.tabs.sendMessage(tabId, { 
+      type: 'START_RECORDING',
+      sessionId: sessionId,
+      captureNetwork: this.state.captureNetwork 
+    }).then(() => {
       console.log('[Background] START_RECORDING sent to content script successfully');
     }).catch((error) => {
       console.error('[Background] Failed to send START_RECORDING to content script:', error);
@@ -360,9 +475,30 @@ class RecordingManager {
 
     console.log('[Background] Final action count:', this.state.actions.length);
 
+    // NEW: Stop network capture and get results
+    let networkData = null;
+    if (this.state.captureNetwork) {
+      try {
+        networkData = this.networkCapture.stop();
+        console.log('[Background] Network capture stopped. Captured:', networkData?.requests?.length || 0, 'requests');
+        
+        // Link UI actions to HTTP requests (correlation)
+        if (networkData && this.state.actions.length > 0) {
+          networkData.linkedActions = this._linkActionsToRequests(this.state.actions, networkData.requests);
+        }
+        
+        this.state.networkData = networkData;
+      } catch (error) {
+        console.warn('[Background] Network capture stop failed:', error.message);
+      }
+    }
+
     const recording = {
       actions: this.state.actions,
       metadata: this.state.metadata,
+      // NEW: Include network data in recording
+      networkData: networkData,
+      sessionId: this.state.sessionId,
     };
 
     // Generate FRESH script with current actions only
@@ -387,13 +523,55 @@ class RecordingManager {
       recording,
       script,
       actionCount: this.state.actions.length,
+      // NEW: Include network summary in response
+      networkSummary: networkData ? {
+        totalRequests: networkData.requests?.length || 0,
+        correlations: networkData.correlations?.length || 0,
+        statistics: networkData.statistics,
+      } : null,
     };
+  }
+  
+  /**
+   * Link UI actions to the HTTP requests they triggered
+   * Creates correlation between user clicks and API calls
+   */
+  _linkActionsToRequests(actions, requests) {
+    const linked = [];
+    
+    for (const action of actions) {
+      const actionTime = action.timestamp;
+      
+      // Find requests within 2 seconds after this action
+      const triggeredRequests = requests.filter(req => {
+        const timeDiff = req.startTime - actionTime;
+        return timeDiff >= 0 && timeDiff < 2000; // Within 2 seconds after
+      });
+      
+      if (triggeredRequests.length > 0) {
+        linked.push({
+          action: {
+            type: action.type,
+            description: action.description,
+            timestamp: actionTime,
+          },
+          requests: triggeredRequests.map(req => ({
+            url: req.url,
+            method: req.method,
+            statusCode: req.statusCode,
+            duration: req.duration,
+          })),
+        });
+      }
+    }
+    
+    return linked;
   }
 
   async saveSessionToBackend(recording, script) {
     try {
       const sessionData = {
-        session_id: `ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        session_id: recording.sessionId || `ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: recording.metadata.title || `Recording ${new Date().toLocaleString()}`,
         initial_url: recording.metadata.startUrl || this.state.startUrl,
         actions: recording.actions,
@@ -401,6 +579,18 @@ class RecordingManager {
         created_at: new Date().toISOString(),
         is_active: false,
         metadata: recording.metadata,
+        // NEW: Include network/protocol data for load testing
+        network_data: recording.networkData ? {
+          session_id: recording.sessionId,
+          requests: recording.networkData.requests || [],
+          websockets: recording.networkData.websockets || [],
+          correlations: recording.networkData.correlations || [],
+          linked_actions: recording.networkData.linkedActions || [],
+          statistics: recording.networkData.statistics || {},
+          start_time: recording.networkData.startTime,
+          end_time: recording.networkData.endTime,
+          duration: recording.networkData.duration,
+        } : null,
       };
 
       const response = await fetch('http://localhost:8000/api/flowstral/save-session', {
@@ -411,6 +601,11 @@ class RecordingManager {
 
       if (response.ok) {
         console.log('[Background] Session saved to backend:', sessionData.session_id);
+        
+        // If we have network data, also save to protocol recording endpoint
+        if (sessionData.network_data && sessionData.network_data.requests.length > 0) {
+          this._saveProtocolDataToBackend(sessionData.session_id, sessionData.network_data);
+        }
       } else {
         console.warn('[Background] Failed to save session to backend:', response.status);
       }
@@ -419,6 +614,79 @@ class RecordingManager {
       // Store locally as fallback
       chrome.storage.local.set({ [`session_${Date.now()}`]: recording });
     }
+  }
+  
+  /**
+   * Save protocol/network data to dedicated endpoint for load testing
+   */
+  async _saveProtocolDataToBackend(sessionId, networkData) {
+    try {
+      // Convert to HAR format for compatibility
+      const harData = this.networkCapture.exportAsHAR ? 
+        this.networkCapture.exportAsHAR() : 
+        this._convertToHAR(networkData);
+      
+      const response = await fetch('http://localhost:8000/api/protocol-recording/import-har', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          har: harData,
+          name: `Protocol Data: ${sessionId}`,
+          linked_session_id: sessionId,
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Background] Protocol data saved:', result.recording_id);
+      }
+    } catch (error) {
+      console.warn('[Background] Could not save protocol data:', error.message);
+    }
+  }
+  
+  /**
+   * Convert network data to HAR format
+   */
+  _convertToHAR(networkData) {
+    return {
+      log: {
+        version: '1.2',
+        creator: { name: 'QAAI Extension', version: '2.0' },
+        entries: (networkData.requests || []).map(req => ({
+          startedDateTime: new Date(req.startTime).toISOString(),
+          time: req.duration || 0,
+          request: {
+            method: req.method,
+            url: req.url,
+            httpVersion: 'HTTP/1.1',
+            headers: Object.entries(req.requestHeaders || {}).map(([name, value]) => ({ name, value })),
+            queryString: [],
+            postData: req.requestBody ? { mimeType: 'application/json', text: JSON.stringify(req.requestBody) } : null,
+            headersSize: -1,
+            bodySize: -1,
+          },
+          response: {
+            status: req.statusCode || 0,
+            statusText: '',
+            httpVersion: 'HTTP/1.1',
+            headers: Object.entries(req.responseHeaders || {}).map(([name, value]) => ({ name, value })),
+            content: { size: req.timing?.decodedBodySize || 0, mimeType: '' },
+            headersSize: -1,
+            bodySize: -1,
+          },
+          timings: {
+            dns: req.timing?.dns || -1,
+            connect: req.timing?.tcp || -1,
+            ssl: req.timing?.ssl || -1,
+            send: 0,
+            wait: req.timing?.ttfb || 0,
+            receive: req.timing?.download || 0,
+          },
+          cache: {},
+        })),
+      },
+    };
   }
 
   generateScript(options = {}) {

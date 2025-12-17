@@ -363,6 +363,47 @@
       left: 20px;
     }
 
+    /* Toggle Switch (modern) */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 18px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: .3s;
+      border-radius: 18px;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #8B5CF6 0%, #38BDF8 100%);
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(18px);
+    }
+
     /* Actions List */
     .actions-container {
       background: rgba(0, 0, 0, 0.25);
@@ -1122,6 +1163,17 @@
         <span class="status-label">Actions Recorded</span>
         <span class="status-value" id="actionCount">0</span>
       </div>
+      <!-- Network/Protocol Capture Toggle (OFF by default - enable for load testing) -->
+      <div class="status-row" id="networkCaptureRow">
+        <span class="status-label">🌐 Protocol Capture</span>
+        <span class="status-value">
+          <label class="toggle-switch" title="Enable for load/performance testing">
+            <input type="checkbox" id="networkCaptureToggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="networkRequestCount" style="margin-left: 6px; font-size: 10px; color: rgba(255,255,255,0.4);">off</span>
+        </span>
+      </div>
     </div>
 
     <div class="controls">
@@ -1132,6 +1184,15 @@
     <div class="controls" style="margin-top: 8px;">
       <button class="btn btn-success" id="saveTestCaseBtn" title="Save as Test Case for review" disabled>💾 Save Test Case</button>
       <button class="btn btn-secondary" id="openWorkflowBtn" title="Open in Workflow Editor" disabled>🔗 Builder</button>
+    </div>
+    <!-- Protocol/HAR Export - Only visible when protocol data is captured -->
+    <div class="controls protocol-actions" id="protocolActions" style="margin-top: 8px; display: none;">
+      <button class="btn" id="exportHarBtn" style="background: linear-gradient(135deg, #7c3aed, #8b5cf6); border-color: #7c3aed;" title="Export protocol data as HAR file">
+        📦 Export HAR
+      </button>
+      <button class="btn btn-secondary" id="loadTestBtn" title="Open load testing page with this protocol data">
+        ⚡ Load Test
+      </button>
     </div>
 
     <div class="actions-container">

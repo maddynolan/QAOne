@@ -9,7 +9,8 @@
     "tabs",
     "scripting",
     "downloads",
-    "sidePanel"
+    "sidePanel",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -26,8 +27,7 @@
     "default_path": "src/sidepanel/sidepanel.html"
   },
   "background": {
-    "service_worker": "src/background/background.js",
-    "type": "module"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [
     {
