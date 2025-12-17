@@ -2555,44 +2555,129 @@ export default function UnifiedWorkflowEditor() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Accessibility Scan - Non-intrusive, opens in new tab */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Find first URL from test steps
-                  const navigateStep = testCase.steps.find(s => s.type === 'navigate' && s.url);
-                  const urlToScan = navigateStep?.url || testCase.settings.baseUrl;
+              {/* Accessibility Scan - Dropdown with URL input option */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" title="Accessibility Scanner (WCAG)">
+                    ♿ A11y
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel>♿ Accessibility Scanner</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
                   
-                  if (!urlToScan) {
-                    toast.error('No URL found to scan. Add a Navigate step first.');
-                    return;
-                  }
+                  {/* Scan from test case URL */}
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      const navigateStep = testCase.steps.find(s => s.type === 'navigate' && s.url);
+                      const urlToScan = navigateStep?.url || testCase.settings.baseUrl;
+                      
+                      if (!urlToScan) {
+                        toast.error('No URL in test case. Use "Scan Any URL" instead.');
+                        return;
+                      }
+                      
+                      toast.info(`Scanning ${urlToScan}...`);
+                      fetch('http://localhost:8000/api/a11y/scan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: urlToScan, wcag_level: 'AA' })
+                      })
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.scan_id) {
+                          window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
+                          toast.success(`Found ${data.summary.total_violations} issues`);
+                        } else {
+                          toast.error(data.detail || 'Scan failed');
+                        }
+                      })
+                      .catch(() => toast.error('Backend not running'));
+                    }}
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    Scan Test Case URL
+                  </DropdownMenuItem>
                   
-                  // Open accessibility scan in new tab
-                  const scanUrl = `http://localhost:8000/api/a11y/scan?url=${encodeURIComponent(urlToScan)}&format=html`;
+                  <DropdownMenuSeparator />
                   
-                  // Call API and open report
-                  fetch('http://localhost:8000/api/a11y/scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: urlToScan, wcag_level: 'AA' })
-                  })
-                  .then(res => res.json())
-                  .then(data => {
-                    if (data.scan_id) {
-                      window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
-                      toast.success(`♿ Accessibility scan complete: ${data.summary.total_violations} issues found`);
-                    }
-                  })
-                  .catch(() => {
-                    toast.error('Accessibility scan failed. Is the backend running?');
-                  });
-                }}
-                title="Scan page for accessibility issues (WCAG)"
-              >
-                ♿
-              </Button>
+                  {/* Scan any URL - with input */}
+                  <div className="px-2 py-2">
+                    <p className="text-xs text-muted-foreground mb-2">Scan Any Website:</p>
+                    <div className="flex gap-2">
+                      <input 
+                        type="url"
+                        placeholder="https://example.com"
+                        className="flex-1 px-2 py-1 text-sm border rounded"
+                        id="a11y-url-input"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const input = e.target as HTMLInputElement;
+                            const url = input.value.trim();
+                            if (!url) return;
+                            
+                            toast.info(`Scanning ${url}...`);
+                            fetch('http://localhost:8000/api/a11y/scan', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url, wcag_level: 'AA' })
+                            })
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data.scan_id) {
+                                window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
+                                toast.success(`Found ${data.summary.total_violations} issues`);
+                              } else {
+                                toast.error(data.detail || 'Scan failed');
+                              }
+                            })
+                            .catch(() => toast.error('Backend not running'));
+                          }
+                        }}
+                      />
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => {
+                          const input = document.getElementById('a11y-url-input') as HTMLInputElement;
+                          const url = input?.value.trim();
+                          if (!url) {
+                            toast.error('Enter a URL first');
+                            return;
+                          }
+                          
+                          toast.info(`Scanning ${url}...`);
+                          fetch('http://localhost:8000/api/a11y/scan', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ url, wcag_level: 'AA' })
+                          })
+                          .then(res => res.json())
+                          .then(data => {
+                            if (data.scan_id) {
+                              window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
+                              toast.success(`Found ${data.summary.total_violations} issues`);
+                            } else {
+                              toast.error(data.detail || 'Scan failed');
+                            }
+                          })
+                          .catch(() => toast.error('Backend not running'));
+                        }}
+                      >
+                        Scan
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => window.open('http://localhost:8000/docs#/accessibility-v2', '_blank')}
+                    className="text-xs text-muted-foreground"
+                  >
+                    📚 API Documentation
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Export Dropdown */}
               <DropdownMenu>

@@ -61,12 +61,42 @@ class AccessibilityReportGenerator:
             }.get(v.get("impact"), "#6b7280")
             
             affected_html = ""
-            for elem in v.get("affected_elements", [])[:3]:
+            for idx, elem in enumerate(v.get("affected_elements", [])[:5], 1):
                 html_escaped = elem.get("html", "").replace("<", "&lt;").replace(">", "&gt;")
+                css_selector = elem.get("css_selector", "")
+                xpath = elem.get("xpath", "")
+                fix_example = elem.get("fix_example", "").replace("<", "&lt;").replace(">", "&gt;")
+                
+                # Build failure reasons list
+                failure_reasons = elem.get("failure_reasons", [])
+                reasons_html = ""
+                if failure_reasons:
+                    reasons_html = "<ul class='failure-reasons'>" + "".join([
+                        f"<li>{r}</li>" for r in failure_reasons[:3]
+                    ]) + "</ul>"
+                
                 affected_html += f"""
-                <div class="code-block">
-                    <code>{html_escaped}</code>
-                    <p class="fix-hint">💡 {elem.get("fix_suggestion", "")}</p>
+                <div class="element-card">
+                    <div class="element-header">
+                        <span class="element-number">Element #{idx}</span>
+                    </div>
+                    
+                    <div class="element-locator">
+                        <strong>📍 CSS Selector:</strong>
+                        <code class="selector">{css_selector}</code>
+                        <button onclick="navigator.clipboard.writeText('{css_selector}')" class="copy-btn" title="Copy selector">📋</button>
+                    </div>
+                    
+                    {f'<div class="element-locator"><strong>🔗 XPath:</strong><code class="selector">{xpath}</code></div>' if xpath else ''}
+                    
+                    <div class="element-html">
+                        <strong>🏷️ Current HTML:</strong>
+                        <div class="code-block"><code>{html_escaped}</code></div>
+                    </div>
+                    
+                    {reasons_html}
+                    
+                    {f'<div class="fix-example"><strong>✅ Fix Example:</strong><pre>{fix_example}</pre></div>' if fix_example else ''}
                 </div>
                 """
             
@@ -337,6 +367,122 @@ class AccessibilityReportGenerator:
             color: #667eea;
             text-decoration: none;
             font-weight: 500;
+        }}
+        
+        .element-card {{
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+        }}
+        
+        .element-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }}
+        
+        .element-number {{
+            background: #667eea;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }}
+        
+        .element-locator {{
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }}
+        
+        .element-locator strong {{
+            color: #475569;
+            font-size: 0.85em;
+        }}
+        
+        .selector {{
+            background: #0f172a;
+            color: #38bdf8;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.8em;
+            flex: 1;
+            overflow-x: auto;
+        }}
+        
+        .copy-btn {{
+            background: #e2e8f0;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }}
+        
+        .copy-btn:hover {{
+            background: #cbd5e1;
+        }}
+        
+        .element-html {{
+            margin: 12px 0;
+        }}
+        
+        .element-html strong {{
+            display: block;
+            color: #475569;
+            font-size: 0.85em;
+            margin-bottom: 6px;
+        }}
+        
+        .failure-reasons {{
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            padding: 12px 12px 12px 30px;
+            margin: 12px 0;
+            color: #dc2626;
+            font-size: 0.9em;
+        }}
+        
+        .failure-reasons li {{
+            margin: 4px 0;
+        }}
+        
+        .fix-example {{
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 12px 0;
+        }}
+        
+        .fix-example strong {{
+            display: block;
+            color: #166534;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }}
+        
+        .fix-example pre {{
+            background: #14532d;
+            color: #bbf7d0;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.8em;
+            white-space: pre-wrap;
         }}
         
         .learn-more:hover {{

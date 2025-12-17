@@ -480,6 +480,44 @@ class AxeCoreScanner:
         # Build violation details with clear fix instructions
         violation_details = []
         for v in violations:
+            # Extract detailed element info from axe-core nodes
+            affected_elements = []
+            for node in v.get("nodes", [])[:10]:  # Show up to 10 examples
+                # Axe-core provides 'target' as CSS selector array
+                target = node.get("target", [])
+                css_selector = " > ".join(target) if isinstance(target, list) else str(target)
+                
+                # Also try to get xpath if available
+                xpath = node.get("xpath", [])
+                xpath_str = "".join(xpath) if isinstance(xpath, list) else str(xpath) if xpath else ""
+                
+                # Get the actual HTML snippet
+                html = node.get("html", "")
+                
+                # Parse failure summary for clear instructions
+                failure_summary = node.get("failureSummary", "")
+                
+                # Get any/all/none check results
+                any_checks = node.get("any", [])
+                all_checks = node.get("all", [])
+                none_checks = node.get("none", [])
+                
+                # Build clear failure reasons
+                failure_reasons = []
+                for check in any_checks + all_checks + none_checks:
+                    if check.get("message"):
+                        failure_reasons.append(check.get("message"))
+                
+                affected_elements.append({
+                    "css_selector": css_selector,
+                    "xpath": xpath_str,
+                    "html": html,
+                    "fix_suggestion": failure_summary,
+                    "failure_reasons": failure_reasons,
+                    # Provide a concrete fix example
+                    "fix_example": self._generate_fix_example(v.get("id"), html, css_selector)
+                })
+            
             detail = {
                 "rule_id": v.get("id"),
                 "impact": v.get("impact", "unknown"),
@@ -489,13 +527,7 @@ class AxeCoreScanner:
                 "how_to_fix": self._get_fix_instructions(v),
                 "wcag_criteria": self._get_wcag_criteria(v.get("tags", [])),
                 "learn_more": v.get("helpUrl"),
-                "affected_elements": [
-                    {
-                        "html": node.get("html", ""),
-                        "fix_suggestion": node.get("failureSummary", "")
-                    }
-                    for node in v.get("nodes", [])[:5]  # Limit to 5 examples
-                ],
+                "affected_elements": affected_elements,
                 "element_count": len(v.get("nodes", []))
             }
             violation_details.append(detail)
@@ -593,6 +625,109 @@ class AxeCoreScanner:
         }
         
         return fix_instructions.get(rule_id, "See 'Learn More' link for detailed fix instructions")
+    
+    def _generate_fix_example(self, rule_id: str, html: str, css_selector: str) -> str:
+        """Generate a concrete code fix example based on the violation type"""
+        import re
+        
+        if not html:
+            return ""
+        
+        # Clean up HTML for display
+        html_clean = html.strip()
+        
+        if rule_id == "image-alt":
+            # Find src and suggest alt text
+            src_match = re.search(r'src=["\']([^"\']+)["\']', html_clean)
+            src = src_match.group(1) if src_match else "image.jpg"
+            filename = src.split("/")[-1].split("?")[0]
+            suggested_alt = filename.replace("-", " ").replace("_", " ").replace(".png", "").replace(".jpg", "").replace(".webp", "").title()
+            
+            if '<img' in html_clean.lower():
+                if 'alt=' in html_clean.lower():
+                    return f'<!-- Change empty alt to descriptive text -->\n<img src="{src}" alt="{suggested_alt}">'
+                else:
+                    return f'<!-- Add alt attribute -->\n<img src="{src}" alt="{suggested_alt}">'
+        
+        elif rule_id == "button-name":
+            return f'''<!-- Option 1: Add visible text -->
+<button>Click Here</button>
+
+<!-- Option 2: Add aria-label -->
+<button aria-label="Submit form">
+  <svg>...</svg>
+</button>'''
+        
+        elif rule_id == "link-name":
+            href_match = re.search(r'href=["\']([^"\']+)["\']', html_clean)
+            href = href_match.group(1) if href_match else "#"
+            return f'''<!-- Option 1: Add visible text -->
+<a href="{href}">Learn More</a>
+
+<!-- Option 2: Add aria-label -->
+<a href="{href}" aria-label="Learn more about our services">
+  <img src="arrow.png" alt="">
+</a>'''
+        
+        elif rule_id == "label":
+            # Try to extract input id
+            id_match = re.search(r'id=["\']([^"\']+)["\']', html_clean)
+            input_id = id_match.group(1) if id_match else "input-field"
+            
+            return f'''<!-- Option 1: Add label element -->
+<label for="{input_id}">Email Address</label>
+<input type="text" id="{input_id}">
+
+<!-- Option 2: Add aria-label -->
+<input type="text" id="{input_id}" aria-label="Email Address">
+
+<!-- Option 3: Add aria-labelledby -->
+<span id="{input_id}-label">Email</span>
+<input type="text" aria-labelledby="{input_id}-label">'''
+        
+        elif rule_id == "html-has-lang":
+            return '<!-- Add lang attribute to html element -->\n<html lang="en">'
+        
+        elif rule_id == "document-title":
+            return '<!-- Add title in head -->\n<head>\n  <title>Page Title - Site Name</title>\n</head>'
+        
+        elif rule_id == "color-contrast":
+            return '''/* Increase text contrast */
+.low-contrast-text {
+  /* Before: color: #999; (fails AA) */
+  color: #595959; /* 7:1 ratio - passes AAA */
+}
+
+/* Or increase background contrast */
+.container {
+  background: #ffffff;
+  color: #333333; /* 12.6:1 ratio */
+}'''
+        
+        elif rule_id == "heading-order":
+            return '''<!-- Correct heading hierarchy -->
+<h1>Page Title</h1>
+  <h2>Section 1</h2>
+    <h3>Subsection 1.1</h3>
+  <h2>Section 2</h2>
+    <h3>Subsection 2.1</h3>
+
+<!-- DON'T skip levels -->
+<!-- Bad: h1 → h3 (skipped h2) -->'''
+        
+        elif rule_id == "page-has-heading-one":
+            return '''<!-- Add h1 as the main page heading -->
+<main>
+  <h1>Welcome to Our Website</h1>
+  <p>Content goes here...</p>
+</main>'''
+        
+        # Generic fallback - show the selector for easy finding
+        return f'''/* Element to fix: */
+{css_selector}
+
+/* Current HTML: */
+{html_clean[:200]}...'''
     
     def _get_wcag_criteria(self, tags: List[str]) -> List[str]:
         """Extract WCAG criteria from tags"""
