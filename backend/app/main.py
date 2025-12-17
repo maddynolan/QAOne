@@ -7092,6 +7092,10 @@ app.include_router(performance_router)
 from app.routers.protocol_recording_api import router as protocol_recording_router
 app.include_router(protocol_recording_router)
 
+# System Resource Monitoring API - CPU, Memory, Disk, Network
+from app.routers.system_monitoring_api import router as system_monitoring_router
+app.include_router(system_monitoring_router)
+
 # Accessibility Testing API
 from app.routers.accessibility_api import router as accessibility_router
 app.include_router(accessibility_router)
