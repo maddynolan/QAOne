@@ -2555,6 +2555,45 @@ export default function UnifiedWorkflowEditor() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {/* Accessibility Scan - Non-intrusive, opens in new tab */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Find first URL from test steps
+                  const navigateStep = testCase.steps.find(s => s.type === 'navigate' && s.url);
+                  const urlToScan = navigateStep?.url || testCase.settings.baseUrl;
+                  
+                  if (!urlToScan) {
+                    toast.error('No URL found to scan. Add a Navigate step first.');
+                    return;
+                  }
+                  
+                  // Open accessibility scan in new tab
+                  const scanUrl = `http://localhost:8000/api/a11y/scan?url=${encodeURIComponent(urlToScan)}&format=html`;
+                  
+                  // Call API and open report
+                  fetch('http://localhost:8000/api/a11y/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: urlToScan, wcag_level: 'AA' })
+                  })
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.scan_id) {
+                      window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
+                      toast.success(`♿ Accessibility scan complete: ${data.summary.total_violations} issues found`);
+                    }
+                  })
+                  .catch(() => {
+                    toast.error('Accessibility scan failed. Is the backend running?');
+                  });
+                }}
+                title="Scan page for accessibility issues (WCAG)"
+              >
+                ♿
+              </Button>
+
               {/* Export Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

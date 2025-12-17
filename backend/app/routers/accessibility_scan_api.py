@@ -1,0 +1,303 @@
+"""
+Accessibility Scan API - Real axe-core scanning
+
+NEW API endpoints for real accessibility scanning using Playwright + axe-core.
+These endpoints are SEPARATE from the existing accessibility_api.py to avoid
+breaking any existing functionality.
+
+Endpoints:
+- POST /api/a11y/scan - Scan a URL with real axe-core
+- GET /api/a11y/report/{scan_id} - Get report in various formats
+- POST /api/a11y/batch-scan - Scan multiple URLs
+"""
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, HttpUrl
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import logging
+import uuid
+import asyncio
+
+# Import our new scanner
+from app.services.accessibility.axe_core_scanner import get_scanner
+from app.services.accessibility.accessibility_report_generator import get_report_generator
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/a11y", tags=["accessibility-v2"])
+
+# In-memory store for scan results (in production, use Redis or DB)
+_scan_results: Dict[str, Dict[str, Any]] = {}
+
+
+class ScanRequest(BaseModel):
+    """Request to scan a URL for accessibility issues"""
+    url: str
+    wcag_level: str = "AA"  # A, AA, AAA
+    wait_for_selector: Optional[str] = None
+    include_passes: bool = False
+
+
+class BatchScanRequest(BaseModel):
+    """Request to scan multiple URLs"""
+    urls: List[str]
+    wcag_level: str = "AA"
+    max_concurrent: int = 3
+
+
+class ScanResponse(BaseModel):
+    """Response from accessibility scan"""
+    scan_id: str
+    status: str
+    url: str
+    wcag_level: str
+    summary: Dict[str, Any]
+    report_url: str
+
+
+@router.post("/scan", response_model=ScanResponse)
+async def scan_url(request: ScanRequest):
+    """
+    Scan a URL for accessibility issues using real axe-core.
+    
+    This performs a REAL scan using Playwright + axe-core, not regex fallback.
+    
+    Returns:
+        - scan_id: Unique ID to retrieve full report
+        - summary: Quick overview of issues found
+        - report_url: URL to get full HTML report
+    """
+    scan_id = str(uuid.uuid4())[:8]
+    
+    try:
+        logger.info(f"Starting accessibility scan {scan_id} for {request.url}")
+        
+        scanner = get_scanner()
+        
+        # Run the real scan
+        result = await scanner.scan_url(
+            url=request.url,
+            wcag_level=request.wcag_level,
+            include_passes=request.include_passes,
+            wait_for_selector=request.wait_for_selector
+        )
+        
+        # Store result for later retrieval
+        _scan_results[scan_id] = result
+        
+        logger.info(f"Scan {scan_id} complete: {result['summary']['total_violations']} issues found")
+        
+        return ScanResponse(
+            scan_id=scan_id,
+            status=result["summary"]["status"],
+            url=request.url,
+            wcag_level=request.wcag_level,
+            summary=result["summary"],
+            report_url=f"/api/a11y/report/{scan_id}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Scan failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
+
+@router.get("/report/{scan_id}")
+async def get_report(
+    scan_id: str,
+    format: str = "html"
+):
+    """
+    Get accessibility report in various formats.
+    
+    Formats:
+        - html: Beautiful HTML report (viewable in browser)
+        - json: Raw JSON data
+        - markdown: Markdown format
+    """
+    if scan_id not in _scan_results:
+        raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+    
+    result = _scan_results[scan_id]
+    generator = get_report_generator()
+    
+    if format == "html":
+        html_content = generator.generate_html_report(result)
+        return HTMLResponse(content=html_content)
+    
+    elif format == "json":
+        return JSONResponse(content=result)
+    
+    elif format == "markdown" or format == "md":
+        md_content = generator.generate_markdown_report(result)
+        return HTMLResponse(
+            content=f"<pre style='font-family: monospace; white-space: pre-wrap;'>{md_content}</pre>",
+            media_type="text/html"
+        )
+    
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+
+
+@router.get("/report/{scan_id}/download")
+async def download_report(
+    scan_id: str,
+    format: str = "html"
+):
+    """Download accessibility report as file"""
+    if scan_id not in _scan_results:
+        raise HTTPException(status_code=404, detail=f"Scan {scan_id} not found")
+    
+    result = _scan_results[scan_id]
+    generator = get_report_generator()
+    url = result.get("scan_info", {}).get("url", "unknown")
+    
+    # Create filename
+    safe_url = url.replace("https://", "").replace("http://", "").replace("/", "_")[:50]
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    
+    if format == "html":
+        content = generator.generate_html_report(result)
+        filename = f"accessibility_report_{safe_url}_{timestamp}.html"
+        media_type = "text/html"
+    elif format == "json":
+        content = generator.generate_json_report(result)
+        filename = f"accessibility_report_{safe_url}_{timestamp}.json"
+        media_type = "application/json"
+    elif format in ["markdown", "md"]:
+        content = generator.generate_markdown_report(result)
+        filename = f"accessibility_report_{safe_url}_{timestamp}.md"
+        media_type = "text/markdown"
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+    
+    return HTMLResponse(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@router.post("/batch-scan")
+async def batch_scan(
+    request: BatchScanRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Scan multiple URLs for accessibility issues.
+    
+    Scans are performed concurrently with a configurable limit.
+    Returns a batch ID to check progress.
+    """
+    batch_id = str(uuid.uuid4())[:8]
+    
+    # Store batch info
+    _scan_results[f"batch_{batch_id}"] = {
+        "status": "in_progress",
+        "urls": request.urls,
+        "completed": [],
+        "failed": [],
+        "total": len(request.urls),
+        "started_at": datetime.utcnow().isoformat()
+    }
+    
+    # Start batch processing in background
+    background_tasks.add_task(
+        _process_batch,
+        batch_id,
+        request.urls,
+        request.wcag_level,
+        request.max_concurrent
+    )
+    
+    return {
+        "batch_id": batch_id,
+        "status": "in_progress",
+        "total_urls": len(request.urls),
+        "progress_url": f"/api/a11y/batch/{batch_id}"
+    }
+
+
+@router.get("/batch/{batch_id}")
+async def get_batch_status(batch_id: str):
+    """Get status of a batch scan"""
+    key = f"batch_{batch_id}"
+    if key not in _scan_results:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    return _scan_results[key]
+
+
+async def _process_batch(
+    batch_id: str,
+    urls: List[str],
+    wcag_level: str,
+    max_concurrent: int
+):
+    """Process batch of URLs"""
+    key = f"batch_{batch_id}"
+    scanner = get_scanner()
+    
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def scan_one(url: str):
+        async with semaphore:
+            try:
+                result = await scanner.scan_url(url, wcag_level=wcag_level)
+                scan_id = str(uuid.uuid4())[:8]
+                _scan_results[scan_id] = result
+                
+                _scan_results[key]["completed"].append({
+                    "url": url,
+                    "scan_id": scan_id,
+                    "summary": result["summary"]
+                })
+            except Exception as e:
+                _scan_results[key]["failed"].append({
+                    "url": url,
+                    "error": str(e)
+                })
+    
+    tasks = [scan_one(url) for url in urls]
+    await asyncio.gather(*tasks)
+    
+    _scan_results[key]["status"] = "completed"
+    _scan_results[key]["completed_at"] = datetime.utcnow().isoformat()
+
+
+@router.get("/quick-check")
+async def quick_check(url: str, wcag_level: str = "AA"):
+    """
+    Quick accessibility check - returns summary only, no full report.
+    
+    Faster than full scan, good for CI/CD pipelines.
+    """
+    try:
+        scanner = get_scanner()
+        result = await scanner.scan_url(url, wcag_level=wcag_level, include_passes=False)
+        
+        summary = result["summary"]
+        
+        # Determine pass/fail based on critical issues
+        passed = summary["critical"] == 0 and summary["serious"] == 0
+        
+        return {
+            "url": url,
+            "wcag_level": wcag_level,
+            "passed": passed,
+            "compliance_score": summary["compliance_score"],
+            "issues": {
+                "critical": summary["critical"],
+                "serious": summary["serious"],
+                "moderate": summary["moderate"],
+                "minor": summary["minor"]
+            },
+            "recommendation": "PASS - No critical or serious issues" if passed else "FAIL - Fix critical/serious issues"
+        }
+        
+    except Exception as e:
+        logger.error(f"Quick check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

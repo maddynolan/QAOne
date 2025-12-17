@@ -7088,9 +7088,17 @@ app.include_router(jira_webhook_router)
 from app.routers.performance_api import router as performance_router
 app.include_router(performance_router)
 
+# Protocol Recording API - HTTP traffic capture for load testing
+from app.routers.protocol_recording_api import router as protocol_recording_router
+app.include_router(protocol_recording_router)
+
 # Accessibility Testing API
 from app.routers.accessibility_api import router as accessibility_router
 app.include_router(accessibility_router)
+
+# NEW: Real Axe-Core Accessibility Scanning (v2)
+from app.routers.accessibility_scan_api import router as a11y_scan_router
+app.include_router(a11y_scan_router)
 
 # Compliance and competitive optimizations
 from app.routers.compliance_api import router as compliance_router
