@@ -72,9 +72,14 @@ class AxeCoreScanner:
         self.playwright_available = self._check_playwright()
     
     def _check_playwright(self) -> bool:
-        """Check if playwright is available"""
+        """Check if playwright is available and working"""
         try:
             import playwright
+            # On Windows with uvicorn, async subprocess doesn't work
+            # We'll use sync playwright in a thread instead
+            import sys
+            if sys.platform == 'win32':
+                logger.info("Windows detected - will use sync Playwright in thread pool")
             return True
         except ImportError:
             logger.warning("Playwright not installed - using fallback scanner")
@@ -116,12 +121,29 @@ class AxeCoreScanner:
         Returns:
             Comprehensive accessibility report
         """
+        import sys
+        from concurrent.futures import ThreadPoolExecutor
+        
         start_time = datetime.utcnow()
         
         if self.playwright_available:
-            results = await self._scan_with_playwright(
-                url, wcag_level, wait_for_selector, timeout_ms
-            )
+            try:
+                # On Windows, run sync playwright in thread pool to avoid event loop issues
+                if sys.platform == 'win32':
+                    loop = asyncio.get_event_loop()
+                    with ThreadPoolExecutor() as pool:
+                        results = await loop.run_in_executor(
+                            pool,
+                            self._scan_with_playwright_sync,
+                            url, wcag_level, wait_for_selector, timeout_ms
+                        )
+                else:
+                    results = await self._scan_with_playwright(
+                        url, wcag_level, wait_for_selector, timeout_ms
+                    )
+            except Exception as e:
+                logger.warning(f"Playwright scan failed, using fallback: {e}")
+                results = await self._scan_fallback(url, wcag_level)
         else:
             # Fallback to basic HTTP fetch + regex checks
             results = await self._scan_fallback(url, wcag_level)
@@ -130,6 +152,55 @@ class AxeCoreScanner:
         report = self._build_report(results, url, wcag_level, start_time, include_passes)
         
         return report
+    
+    def _scan_with_playwright_sync(
+        self,
+        url: str,
+        wcag_level: str,
+        wait_for_selector: Optional[str],
+        timeout_ms: int
+    ) -> Dict[str, Any]:
+        """Sync version of Playwright scan for Windows compatibility"""
+        from playwright.sync_api import sync_playwright
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Flowstral-Accessibility-Scanner/1.0"
+            )
+            page = context.new_page()
+            
+            try:
+                # Navigate to URL
+                page.goto(url, timeout=timeout_ms, wait_until="networkidle")
+                
+                # Wait for specific element if requested
+                if wait_for_selector:
+                    page.wait_for_selector(wait_for_selector, timeout=timeout_ms)
+                
+                # Inject axe-core and run analysis
+                wcag_tags = self._get_wcag_tags(wcag_level)
+                script = AXE_RUN_SCRIPT % (AXE_CORE_CDN, json.dumps(wcag_tags))
+                
+                results = page.evaluate(script)
+                
+                # Get page title and meta
+                results['pageTitle'] = page.title()
+                results['pageUrl'] = page.url
+                
+            except Exception as e:
+                logger.error(f"Playwright sync scan failed: {e}")
+                results = {
+                    "violations": [],
+                    "incomplete": [],
+                    "passes": [],
+                    "error": str(e)
+                }
+            finally:
+                browser.close()
+        
+        return results
     
     async def _scan_with_playwright(
         self,
