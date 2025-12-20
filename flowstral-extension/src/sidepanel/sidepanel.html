@@ -1582,7 +1582,21 @@
 
     <!-- Manual Assertions -->
     <div class="settings-section">
-      <div class="section-title">✅ Assertions</div>
+      <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>✅ Assertions</span>
+        <button class="btn btn-ai" id="smartAssertBtn" style="font-size: 10px; padding: 4px 10px;" title="AI suggests assertions based on element type">
+          🪄 Smart Assert
+        </button>
+      </div>
+      
+      <!-- Smart Assert Suggestions (hidden by default) -->
+      <div id="smartAssertSuggestions" class="assertion-builder" style="display: none; margin-bottom: 12px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(56, 189, 248, 0.1) 100%); border: 1px solid rgba(139, 92, 246, 0.3);">
+        <div style="font-size: 10px; color: #8B5CF6; margin-bottom: 8px; font-weight: 600;">💡 Suggested Assertions:</div>
+        <div id="smartAssertList" style="display: flex; flex-direction: column; gap: 4px;">
+          <!-- Suggestions will be inserted here -->
+        </div>
+      </div>
+      
       <div class="assertion-builder">
         <div class="form-group">
           <label>Assertion Type</label>

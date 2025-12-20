@@ -126,17 +126,32 @@ class SidebarController {
     });
     
     // Listen for real-time action updates from background
+    // SIMPLIFIED: Trust background.js for deduplication - don't duplicate that logic here
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'ACTION_RECORDED') {
         console.log('[Sidebar] ACTION_RECORDED received:', message.action.type, message.action.description);
-        console.log('[Sidebar] Current actions before push:', this.state.actions.length);
-        this.state.actions.push(message.action);
-        console.log('[Sidebar] Actions after push:', this.state.actions.length);
-        this.renderActionsList();
-        this.updateUI();
         
+        // Background already did deduplication - trust it and just add
+        // Check by timestamp to avoid adding same action twice (from broadcast)
+        const newAction = message.action;
+        const alreadyExists = this.state.actions.some(a => a.timestamp === newAction.timestamp && a.type === newAction.type);
+        
+        if (!alreadyExists) {
+          this.state.actions.push(newAction);
+          console.log('[Sidebar] Actions count:', this.state.actions.length);
+          this.renderActionsList();
+          this.updateUI();
+        }
+
         // Update network request count
         this.updateNetworkRequestCount();
+      }
+      
+      // Handle action updates (consolidation of fill actions)
+      if (message.type === 'ACTION_UPDATED') {
+        console.log('[Sidebar] ACTION_UPDATED received:', message.action?.type);
+        // Sync actions from background to ensure consistency
+        this.syncActionsFromBackground();
       }
       if (message.type === 'NETWORK_REQUEST_CAPTURED') {
         // Real-time network request count update
@@ -289,6 +304,10 @@ class SidebarController {
       assertionSelector: document.getElementById('assertionSelector'),
       addAssertionBtn: document.getElementById('addAssertionBtn'),
       assertionsList: document.getElementById('assertionsList'),
+      // Smart Assert (AI suggestions)
+      smartAssertBtn: document.getElementById('smartAssertBtn'),
+      smartAssertSuggestions: document.getElementById('smartAssertSuggestions'),
+      smartAssertList: document.getElementById('smartAssertList'),
       // AI Enhancement (in Review tab)
       enhanceAIBtn: document.getElementById('enhanceAIBtn'),
       
@@ -394,6 +413,11 @@ class SidebarController {
     }
     if (this.elements.addAssertionBtn) {
       this.elements.addAssertionBtn.addEventListener('click', () => this.addAssertion());
+    }
+    
+    // Smart Assert button
+    if (this.elements.smartAssertBtn) {
+      this.elements.smartAssertBtn.addEventListener('click', () => this.showSmartAssertSuggestions());
     }
     
     // Script controls
@@ -778,16 +802,13 @@ class SidebarController {
         this.state.recording = response.recording || false;
         this.state.paused = response.paused || false;
       }
-      
-      // Get actions from background
-      const actionsResponse = await chrome.runtime.sendMessage({ type: 'GET_ACTIONS' });
-      if (actionsResponse) {
-        this.state.actions = actionsResponse.actions || [];
-      }
-      
+
+      // Get actions from background - single source of truth
+      await this.syncActionsFromBackground();
+
       // Clear script on load
       this.state.script = '';
-      
+
       console.log('[Sidebar] Loaded state:', {
         recording: this.state.recording,
         actions: this.state.actions.length
@@ -797,6 +818,21 @@ class SidebarController {
       this.state.recording = false;
       this.state.actions = [];
       this.state.script = '';
+    }
+  }
+  
+  // Sync actions from background.js (single source of truth)
+  async syncActionsFromBackground() {
+    try {
+      const actionsResponse = await chrome.runtime.sendMessage({ type: 'GET_ACTIONS' });
+      if (actionsResponse && actionsResponse.actions) {
+        this.state.actions = actionsResponse.actions;
+        this.renderActionsList();
+        this.updateUI();
+        console.log('[Sidebar] Synced actions from background:', this.state.actions.length);
+      }
+    } catch (error) {
+      console.error('[Sidebar] Failed to sync actions:', error);
     }
   }
 
@@ -1057,7 +1093,16 @@ class SidebarController {
       case 'click':
         return action.selector?.selector?.substring(0, 50) || 'Click element';
       case 'fill':
-        return `Fill: "${(action.value || '').substring(0, 25)}..."`;
+      case 'type':
+        // SECURITY: Use displayValue (masked) for sensitive fields
+        const displayVal = action.isSensitive 
+          ? (action.displayValue || '••••••••')
+          : (action.displayValue || action.value || '');
+        // Truncate for display but keep meaningful length
+        const truncated = displayVal.length > 30 ? displayVal.substring(0, 27) + '...' : displayVal;
+        // Add lock icon for sensitive fields
+        const lockIcon = action.isSensitive ? '🔒 ' : '';
+        return `${lockIcon}Type "${truncated}"`;
       case 'navigate':
         return action.url ? new URL(action.url).pathname : 'Navigate';
       case 'select':
@@ -1832,6 +1877,204 @@ Date: ${new Date().toISOString()}
     this.state.assertions = this.state.assertions.filter(a => a.id !== id);
     this.renderAssertionsList();
     this.addLog('info', 'Assertion removed');
+  }
+
+  /**
+   * Smart Assert - AI-powered assertion suggestions based on element analysis
+   * Analyzes the current page/selected element and suggests relevant assertions
+   */
+  showSmartAssertSuggestions() {
+    const suggestionsPanel = this.elements.smartAssertSuggestions;
+    const suggestionsList = this.elements.smartAssertList;
+    
+    if (!suggestionsPanel || !suggestionsList) return;
+    
+    // Get the last recorded action or page state
+    const lastAction = this.state.actions && this.state.actions.length > 0 
+      ? this.state.actions[this.state.actions.length - 1] 
+      : null;
+    
+    // Build suggestions based on context
+    const suggestions = this._generateSmartAssertions(lastAction);
+    
+    if (suggestions.length === 0) {
+      suggestions.push({
+        type: 'text_visible',
+        value: '',
+        display: 'Page contains text...',
+        hint: 'Enter expected text to verify'
+      });
+    }
+    
+    // Render suggestions
+    suggestionsList.innerHTML = suggestions.map((s, idx) => `
+      <div class="suggestion-chip" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; cursor: pointer; transition: all 0.2s;" 
+           onclick="sidebar.applySmartAssertion(${idx})" 
+           data-type="${s.type}" 
+           data-value="${this._escapeHtml(s.value || '')}"
+           data-selector="${this._escapeHtml(s.selector || '')}">
+        <span style="font-size: 14px;">${this._getAssertionIcon(s.type)}</span>
+        <div style="flex: 1;">
+          <div style="font-size: 11px; font-weight: 500; color: #fff;">${s.display}</div>
+          ${s.hint ? `<div style="font-size: 9px; color: rgba(255,255,255,0.5);">${s.hint}</div>` : ''}
+        </div>
+        <span style="font-size: 11px; color: #8B5CF6;">+</span>
+      </div>
+    `).join('');
+    
+    // Store suggestions for later use
+    this._smartAssertSuggestions = suggestions;
+    
+    // Show the panel
+    suggestionsPanel.style.display = 'block';
+    this.addLog('info', `Smart Assert: ${suggestions.length} suggestions generated`);
+  }
+  
+  _generateSmartAssertions(lastAction) {
+    const suggestions = [];
+    
+    // Context-aware suggestions based on last action
+    if (lastAction) {
+      const actionType = lastAction.type || lastAction.action;
+      const selector = lastAction.selector || lastAction.target?.selector;
+      const text = lastAction.text || lastAction.value || lastAction.target?.text;
+      
+      // Text/Input assertions
+      if (actionType === 'input' || actionType === 'fill' || actionType === 'type') {
+        suggestions.push({
+          type: 'text_visible',
+          value: text?.substring(0, 50) || '',
+          display: `Input contains "${text?.substring(0, 30) || '...'}"`,
+          hint: 'Verify the entered text appears',
+          selector
+        });
+      }
+      
+      // Click assertions - check for navigation/state change
+      if (actionType === 'click') {
+        suggestions.push({
+          type: 'element_visible',
+          value: selector || '',
+          display: 'Element is visible after click',
+          hint: 'Verify element state after action',
+          selector
+        });
+        
+        // If clicking a link/button, might navigate
+        suggestions.push({
+          type: 'url_contains',
+          value: '',
+          display: 'URL changes after click',
+          hint: 'Enter expected URL fragment'
+        });
+      }
+      
+      // Form submission
+      if (actionType === 'submit' || (text && text.toLowerCase().includes('submit'))) {
+        suggestions.push({
+          type: 'text_visible',
+          value: 'success',
+          display: 'Success message appears',
+          hint: 'Verify form submission result'
+        });
+        suggestions.push({
+          type: 'text_visible',
+          value: 'error',
+          display: 'No error message',
+          hint: 'Verify no errors appear'
+        });
+      }
+    }
+    
+    // Generic suggestions that always apply
+    suggestions.push({
+      type: 'text_visible',
+      value: '',
+      display: 'Text is visible on page',
+      hint: 'Verify specific text appears'
+    });
+    
+    suggestions.push({
+      type: 'element_visible',
+      value: '',
+      display: 'Element is visible',
+      hint: 'Enter selector to verify visibility'
+    });
+    
+    suggestions.push({
+      type: 'title_is',
+      value: '',
+      display: 'Page title matches',
+      hint: 'Verify page title'
+    });
+    
+    // Date-specific suggestions (for date fields detected)
+    if (lastAction?.target?.type === 'date' || lastAction?.selector?.includes('date')) {
+      suggestions.unshift({
+        type: 'text_visible',
+        value: new Date().toLocaleDateString(),
+        display: 'Date field shows today',
+        hint: 'Verify current date is displayed'
+      });
+    }
+    
+    // Currency/amount suggestions
+    if (lastAction?.selector?.includes('amount') || lastAction?.selector?.includes('price') || lastAction?.selector?.includes('total')) {
+      suggestions.unshift({
+        type: 'text_contains',
+        value: '$',
+        display: 'Amount format is correct',
+        hint: 'Verify currency formatting',
+        selector: lastAction.selector
+      });
+    }
+    
+    return suggestions;
+  }
+  
+  applySmartAssertion(index) {
+    const suggestion = this._smartAssertSuggestions?.[index];
+    if (!suggestion) return;
+    
+    // Pre-fill the assertion form
+    if (this.elements.assertionType) {
+      this.elements.assertionType.value = suggestion.type;
+      this.updateAssertionUI();
+    }
+    
+    if (this.elements.assertionValue && suggestion.value) {
+      this.elements.assertionValue.value = suggestion.value;
+    }
+    
+    if (this.elements.assertionSelector && suggestion.selector) {
+      this.elements.assertionSelector.value = suggestion.selector;
+    }
+    
+    // Hide the suggestions panel
+    if (this.elements.smartAssertSuggestions) {
+      this.elements.smartAssertSuggestions.style.display = 'none';
+    }
+    
+    this.addLog('info', `Applied: ${suggestion.display}`);
+  }
+  
+  _getAssertionIcon(type) {
+    const icons = {
+      'text_visible': '📝',
+      'text_exact': '🎯',
+      'text_contains': '📄',
+      'element_visible': '👁️',
+      'element_count': '🔢',
+      'url_contains': '🔗',
+      'title_is': '📰',
+      'soql_query': '⚡'
+    };
+    return icons[type] || '✅';
+  }
+  
+  _escapeHtml(text) {
+    if (!text) return '';
+    return String(text).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   async saveTestCase() {
