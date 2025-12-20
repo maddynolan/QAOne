@@ -2,6 +2,12 @@
 Ollama LLM Service for QA AI Platform
 Integrates with Ollama running on DGX with 7B, 14B, and 32B models
 Now supports vLLM backend for high-performance parallel inference
+
+=============================================================================
+DISABLED: DGX Spark / Ollama infrastructure not ready
+This service requires DGX hardware with Qwen models deployed via Ollama.
+When DGX is ready, set ENABLE_OLLAMA_SERVICE=true in .env
+=============================================================================
 """
 
 import asyncio
@@ -15,6 +21,14 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# DISABLED FLAG - Set to True when DGX/Ollama infrastructure is ready
+# ============================================================================
+OLLAMA_SERVICE_ENABLED = os.getenv("ENABLE_OLLAMA_SERVICE", "false").lower() == "true"
+
+if not OLLAMA_SERVICE_ENABLED:
+    logger.info("[DISABLED] Ollama service - DGX infrastructure not ready (set ENABLE_OLLAMA_SERVICE=true when ready)")
+
 class ModelMode(str, Enum):
     """Model selection based on task complexity"""
     QUICK = "quick"  # 7B model
@@ -26,9 +40,20 @@ class OllamaService:
     """
     Service to interact with Ollama API on DGX
     Now supports vLLM backend for high-performance parallel inference with GPU saturation
+    
+    DISABLED: DGX/Ollama infrastructure not ready. Enable with ENABLE_OLLAMA_SERVICE=true
     """
     
     def __init__(self):
+        # ============================================================================
+        # CHECK IF SERVICE IS ENABLED
+        # ============================================================================
+        self.enabled = OLLAMA_SERVICE_ENABLED
+        if not self.enabled:
+            self.session = None
+            self._vllm_service = None
+            return  # Skip all initialization when disabled
+        
         # Backend selection: vLLM for parallel processing, Ollama for compatibility
         self.use_vllm = os.getenv("USE_VLLM", "false").lower() == "true"
         
@@ -54,12 +79,8 @@ class OllamaService:
         self.ollama_base_url = ollama_url_from_env
         self.ollama_api_url = f"{self.ollama_base_url}/api/generate"
         
-        # Log the URL being used (for debugging)
-        logger.info(f"[DEBUG] OllamaService using URL: {self.ollama_base_url} (from OLLAMA_URL env: {os.getenv('OLLAMA_URL', 'NOT SET')})")
-        print(f"[DEBUG] OllamaService using URL: {self.ollama_base_url}")
-        if "11434" in self.ollama_base_url:
-            logger.warning("[WARNING] Using default port 11434 - OLLAMA_URL may not be set correctly!")
-            print(f"[WARN] Using default port 11434 - check OLLAMA_URL in .env")
+        # Log URL at debug level only
+        logger.debug(f"OllamaService URL: {self.ollama_base_url}")
         self.session: Optional[aiohttp.ClientSession] = None
         # Increased timeout for 14B model on DGX (can take 2-3 minutes, need buffer)
         self.timeout = 360  # 6 minutes timeout for 14B model (actual takes 114-117s, but need buffer)
@@ -67,17 +88,15 @@ class OllamaService:
         # vLLM service for parallel processing (lazy import)
         self._vllm_service = None
         
-        # Log which backend we're using
+        # Initialize vLLM backend if enabled
         if self.use_vllm:
-            logger.info(f"OllamaService initialized - Using vLLM backend for parallel processing")
             try:
                 from app.services.llm.vllm_service import get_vllm_service
                 self._vllm_service = get_vllm_service()
+                logger.debug("OllamaService using vLLM backend")
             except Exception as e:
-                logger.warning(f"Failed to initialize vLLM service: {e}, falling back to Ollama")
+                logger.warning(f"vLLM init failed: {e}, falling back to Ollama")
                 self.use_vllm = False
-        else:
-            logger.info(f"OllamaService initialized - Using Ollama at: {self.ollama_base_url}")
         
         # Model mapping based on mode
         # Fine-tuned model takes precedence if available
@@ -102,15 +121,7 @@ class OllamaService:
         # If fine-tuned model is enabled, use it for QUICK mode
         if self.use_finetuned:
             self.model_map[ModelMode.QUICK] = self.finetuned_model
-            logger.info(f"Fine-tuned model enabled: {self.finetuned_model} (for quick mode)")
-        else:
-            logger.info(f"Using qwen3-coder:30b for all modes (7B/14B models deleted)")
-        
-        # Log test case model preference
-        if self.use_7b_for_test_cases:
-            logger.info(f"Test case generation will use: {self.test_case_model} (faster, optimized for structured output)")
-        else:
-            logger.info(f"Test case generation will use: qwen3-coder:30b (slower, higher quality)")
+            logger.debug(f"Fine-tuned model enabled: {self.finetuned_model}")
     
     async def initialize(self):
         """Initialize HTTP session"""
@@ -138,21 +149,13 @@ class OllamaService:
         
         # Priority 1: Use fast model (7B) for test case generation if requested
         if use_fast_model and self.use_7b_for_test_cases:
-            logger.info(f"[OK] Using fast 7B model for test cases: {self.test_case_model} (use_fast_model={use_fast_model}, use_7b_for_test_cases={self.use_7b_for_test_cases})")
-            print(f"[INFO] _SELECT_MODEL - Using fast 7B model: {self.test_case_model}")
+            logger.debug(f"Using fast 7B model: {self.test_case_model}")
             return self.test_case_model
-        elif use_fast_model:
-            logger.warning(f"[WARNING] use_fast_model=True but use_7b_for_test_cases={self.use_7b_for_test_cases} - falling back to regular model")
-            print(f"[WARN] _SELECT_MODEL - use_fast_model requested but use_7b_for_test_cases is disabled")
         
         # Priority 2: Use fine-tuned model if enabled and mode is quick (7B equivalent)
         if self.use_finetuned and (not mode or mode == ModelMode.QUICK.value or mode == "quick"):
-            print(f"[INFO] _SELECT_MODEL - Using fine-tuned model: {self.finetuned_model} (mode: {mode}, use_finetuned: {self.use_finetuned})")
-            logger.info(f"Using fine-tuned model: {self.finetuned_model} (mode: {mode})")
+            logger.debug(f"Using fine-tuned model: {self.finetuned_model}")
             return self.finetuned_model
-        else:
-            print(f"[INFO] _SELECT_MODEL - NOT using fine-tuned model (mode: {mode}, use_finetuned: {self.use_finetuned}, finetuned_model: {self.finetuned_model})")
-            logger.debug(f"Not using fine-tuned model - mode: {mode}, use_finetuned: {self.use_finetuned}")
         
         # Fallback to base model selection
         if not mode:
@@ -186,6 +189,17 @@ class OllamaService:
         Returns:
             Dict containing 'response' text and 'model' used
         """
+        # ============================================================================
+        # DISABLED CHECK - Return empty response when service is disabled
+        # ============================================================================
+        if not self.enabled:
+            logger.warning("OllamaService.generate() called but service is DISABLED")
+            return {
+                "response": "",
+                "model": "ollama_disabled",
+                "error": "Ollama service disabled - DGX infrastructure not ready. Set ENABLE_OLLAMA_SERVICE=true"
+            }
+        
         # Use vLLM if enabled for better parallelism
         if self.use_vllm and self._vllm_service:
             try:
@@ -562,14 +576,7 @@ def get_ollama_service() -> OllamaService:
             for env_path in env_paths:
                 if os.path.exists(env_path):
                     load_dotenv(env_path, override=True)
-                    ollama_url = os.getenv('OLLAMA_URL', 'NOT SET')
-                    logger.info(f"Loaded .env from {env_path} for OllamaService - OLLAMA_URL={ollama_url}")
-                    if ollama_url == 'NOT SET':
-                        logger.warning(f"[WARNING] OLLAMA_URL not found in {env_path}! Will use default port 11434")
                     break
-            # Double-check OLLAMA_URL is set
-            if os.getenv('OLLAMA_URL') is None:
-                logger.error("[ERROR] OLLAMA_URL is still not set after loading .env files!")
         except ImportError:
             pass  # dotenv not available, skip
         _ollama_service_instance = OllamaService()

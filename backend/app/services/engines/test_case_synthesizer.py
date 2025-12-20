@@ -51,18 +51,15 @@ class TestCaseSynthesizer:
         # Screenshot Analyzer (OCR for text extraction)
         try:
             self.screenshot_analyzer = ScreenshotAnalyzer(ocr_provider="tesseract")
-            logger.info("ScreenshotAnalyzer initialized - OCR available for page/element name extraction")
         except Exception as e:
-            logger.warning(f"ScreenshotAnalyzer not available: {e} - OCR features disabled")
+            logger.debug(f"ScreenshotAnalyzer not available: {e}")
             self.screenshot_analyzer = None
         
         # Advanced Selector Strategy Engine
         self.selector_engine = SelectorStrategyEngine()
-        logger.info("SelectorStrategyEngine initialized - advanced selector strategies available")
         
         # Enhanced Expected Results Generator
         self.expected_results_generator = ExpectedResultsGenerator()
-        logger.info("ExpectedResultsGenerator initialized - contextual expected results available")
         
         # Element naming strategies (priority order)
         self.naming_strategies = [
@@ -79,14 +76,12 @@ class TestCaseSynthesizer:
         # Flowstral Template Engine for fluent language generation
         try:
             self.flowstral_engine = FlowstralTemplateEngine()
-            logger.info("FlowstralTemplateEngine initialized - fluent language generation available")
         except Exception as e:
-            logger.warning(f"FlowstralTemplateEngine not available: {e} - using basic templates")
+            logger.debug(f"FlowstralTemplateEngine not available: {e}")
             self.flowstral_engine = None
         
         # Test Case Enhancements for universal improvements
         self.enhancements = TestCaseEnhancements()
-        logger.info("TestCaseEnhancements initialized - entry point, element names, expected results improvements available")
     
     def synthesize_test_cases(
         self,

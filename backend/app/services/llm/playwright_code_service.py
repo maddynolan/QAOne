@@ -49,16 +49,9 @@ class PlaywrightCodeService:
         # Provider selection: "ollama", "openai", or "auto" (try OpenAI first, fallback to Ollama)
         self.provider = os.getenv("PLAYWRIGHT_LLM_PROVIDER", "auto").lower()
         
-        logger.info(f"PlaywrightCodeService initialized with provider: {self.provider}")
-        logger.info("✅ LocatorEngine, AutoHealingService, ScriptConverter, RobustDiscovery, and IntelligentHealing initialized")
+        logger.debug(f"PlaywrightCodeService initialized with provider: {self.provider}")
         if self.provider == "openai" and not self.openai_service.is_available():
             logger.warning("OpenAI provider requested but not available - will fallback to Ollama")
-        if self.provider == "ollama":
-            logger.info("Using Ollama provider (local models) for Playwright generation")
-        elif self.provider == "openai":
-            logger.info("Using OpenAI provider (gpt-4o-mini) for Playwright generation")
-        else:
-            logger.info("Using auto provider selection (OpenAI first, Ollama fallback) for Playwright generation")
     
     def _build_prompts(self, action_graph: Dict[str, Any]) -> tuple[str, str]:
         """

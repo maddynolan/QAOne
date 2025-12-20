@@ -28,7 +28,7 @@ try:
         for path in tesseract_paths:
             if os.path.exists(path):
                 pytesseract.pytesseract.tesseract_cmd = path
-                logger.info(f"Tesseract found at: {path}")
+                logger.debug(f"Tesseract found at: {path}")
                 break
         else:
             # If not found in common locations, try to use from PATH
@@ -67,11 +67,11 @@ class ScreenshotAnalyzer:
         
         if ocr_provider == "tesseract" and TESSERACT_AVAILABLE:
             self.ocr_available = True
-            logger.info("ScreenshotAnalyzer initialized with Tesseract OCR")
+            logger.debug("ScreenshotAnalyzer initialized with Tesseract OCR")
         elif ocr_provider == "google_vision" and GOOGLE_VISION_AVAILABLE:
             self.ocr_available = True
             self.vision_client = vision.ImageAnnotatorClient()
-            logger.info("ScreenshotAnalyzer initialized with Google Vision API")
+            logger.debug("ScreenshotAnalyzer initialized with Google Vision API")
         else:
             logger.warning(f"ScreenshotAnalyzer initialized without OCR (provider: {ocr_provider})")
     

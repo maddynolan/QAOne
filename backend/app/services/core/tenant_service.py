@@ -19,7 +19,7 @@ class TenantService:
     
     def __init__(self):
         self._db_pool = None
-        logger.info("TenantService initialized")
+        logger.debug("TenantService initialized")
     
     def _get_db_pool(self):
         """Get database connection pool"""

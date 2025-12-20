@@ -30,7 +30,7 @@ try:
         os.path.join(extension_path, "playwright-generator.js")
     )
     # For now, we'll implement a Python version based on the JS logic
-    logger.info("[PLAYWRIGHT-RECORDER] Using Python-based script generator")
+    logger.debug("[PLAYWRIGHT-RECORDER] Using Python-based script generator")
 except Exception as e:
     logger.warning(f"[PLAYWRIGHT-RECORDER] Could not load JS generator: {e}, using Python implementation")
 
@@ -2156,6 +2156,20 @@ async def save_session(request: Dict[str, Any]) -> Dict[str, Any]:
                     "target": node_id,
                 })
         
+        # NEW: Process network/protocol data for unified test cases
+        network_data = request.get("network_data")
+        network_summary = None
+        
+        if network_data:
+            network_summary = {
+                "total_requests": len(network_data.get("requests", [])),
+                "correlations": len(network_data.get("correlations", [])),
+                "linked_actions": len(network_data.get("linked_actions", [])),
+                "statistics": network_data.get("statistics", {}),
+                "duration": network_data.get("duration"),
+            }
+            logger.info(f"[FLOWSTRAL] Session includes {network_summary['total_requests']} HTTP requests (protocol data)")
+        
         session_data = {
             "session_id": session_id,
             "name": request.get("name", f"Recording {datetime.now().strftime('%Y-%m-%d %H:%M')}"),
@@ -2172,16 +2186,23 @@ async def save_session(request: Dict[str, Any]) -> Dict[str, Any]:
             "status": "draft",  # Initial status for workflow
             "metadata": request.get("metadata", {}),
             "project_id": request.get("project_id", "default"),
+            # NEW: Protocol/network data for load testing
+            "network_data": network_data,
+            "network_summary": network_summary,
+            "has_protocol_data": network_data is not None and len(network_data.get("requests", [])) > 0,
         }
         
         _sessions[session_id] = session_data
         
-        logger.info(f"[FLOWSTRAL] Saved session {session_id} with {len(actions)} actions (action_graph: {len(action_graph_nodes)} nodes)")
+        protocol_msg = f", {network_summary['total_requests']} HTTP requests" if network_summary else ""
+        logger.info(f"[FLOWSTRAL] Saved session {session_id} with {len(actions)} actions (action_graph: {len(action_graph_nodes)} nodes{protocol_msg})")
         
         return {
             "status": "success",
             "session_id": session_id,
-            "message": f"Session saved with {len(actions)} actions"
+            "message": f"Session saved with {len(actions)} actions",
+            "network_summary": network_summary,
+            "has_protocol_data": session_data.get("has_protocol_data", False),
         }
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error saving session: {e}", exc_info=True)

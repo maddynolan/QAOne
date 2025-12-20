@@ -2,6 +2,12 @@
 vLLM Service for High-Performance Parallel Model Inference
 Supports FP8 quantization and concurrent request handling for GPU saturation
 Based on vLLM (VLM) architecture for maximum throughput
+
+=============================================================================
+DISABLED: DGX Spark / vLLM infrastructure not ready
+This service requires DGX hardware with vLLM server running.
+When DGX is ready, set ENABLE_VLLM_SERVICE=true in .env
+=============================================================================
 """
 
 import asyncio
@@ -15,6 +21,14 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# DISABLED FLAG - Set to True when DGX/vLLM infrastructure is ready
+# ============================================================================
+VLLM_SERVICE_ENABLED = os.getenv("ENABLE_VLLM_SERVICE", "false").lower() == "true"
+
+if not VLLM_SERVICE_ENABLED:
+    logger.info("[DISABLED] vLLM service - DGX infrastructure not ready (set ENABLE_VLLM_SERVICE=true when ready)")
+
 class ModelMode(str, Enum):
     """Model selection based on task complexity"""
     QUICK = "quick"  # 7B model
@@ -26,9 +40,19 @@ class VLLMService:
     """
     High-performance vLLM service with parallel request support
     Optimized for GPU saturation and concurrent code generation
+    
+    DISABLED: DGX/vLLM infrastructure not ready. Enable with ENABLE_VLLM_SERVICE=true
     """
     
     def __init__(self):
+        # ============================================================================
+        # CHECK IF SERVICE IS ENABLED
+        # ============================================================================
+        self.enabled = VLLM_SERVICE_ENABLED
+        if not self.enabled:
+            self.session = None
+            return  # Skip all initialization when disabled
+        
         # vLLM endpoint (typically running in Docker)
         self.vllm_base_url = os.getenv("VLLM_URL", "http://localhost:8000")
         self.vllm_api_url = f"{self.vllm_base_url}/v1/completions"
@@ -66,22 +90,17 @@ class VLLMService:
             for mode in self.model_map:
                 model_name = self.model_map[mode]
                 if "-fp8" not in model_name.lower() and "-fp4" not in model_name.lower():
-                    # Check if FP8 version exists, otherwise use original
-                    # In practice, you'd load FP8 models separately
-                    logger.info(f"FP8 quantization enabled for {mode} mode")
+                    logger.debug(f"FP8 quantization enabled for {mode} mode")
         
         # If fine-tuned model is enabled, use it for QUICK mode
         if self.use_finetuned:
             self.model_map[ModelMode.QUICK] = self.finetuned_model
-            logger.info(f"Fine-tuned model enabled: {self.finetuned_model} (for quick mode)")
+            logger.debug(f"Fine-tuned model enabled: {self.finetuned_model}")
         
         # Use vLLM backend flag
         self.use_vllm = os.getenv("USE_VLLM", "false").lower() == "true"
         
-        logger.info(f"VLLMService initialized - vLLM URL: {self.vllm_base_url}")
-        logger.info(f"  Max concurrent requests: {self.max_concurrent_requests}")
-        logger.info(f"  FP8 quantization: {self.use_fp8}")
-        logger.info(f"  Use vLLM backend: {self.use_vllm}")
+        logger.debug(f"VLLMService initialized - URL: {self.vllm_base_url}")
     
     async def initialize(self):
         """Initialize HTTP session with connection pooling for parallelism"""
@@ -113,7 +132,7 @@ class VLLMService:
         
         # Priority 2: Use fine-tuned model if enabled and mode is quick
         if self.use_finetuned and (not mode or mode == ModelMode.QUICK.value or mode == "quick"):
-            logger.info(f"Using fine-tuned model: {self.finetuned_model} (mode: {mode})")
+            logger.debug(f"Using fine-tuned model: {self.finetuned_model}")
             return self.finetuned_model
         
         # Fallback to base model selection
@@ -153,6 +172,17 @@ class VLLMService:
         Returns:
             Dict containing 'response' text and 'model' used
         """
+        # ============================================================================
+        # DISABLED CHECK - Return empty response when service is disabled
+        # ============================================================================
+        if not self.enabled:
+            logger.warning("VLLMService.generate() called but service is DISABLED")
+            return {
+                "response": "",
+                "model": "vllm_disabled",
+                "error": "vLLM service disabled - DGX infrastructure not ready. Set ENABLE_VLLM_SERVICE=true"
+            }
+        
         if not self.session:
             await self.initialize()
         
@@ -216,7 +246,7 @@ class VLLMService:
                         )
                         
                         if "qa-expert" in actual_model_used.lower():
-                            logger.info(f"✅ Using trained model: {actual_model_used}")
+                            logger.debug(f"Using trained model: {actual_model_used}")
                         else:
                             logger.debug(f"Using base model: {actual_model_used}")
                         

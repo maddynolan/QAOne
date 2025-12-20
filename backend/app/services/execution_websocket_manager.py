@@ -20,7 +20,7 @@ class ExecutionWebSocketManager:
     def __init__(self):
         # Map execution_id -> List of WebSocket connections
         self.connections: Dict[str, List[WebSocket]] = {}
-        logger.info("ExecutionWebSocketManager initialized")
+        logger.debug("ExecutionWebSocketManager initialized")
     
     async def connect(self, websocket: WebSocket, execution_id: str):
         """Accept and register a WebSocket connection"""
@@ -191,3 +191,16 @@ class ExecutionWebSocketManager:
 
 # Global instance
 execution_ws_manager = ExecutionWebSocketManager()
+
+
+
+
+
+
+
+
+
+
+
+
+

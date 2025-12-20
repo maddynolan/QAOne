@@ -31,7 +31,7 @@ class AgentRegistry:
         # Task statistics
         self.task_stats: Dict[AgentType, Dict[str, Any]] = {}
         
-        logger.info("AgentRegistry initialized")
+        logger.debug("AgentRegistry initialized")
     
     def register_agent(
         self,
@@ -61,7 +61,7 @@ class AgentRegistry:
             "latencies": []
         }
         
-        logger.info(f"Registered agent: {agent_type.value} - {capability.name}")
+        logger.debug(f"Registered agent: {agent_type.value} - {capability.name}")
     
     def get_agent(self, agent_type: AgentType) -> Optional[AgentCapability]:
         """Get agent capability by type"""

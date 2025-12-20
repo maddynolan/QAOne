@@ -188,7 +188,7 @@ class PromptCache:
             "start_time": datetime.utcnow().isoformat()
         }
         
-        logger.info(f"PromptCache initialized. DB: {self.config.db_path}")
+        logger.debug(f"PromptCache initialized. DB: {self.config.db_path}")
     
     @contextmanager
     def _get_conn(self):
@@ -299,7 +299,7 @@ class PromptCache:
             if row:
                 self._record_hit(conn, row['id'])
                 self._stats["hits"] += 1
-                logger.info(f"Cache HIT (exact): {hash_exact[:12]}...")
+                logger.debug(f"Cache HIT (exact): {hash_exact[:12]}...")
                 return {
                     "response": row['response'],
                     "from_cache": True,
@@ -322,7 +322,7 @@ class PromptCache:
                 if row:
                     self._record_hit(conn, row['id'])
                     self._stats["hits"] += 1
-                    logger.info(f"Cache HIT (normalized): {hash_normalized[:12]}...")
+                    logger.debug(f"Cache HIT (normalized): {hash_normalized[:12]}...")
                     return {
                         "response": row['response'],
                         "from_cache": True,
@@ -343,7 +343,7 @@ class PromptCache:
                         self._record_hit(conn, semantic_match['id'])
                         self._stats["hits"] += 1
                         self._stats["semantic_hits"] += 1
-                        logger.info(f"Cache HIT (semantic): similarity={semantic_match['similarity']:.2f}")
+                        logger.debug(f"Cache HIT (semantic): similarity={semantic_match['similarity']:.2f}")
                         return {
                             "response": semantic_match['response'],
                             "from_cache": True,
@@ -455,7 +455,7 @@ class PromptCache:
             conn.commit()
         
         self._stats["writes"] += 1
-        logger.info(f"Cache SET: {hash_exact[:12]}... (TTL: {ttl_hours}h)")
+        logger.debug(f"Cache SET: {hash_exact[:12]}... (TTL: {ttl_hours}h)")
     
     def _evict_oldest(self, conn: sqlite3.Connection, count: int):
         """Evict oldest/least used entries"""
@@ -469,7 +469,7 @@ class PromptCache:
         """, (count,))
         conn.commit()
         self._stats["evictions"] += count
-        logger.info(f"Cache evicted {count} entries")
+        logger.debug(f"Cache evicted {count} entries")
     
     def _cleanup_expired(self, conn: sqlite3.Connection):
         """Remove expired entries"""
@@ -536,7 +536,7 @@ class PromptCache:
                 conn.execute("DELETE FROM prompt_cache")
             conn.commit()
         
-        logger.info(f"Cache cleared (task_type={task_type})")
+        logger.debug(f"Cache cleared (task_type={task_type})")
     
     def warm_cache(self, entries: List[Dict[str, Any]]):
         """
@@ -558,7 +558,7 @@ class PromptCache:
                 )
         
         asyncio.run(_warm())
-        logger.info(f"Cache warmed with {len(entries)} entries")
+        logger.debug(f"Cache warmed with {len(entries)} entries")
 
 
 # Singleton instance
@@ -571,3 +571,16 @@ def get_prompt_cache() -> PromptCache:
     if _prompt_cache is None:
         _prompt_cache = PromptCache()
     return _prompt_cache
+
+
+
+
+
+
+
+
+
+
+
+
+

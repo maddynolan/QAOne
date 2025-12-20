@@ -5,6 +5,13 @@ Cached Claude Service - Cost-Optimized LLM Integration
 This service implements prompt caching and smart cost optimization
 for Claude API usage in the QAAI platform.
 
+=============================================================================
+✅ ACTIVE SERVICE - For DEVELOPMENT USE ONLY (building the product)
+NOT used for customer-facing test case generation (that uses OpenAI)
+
+This is for YOUR use during product development to reduce Claude API costs.
+=============================================================================
+
 Cost Savings Strategy:
 1. Prompt Caching - Cache static content (90% cheaper on cache reads)
 2. Tiered Models - Use Haiku for simple tasks, Sonnet for complex
@@ -305,7 +312,7 @@ class CachedClaudeService:
         # Load static context (cacheable content)
         self.static_context = self._build_static_context()
         
-        logger.info(f"CachedClaudeService initialized. Static context: {len(self.static_context)} chars")
+        logger.debug(f"CachedClaudeService initialized. Static context: {len(self.static_context)} chars")
     
     def _build_static_context(self) -> str:
         """
@@ -655,7 +662,7 @@ Include proper waits, error handling, and assertions.
             cached = await self.response_cache.get_async(dynamic_prompt, model, task_type)
             if cached:
                 self.usage_tracker.log_request(model, task_type, {}, from_local_cache=True)
-                logger.info(f"💰 CACHE HIT - Saved API call! Task: {task_type}")
+                logger.debug(f"[CACHE HIT] Saved API call for task: {task_type}")
                 return {
                     "content": cached,
                     "usage": {"from_local_cache": True},
@@ -703,7 +710,7 @@ Include proper waits, error handling, and assertions.
             # Cache response locally (persistent SQLite cache)
             if use_cache:
                 await self.response_cache.set_async(dynamic_prompt, model, content, task_type)
-                logger.info(f"💾 Response cached for future use (task: {task_type})")
+                logger.debug(f"[CACHED] Response stored for task: {task_type}")
             
             logger.info(
                 f"Claude API call: model={model}, "
@@ -838,7 +845,7 @@ Include proper waits, error handling, and assertions.
             from app.services.llm.prompt_cache import get_prompt_cache
             cache = get_prompt_cache()
             cache.clear(task_type)
-            logger.info(f"Cache cleared (task_type={task_type})")
+            logger.debug(f"Cache cleared (task_type={task_type})")
         except Exception as e:
             logger.warning(f"Could not clear cache: {e}")
 
@@ -852,6 +859,19 @@ def get_cached_claude_service() -> CachedClaudeService:
     if _cached_claude_service is None:
         _cached_claude_service = CachedClaudeService()
     return _cached_claude_service
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

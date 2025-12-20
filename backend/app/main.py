@@ -43,7 +43,6 @@ try:
     if os.path.exists(env_path):
         load_dotenv(env_path)
         logger = logging.getLogger(__name__)
-        logger.info(f"Loaded environment from: {env_path}")
     else:
         # Try loading from current directory
         load_dotenv()
@@ -78,7 +77,6 @@ from app.services.llm.prompt.prompt_builders import build_req_to_testplan_prompt
 # Recreate ollama_service after .env is loaded to pick up OLLAMA_URL
 from app.services.llm.ollama_service import get_ollama_service
 ollama_service = get_ollama_service()  # Get service instance with environment loaded
-logger.info(f"Ollama service initialized with URL: {os.getenv('OLLAMA_URL', 'http://localhost:11434')}")
 
 # Add the parent directory to the path to import our services
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -88,39 +86,33 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown gracefully"""
     # Startup
-    logger.info("Starting QA AI Backend...")
     try:
         # Initialize SQLite database
         from app.services.storage.database_service import init_database
         await init_database()
-        logger.info("SQLite database initialized")
-        
-        # Initialize any other startup resources here
-        logger.info("Backend started successfully")
+        logger.info("QA AI Backend started (SQLite ready)")
         yield
     except asyncio.CancelledError:
         # Gracefully handle cancellation during shutdown
-        logger.info("Shutdown requested, cleaning up...")
         raise
     finally:
         # Shutdown - cleanup resources
-        logger.info("Shutting down backend...")
         try:
             # Cleanup WebSocket connections
             try:
                 from app.services.flowstral.flowstral_websocket_manager import flowstral_ws_manager
                 await flowstral_ws_manager.cleanup()
-            except Exception as e:
-                logger.debug(f"WebSocket cleanup: {e}")
+            except Exception:
+                pass
             
             # Cleanup HTTP sessions (vLLM, etc.)
             try:
                 from app.services.llm.vllm_service import vllm_service
                 await vllm_service.cleanup()
-            except Exception as e:
-                logger.debug(f"vLLM cleanup: {e}")
+            except Exception:
+                pass
             
-            logger.info("Backend shutdown complete")
+            logger.info("Backend stopped")
         except asyncio.CancelledError:
             # Ignore cancellation errors during cleanup
             logger.debug("Cleanup cancelled (normal during shutdown)")
@@ -7092,9 +7084,17 @@ app.include_router(performance_router)
 from app.routers.protocol_recording_api import router as protocol_recording_router
 app.include_router(protocol_recording_router)
 
-# System Resource Monitoring API - CPU, Memory, Disk, Network
+# System Resource Monitoring API - CPU, Memory, Disk, Network (LOCAL machine)
 from app.routers.system_monitoring_api import router as system_monitoring_router
 app.include_router(system_monitoring_router)
+
+# Server Resource Monitoring API - Like LoadRunner SiteScope (TARGET servers)
+from app.routers.server_monitoring_api import router as server_monitoring_router
+app.include_router(server_monitoring_router)
+
+# OCR Fallback API - Last resort when all DOM locators fail
+from app.routers.ocr_fallback_api import router as ocr_fallback_router
+app.include_router(ocr_fallback_router)
 
 # Accessibility Testing API
 from app.routers.accessibility_api import router as accessibility_router

@@ -1,6 +1,16 @@
 """
 OpenAI Service for Test Case Rewriting
 Provides fast, cost-effective test case generation using gpt-4o-mini
+
+=============================================================================
+✅ ACTIVE SERVICE - This is the primary LLM service for the product
+Uses OpenAI gpt-4o-mini for:
+- Test case formatting
+- Quick rewrites
+- JSON structure generation
+
+Cost: ~$0.15/1M input tokens, $0.60/1M output tokens (very cheap!)
+=============================================================================
 """
 
 import asyncio
@@ -44,17 +54,13 @@ class OpenAIService:
         # Load API key from environment
         self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            logger.warning("OPENAI_API_KEY not set - OpenAI service will not be available")
-            logger.debug("OpenAIService: Checked OPENAI_API_KEY in environment variables")
+            logger.debug("OPENAI_API_KEY not set - OpenAI service will not be available")
             self._client = None
         else:
-            # Mask API key in logs (show first 7 chars only)
-            masked_key = self.api_key[:7] + "..." if len(self.api_key) > 7 else "***"
-            logger.info(f"OpenAI API key found: {masked_key}")
             try:
                 from openai import AsyncOpenAI
                 self._client = AsyncOpenAI(api_key=self.api_key)
-                logger.info("OpenAI service initialized with gpt-4o-mini support")
+                logger.debug("OpenAI service initialized (gpt-4o-mini)")
             except ImportError:
                 logger.warning("openai package not installed - run: pip install openai")
                 self._client = None

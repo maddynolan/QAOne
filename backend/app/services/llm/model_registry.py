@@ -1,16 +1,31 @@
 """
 Model Registry Service
 Manages fine-tuned model versions, A/B testing, and deployments
+
+=============================================================================
+DISABLED: Fine-tuned models not ready
+This service tracks fine-tuned model versions for DGX deployment.
+When fine-tuning is ready, set ENABLE_MODEL_REGISTRY=true in .env
+=============================================================================
 """
 
 import logging
 import json
 import hashlib
+import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# DISABLED FLAG - Set to True when fine-tuned models are ready
+# ============================================================================
+MODEL_REGISTRY_ENABLED = os.getenv("ENABLE_MODEL_REGISTRY", "false").lower() == "true"
+
+if not MODEL_REGISTRY_ENABLED:
+    logger.info("[DISABLED] Model registry - no fine-tuned models available (set ENABLE_MODEL_REGISTRY=true when ready)")
 
 
 class ModelStatus(str, Enum):

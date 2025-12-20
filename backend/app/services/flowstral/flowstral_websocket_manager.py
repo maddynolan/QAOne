@@ -20,7 +20,7 @@ class FlowstralWebSocketManager:
     def __init__(self):
         # Map session_id -> List of WebSocket connections
         self.connections: Dict[str, List[WebSocket]] = {}
-        logger.info("FlowstralWebSocketManager initialized")
+        logger.debug("FlowstralWebSocketManager initialized")
     
     async def connect(self, websocket: WebSocket, session_id: str):
         """Accept and register a WebSocket connection"""

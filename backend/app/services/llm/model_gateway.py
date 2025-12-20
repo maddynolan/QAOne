@@ -1,6 +1,15 @@
 """
 Model Gateway Service - Unified LLM Access Layer
 Provides a single interface for all LLM operations across different providers
+
+=============================================================================
+CURRENT ACTIVE PROVIDERS:
+- OpenAI (gpt-4o-mini) - Active for test case formatting ✅
+- Anthropic (Claude) - Active for development use only ✅
+
+DISABLED PROVIDERS (DGX not ready):
+- LOCAL_QWEN (Ollama/vLLM) - Set ENABLE_OLLAMA_SERVICE=true when ready
+=============================================================================
 """
 
 import asyncio
@@ -12,6 +21,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+# Check if local services are enabled
+LOCAL_SERVICES_ENABLED = (
+    os.getenv("ENABLE_OLLAMA_SERVICE", "false").lower() == "true" or
+    os.getenv("ENABLE_VLLM_SERVICE", "false").lower() == "true"
+)
 
 # Provider types
 class LLMProvider(str, Enum):
@@ -64,11 +79,22 @@ class ModelGateway:
     Unified gateway for LLM access
     Routes requests to appropriate providers (local Qwen, cloud APIs)
     Tracks usage and costs
+    
+    NOTE: Local Qwen (Ollama/vLLM) is DISABLED by default until DGX is ready.
+          Default provider is OpenAI (gpt-4o-mini).
     """
     
     def __init__(self):
-        # Default provider (can be overridden per request)
-        self.default_provider = LLMProvider(os.getenv("DEFAULT_LLM_PROVIDER", "local_qwen"))
+        # Default provider - use OpenAI since local services are disabled
+        # When DGX is ready, can switch to "local_qwen"
+        default = os.getenv("DEFAULT_LLM_PROVIDER", "openai")
+        
+        # Force OpenAI if local services are disabled but local_qwen was requested
+        if default == "local_qwen" and not LOCAL_SERVICES_ENABLED:
+            logger.debug("[FALLBACK] local_qwen -> openai (local services disabled)")
+            default = "openai"
+        
+        self.default_provider = LLMProvider(default)
         
         # Initialize provider services (lazy loading)
         self._ollama_service = None
@@ -79,7 +105,7 @@ class ModelGateway:
         # Usage tracking
         self._track_usage = os.getenv("TRACK_LLM_USAGE", "true").lower() == "true"
         
-        logger.info(f"ModelGateway initialized with default provider: {self.default_provider}")
+        logger.debug(f"ModelGateway initialized with default provider: {self.default_provider}")
     
     # ==================== Provider Initialization ====================
     
@@ -100,9 +126,9 @@ class ModelGateway:
                     if os.path.exists(env_path):
                         load_dotenv(env_path, override=True)
                         ollama_url = os.getenv('OLLAMA_URL', 'NOT SET')
-                        logger.info(f"ModelGateway: Loaded .env from {env_path} - OLLAMA_URL={ollama_url}")
+                        logger.debug(f"ModelGateway: Loaded .env from {env_path} - OLLAMA_URL={ollama_url}")
                         if ollama_url == 'NOT SET':
-                            logger.warning(f"⚠️  OLLAMA_URL not found in {env_path}!")
+                            logger.warning(f"[WARN] OLLAMA_URL not found in {env_path}!")
                         break
             except ImportError:
                 pass  # dotenv not available, skip
@@ -245,10 +271,17 @@ class ModelGateway:
     
     async def _generate_local(self, request: GenerationRequest) -> Dict[str, Any]:
         """Generate using local Qwen models"""
+        # ============================================================================
+        # CHECK IF LOCAL SERVICES ARE ENABLED
+        # ============================================================================
+        if not LOCAL_SERVICES_ENABLED:
+            logger.debug("[FALLBACK] _generate_local -> OpenAI (local services disabled)")
+            # Fallback to OpenAI instead of failing
+            return await self._generate_openai(request)
+        
         # Log model selection request
         if request.use_fast_model:
-            logger.info(f"🚀 MODEL_GATEWAY - Fast model requested (use_fast_model=True) for task_type={request.task_type}")
-            print(f"[INFO] MODEL_GATEWAY - Fast model requested (use_fast_model=True) for task_type={request.task_type}")
+            logger.debug(f"MODEL_GATEWAY - Fast model requested for task_type={request.task_type}")
         
         ollama = self._get_ollama_service()
         result = await ollama.generate(
@@ -259,20 +292,12 @@ class ModelGateway:
             use_fast_model=request.use_fast_model
         )
         
-        # Log actual model used
+        # Log actual model used (debug level to reduce noise)
         model_used = result.get("model", "unknown") if result else "None"
         if result:
-            logger.info(f"✅ MODEL_GATEWAY - Model used: {model_used}, has_response={bool(result.get('response'))}, response_length={len(result.get('response', ''))}")
-            print(f"[INFO] MODEL_GATEWAY - Model used: {model_used}, has_response={bool(result.get('response'))}")
-            if "7b" in model_used.lower() or "qwen2.5-coder" in model_used.lower():
-                logger.info(f"✅ Confirmed: Using 7B model ({model_used})")
-                print(f"[OK] Using 7B model: {model_used}")
-            else:
-                logger.warning(f"⚠️  Not using 7B model - got: {model_used}")
-                print(f"[WARN] Not using 7B model - got: {model_used}")
+            logger.debug(f"MODEL_GATEWAY - Model: {model_used}, response_length={len(result.get('response', ''))}")
         else:
-            logger.error(f"❌ MODEL_GATEWAY - Ollama service returned None result!")
-            print(f"[ERROR] MODEL_GATEWAY - Ollama service returned None result!")
+            logger.error(f"MODEL_GATEWAY - Ollama service returned None result!")
         
         return {
             "response": result.get("response", "") if result else "",

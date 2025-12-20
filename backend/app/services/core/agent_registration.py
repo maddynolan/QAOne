@@ -196,7 +196,7 @@ def register_all_agents():
         handler=test_design_agent_handler
     )
     
-    logger.info("All agents registered successfully")
+    logger.debug("All agents registered successfully")
 
 
 # Auto-register on import

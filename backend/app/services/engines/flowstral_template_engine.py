@@ -45,7 +45,7 @@ class FlowstralTemplateEngine:
         self.expected_phrases = self.templates.get("expected_phrases", {})
         self.scenario_templates = self.templates.get("scenario_templates", [])
         
-        logger.info(f"FlowstralTemplateEngine initialized with {len(self.page_types)} page types, "
+        logger.debug(f"FlowstralTemplateEngine initialized with {len(self.page_types)} page types, "
                     f"{len(self.controls)} controls, {len(self.scenario_templates)} scenario templates")
     
     def _load_templates(self, templates_path: str) -> Dict[str, Any]:
