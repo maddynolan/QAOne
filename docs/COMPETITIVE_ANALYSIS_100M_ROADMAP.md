@@ -1,8 +1,157 @@
 # 🚀 Flowstral: Competitive Analysis, Pricing Strategy & $100M ARR Roadmap
 
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Last Updated:** December 2024  
 **Purpose:** Deep competitive analysis, realistic pricing, and path to $100M ARR
+
+---
+
+## 🎯 How The Product Actually Works (Extension → Platform Flow)
+
+### The Two-Part Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        FLOWSTRAL PRODUCT ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   PART 1: CHROME EXTENSION (FREE)           PART 2: PLATFORM (PAID)         │
+│   ════════════════════════════════          ═══════════════════════════     │
+│                                                                              │
+│   ┌─────────────────────────┐              ┌─────────────────────────┐      │
+│   │  FLOWSTRAL RECORDER     │   Exports    │  FLOWSTRAL PLATFORM     │      │
+│   │  (Chrome Extension)     │────────────> │  (React + FastAPI)      │      │
+│   │                         │   to         │                         │      │
+│   │  • DOM Analysis (17ms)  │              │  • Workflow Builder     │      │
+│   │  • Smart Selectors      │              │  • Test Execution       │      │
+│   │  • Action Recording     │              │  • AI Enhancement       │      │
+│   │  • Network Capture      │              │  • Self-Healing         │      │
+│   │  • App Detection        │              │  • Reporting/Dashboard  │      │
+│   │  • HAR Export           │              │  • CI/CD Integration    │      │
+│   │                         │              │  • Multi-user Teams     │      │
+│   │  VALUE: Capture only    │              │  VALUE: Full platform   │      │
+│   │  COST: $0               │              │  COST: $$ (subscription)│      │
+│   └─────────────────────────┘              └─────────────────────────┘      │
+│              │                                        │                      │
+│              │         ┌──────────────────────┐       │                      │
+│              └────────>│  CONVERSION POINT    │<──────┘                      │
+│                        │                      │                              │
+│                        │  User records test   │                              │
+│                        │  → Clicks "Export"   │                              │
+│                        │  → "Sign in to       │                              │
+│                        │     Flowstral"       │                              │
+│                        │  → Platform opens    │                              │
+│                        │  → Free tier or Pay  │                              │
+│                        └──────────────────────┘                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why This Model Works
+
+| Component | What It Does | Why It's Free/Paid |
+|-----------|--------------|-------------------|
+| **Chrome Extension** | Records user actions, captures DOM | **FREE** - Low cost (runs on user's machine), viral distribution |
+| **Smart Selectors** | Generates stable locators | **FREE** - Runs locally, $0 cost to you |
+| **Export to Playwright** | Generates raw script | **FREE** - Basic value, hooks them in |
+| **Workflow Builder** | Visual no-code editor | **PAID** - Server-side, high value |
+| **Test Execution** | Runs tests with Playwright | **PAID** - Server resources needed |
+| **Self-Healing** | AI fixes broken selectors | **PAID** - LLM costs, high value |
+| **AI Test Generation** | Creates tests from requirements | **PAID** - LLM costs, high value |
+| **Reporting/Dashboard** | Analytics, trends, results | **PAID** - Server storage, high value |
+| **Team Features** | Multi-user, RBAC, SSO | **PAID** - Enterprise value |
+
+### Feature Distribution: Extension vs Platform
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    WHAT'S FREE vs WHAT'S PAID                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  🆓 FREE (Extension Only - No Account Needed)                               │
+│  ════════════════════════════════════════════                               │
+│  ✅ Record clicks, inputs, navigation                                       │
+│  ✅ Smart selector generation (20+ app profiles)                            │
+│  ✅ DOM analysis (17ms performance)                                         │
+│  ✅ Network request capture (HAR)                                           │
+│  ✅ Copy single step as Playwright code                                     │
+│  ✅ Basic element inspection                                                 │
+│                                                                              │
+│  🆓 FREE TIER (Account Required, Limited)                                   │
+│  ════════════════════════════════════════════                               │
+│  ✅ Export full recording to platform                                       │
+│  ✅ Visual Workflow Builder (view/edit)                                     │
+│  ✅ Run tests locally (50 runs/month)                                       │
+│  ✅ Basic assertions                                                         │
+│  ✅ 3 team members                                                           │
+│  ✅ 7-day execution history                                                  │
+│  ❌ Self-healing (shows "Upgrade to Pro")                                   │
+│  ❌ AI test generation (shows "Upgrade to Pro")                             │
+│  ❌ CI/CD integration (shows "Upgrade to Team")                             │
+│                                                                              │
+│  💰 PAID TIERS (The Real Value)                                             │
+│  ════════════════════════════════════════════                               │
+│                                                                              │
+│  STARTER ($99/mo):                                                          │
+│  ├── 500 test runs/month                                                    │
+│  ├── 5 team members                                                         │
+│  ├── Self-healing (basic)                                                   │
+│  ├── 30-day history                                                         │
+│  └── Email support                                                          │
+│                                                                              │
+│  TEAM ($299/mo):                                                             │
+│  ├── 3,000 test runs/month                                                  │
+│  ├── 15 team members                                                        │
+│  ├── AI test generation                                                     │
+│  ├── CI/CD integrations (GitHub, GitLab, Jenkins)                          │
+│  ├── API testing module                                                     │
+│  ├── Jira/Azure DevOps integration                                         │
+│  ├── 90-day history                                                         │
+│  └── Priority support                                                       │
+│                                                                              │
+│  BUSINESS ($799/mo):                                                         │
+│  ├── 15,000 test runs/month                                                 │
+│  ├── 50 team members                                                        │
+│  ├── SSO/SAML                                                               │
+│  ├── Performance testing (k6)                                               │
+│  ├── Accessibility testing                                                  │
+│  ├── Custom dashboards                                                      │
+│  ├── 1-year history                                                         │
+│  └── Phone support                                                          │
+│                                                                              │
+│  ENTERPRISE ($6,500/mo+):                                                    │
+│  ├── Unlimited everything                                                   │
+│  ├── On-prem / Private cloud options                                       │
+│  ├── Security testing (ZAP)                                                │
+│  ├── Custom AI model training                                               │
+│  ├── Dedicated CSM                                                          │
+│  ├── SLA guarantee                                                          │
+│  └── Professional services                                                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### The User Journey
+
+```
+STEP 1: DISCOVER                    STEP 2: TRY                     STEP 3: CONVERT
+════════════════════                ═════════════                   ═══════════════
+                                    
+Chrome Web Store                    Record First Test               Hit Free Limits
+     │                                    │                              │
+     ▼                                    ▼                              ▼
+┌────────────┐                     ┌────────────┐                 ┌────────────┐
+│ Download   │                     │ Extension  │                 │ "Upgrade   │
+│ Extension  │────────────────────>│ Works!     │────────────────>│ to run     │
+│ (FREE)     │   "Try recording    │ 17ms fast! │  "I want to     │ more tests"│
+└────────────┘    on your app"     └────────────┘   run this!"    └─────┬──────┘
+                                                                        │
+                                                                        ▼
+                                                                  ┌────────────┐
+                                                                  │ PAYING     │
+                                                                  │ CUSTOMER   │
+                                                                  └────────────┘
+```
 
 ---
 
@@ -70,63 +219,176 @@ After deep analysis of your codebase, you have built an **enterprise-grade unifi
 
 ---
 
-## 💰 Your Pricing Strategy vs. Competition
+## 💰 Realistic Pricing Strategy (Based on Your ROI)
 
-### Pricing Benchmarks (Per-Seat/Per-Year)
+### Your Actual Costs (From ROI Analysis)
+
+```
+YOUR COST TO SERVE EACH CUSTOMER:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIXED COSTS (shared across customers):
+├── Infrastructure: $300/month total
+├── Your time: (variable)
+└── Overhead: ~$50/month total
+
+VARIABLE COSTS (per customer):
+├── AI tokens (OpenAI gpt-4o-mini): $5-20/customer/month
+├── Storage (if using your S3): $10-50/customer/month
+└── Support time: $50-100/customer/month
+
+┌─────────────────────────────────────────────────────────────────┐
+│  TOTAL COST PER CUSTOMER: ~$100-200/month                       │
+│                                                                  │
+│  AT 10 CUSTOMERS:                                                │
+│  • Fixed costs: $300/mo ÷ 10 = $30/customer                     │
+│  • Variable: ~$100/customer                                      │
+│  • Total: ~$130/customer/month                                   │
+│                                                                  │
+│  AT 100 CUSTOMERS:                                               │
+│  • Fixed costs: $300/mo ÷ 100 = $3/customer                     │
+│  • Variable: ~$100/customer                                      │
+│  • Total: ~$103/customer/month                                   │
+│                                                                  │
+│  GROSS MARGIN AT SCALE: 95%+ 🎉                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Pricing Benchmarks (Competition)
 
 ```
 ENTERPRISE LEGACY TOOLS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Tosca         ████████████████████████████████ $15,000-30,000/user
-UFT One       █████████████████████████████ $12,000-25,000/user
-LoadRunner    ████████████████████████████ $10,000-20,000/user
+Tosca         ████████████████████████████████ $15,000-30,000/user/yr
+UFT One       █████████████████████████████ $12,000-25,000/user/yr
+LoadRunner    ████████████████████████████ $10,000-20,000/user/yr
 
 AI-FIRST MODERN TOOLS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-mabl          █████████████████ $5,000-10,000/user
-Functionize   ████████████████ $4,000-8,000/user
-Testim        █████████████ $3,000-6,000/user
-testRigor     ████████████ $2,500-5,000/user
-Katalon       █████████ $2,000-4,000/user
-
-YOUR OPPORTUNITY (FLOWSTRAL)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Sweet Spot    ████████████████ $3,000-6,000/user
-              │
-              └── 70-90% cheaper than legacy
-              └── Competitive with AI-first tools
-              └── More features than most
+mabl          █████████████████ $5,000-10,000/user/yr
+Functionize   ████████████████ $4,000-8,000/user/yr
+Testim        █████████████ $3,000-6,000/user/yr
+testRigor     ████████████ $2,500-5,000/user/yr
+Katalon       █████████ $2,000-4,000/user/yr
 ```
 
-### Recommended Flowstral Pricing Tiers
+### Recommended Flowstral Pricing (ROI-Backed)
 
-| Tier | Monthly Price | Annual Price | Target | What's Included |
-|------|--------------|--------------|--------|-----------------|
-| **Free** | $0 | $0 | Developers, POC | 3 users, 100 test runs/mo, Community support |
-| **Starter** | $199/mo | $1,990/yr | SMB, Small teams | 5 users, 1K runs/mo, Email support, All core features |
-| **Professional** | $599/mo | $5,990/yr | Growing teams | 15 users, 10K runs/mo, Priority support, API access, Integrations |
-| **Business** | $1,499/mo | $14,990/yr | Mid-market | 50 users, Unlimited runs, Phone support, SSO, Custom integrations |
-| **Enterprise** | Custom | Custom | Large enterprise | Unlimited, On-prem option, Dedicated CSM, SLA, Custom AI training |
+**Pricing Philosophy:** Extension is FREE → Platform is PAID
 
-### Enterprise Pricing (From Your Existing Docs)
+#### Self-Serve Tiers (PLG Motion)
 
-| Deployment Model | Monthly | Annual | Best For |
-|-----------------|---------|--------|----------|
-| Hybrid SaaS (Recommended) | $6,500 | $78,000 | Most enterprises |
-| Full SaaS (Managed Runners) | $15,000 | $180,000 | Zero-infra teams |
-| Private Cloud | $20,000 + infra | $240,000+ | Regulated industries |
-| On-Prem License | - | $240,000 | Air-gapped |
+| Tier | Monthly | Annual | Your Cost | Margin | What's Included |
+|------|---------|--------|-----------|--------|-----------------|
+| **Free** | $0 | $0 | $0 (self-service) | N/A | Extension + 3 users + 50 runs/mo + Community |
+| **Starter** | $99/mo | $990/yr | ~$20/mo | 80% | 5 users, 500 runs/mo, Email support |
+| **Team** | $299/mo | $2,990/yr | ~$60/mo | 80% | 15 users, 3K runs/mo, Integrations, Priority support |
+| **Business** | $799/mo | $7,990/yr | ~$150/mo | 81% | 50 users, 15K runs/mo, SSO, Phone support |
 
-### Add-On Pricing
+```
+PROFIT PER TIER (at scale):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-| Add-On | Monthly | Notes |
-|--------|---------|-------|
-| Extra 10 parallel runners | $2,500 | For scale |
-| Extra storage (per TB) | $400 | Evidence/artifacts |
-| SSO/SAML + Audit | $1,000 | Enterprise security |
-| Premium Support SLA | $2,500-$5,000 | 4hr/24hr response |
-| Managed Workers | $3,000/10 workers | In customer network |
-| AI Model Training | $10,000 one-time | Custom fine-tuning |
+Starter ($99/mo):
+├── Revenue: $99
+├── Cost: ~$20 (minimal support, shared infra)
+└── Profit: $79/mo = $948/yr ✅
+
+Team ($299/mo):
+├── Revenue: $299
+├── Cost: ~$60 (some support, more storage)
+└── Profit: $239/mo = $2,868/yr ✅
+
+Business ($799/mo):
+├── Revenue: $799
+├── Cost: ~$150 (dedicated support, more resources)
+└── Profit: $649/mo = $7,788/yr ✅
+```
+
+#### Enterprise Tiers (Sales-Led Motion)
+
+| Deployment | Monthly | Annual | Your Cost | Margin | What's Included |
+|------------|---------|--------|-----------|--------|-----------------|
+| **Hybrid SaaS** | $6,500 | $78,000 | ~$200/mo | **97%** | Unlimited users, 50 parallel, BYO storage |
+| **Full SaaS** | $15,000 | $180,000 | ~$500/mo | **97%** | + Managed runners, our storage |
+| **Private Cloud** | $20,000+infra | $240,000+ | ~$300/mo | **98%** | In customer AWS/Azure |
+| **On-Prem License** | - | $240,000 | ~$0/mo | **99%** | Air-gapped, no cloud costs |
+
+```
+ENTERPRISE PROFIT CALCULATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hybrid SaaS @ $6,500/month:
+┌─────────────────────────────────────────────────────────────────┐
+│  Revenue:           $6,500/month                                │
+│  Your Costs:                                                    │
+│  ├── AI tokens:     $20/month (gpt-4o-mini is CHEAP)           │
+│  ├── Infrastructure: $30/month (shared)                         │
+│  ├── Storage:       $0 (BYO storage = customer pays)           │
+│  ├── Support:       $100/month (enterprise attention)          │
+│  └── Overhead:      $50/month                                   │
+│  ─────────────────────────────────────────────────              │
+│  Total Cost:        $200/month                                  │
+│  PROFIT:            $6,300/month = $75,600/year 🎉             │
+│  MARGIN:            97%                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Add-On Pricing (Upsell Opportunities)
+
+| Add-On | Price | Your Cost | Margin | Notes |
+|--------|-------|-----------|--------|-------|
+| Extra 10 parallel runners | $2,500/mo | $200 | 92% | Compute costs |
+| Extra storage (per TB) | $400/mo | $50 | 88% | S3 costs |
+| SSO/SAML + Audit | $1,000/mo | $0 | 100% | Just config |
+| Premium Support (4hr SLA) | $5,000/mo | $2,000 | 60% | Requires staff |
+| Managed Workers | $3,000/10 workers | $500 | 83% | VMs in customer network |
+| AI Model Fine-Tuning | $10,000 one-time | $2,000 | 80% | Your time + compute |
+
+### Why This Pricing Works
+
+```
+VALUE LADDER VISUALIZATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+                                        ┌──────────────────┐
+                                        │ Enterprise       │ $78K-$240K/yr
+                                        │ (Sales-Led)      │ Unlimited everything
+                                        │ 97-99% margin    │
+                                        └────────┬─────────┘
+                                                 │
+                               ┌─────────────────┴────────────────┐
+                               │ Business ($800/mo)               │
+                               │ SSO, 50 users, Phone support     │
+                               │ 81% margin                       │
+                               └─────────────────┬────────────────┘
+                                                 │
+                        ┌────────────────────────┴─────────────────────┐
+                        │ Team ($299/mo)                               │
+                        │ 15 users, Integrations                       │
+                        │ 80% margin                                   │
+                        └────────────────────────┬─────────────────────┘
+                                                 │
+              ┌──────────────────────────────────┴───────────────────────────────┐
+              │ Starter ($99/mo)                                                 │
+              │ 5 users, Basic support                                           │
+              │ 80% margin                                                       │
+              └──────────────────────────────────┬───────────────────────────────┘
+                                                 │
+┌────────────────────────────────────────────────┴────────────────────────────────────────┐
+│ FREE TIER ($0)                                                                          │
+│ Chrome Extension + 3 users + 50 test runs/month                                         │
+│ Cost to you: $0 (runs on their machine, minimal cloud usage)                           │
+│                                                                                         │
+│ PURPOSE: Get users hooked, then upgrade when they hit limits                           │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+CONVERSION TRIGGERS:
+├── Free → Starter:  "Need more than 50 runs? Upgrade!"
+├── Starter → Team:  "Need more users? Integrations? Upgrade!"
+├── Team → Business: "Need SSO? Phone support? Upgrade!"
+└── Business → Enterprise: "Need unlimited + SLA + dedicated support? Let's talk!"
+```
 
 ---
 
@@ -348,25 +610,90 @@ Year 5: 2,000 customers (1.7x)
 ### Phase 1: Product-Led Growth (Year 1)
 
 ```
-ACQUISITION FUNNEL
+REALISTIC CONVERSION FUNNEL (Extension → Platform)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Chrome Web Store → Free Tier → Trial → Paid
-    │                 │           │        │
-    │ 10,000         │ 5,000     │ 500    │ 200
-    │ downloads/mo   │ signups   │ active │ paying
-    │                │           │        │
-    └── 50% ────────>└── 10% ──>└── 40% ─>│
-                                           │
-                    Conversion rate: 4% overall (industry: 2-5%)
+STAGE 1: EXTENSION DOWNLOAD (Chrome Web Store)
+────────────────────────────────────────────────────────────────────
+Downloads/month: 5,000 (conservative) to 20,000 (with marketing)
+
+┌─────────────┐
+│ Chrome      │ ←── Search: "test recorder", "selenium alternative"
+│ Web Store   │ ←── Links from blog posts, YouTube demos
+│             │ ←── Word of mouth
+└──────┬──────┘
+       │ 5,000 downloads
+       ▼
+
+STAGE 2: EXTENSION ACTIVATED (First Recording)
+────────────────────────────────────────────────────────────────────
+Conversion: 60% of downloads → first recording
+Why some don't: Installed but never opened, wrong tool, testing
+
+       │ 3,000 first recordings
+       ▼
+
+STAGE 3: PLATFORM SIGNUP (Export/View Test)
+────────────────────────────────────────────────────────────────────
+Trigger: User clicks "Export to Platform" or "Run Test"
+Conversion: 40% of active recorders → platform signup (free tier)
+Why: They recorded, now they want to USE the recording
+
+┌─────────────┐     ┌─────────────┐
+│ Extension   │────>│ "Sign up to │ ←── This is your conversion point!
+│ "Export"    │     │ Flowstral"  │
+└─────────────┘     └──────┬──────┘
+                           │ 1,200 free signups
+                           ▼
+
+STAGE 4: FREE TIER ACTIVATION (Runs Tests)
+────────────────────────────────────────────────────────────────────
+Conversion: 50% of signups → run at least one test
+Why not: Just exploring, didn't connect properly
+
+                           │ 600 active free users
+                           ▼
+
+STAGE 5: PAID CONVERSION (Hits Limits)
+────────────────────────────────────────────────────────────────────
+Trigger: "You've used 50/50 test runs this month. Upgrade?"
+Conversion: 8-15% of active free → paid
+Timeline: Typically within 30-60 days of activation
+
+                           │ 50-90 paid customers/month
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ MONTHLY METRICS (Conservative):                                  │
+│                                                                  │
+│ 5,000 downloads × 60% activate × 40% signup × 50% active × 10%  │
+│     = 60 new paying customers per month                          │
+│                                                                  │
+│ At $99-299/mo average = $6K-18K new MRR/month                   │
+│ After 12 months: $72K-216K MRR = $864K-$2.6M ARR               │
+│                                                                  │
+│ Plus enterprise deals (5-10 @ $6,500/mo) = $390K-780K ARR       │
+│                                                                  │
+│ YEAR 1 TOTAL: $1.2M - $3.4M ARR (realistic range)              │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+**The Extension → Platform Conversion Points:**
+
+| Extension Action | Platform Trigger | What User Sees |
+|------------------|------------------|----------------|
+| Click "Export" | Opens platform signup | "Sign in to save your recording" |
+| Click "Run Test" | Opens platform | "Connect to Flowstral to execute" |
+| Click "View History" | Opens platform | "Your recordings are stored in Flowstral" |
+| Click "Smart Assert" | Opens platform | "AI assertions require Flowstral account" |
+| Click "Self-Heal" | Opens platform | "Self-healing requires Flowstral Pro" |
 
 **Key PLG Tactics:**
 1. **Chrome Web Store** - Primary acquisition channel
-2. **"Record First Test in 5 Minutes"** - Instant value
-3. **Freemium with generous limits** - 100 runs/month free
-4. **In-app upgrade prompts** - Context-aware
-5. **Community Discord/Slack** - Support at scale
+2. **"Record First Test in 5 Minutes"** - Instant value IN the extension
+3. **Gentle upgrade prompts** - "Export to Flowstral" (not "pay now")
+4. **Free tier with real limits** - 50 runs/month, 3 users (enough to evaluate)
+5. **In-platform upsells** - Show features they CAN'T use yet
+6. **Community Discord/Slack** - Support at scale, creates stickiness
 
 ### Phase 2: Sales-Assisted Growth (Year 2-3)
 
