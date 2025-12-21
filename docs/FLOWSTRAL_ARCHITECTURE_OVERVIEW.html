@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowstral Platform Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            color: white;
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+        }
+        
+        .header h1 {
+            font-size: 2.8em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -1px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .header .tagline {
+            margin-top: 20px;
+            font-size: 0.95em;
+            opacity: 0.8;
+        }
+        
+        /* Section styling */
+        .section {
+            background: white;
+            border-radius: 16px;
+            padding: 35px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 1.6em;
+            margin-bottom: 25px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #667eea;
+            display: inline-block;
+        }
+        
+        .section h3 {
+            color: #333;
+            font-size: 1.2em;
+            margin: 25px 0 15px 0;
+        }
+        
+        /* Architecture Diagram */
+        .architecture-diagram {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 30px 0;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #e2e8f0;
+            overflow-x: auto;
+            white-space: pre;
+        }
+        
+        /* Grid layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 20px 0;
+        }
+        
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        /* Cards */
+        .card {
+            background: linear-gradient(135deg, #f8fafc 0%, #fff 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 25px;
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .card.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        
+        .card.primary h4 {
+            color: white;
+        }
+        
+        .card h4 {
+            color: #667eea;
+            font-size: 1.1em;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card p {
+            font-size: 0.9em;
+            color: #64748b;
+        }
+        
+        .card.primary p {
+            color: rgba(255,255,255,0.9);
+        }
+        
+        .card .tech {
+            margin-top: 12px;
+            font-size: 0.8em;
+            color: #94a3b8;
+            font-family: 'Consolas', monospace;
+        }
+        
+        .card.primary .tech {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        /* Icon styles */
+        .icon {
+            font-size: 1.4em;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.9em;
+        }
+        
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8em;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+        
+        tr:hover {
+            background: #f1f5f9;
+        }
+        
+        /* Feature list */
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .feature-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        /* Deployment boxes */
+        .deployment-option {
+            background: #f8fafc;
+            border-left: 4px solid #667eea;
+            padding: 20px 25px;
+            margin: 15px 0;
+            border-radius: 0 12px 12px 0;
+        }
+        
+        .deployment-option h4 {
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+        
+        .deployment-option .price {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+        
+        /* Stats */
+        .stats-row {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 30px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+        }
+        
+        .stat {
+            text-align: center;
+            color: white;
+        }
+        
+        .stat .number {
+            font-size: 2.5em;
+            font-weight: 700;
+            display: block;
+        }
+        
+        .stat .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        /* Flow arrows */
+        .flow-section {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+        
+        .flow-step .step-num {
+            width: 36px;
+            height: 36px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        
+        .flow-step .step-content {
+            margin-left: 15px;
+            flex-grow: 1;
+        }
+        
+        .flow-step .step-arrow {
+            color: #667eea;
+            font-size: 1.5em;
+            margin: 0 10px;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #64748b;
+            font-size: 0.9em;
+        }
+        
+        /* Print styles */
+        @media print {
+            body {
+                background: white;
+            }
+            .section {
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+                break-inside: avoid;
+            }
+            .header {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- Header -->
+        <div class="header">
+            <h1>Flowstral Platform</h1>
+            <div class="subtitle">Enterprise Test Automation Architecture</div>
+            <div class="tagline">AI-Powered • Self-Healing • Multi-Tenant • Cloud & On-Prem Ready</div>
+        </div>
+        
+        <!-- Key Stats -->
+        <div class="stats-row">
+            <div class="stat">
+                <span class="number">17ms</span>
+                <span class="label">DOM Analysis</span>
+            </div>
+            <div class="stat">
+                <span class="number">20+</span>
+                <span class="label">Enterprise Apps</span>
+            </div>
+            <div class="stat">
+                <span class="number">97%</span>
+                <span class="label">Gross Margin</span>
+            </div>
+            <div class="stat">
+                <span class="number">5</span>
+                <span class="label">Testing Types</span>
+            </div>
+        </div>
+        
+        <!-- Architecture Overview -->
+        <div class="section">
+            <h2>Platform Architecture</h2>
+            
+            <div class="architecture-diagram">
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              FLOWSTRAL PLATFORM ARCHITECTURE                             │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                          │
+│    ┌────────────────────────────────────────────────────────────────────────────────┐   │
+│    │                           CLIENT LAYER                                          │   │
+│    │  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐           │   │
+│    │  │  Chrome Extension │   │   React Web App  │   │   CI/CD Plugins  │           │   │
+│    │  │  • DOM Capture    │   │   • Dashboard    │   │   • GitHub       │           │   │
+│    │  │  • Smart Selectors│   │   • Test Builder │   │   • GitLab       │           │   │
+│    │  │  • Network Capture│   │   • Run Results  │   │   • Jenkins      │           │   │
+│    │  │  • App Detection  │   │   • Analytics    │   │   • Azure DevOps │           │   │
+│    │  └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘           │   │
+│    └───────────┼──────────────────────┼──────────────────────┼──────────────────────┘   │
+│                │                      │                      │                          │
+│                └──────────────────────┼──────────────────────┘                          │
+│                                       ▼                                                  │
+│    ┌────────────────────────────────────────────────────────────────────────────────┐   │
+│    │                           API GATEWAY (FastAPI)                                 │   │
+│    │  • REST API (50+ endpoints)  • WebSocket (Real-time)  • JWT Authentication     │   │
+│    └────────────────────────────────────────────────────────────────────────────────┘   │
+│                                       │                                                  │
+│         ┌─────────────────────────────┼─────────────────────────────┐                   │
+│         │                             │                             │                   │
+│         ▼                             ▼                             ▼                   │
+│    ┌──────────────┐           ┌──────────────┐           ┌──────────────┐              │
+│    │   AI LAYER   │           │   EXECUTION  │           │   STORAGE    │              │
+│    │              │           │    ENGINE    │           │    LAYER     │              │
+│    │ • OpenAI API │           │              │           │              │              │
+│    │ • Model GW   │           │ • Playwright │           │ • PostgreSQL │              │
+│    │ • Self-Heal  │           │ • k6 (Perf)  │           │ • Redis      │              │
+│    │ • Test Gen   │           │ • ZAP (Sec)  │           │ • S3/MinIO   │              │
+│    └──────────────┘           │ • axe (A11y) │           └──────────────┘              │
+│                               └──────────────┘                                          │
+│                                       │                                                  │
+│    ┌──────────────────────────────────┼──────────────────────────────────────────────┐  │
+│    │                    CUSTOMER NETWORK (Hybrid Deployment)                          │  │
+│    │  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐             │  │
+│    │  │  Worker Agent    │   │  Customer Apps   │   │  Customer Storage│             │  │
+│    │  │  (Playwright)    │──▶│  (Salesforce,    │   │  (MinIO/S3)      │             │  │
+│    │  │                  │   │   SAP, Internal) │   │                  │             │  │
+│    │  └──────────────────┘   └──────────────────┘   └──────────────────┘             │  │
+│    └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                          │
+└─────────────────────────────────────────────────────────────────────────────────────────┘</div>
+        </div>
+        
+        <!-- Core Components -->
+        <div class="section">
+            <h2>Core Components</h2>
+            
+            <div class="grid-2">
+                <div class="card primary">
+                    <h4><span class="icon">🔌</span> Chrome Extension</h4>
+                    <p>Browser-native recording with intelligent DOM analysis. Captures user actions, generates smart selectors, and detects 20+ enterprise applications automatically.</p>
+                    <div class="tech">Manifest V3 • Content Scripts • WebRequest API</div>
+                </div>
+                
+                <div class="card primary">
+                    <h4><span class="icon">⚛️</span> React Web Application</h4>
+                    <p>Modern single-page application with visual workflow builder, real-time execution monitoring, and comprehensive test management dashboards.</p>
+                    <div class="tech">React 18 • TypeScript • Vite • shadcn/ui</div>
+                </div>
+                
+                <div class="card">
+                    <h4><span class="icon">🐍</span> FastAPI Backend</h4>
+                    <p>High-performance async API server handling all business logic, test orchestration, and real-time WebSocket communications.</p>
+                    <div class="tech">FastAPI • Python 3.10+ • Async/Await • Pydantic</div>
+                </div>
+                
+                <div class="card">
+                    <h4><span class="icon">🎭</span> Playwright Engine</h4>
+                    <p>Cross-browser test execution with self-healing selectors, screenshot/video capture, and network request interception.</p>
+                    <div class="tech">Playwright 1.48+ • Chrome • Firefox • WebKit</div>
+                </div>
+                
+                <div class="card">
+                    <h4><span class="icon">🤖</span> AI Services</h4>
+                    <p>Intelligent test generation, self-healing selector repair, and natural language test case formatting powered by OpenAI.</p>
+                    <div class="tech">OpenAI gpt-4o-mini • Prompt Caching • Model Gateway</div>
+                </div>
+                
+                <div class="card">
+                    <h4><span class="icon">🐘</span> PostgreSQL Database</h4>
+                    <p>Enterprise-grade relational database with multi-tenant isolation, row-level security, and vector embeddings for semantic search.</p>
+                    <div class="tech">PostgreSQL 15+ • pgvector • RLS Policies</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Testing Capabilities -->
+        <div class="section">
+            <h2>Testing Capabilities</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h4>🖥️ Functional Testing</h4>
+                    <p>Visual workflow builder with drag-drop interface, smart selectors, and self-healing automation.</p>
+                </div>
+                <div class="card">
+                    <h4>🔌 API Testing</h4>
+                    <p>OpenAPI import, GraphQL/SOAP support, service virtualization, and database assertions.</p>
+                </div>
+                <div class="card">
+                    <h4>⚡ Performance Testing</h4>
+                    <p>k6 integration with virtual users, response metrics, and server resource monitoring.</p>
+                </div>
+                <div class="card">
+                    <h4>🔒 Security Testing</h4>
+                    <p>OWASP ZAP integration for DAST scanning with vulnerability reporting.</p>
+                </div>
+                <div class="card">
+                    <h4>♿ Accessibility Testing</h4>
+                    <p>axe-core powered WCAG 2.1 AA compliance scanning with remediation guidance.</p>
+                </div>
+                <div class="card">
+                    <h4>🔍 Autonomous Testing</h4>
+                    <p>AI-driven exploration that discovers bugs without predefined test scripts.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Enterprise Application Support -->
+        <div class="section">
+            <h2>Enterprise Application Support</h2>
+            <p style="margin-bottom: 20px;">Intelligent selector generation optimized for complex enterprise applications:</p>
+            
+            <div class="grid-4">
+                <div class="card"><h4>Salesforce</h4><p>Lightning + Classic</p></div>
+                <div class="card"><h4>ServiceNow</h4><p>All modules</p></div>
+                <div class="card"><h4>SAP</h4><p>Fiori + GUI</p></div>
+                <div class="card"><h4>Oracle</h4><p>Cloud Apps</p></div>
+                <div class="card"><h4>Workday</h4><p>HCM + Finance</p></div>
+                <div class="card"><h4>Microsoft</h4><p>Dynamics 365</p></div>
+                <div class="card"><h4>NetSuite</h4><p>ERP + CRM</p></div>
+                <div class="card"><h4>Veeva</h4><p>CRM + Vault</p></div>
+            </div>
+            <p style="margin-top: 15px; color: #64748b; font-size: 0.9em;">Plus: Pega, Appian, OutSystems, Mendix, Power Apps, Zuora, Coupa, Concur, and more...</p>
+        </div>
+        
+        <!-- Deployment Options -->
+        <div class="section">
+            <h2>Deployment Options</h2>
+            
+            <div class="deployment-option">
+                <h4>Hybrid SaaS (Recommended)</h4>
+                <p>Control plane hosted by Flowstral. Test execution workers run in customer network for internal app access and data security.</p>
+                <span class="price">$6,500/month</span>
+            </div>
+            
+            <div class="deployment-option">
+                <h4>Full SaaS — Managed</h4>
+                <p>Complete platform hosted and managed by Flowstral including execution infrastructure and evidence storage.</p>
+                <span class="price">$15,000/month</span>
+            </div>
+            
+            <div class="deployment-option">
+                <h4>Private Cloud</h4>
+                <p>Deployed in customer's AWS/Azure/GCP account. Flowstral manages operations while customer controls infrastructure.</p>
+                <span class="price">$20,000/month + infrastructure</span>
+            </div>
+            
+            <div class="deployment-option">
+                <h4>On-Premises License</h4>
+                <p>Full platform runs in customer datacenter. Air-gapped deployment for regulated industries.</p>
+                <span class="price">$240,000/year</span>
+            </div>
+        </div>
+        
+        <!-- Data Flow -->
+        <div class="section">
+            <h2>Test Execution Flow</h2>
+            
+            <div class="flow-section">
+                <div class="flow-step">
+                    <div class="step-num">1</div>
+                    <div class="step-content"><strong>Record</strong> — Chrome extension captures user actions with intelligent selectors</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-num">2</div>
+                    <div class="step-content"><strong>Build</strong> — Visual workflow editor structures test with assertions and data</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-num">3</div>
+                    <div class="step-content"><strong>Execute</strong> — Playwright runs test with real-time WebSocket progress updates</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-num">4</div>
+                    <div class="step-content"><strong>Heal</strong> — AI automatically repairs broken selectors when UI changes</div>
+                </div>
+                <div class="flow-step">
+                    <div class="step-num">5</div>
+                    <div class="step-content"><strong>Report</strong> — Screenshots, videos, and analytics captured in dashboard</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Technology Stack -->
+        <div class="section">
+            <h2>Technology Stack</h2>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Layer</th>
+                        <th>Technology</th>
+                        <th>Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Frontend</strong></td>
+                        <td>React 18 + TypeScript + Vite</td>
+                        <td>Web application UI</td>
+                    </tr>
+                    <tr>
+                        <td><strong>UI Components</strong></td>
+                        <td>shadcn/ui + Tailwind CSS</td>
+                        <td>Modern design system</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Extension</strong></td>
+                        <td>Chrome Manifest V3</td>
+                        <td>Browser recording & analysis</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Backend API</strong></td>
+                        <td>FastAPI (Python 3.10+)</td>
+                        <td>REST API + WebSocket</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Test Execution</strong></td>
+                        <td>Playwright 1.48+</td>
+                        <td>Cross-browser automation</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Performance</strong></td>
+                        <td>k6</td>
+                        <td>Load testing</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Security</strong></td>
+                        <td>OWASP ZAP</td>
+                        <td>DAST scanning</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Accessibility</strong></td>
+                        <td>axe-core</td>
+                        <td>WCAG compliance</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Database</strong></td>
+                        <td>PostgreSQL 15+</td>
+                        <td>Data persistence</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cache/Queue</strong></td>
+                        <td>Redis</td>
+                        <td>Sessions & job queue</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Object Storage</strong></td>
+                        <td>S3 / MinIO</td>
+                        <td>Screenshots, videos, artifacts</td>
+                    </tr>
+                    <tr>
+                        <td><strong>AI/LLM</strong></td>
+                        <td>OpenAI gpt-4o-mini</td>
+                        <td>Test generation, self-healing</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Integrations -->
+        <div class="section">
+            <h2>Integrations</h2>
+            
+            <div class="grid-3">
+                <div class="card">
+                    <h4>📋 Test Management</h4>
+                    <ul class="feature-list">
+                        <li>Jira</li>
+                        <li>Azure DevOps</li>
+                        <li>Confluence</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>🔄 CI/CD</h4>
+                    <ul class="feature-list">
+                        <li>GitHub Actions</li>
+                        <li>GitLab CI</li>
+                        <li>Jenkins</li>
+                        <li>Azure Pipelines</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>📊 Monitoring</h4>
+                    <ul class="feature-list">
+                        <li>Prometheus</li>
+                        <li>Slack Notifications</li>
+                        <li>Email Alerts</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Security & Compliance -->
+        <div class="section">
+            <h2>Security & Compliance</h2>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h4>🔐 Security Features</h4>
+                    <ul class="feature-list">
+                        <li>JWT-based authentication</li>
+                        <li>Row-level security (RLS)</li>
+                        <li>SSO/SAML support</li>
+                        <li>API key authentication</li>
+                        <li>Audit logging</li>
+                        <li>Data encryption at rest & transit</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h4>✅ Compliance Ready</h4>
+                    <ul class="feature-list">
+                        <li>SOC 2 Type II architecture</li>
+                        <li>GDPR data residency options</li>
+                        <li>HIPAA-compatible deployment</li>
+                        <li>Air-gapped on-prem option</li>
+                        <li>Multi-tenant isolation</li>
+                        <li>RBAC access controls</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Flowstral</strong> — Enterprise Test Automation Platform</p>
+            <p style="margin-top: 10px;">© 2024 Flowstral. All rights reserved.</p>
+        </div>
+        
+    </div>
+</body>
+</html>
+
