@@ -68,65 +68,72 @@
 │                    WHAT'S FREE vs WHAT'S PAID                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  🆓 FREE (Extension Only - No Account Needed)                               │
-│  ════════════════════════════════════════════                               │
+│  🆓 FREE (Extension + Basic Platform - Creates Champions)                   │
+│  ════════════════════════════════════════════════════════                   │
 │  ✅ Record clicks, inputs, navigation                                       │
 │  ✅ Smart selector generation (20+ app profiles)                            │
 │  ✅ DOM analysis (17ms performance)                                         │
 │  ✅ Network request capture (HAR)                                           │
-│  ✅ Copy single step as Playwright code                                     │
-│  ✅ Basic element inspection                                                 │
-│                                                                              │
-│  🆓 FREE TIER (Account Required, Limited)                                   │
-│  ════════════════════════════════════════════                               │
-│  ✅ Export full recording to platform                                       │
+│  ✅ Export to Playwright code                                               │
 │  ✅ Visual Workflow Builder (view/edit)                                     │
-│  ✅ Run tests locally (50 runs/month)                                       │
+│  ✅ Run tests (50 runs/month - enough to evaluate)                          │
 │  ✅ Basic assertions                                                         │
-│  ✅ 3 team members                                                           │
+│  ✅ 1 user (the champion)                                                   │
 │  ✅ 7-day execution history                                                  │
-│  ❌ Self-healing (shows "Upgrade to Pro")                                   │
-│  ❌ AI test generation (shows "Upgrade to Pro")                             │
-│  ❌ CI/CD integration (shows "Upgrade to Team")                             │
 │                                                                              │
-│  💰 PAID TIERS (The Real Value)                                             │
+│  PURPOSE: Let individual try at work → become champion → sell internally   │
+│                                                                              │
+│  💰 TEAM ($500/mo) - Minimum Purchase                                       │
 │  ════════════════════════════════════════════                               │
-│                                                                              │
-│  STARTER ($99/mo):                                                          │
-│  ├── 500 test runs/month                                                    │
-│  ├── 5 team members                                                         │
-│  ├── Self-healing (basic)                                                   │
-│  ├── 30-day history                                                         │
-│  └── Email support                                                          │
-│                                                                              │
-│  TEAM ($299/mo):                                                             │
-│  ├── 3,000 test runs/month                                                  │
-│  ├── 15 team members                                                        │
+│  ├── 5-15 users                                                             │
+│  ├── 2,000 test runs/month                                                  │
+│  ├── Self-healing                                                           │
 │  ├── AI test generation                                                     │
-│  ├── CI/CD integrations (GitHub, GitLab, Jenkins)                          │
-│  ├── API testing module                                                     │
-│  ├── Jira/Azure DevOps integration                                         │
+│  ├── CI/CD integrations                                                     │
+│  ├── Jira/Azure DevOps                                                      │
 │  ├── 90-day history                                                         │
-│  └── Priority support                                                       │
+│  └── Email support (<24hr)                                                  │
 │                                                                              │
-│  BUSINESS ($799/mo):                                                         │
-│  ├── 15,000 test runs/month                                                 │
-│  ├── 50 team members                                                        │
+│  TARGET: Small QA teams, startups, department pilots                       │
+│                                                                              │
+│  💰 BUSINESS ($1,500/mo)                                                    │
+│  ════════════════════════════════════════════                               │
+│  ├── 15-50 users                                                            │
+│  ├── 10,000 test runs/month                                                 │
+│  ├── Everything in Team +                                                   │
 │  ├── SSO/SAML                                                               │
 │  ├── Performance testing (k6)                                               │
-│  ├── Accessibility testing                                                  │
+│  ├── API testing module                                                     │
 │  ├── Custom dashboards                                                      │
 │  ├── 1-year history                                                         │
-│  └── Phone support                                                          │
+│  └── Priority support (<4hr)                                                │
 │                                                                              │
-│  ENTERPRISE ($6,500/mo+):                                                    │
-│  ├── Unlimited everything                                                   │
+│  TARGET: Mid-market companies, multiple QA teams                           │
+│                                                                              │
+│  💰 ENTERPRISE ($6,500/mo+)                                                 │
+│  ════════════════════════════════════════════                               │
+│  ├── Unlimited users                                                        │
+│  ├── Unlimited test runs                                                    │
+│  ├── Everything in Business +                                               │
+│  ├── Security testing (ZAP integration)                                    │
+│  ├── Accessibility testing                                                  │
 │  ├── On-prem / Private cloud options                                       │
-│  ├── Security testing (ZAP)                                                │
-│  ├── Custom AI model training                                               │
+│  ├── Custom AI model fine-tuning                                           │
 │  ├── Dedicated CSM                                                          │
-│  ├── SLA guarantee                                                          │
+│  ├── SLA guarantee (99.9%)                                                  │
 │  └── Professional services                                                  │
+│                                                                              │
+│  TARGET: Large enterprises replacing Tosca/UFT/LoadRunner                  │
+│                                                                              │
+│  💎 ON-PREM LICENSE ($240K/year)                                            │
+│  ════════════════════════════════════════════                               │
+│  ├── Full platform runs in customer datacenter                             │
+│  ├── Air-gapped deployment                                                  │
+│  ├── No data leaves customer network                                        │
+│  ├── Premium support package                                                │
+│  └── Annual license + maintenance                                           │
+│                                                                              │
+│  TARGET: Banks, healthcare, government, defense contractors                │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -272,38 +279,79 @@ testRigor     ████████████ $2,500-5,000/user/yr
 Katalon       █████████ $2,000-4,000/user/yr
 ```
 
-### Recommended Flowstral Pricing (ROI-Backed)
+### Recommended Flowstral Pricing (Reality-Based)
 
-**Pricing Philosophy:** Extension is FREE → Platform is PAID
-
-#### Self-Serve Tiers (PLG Motion)
-
-| Tier | Monthly | Annual | Your Cost | Margin | What's Included |
-|------|---------|--------|-----------|--------|-----------------|
-| **Free** | $0 | $0 | $0 (self-service) | N/A | Extension + 3 users + 50 runs/mo + Community |
-| **Starter** | $99/mo | $990/yr | ~$20/mo | 80% | 5 users, 500 runs/mo, Email support |
-| **Team** | $299/mo | $2,990/yr | ~$60/mo | 80% | 15 users, 3K runs/mo, Integrations, Priority support |
-| **Business** | $799/mo | $7,990/yr | ~$150/mo | 81% | 50 users, 15K runs/mo, SSO, Phone support |
+**Key Insight: Individuals DON'T Pay for Enterprise Testing Tools**
 
 ```
-PROFIT PER TIER (at scale):
+THE REAL BUYING CYCLE:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Starter ($99/mo):
-├── Revenue: $99
-├── Cost: ~$20 (minimal support, shared infra)
-└── Profit: $79/mo = $948/yr ✅
+Individual tester at BigCorp:
+┌─────────────────────────────────────────────────────────────────┐
+│  "I found this cool extension that records tests..."           │
+│       │                                                         │
+│       ▼                                                         │
+│  "Can I expense $99/month?"                                    │
+│       │                                                         │
+│       ▼                                                         │
+│  "LOL no. Use the tools we already have." (Manager)            │
+│                                                                 │
+│  BUT...                                                         │
+│       │                                                         │
+│       ▼                                                         │
+│  "Wait, this is way better than Tosca. Can we evaluate         │
+│   this for the team?" (Same tester, 2 weeks later)             │
+│       │                                                         │
+│       ▼                                                         │
+│  QA Manager sees demo → VP approves $78K/year budget           │
+│       │                                                         │
+│       ▼                                                         │
+│  ENTERPRISE DEAL CLOSED 🎉                                      │
+└─────────────────────────────────────────────────────────────────┘
 
-Team ($299/mo):
-├── Revenue: $299
-├── Cost: ~$60 (some support, more storage)
-└── Profit: $239/mo = $2,868/yr ✅
-
-Business ($799/mo):
-├── Revenue: $799
-├── Cost: ~$150 (dedicated support, more resources)
-└── Profit: $649/mo = $7,788/yr ✅
+THE INDIVIDUAL IS THE CHAMPION, NOT THE BUYER.
 ```
+
+**Pricing Philosophy:** 
+- FREE = Create internal champions at target companies
+- No low-price individual tiers (waste of time)
+- Jump straight to TEAM minimum ($500+/mo)
+- Focus on ENTERPRISE ($6,500+/mo)
+
+#### Realistic Pricing Tiers
+
+| Tier | Monthly | Annual | Min Users | Target Buyer |
+|------|---------|--------|-----------|--------------|
+| **Free** | $0 | $0 | 1-3 | Individual champion (leads to enterprise) |
+| **Team** | $500/mo | $5,000/yr | 5-15 | Small QA team, startup |
+| **Business** | $1,500/mo | $15,000/yr | 15-50 | Mid-market company |
+| **Enterprise** | $6,500/mo | $78,000/yr | Unlimited | Large enterprise |
+
+```
+WHY NO $99/MONTH TIER:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Individual testers won't pay out of pocket
+❌ They can't expense small amounts easily
+❌ They can't use it at work without company buying
+❌ Support cost for $99 customers is same as $6,500 customers
+❌ Churn is highest at low price points
+
+✅ FREE creates champions who sell internally for you
+✅ $500/mo minimum qualifies serious buyers
+✅ Support effort is worth it at $500+/mo
+✅ These customers actually USE the product (work context)
+```
+
+#### Profit Analysis (Realistic Tiers)
+
+| Tier | Price | Your Cost | Profit | Margin | Support Effort |
+|------|-------|-----------|--------|--------|----------------|
+| **Free** | $0 | $0 | $0 | N/A | Self-serve docs only |
+| **Team** | $500/mo | $80/mo | $420/mo | 84% | Email, <24hr response |
+| **Business** | $1,500/mo | $200/mo | $1,300/mo | 87% | Priority, <4hr response |
+| **Enterprise** | $6,500/mo | $200/mo | $6,300/mo | **97%** | Dedicated CSM |
 
 #### Enterprise Tiers (Sales-Led Motion)
 
@@ -422,39 +470,71 @@ Realistic target over 5 years
 
 | Metric | Conservative | Target | Aggressive |
 |--------|-------------|--------|------------|
-| **Average Contract Value (ACV)** | $40,000 | $65,000 | $100,000 |
+| **Average Contract Value (ACV)** | $25,000 | $45,000 | $78,000 |
 | **Customer Lifetime (years)** | 3 | 5 | 7 |
 | **Net Revenue Retention** | 100% | 115% | 130% |
-| **Gross Margin** | 75% | 85% | 92% |
+| **Gross Margin** | 85% | 90% | 97% |
 | **CAC Payback (months)** | 18 | 12 | 8 |
+
+```
+ACV BREAKDOWN BY TIER:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Team ($500/mo = $6,000 ACV)
+├── Who buys: Small QA teams, startups
+├── Sales motion: Self-serve + light touch
+├── Volume: Higher, lower margin effort
+└── % of customers: 50%
+
+Business ($1,500/mo = $18,000 ACV)
+├── Who buys: Mid-market companies
+├── Sales motion: Inside sales
+├── Volume: Medium
+└── % of customers: 30%
+
+Enterprise ($6,500/mo = $78,000 ACV)
+├── Who buys: Large enterprises
+├── Sales motion: Field sales, longer cycle
+├── Volume: Lower, but 80% of revenue
+└── % of customers: 20%
+
+Blended ACV = (50% × $6K) + (30% × $18K) + (20% × $78K)
+            = $3K + $5.4K + $15.6K
+            = $24,000 (conservative)
+
+With enterprise focus:
+            = (30% × $6K) + (30% × $18K) + (40% × $78K)
+            = $1.8K + $5.4K + $31.2K
+            = $38,400 (target)
+```
 
 ### 5-Year Roadmap to $100M ARR
 
 ```
-YEAR 1: FOUNDATION ($1-2M ARR)
+YEAR 1: FOUNDATION ($500K-1.5M ARR)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Focus: Product-Market Fit + First Enterprise Customers
+Focus: Create Champions + Close First Enterprise Deals
 
 Milestones:
-├── Q1: Launch free tier + Chrome Store approval
-├── Q2: 10 paying customers (mix of SMB + 2-3 enterprise pilots)
-├── Q3: First $500K in ARR, 25 customers
-├── Q4: $1-2M ARR, 40-60 customers
+├── Q1: Chrome Store launch, build champion community
+├── Q2: First 5 Team deals ($500/mo), 2 enterprise pilots
+├── Q3: First enterprise deal closes ($78K ARR)
+├── Q4: 20-30 total customers, $500K-1M ARR
 
 Key Actions:
-• Chrome Web Store listing (immediate distribution)
-• Content marketing: "Tosca Alternative" SEO play
-• Partner with 2-3 SI firms (Accenture, Deloitte, Cognizant contacts)
-• Build case studies from early customers
-• Hire first 2 AEs + 1 SE
+• Chrome Web Store listing (distribution to create champions)
+• "Tosca Alternative" and "UFT Alternative" SEO content
+• Champion enablement (ROI calculator, comparison docs)
+• Personal outreach to champions who "Request Demo"
+• YOU do sales (founder-led sales in Year 1)
+• Build 2-3 case studies from early wins
 
-Revenue Mix:
-• Starter: 30 customers × $2K = $60K
-• Professional: 20 customers × $6K = $120K
-• Business: 8 customers × $15K = $120K
-• Enterprise: 2 customers × $78K = $156K
-• Services: $100K
-TOTAL: ~$556K ARR (conservative) to ~$1.5M (with enterprise wins)
+Revenue Mix (Realistic Year 1):
+• Team: 20 customers × $6K/yr = $120K ARR
+• Business: 5 customers × $18K/yr = $90K ARR  
+• Enterprise: 3 customers × $78K/yr = $234K ARR
+• Pilots/POC: 5 × $30K = $150K (one-time, converts to ARR in Y2)
+TOTAL: ~$600K ARR (conservative) to ~$1.2M (with strong execution)
 
 
 YEAR 2: GROWTH ($5-10M ARR)
@@ -607,93 +687,167 @@ Year 5: 2,000 customers (1.7x)
 
 ## 🎪 Go-To-Market Strategy
 
-### Phase 1: Product-Led Growth (Year 1)
+### Phase 1: Champion-Led Enterprise Sales (Year 1)
 
 ```
-REALISTIC CONVERSION FUNNEL (Extension → Platform)
+THE REAL FUNNEL: FREE USERS → INTERNAL CHAMPIONS → ENTERPRISE DEALS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STAGE 1: EXTENSION DOWNLOAD (Chrome Web Store)
+This is NOT consumer SaaS. This is enterprise software.
+The free tier creates CHAMPIONS, not paying customers.
+
+STAGE 1: EXTENSION DOWNLOAD
 ────────────────────────────────────────────────────────────────────
-Downloads/month: 5,000 (conservative) to 20,000 (with marketing)
+Who downloads: QA Engineers, SDETs, Developers at companies
 
 ┌─────────────┐
-│ Chrome      │ ←── Search: "test recorder", "selenium alternative"
-│ Web Store   │ ←── Links from blog posts, YouTube demos
-│             │ ←── Word of mouth
+│ Chrome      │ ←── Search: "Tosca alternative", "Selenium recorder"
+│ Web Store   │ ←── LinkedIn posts from QA community
+│             │ ←── Reddit r/QualityAssurance, r/softwaretesting
 └──────┬──────┘
-       │ 5,000 downloads
+       │ 3,000 downloads/month
+       │ (mostly enterprise employees)
        ▼
 
-STAGE 2: EXTENSION ACTIVATED (First Recording)
+STAGE 2: USER TRIES IT AT WORK
 ────────────────────────────────────────────────────────────────────
-Conversion: 60% of downloads → first recording
-Why some don't: Installed but never opened, wrong tool, testing
+They record their WORK application (Salesforce, SAP, internal apps)
 
-       │ 3,000 first recordings
+┌───────────────────────────────────────────────────────────────┐
+│ "Wow, this detected our Salesforce Lightning components       │
+│  and generated stable selectors in 17ms!"                     │
+│                                                                │
+│ "This is way easier than Tosca/UFT/Selenium..."               │
+└───────────────────────────────────────────────────────────────┘
+       │
+       │ 1,500 active free users (trying at their companies)
        ▼
 
-STAGE 3: PLATFORM SIGNUP (Export/View Test)
+STAGE 3: CHAMPION EMERGES
 ────────────────────────────────────────────────────────────────────
-Trigger: User clicks "Export to Platform" or "Run Test"
-Conversion: 40% of active recorders → platform signup (free tier)
-Why: They recorded, now they want to USE the recording
+Free user becomes internal advocate:
 
-┌─────────────┐     ┌─────────────┐
-│ Extension   │────>│ "Sign up to │ ←── This is your conversion point!
-│ "Export"    │     │ Flowstral"  │
-└─────────────┘     └──────┬──────┘
-                           │ 1,200 free signups
-                           ▼
+┌───────────────────────────────────────────────────────────────┐
+│ "Hey manager, I found this tool that's 10x better than        │
+│  what we're using. Can we look at it for the team?"           │
+└───────────────────────────────────────────────────────────────┘
+       │
+       │ 150 champions (10% of active users advocate internally)
+       ▼
 
-STAGE 4: FREE TIER ACTIVATION (Runs Tests)
+STAGE 4: ENTERPRISE EVALUATION
 ────────────────────────────────────────────────────────────────────
-Conversion: 50% of signups → run at least one test
-Why not: Just exploring, didn't connect properly
+Champion connects you to their QA Manager/Director:
 
-                           │ 600 active free users
-                           ▼
+┌───────────────────────────────────────────────────────────────┐
+│ FORM CAPTURE: "Request Enterprise Demo"                       │
+│                                                                │
+│ Name: [John Smith]                                            │
+│ Company: [Fortune 500 Co]                                      │
+│ Title: [QA Director]                                          │
+│ Team Size: [25 testers]                                        │
+│ Current Tool: [Tosca - $150K/year]                            │
+│ Timeline: [Q2 2025]                                            │
+└───────────────────────────────────────────────────────────────┘
+       │
+       │ 50 enterprise leads/month (from champions)
+       ▼
 
-STAGE 5: PAID CONVERSION (Hits Limits)
+STAGE 5: ENTERPRISE DEAL
 ────────────────────────────────────────────────────────────────────
-Trigger: "You've used 50/50 test runs this month. Upgrade?"
-Conversion: 8-15% of active free → paid
-Timeline: Typically within 30-60 days of activation
+Close rate on warm (champion-sourced) leads: 20-30%
 
-                           │ 50-90 paid customers/month
-                           ▼
+       │ 10-15 enterprise deals/month
+       ▼
+
 ┌─────────────────────────────────────────────────────────────────┐
-│ MONTHLY METRICS (Conservative):                                  │
+│ REALISTIC YEAR 1 METRICS:                                       │
 │                                                                  │
-│ 5,000 downloads × 60% activate × 40% signup × 50% active × 10%  │
-│     = 60 new paying customers per month                          │
+│ 3,000 downloads/mo × 12 months = 36,000 total downloads         │
+│ → 3,600 active users (10%)                                      │
+│ → 360 internal champions (10%)                                  │
+│ → 180 enterprise leads (50%)                                    │
+│ → 45 closed deals (25% close rate)                              │
 │                                                                  │
-│ At $99-299/mo average = $6K-18K new MRR/month                   │
-│ After 12 months: $72K-216K MRR = $864K-$2.6M ARR               │
+│ DEAL SIZE MIX:                                                   │
+│ ├── 30 Team deals @ $500/mo = $15K/mo = $180K ARR              │
+│ ├── 10 Business deals @ $1,500/mo = $15K/mo = $180K ARR        │
+│ └── 5 Enterprise deals @ $6,500/mo = $32.5K/mo = $390K ARR     │
 │                                                                  │
-│ Plus enterprise deals (5-10 @ $6,500/mo) = $390K-780K ARR       │
+│ YEAR 1 TOTAL: ~$750K ARR (conservative)                         │
+│               ~$1.5M ARR (with good execution)                  │
 │                                                                  │
-│ YEAR 1 TOTAL: $1.2M - $3.4M ARR (realistic range)              │
+│ This is realistic for a bootstrap/small team in Year 1.         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**The Extension → Platform Conversion Points:**
+**The Champion Flywheel:**
 
-| Extension Action | Platform Trigger | What User Sees |
-|------------------|------------------|----------------|
-| Click "Export" | Opens platform signup | "Sign in to save your recording" |
-| Click "Run Test" | Opens platform | "Connect to Flowstral to execute" |
-| Click "View History" | Opens platform | "Your recordings are stored in Flowstral" |
-| Click "Smart Assert" | Opens platform | "AI assertions require Flowstral account" |
-| Click "Self-Heal" | Opens platform | "Self-healing requires Flowstral Pro" |
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     CHAMPION FLYWHEEL                            │
+│                                                                  │
+│      ┌─────────────┐                                            │
+│      │  Free User  │                                            │
+│      │  Downloads  │                                            │
+│      └──────┬──────┘                                            │
+│             │                                                    │
+│             ▼                                                    │
+│      ┌─────────────┐      ┌─────────────┐                       │
+│      │   Tries at  │─────>│  Loves It   │                       │
+│      │    Work     │      │  (Champion) │                       │
+│      └─────────────┘      └──────┬──────┘                       │
+│                                  │                               │
+│                                  ▼                               │
+│                           ┌─────────────┐                       │
+│                           │  Advocates  │                       │
+│                           │  Internally │                       │
+│                           └──────┬──────┘                       │
+│                                  │                               │
+│             ┌────────────────────┼────────────────────┐         │
+│             ▼                    ▼                    ▼         │
+│      ┌─────────────┐      ┌─────────────┐      ┌──────────┐    │
+│      │   Manager   │      │   IT Sees   │      │  Budget  │    │
+│      │  Sees Demo  │─────>│   Value     │─────>│  Approval│    │
+│      └─────────────┘      └─────────────┘      └─────┬────┘    │
+│                                                       │         │
+│                                                       ▼         │
+│                                              ┌──────────────┐   │
+│                                              │  ENTERPRISE  │   │
+│                                              │    DEAL      │   │
+│                                              │   $78K/yr    │   │
+│                                              └──────────────┘   │
+│                                                                  │
+│  Champion gets:                                                  │
+│  • Hero status at work ("I found this")                         │
+│  • Better tools to do their job                                 │
+│  • Possible promotion for improving process                     │
+│                                                                  │
+│  You get:                                                        │
+│  • Free sales team (champions sell for you)                     │
+│  • Warm leads (not cold calling)                                │
+│  • Faster sales cycles (internal buy-in already exists)         │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-**Key PLG Tactics:**
-1. **Chrome Web Store** - Primary acquisition channel
-2. **"Record First Test in 5 Minutes"** - Instant value IN the extension
-3. **Gentle upgrade prompts** - "Export to Flowstral" (not "pay now")
-4. **Free tier with real limits** - 50 runs/month, 3 users (enough to evaluate)
-5. **In-platform upsells** - Show features they CAN'T use yet
-6. **Community Discord/Slack** - Support at scale, creates stickiness
+**What the Free Extension Enables:**
+
+| User Action at Work | Why It Creates Champions |
+|---------------------|-------------------------|
+| Records their actual Salesforce flow | "This understands our app!" |
+| Sees 17ms DOM analysis | "This is FAST compared to Tosca" |
+| Gets stable selectors that work | "These selectors actually work" |
+| Exports to Playwright | "I can show my manager this script" |
+| Shares with teammate | "You gotta try this extension" |
+
+**Key Champion Enablement Tactics:**
+1. **"Share with Team" button** - Easy way to invite colleagues
+2. **"Request Enterprise Demo" prominent** - Captures champion info
+3. **Comparison content** - "Flowstral vs Tosca" page for internal selling
+4. **ROI Calculator** - Champion can show $ savings to management
+5. **Case studies** - "Company X saved $100K/year" for credibility
+6. **Slack community** - Champions help each other sell internally
 
 ### Phase 2: Sales-Assisted Growth (Year 2-3)
 
