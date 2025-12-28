@@ -1,28 +1,29 @@
 /**
- * Playwright Recorder Page - Full Featured UI
- * 
- * Layout (matching original UI):
- * - Left Panel: Recorded Steps with test steps
- * - Right Panel: Tabs for Suggestions, SF Tools, SF Context
+ * Playwright Recorder Page - Flowstral Desktop
  * 
  * Features:
- * - Record New: Create new automated tests from scratch
- * - Automate Existing: Merge recording with existing manual test cases
- * - Smart suggestions with element discovery
- * - SF-aware context panel for Salesforce pages
+ * - Start/Stop/Pause/Resume recording
+ * - Embedded browser preview with suggestions
+ * - SF-aware context for Salesforce pages
+ * - Element discovery and smart suggestions
+ * 
+ * APIs used:
+ * - window.flowstral.playwrightRecorder (for standalone browser)
+ * - window.electronAPI (for embedded browser)
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  Play, Square, Trash2, Download, ExternalLink, Save,
+  Play, Square, Pause, Trash2, Download, ExternalLink, Save,
   CheckCircle, Loader2, Video, Globe, Search, Filter,
   Folder, Tag, Calendar, ChevronDown, ChevronRight,
   Zap, FileText, ArrowLeft, Merge, RotateCcw, X,
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
   MousePointer, Keyboard, Eye, Target, Cloud, Link,
   Hash, Type, CircleDot, FormInput, Database, Copy,
-  Shield, Wand2, CheckSquare, Plus, Settings
+  Shield, Wand2, CheckSquare, Plus, Settings, ArrowRight,
+  SkipForward, Circle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +48,14 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
 
+// Types
 interface RecordedAction {
   id: string;
   qword: string;
@@ -57,6 +64,8 @@ interface RecordedAction {
   description: string;
   timestamp: number;
   selectorObj?: any;
+  selector?: any;
+  type?: string;
 }
 
 interface Suggestion {
@@ -98,12 +107,8 @@ interface TestCase {
   steps: TestStep[];
   folderId?: string;
   folderName?: string;
-  releaseId?: string;
-  planId?: string;
   tags?: string[];
   automationStatus?: 'none' | 'partial' | 'full';
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 interface Folder {
@@ -125,8 +130,10 @@ export default function PlaywrightRecorderPage() {
   const [url, setUrl] = useState("https://");
   const [currentUrl, setCurrentUrl] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [actions, setActions] = useState<RecordedAction[]>([]);
   const [isStarting, setIsStarting] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
   
   // Suggestions state
   const [suggestResult, setSuggestResult] = useState<SuggestResult | null>(null);
@@ -146,20 +153,20 @@ export default function PlaywrightRecorderPage() {
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [allTestCases, setAllTestCases] = useState<TestCase[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [releases, setReleases] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
   
   // Filters for scalable test picker
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'manual' | 'partial' | 'automated'>('all');
   const [folderFilter, setFolderFilter] = useState<string>('all');
-  const [releaseFilter, setReleaseFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   
   // Merge state
   const [mergedSteps, setMergedSteps] = useState<TestStep[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Timer ref
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect if current URL is Salesforce
   const isSalesforceUrl = useMemo(() => {
@@ -170,6 +177,24 @@ export default function PlaywrightRecorderPage() {
            urlToCheck.includes('.my.salesforce');
   }, [currentUrl, url]);
 
+  // Recording timer
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isRecording, isPaused]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Load test data on mount
   useEffect(() => {
     loadTestData();
@@ -177,11 +202,9 @@ export default function PlaywrightRecorderPage() {
 
   const loadTestData = useCallback(async () => {
     try {
-      // Load from localStorage first
       const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
       const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
       
-      // Merge and dedupe by ID
       const allCases = [...localCases];
       flowstralCases.forEach((tc: TestCase) => {
         if (!allCases.some(c => c.id === tc.id)) {
@@ -189,48 +212,20 @@ export default function PlaywrightRecorderPage() {
         }
       });
       
-      // Try to load from Electron storage too
-      const electronAPI = (window as any).electronAPI;
-      if (electronAPI?.localStorage) {
-        try {
-          const electronCases = await electronAPI.localStorage.get('test_cases');
-          if (electronCases && Array.isArray(electronCases)) {
-            electronCases.forEach((tc: TestCase) => {
-              if (!allCases.some(c => c.id === tc.id)) {
-                allCases.push(tc);
-              }
-            });
-          }
-        } catch (e) {
-          console.log('[Recorder] Could not load from Electron storage');
-        }
-      }
-      
-      // Calculate automation status for each test case
       const casesWithStatus = allCases.map(tc => ({
         ...tc,
         automationStatus: calculateAutomationStatus(tc)
       }));
       
       setAllTestCases(casesWithStatus);
-      console.log(`[Recorder] Loaded ${casesWithStatus.length} test cases`);
       
-      // Load folders
       const localFolders = JSON.parse(localStorage.getItem('test_repository_folders') || '[]');
       setFolders(localFolders);
-      
-      // Load releases and plans
-      const localReleases = JSON.parse(localStorage.getItem('test_releases') || '[]');
-      const localPlans = JSON.parse(localStorage.getItem('test_plans') || '[]');
-      setReleases(localReleases);
-      setPlans(localPlans);
-      
     } catch (error) {
       console.error('[Recorder] Error loading test data:', error);
     }
   }, []);
 
-  // Calculate automation status
   const calculateAutomationStatus = (tc: TestCase): 'none' | 'partial' | 'full' => {
     const steps = tc.steps || [];
     if (steps.length === 0) return 'none';
@@ -247,7 +242,6 @@ export default function PlaywrightRecorderPage() {
     return 'none';
   };
 
-  // Get unique tags from all test cases
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     allTestCases.forEach(tc => {
@@ -256,11 +250,9 @@ export default function PlaywrightRecorderPage() {
     return Array.from(tags).sort();
   }, [allTestCases]);
 
-  // Filter and paginate test cases
   const filteredTestCases = useMemo(() => {
     let filtered = allTestCases;
     
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(tc => 
@@ -270,7 +262,6 @@ export default function PlaywrightRecorderPage() {
       );
     }
     
-    // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(tc => {
         const status = tc.automationStatus || 'none';
@@ -281,25 +272,17 @@ export default function PlaywrightRecorderPage() {
       });
     }
     
-    // Folder filter
     if (folderFilter !== 'all') {
       filtered = filtered.filter(tc => tc.folderId === folderFilter);
     }
     
-    // Release filter
-    if (releaseFilter !== 'all') {
-      filtered = filtered.filter(tc => tc.releaseId === releaseFilter);
-    }
-    
-    // Tag filter
     if (tagFilter !== 'all') {
       filtered = filtered.filter(tc => (tc.tags || []).includes(tagFilter));
     }
     
     return filtered;
-  }, [allTestCases, searchQuery, statusFilter, folderFilter, releaseFilter, tagFilter]);
+  }, [allTestCases, searchQuery, statusFilter, folderFilter, tagFilter]);
 
-  // Paginated results
   const paginatedTestCases = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
     return filteredTestCases.slice(start, start + PAGE_SIZE);
@@ -307,19 +290,17 @@ export default function PlaywrightRecorderPage() {
 
   const totalPages = Math.ceil(filteredTestCases.length / PAGE_SIZE);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, folderFilter, releaseFilter, tagFilter]);
+  }, [searchQuery, statusFilter, folderFilter, tagFilter]);
 
   // Listen for actions from Playwright recorder
   useEffect(() => {
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
     
-    if (flowstral) {
-      // Listen for individual actions
-      const unsubAction = flowstral.on?.('playwright-recorder-action', (action: RecordedAction) => {
+    if (flowstral?.on) {
+      const unsubAction = flowstral.on('playwright-recorder-action', (action: RecordedAction) => {
         console.log('[PlaywrightRecorder] Action:', action);
         setActions(prev => {
           if (prev.some(a => a.id === action.id)) return prev;
@@ -327,13 +308,21 @@ export default function PlaywrightRecorderPage() {
         });
       });
 
-      // Listen for recording stopped
-      const unsubStopped = flowstral.on?.('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
+      const unsubStopped = flowstral.on('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
         console.log('[PlaywrightRecorder] Stopped with', finalActions?.length, 'actions');
         if (finalActions?.length > 0) {
           setActions(finalActions);
         }
         setIsRecording(false);
+        setIsPaused(false);
+      });
+
+      const unsubPaused = flowstral.on('playwright-recorder-paused', () => {
+        setIsPaused(true);
+      });
+
+      const unsubResumed = flowstral.on('playwright-recorder-resumed', () => {
+        setIsPaused(false);
       });
 
       // Check if already recording
@@ -343,30 +332,41 @@ export default function PlaywrightRecorderPage() {
           flowstral.playwrightRecorder.getActions().then((acts: RecordedAction[]) => {
             if (acts?.length > 0) setActions(acts);
           });
+          flowstral.playwrightRecorder.isPaused?.().then((paused: boolean) => {
+            setIsPaused(paused);
+          });
         }
       });
 
       return () => {
         unsubAction?.();
         unsubStopped?.();
+        unsubPaused?.();
+        unsubResumed?.();
       };
     }
     
     // Electron API handlers
-    if (electronAPI) {
-      const unsubAction = electronAPI.on?.('action-recorded', (action: RecordedAction) => {
+    if (electronAPI?.on) {
+      const unsubAction = electronAPI.on('action-recorded', (action: RecordedAction) => {
         console.log('[ElectronRecorder] Action:', action);
         setActions(prev => [...prev, action]);
       });
 
-      const unsubUrl = electronAPI.on?.('browser-url-changed', (newUrl: string) => {
+      const unsubUrl = electronAPI.on('browser-url-changed', (newUrl: string) => {
         setCurrentUrl(newUrl);
         if (newUrl.startsWith('http')) setUrl(newUrl);
+      });
+
+      const unsubStatus = electronAPI.on('recording-status', ({ recording, paused }: { recording: boolean; paused?: boolean }) => {
+        setIsRecording(recording);
+        if (typeof paused === 'boolean') setIsPaused(paused);
       });
 
       return () => {
         unsubAction?.();
         unsubUrl?.();
+        unsubStatus?.();
       };
     }
   }, []);
@@ -383,21 +383,21 @@ export default function PlaywrightRecorderPage() {
       
       if (electronAPI?.suggestActions) {
         result = await electronAPI.suggestActions();
-      } else if (flowstral?.suggestActions) {
-        result = await flowstral.suggestActions();
+      } else if (flowstral?.playwrightRecorder?.analyze) {
+        result = await flowstral.playwrightRecorder.analyze();
       }
       
       if (result) {
         setSuggestResult(result);
         if (result.total > 0) {
-          toast.success(`Found ${result.total} suggestions`);
+          toast.success(`Found ${result.total} elements`, { duration: 2000 });
         } else {
-          toast.info("No suggestions found on this page");
+          toast.info("No elements found on this page");
         }
       }
     } catch (error) {
       console.error('[Recorder] Failed to get suggestions:', error);
-      toast.error("Failed to get suggestions");
+      toast.error("Failed to analyze page");
     } finally {
       setIsLoadingSuggestions(false);
     }
@@ -408,7 +408,6 @@ export default function PlaywrightRecorderPage() {
     if (!suggestResult?.suggestions) return [];
     
     return suggestResult.suggestions.filter(s => {
-      // Category filter
       if (elementFilter !== 'all') {
         const category = s.category?.toLowerCase() || s.type?.toLowerCase() || '';
         if (elementFilter === 'buttons' && !category.includes('button')) return false;
@@ -416,7 +415,6 @@ export default function PlaywrightRecorderPage() {
         if (elementFilter === 'inputs' && !category.includes('input') && s.qword !== 'Fill') return false;
         if (elementFilter === 'headings' && !category.includes('heading')) return false;
       }
-      // Search filter
       if (suggestionSearch.trim()) {
         const query = suggestionSearch.toLowerCase();
         return s.description?.toLowerCase().includes(query) || 
@@ -427,7 +425,6 @@ export default function PlaywrightRecorderPage() {
     });
   }, [suggestResult, elementFilter, suggestionSearch]);
 
-  // Toggle suggestion selection
   const toggleSuggestionSelection = (index: number) => {
     setSelectedSuggestions(prev => {
       const next = new Set(prev);
@@ -440,13 +437,11 @@ export default function PlaywrightRecorderPage() {
     });
   };
 
-  // Select all suggestions
   const selectAllSuggestions = () => {
     if (!filteredSuggestions.length) return;
     setSelectedSuggestions(new Set(filteredSuggestions.map((_, i) => i)));
   };
 
-  // Add selected suggestions to test
   const addSelectedToTest = async () => {
     if (selectedSuggestions.size === 0) return;
     
@@ -466,7 +461,7 @@ export default function PlaywrightRecorderPage() {
     }
     
     setActions(prev => [...prev, ...newActions]);
-    toast.success(`Added ${newActions.length} actions to test`);
+    toast.success(`Added ${newActions.length} actions`);
     setSelectedSuggestions(new Set());
   };
 
@@ -475,7 +470,7 @@ export default function PlaywrightRecorderPage() {
     const electronAPI = (window as any).electronAPI;
     
     if (!flowstral?.playwrightRecorder && !electronAPI?.startRecording) {
-      toast.error("Recorder not available");
+      toast.error("Recorder not available. Make sure you're running in Flowstral Desktop.");
       return;
     }
 
@@ -487,19 +482,23 @@ export default function PlaywrightRecorderPage() {
     setIsStarting(true);
     setActions([]);
     setMergedSteps([]);
+    setRecordingTime(0);
 
     try {
       let result;
-      if (electronAPI?.startRecording) {
-        result = await electronAPI.startRecording(url);
-      } else if (flowstral?.playwrightRecorder) {
+      if (flowstral?.playwrightRecorder) {
         result = await flowstral.playwrightRecorder.start(url);
+      } else if (electronAPI?.startRecording) {
+        // First navigate, then start recording
+        await electronAPI.navigateEmbeddedBrowser(url);
+        result = await electronAPI.startRecording();
       }
       
       if (result?.success !== false) {
         setIsRecording(true);
+        setIsPaused(false);
         setCurrentUrl(url);
-        toast.success("Browser opened - start interacting!");
+        toast.success("Recording started - interact with the browser!");
       } else {
         setIsRecording(false);
         toast.error(result?.error || "Failed to start recording");
@@ -507,7 +506,7 @@ export default function PlaywrightRecorderPage() {
     } catch (error: any) {
       console.error('[PlaywrightRecorder] Start error:', error);
       setIsRecording(false);
-      toast.error("Failed to start browser");
+      toast.error(error?.message || "Failed to start browser");
     } finally {
       setIsStarting(false);
     }
@@ -519,29 +518,59 @@ export default function PlaywrightRecorderPage() {
 
     try {
       let result;
-      if (electronAPI?.stopRecording) {
-        result = await electronAPI.stopRecording();
-      } else if (flowstral?.playwrightRecorder) {
+      if (flowstral?.playwrightRecorder) {
         result = await flowstral.playwrightRecorder.stop();
+      } else if (electronAPI?.stopRecording) {
+        result = await electronAPI.stopRecording();
       }
       
       setIsRecording(false);
+      setIsPaused(false);
       
       const finalActions = result?.actions || result;
       if (Array.isArray(finalActions) && finalActions.length > 0) {
         setActions(finalActions);
         toast.success(`Recorded ${finalActions.length} actions`);
         
-        // Auto-merge if in existing mode
         if (mode === 'existing' && selectedTestCase) {
           performMerge(finalActions);
         }
+      } else if (actions.length > 0) {
+        toast.success(`Recording stopped - ${actions.length} actions`);
       } else {
-        toast.info("No actions recorded");
+        toast.info("Recording stopped - no actions captured");
       }
     } catch (error) {
       console.error('[PlaywrightRecorder] Stop error:', error);
       toast.error("Failed to stop recording");
+    }
+  };
+
+  const handlePauseRecording = async () => {
+    const flowstral = (window as any).flowstral;
+    
+    try {
+      if (flowstral?.playwrightRecorder?.pause) {
+        await flowstral.playwrightRecorder.pause();
+        setIsPaused(true);
+        toast.info("Recording paused");
+      }
+    } catch (error) {
+      console.error('[PlaywrightRecorder] Pause error:', error);
+    }
+  };
+
+  const handleResumeRecording = async () => {
+    const flowstral = (window as any).flowstral;
+    
+    try {
+      if (flowstral?.playwrightRecorder?.resume) {
+        await flowstral.playwrightRecorder.resume();
+        setIsPaused(false);
+        toast.info("Recording resumed");
+      }
+    } catch (error) {
+      console.error('[PlaywrightRecorder] Resume error:', error);
     }
   };
 
@@ -553,14 +582,12 @@ export default function PlaywrightRecorderPage() {
     toast.info("Actions cleared");
   };
 
-  // Perform merge: Position-based mapping
   const performMerge = (recordedActions: RecordedAction[]) => {
     if (!selectedTestCase) return;
     
     const existingSteps = selectedTestCase.steps || [];
     const merged: TestStep[] = [];
     
-    // Position-based merge: Action 1 → Step 1, Action 2 → Step 2, etc.
     const maxLength = Math.max(existingSteps.length, recordedActions.length);
     
     for (let i = 0; i < maxLength; i++) {
@@ -568,7 +595,6 @@ export default function PlaywrightRecorderPage() {
       const action = recordedActions[i];
       
       if (existingStep && action) {
-        // Both exist: Merge automation into existing step
         merged.push({
           ...existingStep,
           qword: action.qword,
@@ -577,13 +603,11 @@ export default function PlaywrightRecorderPage() {
           automationStatus: 'recorded'
         });
       } else if (existingStep) {
-        // Only manual step exists (more manual steps than recorded)
         merged.push({
           ...existingStep,
           automationStatus: 'manual'
         });
       } else if (action) {
-        // Only recorded action exists (more recorded than manual)
         merged.push({
           id: `step_${Date.now()}_${i}`,
           name: action.description || `${action.qword} ${action.args?.join(' ')}`,
@@ -598,10 +622,8 @@ export default function PlaywrightRecorderPage() {
     }
     
     setMergedSteps(merged);
-    console.log(`[Merge] Merged ${merged.length} steps (${existingSteps.length} manual + ${recordedActions.length} recorded)`);
   };
 
-  // Save merged test case
   const handleSaveMerged = async () => {
     if (!selectedTestCase || mergedSteps.length === 0) {
       toast.error("Nothing to save");
@@ -618,7 +640,6 @@ export default function PlaywrightRecorderPage() {
         updatedAt: new Date().toISOString()
       };
       
-      // Save to localStorage
       const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
       const idx = localCases.findIndex((tc: TestCase) => tc.id === selectedTestCase.id);
       if (idx >= 0) {
@@ -628,37 +649,13 @@ export default function PlaywrightRecorderPage() {
       }
       localStorage.setItem('test_cases', JSON.stringify(localCases));
       
-      // Also save to flowstral_test_cases for compatibility
-      const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
-      const fIdx = flowstralCases.findIndex((tc: TestCase) => tc.id === selectedTestCase.id);
-      if (fIdx >= 0) {
-        flowstralCases[fIdx] = updatedTestCase;
-      } else {
-        flowstralCases.push(updatedTestCase);
-      }
-      localStorage.setItem('flowstral_test_cases', JSON.stringify(flowstralCases));
-      
-      // Save to Electron storage
-      const electronAPI = (window as any).electronAPI;
-      if (electronAPI?.localStorage) {
-        try {
-          await electronAPI.localStorage.set('test_cases', localCases);
-        } catch (e) {
-          console.log('[Recorder] Could not save to Electron storage');
-        }
-      }
-      
       toast.success(`Saved "${selectedTestCase.name}" with ${mergedSteps.length} steps`);
       
-      // Reset state
       setSelectedTestCase(null);
       setMergedSteps([]);
       setActions([]);
       setMode('new');
-      
-      // Reload test data
       loadTestData();
-      
     } catch (error) {
       console.error('[Recorder] Save error:', error);
       toast.error("Failed to save");
@@ -667,25 +664,26 @@ export default function PlaywrightRecorderPage() {
     }
   };
 
-  // Export to Builder (for new tests)
   const handleExportToBuilder = async () => {
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
 
     try {
       if (electronAPI?.exportToTestBuilder) {
-        await electronAPI.exportToTestBuilder("Recorded Test");
-      } else if (flowstral?.export) {
+        const result = await electronAPI.exportToTestBuilder("Recorded Test");
+        if (result?.success) {
+          toast.success("Exported to Test Builder!");
+        }
+      } else if (flowstral?.export?.toTestBuilder) {
         await flowstral.export.toTestBuilder("Recorded Test");
+        toast.success("Exported to Test Builder");
       }
-      toast.success("Exported to Test Builder");
     } catch (error) {
       console.error('[PlaywrightRecorder] Export error:', error);
       toast.error("Failed to export");
     }
   };
 
-  // Save as new test case
   const handleSaveAsNew = async () => {
     if (actions.length === 0) {
       toast.error("No actions to save");
@@ -699,7 +697,7 @@ export default function PlaywrightRecorderPage() {
       steps: actions.map((action, idx) => ({
         id: `step_${Date.now()}_${idx}`,
         name: action.description || `${action.qword} ${action.args?.join(' ')}`,
-        type: action.qword.toLowerCase(),
+        type: action.qword?.toLowerCase() || action.type || 'click',
         qword: action.qword,
         args: action.args,
         selectorObj: action.selectorObj,
@@ -707,38 +705,31 @@ export default function PlaywrightRecorderPage() {
         expectedResult: `Action: ${action.qword}`
       })),
       automationStatus: 'full',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
     };
     
-    // Save to localStorage
     const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
     localCases.push(newTestCase);
     localStorage.setItem('test_cases', JSON.stringify(localCases));
     
     toast.success(`Created new test case with ${actions.length} steps`);
-    
-    // Navigate to test repository
     navigate('/test-cases');
   };
 
   const getActionIcon = (qword: string) => {
-    switch (qword) {
-      case 'GoTo': return <Globe className="h-4 w-4 text-blue-400" />;
-      case 'ClickText':
-      case 'ClickElement': return <MousePointer className="h-4 w-4 text-green-400" />;
-      case 'Fill': return <Type className="h-4 w-4 text-purple-400" />;
-      case 'AssertText': return <Eye className="h-4 w-4 text-cyan-400" />;
-      default: return <CircleDot className="h-4 w-4 text-gray-400" />;
-    }
+    const type = qword?.toLowerCase() || '';
+    if (type.includes('goto') || type.includes('nav')) return <Globe className="h-4 w-4 text-blue-400" />;
+    if (type.includes('click')) return <MousePointer className="h-4 w-4 text-emerald-400" />;
+    if (type.includes('fill') || type.includes('type')) return <Type className="h-4 w-4 text-violet-400" />;
+    if (type.includes('assert')) return <Eye className="h-4 w-4 text-cyan-400" />;
+    return <CircleDot className="h-4 w-4 text-gray-400" />;
   };
 
   const getStatusBadge = (status?: 'none' | 'partial' | 'full') => {
     switch (status) {
       case 'full':
-        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">Automated</Badge>;
+        return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">Automated</Badge>;
       case 'partial':
-        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs">Partial</Badge>;
+        return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">Partial</Badge>;
       default:
         return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs">Manual</Badge>;
     }
@@ -751,9 +742,16 @@ export default function PlaywrightRecorderPage() {
           <CardContent className="pt-6 text-center">
             <Video className="h-12 w-12 mx-auto mb-4 text-gray-400" />
             <h2 className="text-xl font-semibold mb-2 text-white">Desktop App Required</h2>
-            <p className="text-gray-400">
-              The Playwright Recorder is only available in the Flowstral Desktop app.
+            <p className="text-gray-400 mb-4">
+              The Playwright Recorder requires the Flowstral Desktop application.
             </p>
+            <Button 
+              onClick={() => window.open('https://flowstral.dev/download', '_blank')}
+              className="bg-gradient-to-r from-cyan-500 to-violet-500"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Flowstral Desktop
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -761,30 +759,36 @@ export default function PlaywrightRecorderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white flex">
-      {/* ============ LEFT PANEL - Recorded Steps ============ */}
-      <div className="w-1/2 flex flex-col border-r border-white/10 overflow-hidden">
+    <div className="h-screen bg-[#0a0a0f] text-white flex overflow-hidden">
+      {/* ============ LEFT PANEL - Recording Controls & Steps ============ */}
+      <div className="w-[420px] flex flex-col border-r border-white/10">
         {/* Header */}
         <div className="p-4 border-b border-white/10">
-          <h1 className="text-xl font-bold mb-1 flex items-center gap-2">
-            <Video className="h-5 w-5 text-purple-500" />
-            Playwright Recorder
-          </h1>
-          <p className="text-sm text-gray-500">
-            Record browser interactions and create automated tests
-          </p>
+          <div className="flex items-center justify-between mb-1">
+            <h1 className="text-lg font-bold flex items-center gap-2">
+              <Video className="h-5 w-5 text-red-500" />
+              Playwright Recorder
+            </h1>
+            {isRecording && (
+              <div className="flex items-center gap-2 px-2 py-1 bg-red-500/20 rounded-full border border-red-500/30">
+                <div className={cn("w-2 h-2 rounded-full", isPaused ? "bg-amber-500" : "bg-red-500 animate-pulse")} />
+                <span className="text-xs font-mono text-red-400">{formatTime(recordingTime)}</span>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">Record browser interactions and create automated tests</p>
         </div>
 
         {/* Mode Selector */}
-        <div className="px-4 py-3 border-b border-white/10">
+        <div className="px-4 py-2 border-b border-white/10">
           <Tabs value={mode} onValueChange={(v) => setMode(v as 'new' | 'existing')}>
-            <TabsList className="grid w-full grid-cols-2 bg-[#1a1a25]">
-              <TabsTrigger value="new" className="text-sm data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-                <Play className="h-4 w-4 mr-2" />
+            <TabsList className="grid w-full grid-cols-2 h-9 bg-[#1a1a25]">
+              <TabsTrigger value="new" className="text-xs data-[state=active]:bg-red-600 data-[state=active]:text-white">
+                <Play className="h-3 w-3 mr-1.5" />
                 Record New Test
               </TabsTrigger>
-              <TabsTrigger value="existing" className="text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                <Merge className="h-4 w-4 mr-2" />
+              <TabsTrigger value="existing" className="text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white">
+                <Merge className="h-3 w-3 mr-1.5" />
                 Automate Existing
               </TabsTrigger>
             </TabsList>
@@ -793,42 +797,24 @@ export default function PlaywrightRecorderPage() {
 
         {/* Automate Existing - Test Case Selection */}
         {mode === 'existing' && (
-          <div className="px-4 py-3 border-b border-white/10">
-            <p className="text-xs text-gray-400 mb-2">
-              Select an existing manual test case and record automation to merge with it.
-            </p>
+          <div className="px-4 py-2 border-b border-white/10 bg-violet-900/10">
             {selectedTestCase ? (
-              <div className="flex items-center gap-3 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-                <FileText className="h-5 w-5 text-blue-400" />
+              <div className="flex items-center gap-2 p-2 bg-violet-900/20 border border-violet-500/30 rounded-lg">
+                <FileText className="h-4 w-4 text-violet-400" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{selectedTestCase.name}</div>
-                  <div className="text-xs text-gray-400">
-                    {selectedTestCase.steps?.length || 0} steps
-                  </div>
+                  <div className="text-sm font-medium truncate">{selectedTestCase.name}</div>
+                  <div className="text-xs text-gray-400">{selectedTestCase.steps?.length || 0} steps</div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowTestPicker(true)}
-                  className="h-7 text-xs text-blue-400"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setShowTestPicker(true)} className="h-6 text-xs text-violet-400 px-2">
                   Change
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedTestCase(null)}
-                  className="h-7 w-7 text-gray-400"
-                >
+                <Button variant="ghost" size="icon" onClick={() => setSelectedTestCase(null)} className="h-6 w-6 text-gray-400">
                   <X className="h-3 w-3" />
                 </Button>
               </div>
             ) : (
-              <Button
-                onClick={() => setShowTestPicker(true)}
-                className="w-full bg-blue-600 hover:bg-blue-700 h-9"
-              >
-                <Search className="h-4 w-4 mr-2" />
+              <Button onClick={() => setShowTestPicker(true)} variant="outline" className="w-full h-8 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
+                <Search className="h-3 w-3 mr-1.5" />
                 Select Test Case to Automate
               </Button>
             )}
@@ -837,91 +823,81 @@ export default function PlaywrightRecorderPage() {
 
         {/* URL Input */}
         <div className="px-4 py-3 border-b border-white/10">
-          <label className="block text-xs text-gray-400 mb-2">Starting URL</label>
+          <label className="block text-xs text-gray-400 mb-1.5">Starting URL</label>
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
               <Input
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://example.com"
                 disabled={isRecording}
-                className="pl-10 h-10 bg-[#1a1a25] border-white/10 text-white"
+                className="pl-9 h-9 bg-[#1a1a25] border-white/10 text-white text-sm"
               />
             </div>
-            {!isRecording ? (
+          </div>
+        </div>
+
+        {/* Recording Controls */}
+        <div className="px-4 py-3 border-b border-white/10 flex gap-2">
+          {!isRecording ? (
+            <Button
+              onClick={handleStartRecording}
+              disabled={isStarting || !url.startsWith('http') || (mode === 'existing' && !selectedTestCase)}
+              className="flex-1 h-10 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium"
+            >
+              {isStarting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Circle className="h-4 w-4 mr-2 fill-current" />
+              )}
+              Start Recording
+            </Button>
+          ) : (
+            <>
               <Button
-                onClick={handleStartRecording}
-                disabled={isStarting || !url.startsWith('http') || (mode === 'existing' && !selectedTestCase)}
-                className="bg-green-600 hover:bg-green-700 h-10 px-6"
+                onClick={isPaused ? handleResumeRecording : handlePauseRecording}
+                variant="outline"
+                className="flex-1 h-10 border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
               >
-                {isStarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                {isPaused ? (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Resume
+                  </>
                 ) : (
-                  <Play className="h-4 w-4 mr-2" />
+                  <>
+                    <Pause className="h-4 w-4 mr-2" />
+                    Pause
+                  </>
                 )}
-                Start Recording
               </Button>
-            ) : (
               <Button
                 onClick={handleStopRecording}
-                className="bg-red-600 hover:bg-red-700 h-10 px-6"
+                className="flex-1 h-10 bg-red-600 hover:bg-red-700"
               >
-                <Square className="h-4 w-4 mr-2" />
+                <Square className="h-4 w-4 mr-2 fill-current" />
                 Stop
               </Button>
-            )}
-          </div>
-          
-          {isRecording && (
-            <div className="mt-2 flex items-center gap-2 text-green-400 text-sm">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              Recording in progress...
-            </div>
+            </>
           )}
         </div>
 
         {/* Recorded Steps Header */}
-        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
+        <div className="px-4 py-2 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Recorded Steps</span>
-            <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
+            <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
               {actions.length}
             </Badge>
           </div>
           {actions.length > 0 && (
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearActions}
-                className="h-7 px-2 text-xs text-gray-400 hover:text-white"
-              >
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-gray-400 hover:text-red-400">
                 <Trash2 className="h-3 w-3 mr-1" />
                 Clear
               </Button>
-              {mode === 'new' && (
-                <Button
-                  size="sm"
-                  onClick={handleSaveAsNew}
-                  className="h-7 px-3 text-xs bg-purple-600 hover:bg-purple-700"
-                >
-                  <Save className="h-3 w-3 mr-1" />
-                  Save
-                </Button>
-              )}
-              {mode === 'existing' && mergedSteps.length > 0 && (
-                <Button
-                  size="sm"
-                  onClick={handleSaveMerged}
-                  disabled={isSaving}
-                  className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save Merged
-                </Button>
-              )}
             </div>
           )}
         </div>
@@ -929,12 +905,12 @@ export default function PlaywrightRecorderPage() {
         {/* Recorded Steps List */}
         <ScrollArea className="flex-1">
           {actions.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
+            <div className="text-center py-16 px-4 text-gray-500">
               <Video className="h-12 w-12 mx-auto mb-4 opacity-30" />
-              <p className="text-sm">No actions recorded yet.</p>
+              <p className="text-sm font-medium">No actions recorded yet.</p>
               <p className="text-xs mt-1">
                 {isRecording 
-                  ? "Interact with the browser window to record actions."
+                  ? (isPaused ? "Recording paused. Click Resume to continue." : "Interact with the browser to record actions.")
                   : "Click 'Start Recording' to begin."}
               </p>
             </div>
@@ -943,23 +919,30 @@ export default function PlaywrightRecorderPage() {
               {actions.map((action, index) => (
                 <div
                   key={action.id || index}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] transition-colors border border-transparent hover:border-white/5"
+                  className="flex items-center gap-2 p-2.5 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] transition-colors border border-transparent hover:border-white/5 group"
                 >
-                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-white/5 text-xs text-gray-500 font-medium">
+                  <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-gray-500 font-mono">
                     {String(index + 1).padStart(2, '0')}
                   </div>
-                  {getActionIcon(action.qword)}
+                  {getActionIcon(action.qword || action.type || '')}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white truncate">
-                      {action.description || `${action.qword} ${action.args?.[0] || ''}`}
+                      {action.description || `${action.qword || action.type} ${action.args?.[0] || ''}`}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {action.args?.join(' → ')}
-                    </p>
+                    {action.args && action.args.length > 0 && (
+                      <p className="text-xs text-gray-500 truncate">
+                        {action.args.slice(0, 2).join(' → ')}
+                      </p>
+                    )}
                   </div>
-                  <Badge variant="outline" className="text-xs border-white/20">
-                    {action.qword}
-                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400"
+                    onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -968,48 +951,53 @@ export default function PlaywrightRecorderPage() {
 
         {/* Footer Actions */}
         {actions.length > 0 && (
-          <div className="p-3 border-t border-white/10">
-            <Button
-              onClick={handleExportToBuilder}
-              className="w-full h-10 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600"
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Export to Test Builder
-            </Button>
+          <div className="p-3 border-t border-white/10 space-y-2">
+            {mode === 'new' ? (
+              <>
+                <Button onClick={handleSaveAsNew} className="w-full h-9 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
+                  <Save className="h-4 w-4 mr-2" />
+                  Save as New Test Case
+                </Button>
+                <Button onClick={handleExportToBuilder} variant="outline" className="w-full h-9 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Export to Test Builder
+                </Button>
+              </>
+            ) : (
+              <Button 
+                onClick={handleSaveMerged} 
+                disabled={isSaving || mergedSteps.length === 0}
+                className="w-full h-9 bg-gradient-to-r from-violet-500 to-violet-600"
+              >
+                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save Merged Test
+              </Button>
+            )}
           </div>
         )}
       </div>
 
       {/* ============ RIGHT PANEL - Suggestions & SF Context ============ */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
           {/* Tab Headers */}
-          <div className="px-4 py-3 border-b border-white/10">
+          <div className="px-4 py-2 border-b border-white/10">
             <TabsList className="h-9 bg-[#1a1a25] p-1">
-              <TabsTrigger 
-                value="suggestions" 
-                className="h-7 px-4 text-sm data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400"
-              >
-                <Lightbulb className="h-4 w-4 mr-2" />
+              <TabsTrigger value="suggestions" className="h-7 px-3 text-xs data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+                <Lightbulb className="h-3.5 w-3.5 mr-1.5" />
                 Suggestions
-                {suggestResult?.total && (
-                  <Badge className="ml-2 h-5 bg-amber-500/30 text-amber-300 text-[10px]">
+                {suggestResult?.total ? (
+                  <Badge className="ml-1.5 h-4 bg-amber-500/30 text-amber-300 text-[10px] px-1">
                     {suggestResult.total}
                   </Badge>
-                )}
+                ) : null}
               </TabsTrigger>
-              <TabsTrigger 
-                value="sftools" 
-                className="h-7 px-4 text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
-              >
-                <Cloud className="h-4 w-4 mr-2" />
+              <TabsTrigger value="sftools" className="h-7 px-3 text-xs data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+                <Cloud className="h-3.5 w-3.5 mr-1.5" />
                 SF Tools
               </TabsTrigger>
-              <TabsTrigger 
-                value="sfcontext" 
-                className="h-7 px-4 text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
-              >
-                <Target className="h-4 w-4 mr-2" />
+              <TabsTrigger value="sfcontext" className="h-7 px-3 text-xs data-[state=active]:bg-violet-500/20 data-[state=active]:text-violet-400">
+                <Target className="h-3.5 w-3.5 mr-1.5" />
                 SF Context
               </TabsTrigger>
             </TabsList>
@@ -1018,56 +1006,60 @@ export default function PlaywrightRecorderPage() {
           {/* ========== SUGGESTIONS TAB ========== */}
           <TabsContent value="suggestions" className="flex-1 m-0 overflow-hidden flex flex-col">
             {/* Suggestions Header */}
-            <div className="px-4 py-3 border-b border-white/10">
-              <div className="flex items-center justify-between mb-3">
+            <div className="px-4 py-2 border-b border-white/10">
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-amber-400" />
+                  <Zap className="h-4 w-4 text-amber-400" />
                   <span className="text-sm font-semibold">Suggested Actions</span>
-                  {suggestResult?.total && (
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                  {suggestResult?.total ? (
+                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
                       {suggestResult.total} ITEMS
                     </Badge>
-                  )}
+                  ) : null}
                 </div>
                 <Button
                   onClick={handleRefreshSuggestions}
                   variant="outline"
                   size="sm"
-                  className="h-8 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                  className="h-7 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
                   disabled={isLoadingSuggestions}
                 >
                   {isLoadingSuggestions ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
                   ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
+                    <RefreshCw className="h-3 w-3 mr-1.5" />
                   )}
                   Refresh
                 </Button>
               </div>
 
               {/* Category Filter Badges */}
-              <div className="flex gap-2 flex-wrap">
-                {['all', 'buttons', 'links', 'inputs', 'headings'].map((cat) => (
+              <div className="flex gap-1.5 flex-wrap">
+                {[
+                  { key: 'all', label: 'All', icon: null, color: 'cyan' },
+                  { key: 'buttons', label: 'Buttons', icon: CircleDot, color: 'emerald' },
+                  { key: 'links', label: 'Links', icon: Link, color: 'blue' },
+                  { key: 'inputs', label: 'Inputs', icon: FormInput, color: 'violet' },
+                  { key: 'headings', label: 'Headings', icon: Hash, color: 'amber' },
+                ].map(({ key, label, icon: Icon, color }) => (
                   <Badge 
-                    key={cat}
+                    key={key}
                     variant="outline" 
                     className={cn(
-                      "cursor-pointer transition-colors text-xs",
-                      elementFilter === cat
-                        ? cat === 'buttons' ? "bg-green-500/20 border-green-500/50 text-green-400"
-                        : cat === 'links' ? "bg-blue-500/20 border-blue-500/50 text-blue-400"
-                        : cat === 'inputs' ? "bg-purple-500/20 border-purple-500/50 text-purple-400"
-                        : cat === 'headings' ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
-                        : "bg-cyan-500/20 border-cyan-500/50 text-cyan-400"
+                      "cursor-pointer transition-colors text-[10px] px-2 py-0.5",
+                      elementFilter === key
+                        ? `bg-${color}-500/20 border-${color}-500/50 text-${color}-400`
                         : "border-white/20 text-gray-400 hover:border-white/40"
                     )}
-                    onClick={() => setElementFilter(cat)}
+                    style={elementFilter === key ? {
+                      backgroundColor: `rgb(var(--${color}-500) / 0.2)`,
+                      borderColor: `rgb(var(--${color}-500) / 0.5)`,
+                      color: `rgb(var(--${color}-400))`
+                    } : undefined}
+                    onClick={() => setElementFilter(key)}
                   >
-                    {cat === 'buttons' && <CircleDot className="h-3 w-3 mr-1" />}
-                    {cat === 'links' && <Link className="h-3 w-3 mr-1" />}
-                    {cat === 'inputs' && <FormInput className="h-3 w-3 mr-1" />}
-                    {cat === 'headings' && <Hash className="h-3 w-3 mr-1" />}
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)} {suggestResult?.counts?.[cat] || 0}
+                    {Icon && <Icon className="h-2.5 w-2.5 mr-1" />}
+                    {label} {suggestResult?.counts?.[key] || 0}
                   </Badge>
                 ))}
               </div>
@@ -1079,29 +1071,29 @@ export default function PlaywrightRecorderPage() {
                 variant="outline"
                 size="sm"
                 onClick={selectAllSuggestions}
-                className="h-8 border-green-500/30 text-green-400 hover:bg-green-500/10"
+                className="h-7 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                 disabled={!filteredSuggestions.length}
               >
-                <CheckSquare className="h-4 w-4 mr-2" />
+                <CheckSquare className="h-3 w-3 mr-1.5" />
                 Select All
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={addSelectedToTest}
-                className="h-8 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                className="h-7 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
                 disabled={selectedSuggestions.size === 0}
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-3 w-3 mr-1.5" />
                 Add Selected
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                className="h-7 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
                 disabled={!filteredSuggestions.length}
               >
-                <Wand2 className="h-4 w-4 mr-2" />
+                <Wand2 className="h-3 w-3 mr-1.5" />
                 AI Enhance
               </Button>
             </div>
@@ -1109,148 +1101,144 @@ export default function PlaywrightRecorderPage() {
             {/* Search and Filter */}
             <div className="px-4 py-2 border-b border-white/10 flex gap-2">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
                 <Input
                   value={suggestionSearch}
                   onChange={(e) => setSuggestionSearch(e.target.value)}
                   placeholder="Search elements..."
-                  className="pl-10 h-9 bg-[#1a1a25] border-white/10 text-white text-sm"
+                  className="pl-8 h-8 bg-[#1a1a25] border-white/10 text-white text-xs"
                 />
               </div>
               <Select value={elementFilter} onValueChange={setElementFilter}>
-                <SelectTrigger className="w-36 h-9 bg-[#1a1a25] border-white/10 text-white text-sm">
+                <SelectTrigger className="w-28 h-8 bg-[#1a1a25] border-white/10 text-white text-xs">
                   <SelectValue placeholder="All Elements" />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1a1a25] border-white/10">
-                  <SelectItem value="all">All Elements</SelectItem>
-                  <SelectItem value="buttons">Buttons</SelectItem>
-                  <SelectItem value="links">Links</SelectItem>
-                  <SelectItem value="inputs">Inputs</SelectItem>
-                  <SelectItem value="headings">Headings</SelectItem>
+                  <SelectItem value="all" className="text-xs">All Elements</SelectItem>
+                  <SelectItem value="buttons" className="text-xs">Buttons</SelectItem>
+                  <SelectItem value="links" className="text-xs">Links</SelectItem>
+                  <SelectItem value="inputs" className="text-xs">Inputs</SelectItem>
+                  <SelectItem value="headings" className="text-xs">Headings</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Suggestions List */}
-            <ScrollArea className="flex-1 p-4">
-              {!suggestResult ? (
-                <div className="text-center py-12 text-gray-500">
-                  <Lightbulb className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Start recording to see suggestions</p>
-                  <p className="text-xs mt-1 text-gray-600">
-                    Click Refresh to analyze current page
-                  </p>
-                </div>
-              ) : filteredSuggestions.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <Search className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No matching elements found</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredSuggestions.map((suggestion, index) => (
-                    <div
-                      key={index}
-                      onClick={() => toggleSuggestionSelection(index)}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
-                        selectedSuggestions.has(index)
-                          ? "bg-cyan-500/10 border-cyan-500/50"
-                          : "bg-[#12121a] border-transparent hover:border-white/10"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
-                        selectedSuggestions.has(index)
-                          ? "bg-cyan-500 border-cyan-500"
-                          : "border-gray-600"
-                      )}>
-                        {selectedSuggestions.has(index) && (
-                          <Check className="h-3 w-3 text-white" />
+            <ScrollArea className="flex-1">
+              <div className="p-3">
+                {!suggestResult ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">Start recording to see suggestions</p>
+                    <p className="text-xs mt-1">Click Refresh to analyze current page</p>
+                  </div>
+                ) : filteredSuggestions.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Search className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No matching elements found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {filteredSuggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        onClick={() => toggleSuggestionSelection(index)}
+                        className={cn(
+                          "flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all",
+                          selectedSuggestions.has(index)
+                            ? "bg-cyan-500/10 border-cyan-500/50"
+                            : "bg-[#12121a] border-transparent hover:border-white/10"
                         )}
-                      </div>
-                      
-                      <div className={cn(
-                        "w-8 h-8 rounded flex items-center justify-center",
-                        suggestion.qword === 'ClickText' && "bg-green-500/20 text-green-400",
-                        suggestion.qword === 'Fill' && "bg-purple-500/20 text-purple-400",
-                        suggestion.qword === 'AssertText' && "bg-cyan-500/20 text-cyan-400",
-                        !['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && "bg-gray-500/20 text-gray-400"
-                      )}>
-                        {suggestion.qword === 'ClickText' && <MousePointer className="h-4 w-4" />}
-                        {suggestion.qword === 'Fill' && <Keyboard className="h-4 w-4" />}
-                        {suggestion.qword === 'AssertText' && <Eye className="h-4 w-4" />}
-                        {!['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && <CircleDot className="h-4 w-4" />}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">{suggestion.description}</p>
-                        <p className="text-xs text-gray-500 truncate">{suggestion.element || suggestion.args?.[0]}</p>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-green-400 hover:text-green-300 hover:bg-green-500/20"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const newAction: RecordedAction = {
-                            id: `action_${Date.now()}`,
-                            qword: suggestion.qword,
-                            args: suggestion.args,
-                            description: suggestion.description,
-                            timestamp: Date.now(),
-                            selectorObj: suggestion.selectorObj
-                          };
-                          setActions(prev => [...prev, newAction]);
-                          toast.success('Added to test');
-                        }}
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                        <div className={cn(
+                          "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
+                          selectedSuggestions.has(index)
+                            ? "bg-cyan-500 border-cyan-500"
+                            : "border-gray-600"
+                        )}>
+                          {selectedSuggestions.has(index) && <Check className="h-2.5 w-2.5 text-white" />}
+                        </div>
+                        
+                        <div className={cn(
+                          "w-7 h-7 rounded flex items-center justify-center shrink-0",
+                          suggestion.qword === 'ClickText' && "bg-emerald-500/20 text-emerald-400",
+                          suggestion.qword === 'Fill' && "bg-violet-500/20 text-violet-400",
+                          suggestion.qword === 'AssertText' && "bg-cyan-500/20 text-cyan-400",
+                          !['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && "bg-gray-500/20 text-gray-400"
+                        )}>
+                          {suggestion.qword === 'ClickText' && <MousePointer className="h-3.5 w-3.5" />}
+                          {suggestion.qword === 'Fill' && <Keyboard className="h-3.5 w-3.5" />}
+                          {suggestion.qword === 'AssertText' && <Eye className="h-3.5 w-3.5" />}
+                          {!['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && <CircleDot className="h-3.5 w-3.5" />}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white truncate">{suggestion.description}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{suggestion.element || suggestion.args?.[0]}</p>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newAction: RecordedAction = {
+                              id: `action_${Date.now()}`,
+                              qword: suggestion.qword,
+                              args: suggestion.args,
+                              description: suggestion.description,
+                              timestamp: Date.now(),
+                              selectorObj: suggestion.selectorObj
+                            };
+                            setActions(prev => [...prev, newAction]);
+                            toast.success('Added to test', { duration: 1500 });
+                          }}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
           </TabsContent>
 
           {/* ========== SF TOOLS TAB ========== */}
-          <TabsContent value="sftools" className="flex-1 m-0 overflow-y-auto p-4">
-            <div className="space-y-4">
-              <div className="text-center py-6">
-                <Cloud className="h-10 w-10 mx-auto mb-3 text-blue-400 opacity-50" />
-                <h3 className="text-lg font-semibold mb-1">Salesforce Tools</h3>
-                <p className="text-sm text-gray-400">
-                  Quick access to Salesforce-specific testing tools
-                </p>
+          <TabsContent value="sftools" className="flex-1 m-0 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              <div className="text-center py-4">
+                <Cloud className="h-10 w-10 mx-auto mb-2 text-blue-400 opacity-50" />
+                <h3 className="text-base font-semibold mb-1">Salesforce Tools</h3>
+                <p className="text-xs text-gray-400">Quick access to Salesforce-specific testing tools</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Card className="bg-[#12121a] border-white/10 hover:border-blue-500/30 cursor-pointer transition-colors">
                   <CardContent className="p-4 text-center">
-                    <Database className="h-8 w-8 mx-auto mb-2 text-blue-400" />
+                    <Database className="h-7 w-7 mx-auto mb-2 text-blue-400" />
                     <p className="text-sm font-medium">Query Builder</p>
                     <p className="text-xs text-gray-500">Build SOQL queries</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-[#12121a] border-white/10 hover:border-green-500/30 cursor-pointer transition-colors">
+                <Card className="bg-[#12121a] border-white/10 hover:border-emerald-500/30 cursor-pointer transition-colors">
                   <CardContent className="p-4 text-center">
-                    <Zap className="h-8 w-8 mx-auto mb-2 text-green-400" />
+                    <Zap className="h-7 w-7 mx-auto mb-2 text-emerald-400" />
                     <p className="text-sm font-medium">Apex Runner</p>
                     <p className="text-xs text-gray-500">Execute Apex code</p>
                   </CardContent>
                 </Card>
-                <Card className="bg-[#12121a] border-white/10 hover:border-purple-500/30 cursor-pointer transition-colors">
+                <Card className="bg-[#12121a] border-white/10 hover:border-violet-500/30 cursor-pointer transition-colors">
                   <CardContent className="p-4 text-center">
-                    <Copy className="h-8 w-8 mx-auto mb-2 text-purple-400" />
+                    <Copy className="h-7 w-7 mx-auto mb-2 text-violet-400" />
                     <p className="text-sm font-medium">Record Cloner</p>
                     <p className="text-xs text-gray-500">Clone test data</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-[#12121a] border-white/10 hover:border-amber-500/30 cursor-pointer transition-colors">
                   <CardContent className="p-4 text-center">
-                    <Shield className="h-8 w-8 mx-auto mb-2 text-amber-400" />
+                    <Shield className="h-7 w-7 mx-auto mb-2 text-amber-400" />
                     <p className="text-sm font-medium">Validation Rules</p>
                     <p className="text-xs text-gray-500">View active rules</p>
                   </CardContent>
@@ -1260,7 +1248,7 @@ export default function PlaywrightRecorderPage() {
           </TabsContent>
 
           {/* ========== SF CONTEXT TAB ========== */}
-          <TabsContent value="sfcontext" className="flex-1 m-0 overflow-hidden">
+          <TabsContent value="sfcontext" className="flex-1 m-0 overflow-hidden flex flex-col">
             {isSalesforceUrl ? (
               <SalesforceContextPanel
                 currentUrl={currentUrl || url}
@@ -1290,15 +1278,15 @@ export default function PlaywrightRecorderPage() {
                 onGenerateTestData={(data) => {
                   toast.success(`Generated ${data.length} test records`);
                 }}
-                className="h-full"
+                className="flex-1"
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center p-4 h-full">
+              <div className="flex-1 flex items-center justify-center p-4">
                 <div className="text-center">
-                  <Target className="h-12 w-12 mx-auto mb-3 text-purple-400 opacity-50" />
-                  <h3 className="text-lg font-semibold mb-2">SF Context</h3>
-                  <p className="text-sm text-gray-400">
-                    Navigate to a Salesforce page to see context-aware suggestions
+                  <Target className="h-10 w-10 mx-auto mb-3 text-violet-400 opacity-50" />
+                  <h3 className="text-base font-semibold mb-1">SF Context</h3>
+                  <p className="text-xs text-gray-400">
+                    Navigate to a Salesforce page to see<br />context-aware suggestions
                   </p>
                 </div>
               </div>
@@ -1307,9 +1295,9 @@ export default function PlaywrightRecorderPage() {
         </Tabs>
       </div>
 
-      {/* Test Case Picker Dialog - Scalable with Filters */}
+      {/* Test Case Picker Dialog */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
-        <DialogContent className="max-w-4xl max-h-[80vh] bg-[#12121a] border-white/10">
+        <DialogContent className="max-w-3xl max-h-[80vh] bg-[#12121a] border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Search className="h-5 w-5" />
@@ -1321,23 +1309,19 @@ export default function PlaywrightRecorderPage() {
           </DialogHeader>
           
           {/* Filters */}
-          <div className="grid grid-cols-5 gap-3 pb-4 border-b border-white/10">
-            {/* Search */}
-            <div className="col-span-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                <Input
-                  placeholder="Search by name, ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-[#1a1a25] border-white/10 text-white"
-                />
-              </div>
+          <div className="grid grid-cols-4 gap-2 pb-3 border-b border-white/10">
+            <div className="col-span-2 relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search by name, ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 bg-[#1a1a25] border-white/10 text-white text-sm"
+              />
             </div>
             
-            {/* Status Filter */}
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-              <SelectTrigger className="bg-[#1a1a25] border-white/10 text-white">
+              <SelectTrigger className="h-9 bg-[#1a1a25] border-white/10 text-white text-sm">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent className="bg-[#1a1a25] border-white/10">
@@ -1348,37 +1332,15 @@ export default function PlaywrightRecorderPage() {
               </SelectContent>
             </Select>
             
-            {/* Folder Filter */}
             <Select value={folderFilter} onValueChange={setFolderFilter}>
-              <SelectTrigger className="bg-[#1a1a25] border-white/10 text-white">
+              <SelectTrigger className="h-9 bg-[#1a1a25] border-white/10 text-white text-sm">
                 <SelectValue placeholder="Folder" />
               </SelectTrigger>
               <SelectContent className="bg-[#1a1a25] border-white/10">
                 <SelectItem value="all">All Folders</SelectItem>
                 {folders.map(folder => (
                   <SelectItem key={folder.id} value={folder.id}>
-                    <span className="flex items-center gap-2">
-                      <Folder className="h-3 w-3" />
-                      {folder.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            {/* Tag Filter */}
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="bg-[#1a1a25] border-white/10 text-white">
-                <SelectValue placeholder="Tag" />
-              </SelectTrigger>
-              <SelectContent className="bg-[#1a1a25] border-white/10">
-                <SelectItem value="all">All Tags</SelectItem>
-                {allTags.map(tag => (
-                  <SelectItem key={tag} value={tag}>
-                    <span className="flex items-center gap-2">
-                      <Tag className="h-3 w-3" />
-                      {tag}
-                    </span>
+                    {folder.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1386,12 +1348,11 @@ export default function PlaywrightRecorderPage() {
           </div>
           
           {/* Test Case List */}
-          <ScrollArea className="h-[400px]">
+          <ScrollArea className="h-[350px]">
             {paginatedTestCases.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No test cases found</p>
-                <p className="text-sm mt-1">Try adjusting your filters</p>
+                <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">No test cases found</p>
               </div>
             ) : (
               <div className="space-y-2 pr-4">
@@ -1403,42 +1364,23 @@ export default function PlaywrightRecorderPage() {
                       setShowTestPicker(false);
                     }}
                     className={cn(
-                      "p-4 rounded-lg border cursor-pointer transition-all",
-                      "hover:border-purple-500 hover:bg-white/5",
+                      "p-3 rounded-lg border cursor-pointer transition-all",
+                      "hover:border-violet-500 hover:bg-white/5",
                       selectedTestCase?.id === tc.id
-                        ? "border-purple-500 bg-purple-500/10"
+                        ? "border-violet-500 bg-violet-500/10"
                         : "border-white/10 bg-white/5"
                     )}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="font-medium text-white">{tc.name || tc.title}</div>
-                        {tc.description && (
-                          <div className="text-sm text-gray-400 mt-1 line-clamp-1">
-                            {tc.description}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="outline" className="text-xs border-white/20">
+                        <div className="font-medium text-white text-sm">{tc.name || tc.title}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-[10px] border-white/20">
                             {tc.steps?.length || 0} steps
                           </Badge>
-                          {tc.folderId && (
-                            <Badge variant="outline" className="text-xs border-white/20">
-                              <Folder className="h-3 w-3 mr-1" />
-                              {folders.find(f => f.id === tc.folderId)?.name || 'Folder'}
-                            </Badge>
-                          )}
-                          {(tc.tags || []).slice(0, 2).map(tag => (
-                            <Badge key={tag} variant="outline" className="text-xs border-white/20">
-                              <Tag className="h-3 w-3 mr-1" />
-                              {tag}
-                            </Badge>
-                          ))}
                         </div>
                       </div>
-                      <div>
-                        {getStatusBadge(tc.automationStatus)}
-                      </div>
+                      {getStatusBadge(tc.automationStatus)}
                     </div>
                   </div>
                 ))}
@@ -1446,11 +1388,10 @@ export default function PlaywrightRecorderPage() {
             )}
           </ScrollArea>
           
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 border-t border-white/10">
-              <div className="text-sm text-gray-400">
-                Page {currentPage} of {totalPages} ({filteredTestCases.length} results)
+            <div className="flex items-center justify-between pt-3 border-t border-white/10">
+              <div className="text-xs text-gray-400">
+                Page {currentPage} of {totalPages}
               </div>
               <div className="flex gap-2">
                 <Button
@@ -1458,7 +1399,7 @@ export default function PlaywrightRecorderPage() {
                   size="sm"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="border-white/20"
+                  className="h-7 text-xs border-white/20"
                 >
                   Previous
                 </Button>
@@ -1467,23 +1408,13 @@ export default function PlaywrightRecorderPage() {
                   size="sm"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="border-white/20"
+                  className="h-7 text-xs border-white/20"
                 >
                   Next
                 </Button>
               </div>
             </div>
           )}
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowTestPicker(false)}
-              className="border-white/20"
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
