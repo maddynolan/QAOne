@@ -19,7 +19,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import {
   Play, Save, Download, Plus, Trash2, Copy,
   ArrowUp, ArrowDown, Eye, EyeOff, Code, Settings,
@@ -34,7 +34,8 @@ import {
   Mail, Phone, Hash, User, ShieldCheck, Lightbulb,
   Building2, Plane, GraduationCap, Heart, Utensils,
   Home, Briefcase, Gamepad2, BarChart3,
-  Activity, FileJson, Link2, Key, Timer
+  Activity, FileJson, Link2, Key, Timer,
+  ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,16 +48,104 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
-import { Layout } from '@/components/Layout';
 import { ReusableModulesManager, ModuleStep } from '@/components/ReusableModulesManager';
 import { BlackboxLocatorStrategies, BlackboxLocator } from '@/components/BlackboxLocatorStrategies';
 import { resultsIngestionService, TestRunData } from '@/lib/results-ingestion-service';
 import { SmartFillDialog } from '@/components/SmartFillDialog';
+import { isElectron, localData, recorder as electronRecorder } from '@/lib/electron-bridge';
 import { 
   DOMAINS, CATEGORIES, DomainType, ValidationTemplate,
   getValidationsByDomain, getSuggestionsForField, calculateCoverage,
   groupValidations, getPriorityColor, validationToAssertion
 } from '@/lib/qa-validation-templates';
+
+// ============================================================================
+// UTILITY FUNCTIONS - MUST BE DEFINED BEFORE USE
+// ============================================================================
+
+/**
+ * Convert various selector formats to Python Playwright format
+ * IMPORTANT: This function MUST be defined at module level before any usage
+ */
+function convertSelector(selector: string): string {
+  if (!selector) return 'locator("body")';
+
+  // Clean up the selector - also escape newlines
+  selector = selector.trim().replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+  
+  // Log for debugging
+  console.log('[convertSelector] Input:', selector);
+
+  // Already in Python format
+  if (selector.includes('get_by_')) {
+    const result = selector.replace(/^page\./, '');
+    console.log('[convertSelector] Python format:', result);
+    return result;
+  }
+
+  // Handle page.getByRole, page.getByText etc. (JavaScript Playwright format from recordings)
+  if (selector.startsWith('page.getBy') || selector.startsWith('page.locator')) {
+    let result = selector
+      .replace(/^page\./, '')
+      .replace(/getByRole\(\s*['"](\w+)['"](?:\s*,\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*\})?\s*\)/g, 
+        (_, role, name) => name ? `get_by_role("${role}", name="${name}")` : `get_by_role("${role}")`)
+      .replace(/getByText\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_text("$1")')
+      .replace(/getByLabel\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_label("$1")')
+      .replace(/getByPlaceholder\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_placeholder("$1")')
+      .replace(/getByTestId\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_test_id("$1")')
+      .replace(/getByTitle\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_title("$1")')
+      .replace(/locator\(\s*['"]([^'"]+)['"]\s*\)/g, 'locator("$1")');
+    
+    console.log('[convertSelector] JS Playwright format converted:', result);
+    return result;
+  }
+
+  // Handle locator('...') format - extract the inner selector
+  const locatorMatch = selector.match(/^(?:page\.)?locator\(\s*['"](.+)['"]\s*\)$/);
+  if (locatorMatch) {
+    const innerSelector = locatorMatch[1].replace(/\\"/g, '"').replace(/\\'/g, "'");
+    const result = `locator("${innerSelector.replace(/"/g, '\\"')}")`;
+    console.log('[convertSelector] Locator format:', result);
+    return result;
+  }
+
+  // Handle raw CSS selectors (e.g., [name="firstName"], #myId, .myClass)
+  if (selector.startsWith('[') || selector.startsWith('#') || selector.startsWith('.')) {
+    const result = `locator("${selector.replace(/"/g, '\\"')}")`;
+    console.log('[convertSelector] CSS selector:', result);
+    return result;
+  }
+
+  // Handle getByRole, getByText, etc. without page. prefix (JavaScript to Python conversion)
+  let result = selector
+    .replace(/getByRole\(\s*['"](\w+)['"](?:\s*,\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*\})?\s*\)/g, 
+      (_, role, name) => name ? `get_by_role("${role}", name="${name}")` : `get_by_role("${role}")`)
+    .replace(/getByText\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_text("$1")')
+    .replace(/getByLabel\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_label("$1")')
+    .replace(/getByPlaceholder\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_placeholder("$1")')
+    .replace(/getByTestId\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_test_id("$1")')
+    .replace(/getByTitle\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_title("$1")')
+    .replace(/^page\./, '');
+
+  // If no transformation happened and it's not empty, wrap in locator
+  if (result === selector && selector.trim()) {
+    // Check if it looks like a simple field name (no special chars) - convert to name attribute selector
+    // Common field names: username, password, email, firstName, lastName, etc.
+    const trimmed = selector.trim();
+    const isSimpleName = /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(trimmed) && !trimmed.includes(' ');
+    
+    if (isSimpleName) {
+      // This is likely a field name, use name attribute selector
+      result = `locator('[name="${trimmed}"]')`;
+      console.log('[convertSelector] Converted simple name to [name=]:', result);
+    } else {
+      result = `locator("${selector.replace(/"/g, '\\"')}")`;
+    }
+  }
+
+  console.log('[convertSelector] Final result:', result);
+  return result || 'locator("body")';
+}
 
 // ============================================================================
 // TYPES - Unified Test Case Schema
@@ -75,12 +164,51 @@ type StepType =
   | 'custom';
 
 interface StepAssertion {
+  id?: string;  // For multiple assertions
   enabled: boolean;
   type: string;
   target?: string;
   expected?: string;
   operator?: 'equals' | 'contains' | 'greater' | 'less' | 'matches';
   softAssert?: boolean;
+}
+
+// Helper to generate assertion description text
+function getAssertionDescription(assertion: StepAssertion, stepSelector?: string): string {
+  const target = assertion.target || stepSelector || 'element';
+  const expected = assertion.expected || '';
+  
+  switch (assertion.type) {
+    case 'element_visible': return `Element "${target}" should be visible`;
+    case 'element_hidden': return `Element "${target}" should be hidden`;
+    case 'element_enabled': return `Element "${target}" should be enabled`;
+    case 'element_disabled': return `Element "${target}" should be disabled`;
+    case 'text_contains': return `Page should contain text "${expected}"`;
+    case 'text_equals': return `Element text should equal "${expected}"`;
+    case 'value_contains': return `Input value should contain "${expected}"`;
+    case 'value_equals': return `Input value should be "${expected}"`;
+    case 'url_contains': return `URL should contain "${expected}"`;
+    case 'url_equals': return `URL should be "${expected}"`;
+    case 'title_contains': return `Page title should contain "${expected}"`;
+    case 'count_equals': return `Element count should be ${expected}`;
+    case 'toast_message': return `Toast message "${expected}" should appear`;
+    case 'attribute_equals': return `Attribute should equal "${expected}"`;
+    case 'page_title': return `Page title should be "${expected}"`;
+    default: return expected || 'Verification should pass';
+  }
+}
+
+// Helper to generate expected result from multiple assertions
+function generateExpectedResultFromAssertions(assertions: StepAssertion[], stepSelector?: string): string {
+  if (!assertions || assertions.length === 0) return '';
+  
+  const descriptions = assertions
+    .filter(a => a.enabled)
+    .map(a => getAssertionDescription(a, stepSelector));
+  
+  if (descriptions.length === 0) return '';
+  if (descriptions.length === 1) return descriptions[0];
+  return descriptions.map((d, i) => `${i + 1}. ${d}`).join('\n');
 }
 
 interface SelectorObject {
@@ -106,6 +234,9 @@ interface TestStep {
   selector?: string;
   selectorObj?: SelectorObject;  // Full selector with fallbacks (same as Suggest/Recording)
   value?: string;
+  displayValue?: string;  // Masked value for display (e.g., ••••••• for passwords)
+  isSensitive?: boolean;  // Flag for password/secret fields
+  inputType?: string;     // e.g., 'password', 'text', 'email'
   url?: string;
   waitTime?: number;
 
@@ -126,12 +257,20 @@ interface TestStep {
   query?: string;
   connectionString?: string;
   
-  // Assertion
+  // Assertion (single - legacy) and assertions (multiple - new)
   assertion?: StepAssertion;
+  assertions?: StepAssertion[];  // Multiple assertions support
   
   // Manual test info
   manualAction?: string;
   expectedResult?: string;
+  automationStatus?: 'manual' | 'recorded' | 'verified';
+  
+  // Manual execution tracking
+  manualResult?: 'passed' | 'failed' | 'skipped' | 'blocked';
+  manualNotes?: string;
+  manualExecutedAt?: string;
+  manualExecutedBy?: string;
   
   // Variables
   storeAs?: string;
@@ -198,62 +337,119 @@ type ViewMode = 'no-code' | 'code';
 // STEP TYPE DEFINITIONS
 // ============================================================================
 
-// Simplified & compact step categories
+/**
+ * Step Palette - Comprehensive test step types for manual & automated testing
+ * 
+ * Organized for sprint-start test case creation:
+ * - UI Actions: Core interactions (Navigate, Click, Input, Select)
+ * - Verify: Assertions and validations
+ * - Backend: API calls, DB queries, response validation
+ * - Logic: Conditions, loops, reusable modules
+ * - Wait: Timing and synchronization
+ * - Data: Variables, test data generation
+ * - Evidence: Screenshots, logs, recordings
+ */
 const STEP_CATEGORIES = {
-  // VERIFY - Most important
-  verify: {
-    label: '✅ Verify',
-    compact: true,
-    steps: [
-      { type: 'assert', label: 'Element', icon: Eye, color: 'bg-green-500' },
-      { type: 'assert_text', label: 'Text', icon: Type, color: 'bg-green-500' },
-      { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-violet-500' },
-    ]
-  },
-  // TIMING
-  wait: {
-    label: '⏱️ Wait',
-    compact: true,
-    steps: [
-      { type: 'wait', label: 'Time', icon: Clock, color: 'bg-amber-500' },
-      { type: 'wait_for_element', label: 'Element', icon: Eye, color: 'bg-amber-500' },
-    ]
-  },
-  // BACKEND
-  api: {
-    label: '🔌 API/DB',
-    compact: true,
-    steps: [
-      { type: 'api', label: 'API', icon: Globe, color: 'bg-blue-600' },
-      { type: 'db_query', label: 'Database', icon: Database, color: 'bg-orange-500' },
-    ]
-  },
-  // LOGIC
-  logic: {
-    label: '🔀 Logic',
-    compact: true,
-    steps: [
-      { type: 'condition', label: 'If/Then', icon: Share2, color: 'bg-purple-500' },
-      { type: 'loop', label: 'Loop', icon: RefreshCw, color: 'bg-purple-500' },
-      { type: 'module', label: 'Module', icon: Package, color: 'bg-purple-500' },
-    ]
-  },
-  // UI ACTIONS - Collapsed
+  // UI ACTIONS - Primary for manual test case creation
   ui: {
-    label: 'UI (Manual)',
-    collapsed: true,
+    label: 'UI Actions',
+    icon: MousePointer,
+    color: 'amber',
+    description: 'User interface interactions',
     steps: [
-      { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-slate-400' },
-      { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-slate-400' },
-      { type: 'input', label: 'Input', icon: Type, color: 'bg-slate-400' },
-      { type: 'select', label: 'Select', icon: ChevronDown, color: 'bg-slate-400' },
+      { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-amber-500', desc: 'Go to URL' },
+      { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-amber-500', desc: 'Click element' },
+      { type: 'input', label: 'Input', icon: Type, color: 'bg-amber-500', desc: 'Enter text' },
+      { type: 'select', label: 'Select', icon: ChevronDown, color: 'bg-amber-500', desc: 'Choose option' },
+      { type: 'hover', label: 'Hover', icon: Target, color: 'bg-amber-600', desc: 'Mouse hover' },
+      { type: 'upload', label: 'Upload', icon: Upload, color: 'bg-amber-600', desc: 'Upload file' },
+    ]
+  },
+  // VERIFY - Assertions and validations
+  verify: {
+    label: 'Verify',
+    icon: CheckCircle,
+    color: 'green',
+    description: 'Assertions and validations',
+    steps: [
+      { type: 'assert', label: 'Element Visible', icon: Eye, color: 'bg-green-500', desc: 'Check visibility' },
+      { type: 'assert_text', label: 'Text Content', icon: Type, color: 'bg-green-500', desc: 'Verify text' },
+      { type: 'assert_value', label: 'Field Value', icon: FileText, color: 'bg-green-500', desc: 'Check input value' },
+      { type: 'assert_url', label: 'URL', icon: Link2, color: 'bg-green-600', desc: 'Verify URL' },
+      { type: 'assert_title', label: 'Page Title', icon: FileText, color: 'bg-green-600', desc: 'Check title' },
+      { type: 'assert_count', label: 'Element Count', icon: Hash, color: 'bg-green-600', desc: 'Count elements' },
+    ]
+  },
+  // BACKEND - API and Database
+  backend: {
+    label: 'Backend',
+    icon: Server,
+    color: 'blue',
+    description: 'API calls and database queries',
+    steps: [
+      { type: 'api', label: 'API Request', icon: Globe, color: 'bg-blue-500', desc: 'HTTP request' },
+      { type: 'api_validate', label: 'Validate Response', icon: CheckCircle, color: 'bg-blue-500', desc: 'Check API response' },
+      { type: 'api_extract', label: 'Extract Value', icon: Key, color: 'bg-blue-600', desc: 'Get from response' },
+      { type: 'db_query', label: 'Database Query', icon: Database, color: 'bg-orange-500', desc: 'SQL query' },
+      { type: 'db_validate', label: 'Validate Data', icon: ShieldCheck, color: 'bg-orange-500', desc: 'Check DB data' },
+    ]
+  },
+  // LOGIC - Control flow
+  logic: {
+    label: 'Logic',
+    icon: Share2,
+    color: 'purple',
+    description: 'Conditions, loops, and modules',
+    steps: [
+      { type: 'condition', label: 'If / Then', icon: Share2, color: 'bg-purple-500', desc: 'Conditional logic' },
+      { type: 'loop', label: 'Loop', icon: RefreshCw, color: 'bg-purple-500', desc: 'Repeat steps' },
+      { type: 'module', label: 'Reusable Module', icon: Package, color: 'bg-purple-600', desc: 'Import module' },
+      { type: 'group', label: 'Group Steps', icon: Layers, color: 'bg-purple-600', desc: 'Group together' },
+    ]
+  },
+  // WAIT - Synchronization
+  wait: {
+    label: 'Wait',
+    icon: Clock,
+    color: 'cyan',
+    description: 'Timing and synchronization',
+    steps: [
+      { type: 'wait', label: 'Wait Time', icon: Timer, color: 'bg-cyan-500', desc: 'Fixed delay' },
+      { type: 'wait_for_element', label: 'Wait for Element', icon: Eye, color: 'bg-cyan-500', desc: 'Until visible' },
+      { type: 'wait_for_text', label: 'Wait for Text', icon: Type, color: 'bg-cyan-600', desc: 'Until text appears' },
+      { type: 'wait_for_network', label: 'Wait for Network', icon: Activity, color: 'bg-cyan-600', desc: 'Network idle' },
+    ]
+  },
+  // DATA - Variables and test data
+  data: {
+    label: 'Data',
+    icon: Database,
+    color: 'violet',
+    description: 'Variables and test data',
+    steps: [
+      { type: 'set_variable', label: 'Set Variable', icon: Edit, color: 'bg-violet-500', desc: 'Store value' },
+      { type: 'generate_data', label: 'Generate Data', icon: Wand2, color: 'bg-violet-500', desc: 'Random/fake data' },
+      { type: 'extract_text', label: 'Extract from Page', icon: FileText, color: 'bg-violet-600', desc: 'Get page data' },
+      { type: 'use_data_row', label: 'Data Row', icon: ClipboardList, color: 'bg-violet-600', desc: 'Use dataset row' },
+    ]
+  },
+  // EVIDENCE - Documentation
+  evidence: {
+    label: 'Evidence',
+    icon: Camera,
+    color: 'rose',
+    description: 'Screenshots and logs',
+    steps: [
+      { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-rose-500', desc: 'Capture screen' },
+      { type: 'log', label: 'Log Message', icon: FileText, color: 'bg-rose-500', desc: 'Add log entry' },
+      { type: 'annotation', label: 'Add Note', icon: BookOpen, color: 'bg-rose-600', desc: 'Manual note' },
     ]
   },
 };
 
 const getStepInfo = (type: StepType) => {
   for (const category of Object.values(STEP_CATEGORIES)) {
-    const step = category.steps.find(s => s.type === type);
+    const step = (category as any).steps.find((s: any) => s.type === type);
     if (step) return step;
   }
   return { type, label: type, icon: Zap, color: 'bg-gray-500 text-white' };
@@ -419,6 +615,19 @@ function getStepDescription(step: TestStep): string {
     
     case 'input':
       if (step.value) {
+        // SECURITY: Mask sensitive values (passwords, secrets, etc.)
+        const isSensitive = step.isSensitive || 
+                           step.inputType === 'password' ||
+                           /password|passwd|pwd|^pw$|secret|token|api[_-]?key/i.test(step.name || '') ||
+                           /password|passwd|pwd|^pw$|secret|token|api[_-]?key/i.test(step.target || '');
+        
+        // Also detect garbled UTF-8 characters (encoding issues from password recording)
+        const hasGarbledChars = /[āã口¢Γ]/.test(step.value || '');
+        
+        if (isSensitive || hasGarbledChars) {
+          return `🔒 Type "••••••••"`;
+        }
+        
         const preview = step.value.length > 20 ? step.value.slice(0, 20) + '...' : step.value;
         return `Type "${preview}"`;
       }
@@ -708,7 +917,7 @@ const RANDOM_DATA = {
 };
 
 // Helper to pick random from array
-const randomPick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const randomPick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 // Helper to generate random string of given length
 const randomString = (length: number, chars = 'abcdefghijklmnopqrstuvwxyz0123456789'): string => {
@@ -938,6 +1147,7 @@ function generateSmartValue(type: string, fieldHint: string = '', constraints?: 
 
 export default function UnifiedWorkflowEditor() {
   const [searchParams] = useSearchParams();
+  const location = useLocation(); // Track location changes to reload from localStorage
   const testCaseIdFromUrl = searchParams.get('testCaseId') || undefined;
 
   // Test case state
@@ -970,6 +1180,7 @@ export default function UnifiedWorkflowEditor() {
   const [showModules, setShowModules] = useState(false);
   const [showBlackbox, setShowBlackbox] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['ui', 'verify']);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
   // Saved state - tracks if this test case exists in backend
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
@@ -984,6 +1195,18 @@ export default function UnifiedWorkflowEditor() {
   // Format view dialog (ISTQB/Gherkin)
   const [showFormatDialog, setShowFormatDialog] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'istqb' | 'gherkin' | 'markdown'>('istqb');
+
+  // ═══════════════════════════════════════════════════════════════
+  // MANUAL EXECUTION MODE
+  // ═══════════════════════════════════════════════════════════════
+  const [isManualExecution, setIsManualExecution] = useState(false);
+  const [manualCurrentStep, setManualCurrentStep] = useState(0);
+  const [manualResults, setManualResults] = useState<Record<string, { 
+    result: 'passed' | 'failed' | 'skipped' | 'blocked';
+    notes?: string;
+    executedAt: string;
+  }>>({});
+  const [manualExecutionStartTime, setManualExecutionStartTime] = useState<Date | null>(null);
 
   // QA Validation Coverage
   const [showDomainSelector, setShowDomainSelector] = useState(false);
@@ -1054,6 +1277,67 @@ export default function UnifiedWorkflowEditor() {
     const importSource = searchParams.get('import');
     const sessionId = searchParams.get('sessionId');
     
+    // Handle base64-encoded import from Flowstral Desktop
+    if (importSource && importSource !== 'trace') {
+      try {
+        // Decode base64 test case from desktop app
+        const decoded = atob(decodeURIComponent(importSource));
+        const desktopTestCase = JSON.parse(decoded);
+        console.log('[Builder] Importing from Flowstral Desktop:', desktopTestCase);
+        
+        // Convert steps to our format - handle qword from recorder
+        const steps: TestStep[] = (desktopTestCase.steps || []).map((step: any, idx: number) => {
+          // Use qword if available, then type, then default to 'click'
+          const rawType = step.qword || step.type || 'click';
+          const mappedType = mapEventType(rawType);
+          
+          // Mask password values
+          const isPasswordStep = /password|passwd|pwd|["']pw["']|\bpw\b/i.test(step.name || step.description || '');
+          const value = isPasswordStep ? '••••••••' : (step.value || '');
+          
+          return {
+            id: step.id || `step_${Date.now()}_${idx}`,
+            type: mappedType,
+            name: step.name || step.description || `Step ${idx + 1}`,
+            selector: step.selector || step.selectorObj?.selector || '',
+            selectorObj: step.selectorObj,
+            value,
+            url: step.url || (mappedType === 'navigate' ? step.args?.[0] : '') || '',
+            qword: step.qword,  // Preserve qword for execution
+            args: step.args,    // Preserve args for execution
+            enabled: step.enabled !== false,
+            expectedResult: step.expectedResult || '',
+            isSensitive: isPasswordStep || step.isSensitive,
+          };
+        });
+        
+        setTestCase(prev => ({
+          ...prev,
+          id: desktopTestCase.id || `tc_${Date.now()}`,
+          name: desktopTestCase.name || 'Imported from Desktop',
+          description: desktopTestCase.description || 'Recorded in Flowstral Desktop',
+          tags: desktopTestCase.tags || [],
+          steps,
+          settings: {
+            ...prev.settings,
+            baseUrl: desktopTestCase.settings?.baseUrl || '',
+            timeout: desktopTestCase.settings?.timeout || 30000,
+          },
+          metadata: {
+            ...prev.metadata,
+            ...desktopTestCase.metadata,
+            source: 'flowstral-desktop',
+          },
+        }));
+        
+        toast.success(`Imported "${desktopTestCase.name}" with ${steps.length} steps from Desktop`);
+        return;
+      } catch (e) {
+        console.error('[Builder] Failed to decode desktop import:', e);
+        // Fall through to other import methods
+      }
+    }
+    
     // Handle import=trace from Trace page
     if (importSource === 'trace') {
       const sessionData = localStorage.getItem('workflow_import_session');
@@ -1076,6 +1360,9 @@ export default function UnifiedWorkflowEditor() {
                 selector: extractSelectorString(action.selector),
                 selectorObj: extractSelectorObject(action.selector, action.selectorObj, action), // CRITICAL: Preserve full selector
                 value: action.value || '',
+                displayValue: action.displayValue || action.value || '', // Masked value for display
+                isSensitive: action.isSensitive || action.inputType === 'password',  // Preserve sensitive flag
+                inputType: action.inputType || action.elementType || '',  // Preserve input type
                 target: action.target || action.description || '',
                 enabled: true,
                 expectedResult: action.expectedResult || '',
@@ -1135,9 +1422,56 @@ export default function UnifiedWorkflowEditor() {
     
     if (data) {
       try {
-        const parsed = JSON.parse(decodeURIComponent(data));
+        // Try base64 decoding first (from Electron export)
+        let decodedData = data;
+        try {
+          decodedData = atob(decodeURIComponent(data));
+          console.log('[Builder] Decoded base64 data');
+        } catch (b64Error) {
+          // Not base64, try as URI-encoded JSON
+          decodedData = decodeURIComponent(data);
+        }
+        
+        const parsed = JSON.parse(decodedData);
         console.log('[Builder] Loading from URL data:', parsed);
-        if (parsed.events || parsed.steps || parsed.nodes) {
+        console.log('[Builder] Parsed data has', parsed.steps?.length, 'steps');
+        
+        // Direct test case format (from Electron export)
+        if (parsed.steps && Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+          // Check if already in TestStep format
+          if (parsed.steps[0].type) {
+            console.log('[Builder] Direct test case format detected');
+            // Clean up step names
+            const cleanedSteps = parsed.steps.map((step: any) => ({
+              ...step,
+              name: cleanStepName(step.name, step.type),
+              selectorObj: step.selectorObj || (typeof step.selector === 'object' ? step.selector : undefined),
+              selector: typeof step.selector === 'string' ? step.selector : 
+                        (step.selector?.playwright || step.selector?.selector || step.selectorObj?.playwright || ''),
+            }));
+            
+            setTestCase(prev => ({
+              ...prev,
+              id: parsed.id || prev.id,
+              name: parsed.name || 'Recorded Test',
+              description: parsed.description || '',
+              steps: cleanedSteps,
+              settings: {
+                ...prev.settings,
+                baseUrl: parsed.settings?.baseUrl || '',
+              },
+              metadata: {
+                ...prev.metadata,
+                ...parsed.metadata,
+              }
+            }));
+            console.log('[Builder] Loaded', cleanedSteps.length, 'steps from URL data');
+            return; // Exit early
+          }
+        }
+        
+        // Legacy format conversion
+        if (parsed.events || parsed.nodes) {
           let steps: TestStep[] = [];
           
           if (parsed.events) {
@@ -1167,10 +1501,18 @@ export default function UnifiedWorkflowEditor() {
     } else {
       // Load from localStorage (recording import)
       const saved = localStorage.getItem('unified_test_case');
+      const timestamp = localStorage.getItem('unified_test_case_timestamp');
+      console.log('[Builder] Checking localStorage for unified_test_case:', saved ? 'FOUND' : 'NOT FOUND', 'timestamp:', timestamp);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          console.log('[Builder] Loading from localStorage:', parsed.steps?.length, 'steps');
+          console.log('[Builder] Loading from localStorage:', parsed);
+          console.log('[Builder] Steps count:', parsed.steps?.length, 'steps');
+          
+          // Clear the timestamp after reading to avoid re-loading on future visits
+          if (timestamp) {
+            localStorage.removeItem('unified_test_case_timestamp');
+          }
           
           // Clean step names and ensure selectorObj is preserved
           if (parsed.steps && Array.isArray(parsed.steps)) {
@@ -1185,12 +1527,43 @@ export default function UnifiedWorkflowEditor() {
           }
           
           setTestCase(parsed);
+          console.log('[Builder] TestCase set successfully with', parsed.steps?.length, 'steps');
         } catch (e) {
           console.error('Failed to load from localStorage:', e);
         }
+      } else {
+        console.log('[Builder] No saved test case in localStorage');
       }
     }
-  }, [searchParams]);
+  }, [searchParams, location.key]); // Include location.key to trigger on navigation
+  
+  // Also listen for storage events (when another window/tab sets localStorage)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'unified_test_case' && e.newValue) {
+        console.log('[Builder] Storage event detected - reloading test case');
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed.steps && Array.isArray(parsed.steps)) {
+            parsed.steps = parsed.steps.map((step: any) => ({
+              ...step,
+              name: cleanStepName(step.name, step.type),
+              selectorObj: step.selectorObj || (typeof step.selector === 'object' ? step.selector : undefined),
+              selector: typeof step.selector === 'string' ? step.selector : 
+                        (step.selector?.playwright || step.selector?.selector || step.selectorObj?.playwright || ''),
+            }));
+          }
+          setTestCase(parsed);
+          console.log('[Builder] Loaded from storage event:', parsed.steps?.length, 'steps');
+        } catch (err) {
+          console.error('[Builder] Failed to parse storage event data:', err);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
   
   // Load protocol data from localStorage (injected by recorder)
   useEffect(() => {
@@ -1266,6 +1639,9 @@ export default function UnifiedWorkflowEditor() {
               selector: extractSelectorString(action.selector),
               selectorObj: extractSelectorObject(action.selector, action.selectorObj, action), // CRITICAL: Preserve full selector
               value: action.value || action.input_value || '',
+              displayValue: action.displayValue || action.value || '', // Masked value for display
+              isSensitive: action.isSensitive || action.inputType === 'password',  // Preserve sensitive flag
+              inputType: action.inputType || action.elementType || '',  // Preserve input type
               target: extractTargetName(action.selector, action),
               enabled: true,
               expectedResult: action.expected_result || '',
@@ -1477,6 +1853,9 @@ export default function UnifiedWorkflowEditor() {
     }
   }, []);
 
+  // Track if initial load is complete to prevent auto-save race condition
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+
   // Auto-load test case from URL parameter
   useEffect(() => {
     if (testCaseIdFromUrl) {
@@ -1484,10 +1863,25 @@ export default function UnifiedWorkflowEditor() {
     }
   }, [testCaseIdFromUrl, loadTestCaseById]);
 
-  // Auto-save
+  // Mark initial load as complete after first render cycle
   useEffect(() => {
+    // Small delay to ensure loading useEffects have completed
+    const timer = setTimeout(() => {
+      setIsInitialLoadComplete(true);
+      console.log('[Builder] Initial load complete, auto-save enabled');
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Auto-save - only after initial load is complete to prevent overwriting imported data
+  useEffect(() => {
+    if (!isInitialLoadComplete) {
+      console.log('[Builder] Skipping auto-save during initial load');
+      return;
+    }
+    console.log('[Builder] Auto-saving test case with', testCase.steps?.length, 'steps');
     localStorage.setItem('unified_test_case', JSON.stringify(testCase));
-  }, [testCase]);
+  }, [testCase, isInitialLoadComplete]);
 
   // Save history
   useEffect(() => {
@@ -1607,24 +2001,73 @@ export default function UnifiedWorkflowEditor() {
   };
 
   const mapEventType = (type: string): StepType => {
+    const normalized = (type || '').toLowerCase();
     const map: Record<string, StepType> = {
       'click': 'click',
+      'clicktext': 'click',
+      'clickelement': 'click',
       'input': 'input',
       'type': 'input',
       'fill': 'input',
       'select': 'select',
       'navigate': 'navigate',
+      'navigateto': 'navigate',  // SF Tool NavigateTo
       'goto': 'navigate',
       'wait': 'wait',
       'assert': 'assert',
+      'asserttext': 'assert',
+      'assertfieldvalue': 'assert',
+      'assertvalidation': 'assert',
       'hover': 'hover',
+      // SF Tools - map to custom or navigate
+      'executesoql': 'api',
+      'executeapex': 'api',
+      'restapicall': 'api',
+      'createrecord': 'api',
+      'createtestdata': 'api',
+      'clonerecord': 'api',
+      'deleterecord': 'api',
+      'bulkload': 'api',
+      'runreport': 'api',
+      'runapextest': 'api',
+      'triggerflow': 'api',
+      'managepermissionset': 'api',
     };
-    return map[type] || 'click';
+    return map[normalized] || 'click';
   };
 
   // Clean step name - remove redundant type prefixes (e.g., "Click: Click" -> "Click")
+  // Also masks passwords and fixes garbled UTF-8 characters
   const cleanStepName = (name: string, type?: string): string => {
     if (!name) return name;
+    
+    let cleaned = name;
+    
+    // Detect password fields by name pattern - match "pw" as word or in quotes
+    const isPasswordField = /password|passwd|pwd|["']pw["']|\/pw\/|:pw:|_pw_|\bpw\b/i.test(name);
+    
+    // Detect garbled UTF-8 characters (encoding issues)
+    const hasGarbledChars = /[āã口¢Γ]/.test(name);
+    
+    // If it's a password field or has garbled chars, mask the value
+    if (isPasswordField || hasGarbledChars) {
+      // Replace quoted values with mask (handles: "value" or 'value')
+      cleaned = cleaned.replace(/["'][^"']+["']/g, (match, offset) => {
+        // Preserve field name (first quoted value), mask password (second quoted value)
+        // Pattern: Fill "fieldName": "value"
+        if (offset > 10) return '"••••••••"';
+        return match;
+      });
+      
+      // If the entire name is garbled, replace it
+      if (hasGarbledChars && cleaned === name) {
+        // Keep the action and field name, replace garbled value
+        if (cleaned.includes(':')) {
+          const parts = cleaned.split(':');
+          cleaned = `${parts[0]}: "••••••••"`;
+        }
+      }
+    }
     
     // Remove redundant patterns like "Click: Click" or "Navigate: Navigate"
     // Handle patterns like: "Click: Click 'text'" -> "Click 'text'"
@@ -1638,7 +2081,6 @@ export default function UnifiedWorkflowEditor() {
       { pattern: /^Assert:\s*Assert\s+/i, replacement: 'Assert ' },
     ];
     
-    let cleaned = name;
     for (const { pattern, replacement } of patterns) {
       if (pattern.test(cleaned)) {
         cleaned = cleaned.replace(pattern, replacement);
@@ -1734,26 +2176,117 @@ export default function UnifiedWorkflowEditor() {
         expectedResult: 'Element should be visible'
       },
       assert_text: {
-        name: 'Check: Text Contains',
+        name: 'Verify: Text Contains',
         expectedResult: 'Text should contain expected value'
       },
+      assert_value: {
+        name: 'Verify: Field Value',
+        expectedResult: 'Field value should match expected'
+      },
       assert_url: {
-        name: 'Check: URL',
-        expectedResult: 'URL should match'
+        name: 'Verify: URL',
+        expectedResult: 'URL should match expected'
+      },
+      assert_title: {
+        name: 'Verify: Page Title',
+        expectedResult: 'Page title should match'
+      },
+      assert_count: {
+        name: 'Verify: Element Count',
+        expectedResult: 'Element count should match expected'
       },
       screenshot: {
         name: 'Take Screenshot',
         expectedResult: 'Screenshot captured'
       },
+      log: {
+        name: 'Log: [message]',
+        expectedResult: 'Log entry created'
+      },
+      annotation: {
+        name: 'Note: [description]',
+        expectedResult: 'Note added to test'
+      },
       api: {
         name: 'API: [endpoint]',
         method: 'GET',
+        endpoint: '',
         expectedResult: 'API call should succeed'
+      },
+      api_validate: {
+        name: 'Validate: API Response',
+        expectedResult: 'Response should match expected'
+      },
+      api_extract: {
+        name: 'Extract: [field] from Response',
+        jsonPath: '',
+        storeAs: 'extracted_value',
+        expectedResult: 'Value extracted from response'
       },
       db_query: {
         name: 'Query: [table]',
         dbType: 'postgres',
+        query: '',
         expectedResult: 'Query should return results'
+      },
+      db_validate: {
+        name: 'Validate: DB Record',
+        expectedResult: 'Database record should match expected'
+      },
+      condition: {
+        name: 'If: [condition]',
+        condition: '',
+        expectedResult: 'Condition evaluated'
+      },
+      loop: {
+        name: 'Loop: [count] times',
+        loopCount: 1,
+        expectedResult: 'Loop completed'
+      },
+      module: {
+        name: 'Run Module: [name]',
+        moduleId: '',
+        expectedResult: 'Module executed successfully'
+      },
+      group: {
+        name: 'Group: [steps]',
+        expectedResult: 'Group of steps executed'
+      },
+      wait_for_text: {
+        name: 'Wait for: [text]',
+        expectedResult: 'Text should appear on page'
+      },
+      wait_for_network: {
+        name: 'Wait for: Network Idle',
+        expectedResult: 'Network should be idle'
+      },
+      set_variable: {
+        name: 'Set: [variable]',
+        variableName: '',
+        variableValue: '',
+        expectedResult: 'Variable set'
+      },
+      generate_data: {
+        name: 'Generate: [data type]',
+        dataType: 'random_string',
+        storeAs: 'generated_data',
+        expectedResult: 'Data generated'
+      },
+      extract_text: {
+        name: 'Extract: Text from [element]',
+        storeAs: 'extracted_text',
+        expectedResult: 'Text extracted from page'
+      },
+      use_data_row: {
+        name: 'Use: Data Row [index]',
+        dataSource: '',
+        rowIndex: 0,
+        expectedResult: 'Data row applied'
+      },
+      upload: {
+        name: 'Upload: [file]',
+        filePath: '',
+        expectedResult: 'File uploaded successfully'
       },
       // BLACK-BOX TESTING - Date & Time
       date_relative: {
@@ -1876,6 +2409,34 @@ export default function UnifiedWorkflowEditor() {
       [newSteps[idx], newSteps[newIdx]] = [newSteps[newIdx], newSteps[idx]];
       return { ...prev, steps: newSteps, metadata: { ...prev.metadata, updatedAt: new Date().toISOString() } };
     });
+  };
+
+  // Drag and drop handlers for step reordering
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    // Reorder steps while dragging for smooth visual feedback
+    setTestCase(prev => {
+      const newSteps = [...prev.steps];
+      const [removed] = newSteps.splice(draggedIndex, 1);
+      newSteps.splice(index, 0, removed);
+      return { ...prev, steps: newSteps };
+    });
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    // Update timestamp
+    setTestCase(prev => ({
+      ...prev,
+      metadata: { ...prev.metadata, updatedAt: new Date().toISOString() }
+    }));
   };
 
   const duplicateStep = (stepId: string) => {
@@ -2059,13 +2620,63 @@ export default function UnifiedWorkflowEditor() {
       // Add main test steps after precondition steps
       allSteps = [...allSteps, ...testCase.steps];
       
-      // Create merged test case for code generation
+      // Create merged test case for execution
       const mergedTestCase: UnifiedTestCase = {
         ...testCase,
         steps: allSteps,
         preconditions: [], // Clear preconditions since we're inlining them
       };
       
+      // In Electron, use local Playwright execution for better performance
+      if (isElectron()) {
+        const api = (window as any).electronAPI;
+        if (api?.testRunner) {
+          console.log('[Run Test] Using Electron local execution');
+          toast.info('Running test locally...');
+          
+          // Subscribe to step events
+          const stepStartUnsub = api.on('test-step-start', ({ index, step }: { index: number; step: any }) => {
+            setExecutionResult(prev => ({
+              ...prev,
+              currentStep: index,
+              logs: [...prev.logs, `▶ Step ${index + 1}: ${step.name || step.type}`]
+            }));
+          });
+          
+          const stepCompleteUnsub = api.on('test-step-complete', ({ index, step, result }: { index: number; step: any; result: any }) => {
+            const statusEmoji = result.status === 'passed' ? '✅' : result.status === 'failed' ? '❌' : '⏭️';
+            setExecutionResult(prev => ({
+              ...prev,
+              results: [...prev.results, result],
+              logs: [...prev.logs, `${statusEmoji} Step ${index + 1}: ${result.status}${result.error ? ' - ' + result.error : ''}`]
+            }));
+          });
+          
+          const result = await api.testRunner.executeTest(mergedTestCase);
+          
+          // Cleanup subscriptions
+          if (stepStartUnsub) stepStartUnsub();
+          if (stepCompleteUnsub) stepCompleteUnsub();
+          
+          setExecutionResult(prev => ({
+            ...prev,
+            status: result.status,
+            logs: [...prev.logs, `\n${result.status === 'passed' ? '✅ TEST PASSED' : '❌ TEST FAILED'} (${result.duration}ms)`]
+          }));
+          
+          setIsRunning(false);
+          
+          if (result.status === 'passed') {
+            toast.success('Test passed!');
+          } else {
+            toast.error(`Test failed: ${result.error || 'See logs for details'}`);
+          }
+          
+          return;
+        }
+      }
+      
+      // Fallback to backend execution
       const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       const code = generateAutomationCode(mergedTestCase, safeName);
       const response = await fetch('http://localhost:8000/api/flowstral/execute', {
@@ -2280,6 +2891,74 @@ export default function UnifiedWorkflowEditor() {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // MANUAL EXECUTION FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════
+  
+  const startManualExecution = () => {
+    if (testCase.steps.length === 0) {
+      toast.error('Add steps to execute manually');
+      return;
+    }
+    setIsManualExecution(true);
+    setManualCurrentStep(0);
+    setManualResults({});
+    setManualExecutionStartTime(new Date());
+    toast.info('Manual execution started. Follow each step and mark Pass/Fail.');
+  };
+
+  const endManualExecution = () => {
+    setIsManualExecution(false);
+    
+    // Calculate summary
+    const results = Object.values(manualResults);
+    const passed = results.filter(r => r.result === 'passed').length;
+    const failed = results.filter(r => r.result === 'failed').length;
+    const skipped = results.filter(r => r.result === 'skipped').length;
+    const total = testCase.steps.length;
+    
+    // Update step results in test case
+    setTestCase(prev => ({
+      ...prev,
+      steps: prev.steps.map(step => {
+        const result = manualResults[step.id];
+        if (result) {
+          return {
+            ...step,
+            manualResult: result.result,
+            manualNotes: result.notes,
+            manualExecutedAt: result.executedAt,
+          };
+        }
+        return step;
+      }),
+    }));
+    
+    if (failed > 0) {
+      toast.error(`Manual execution completed: ${passed} passed, ${failed} failed, ${skipped} skipped`);
+    } else {
+      toast.success(`Manual execution completed: ${passed}/${total} passed!`);
+    }
+  };
+
+  const markStepResult = (stepId: string, result: 'passed' | 'failed' | 'skipped' | 'blocked', notes?: string) => {
+    setManualResults(prev => ({
+      ...prev,
+      [stepId]: {
+        result,
+        notes,
+        executedAt: new Date().toISOString(),
+      }
+    }));
+    
+    // Auto-advance to next step
+    if (manualCurrentStep < testCase.steps.length - 1) {
+      setTimeout(() => setManualCurrentStep(prev => prev + 1), 300);
+    }
+  };
+
+  const getCurrentManualStep = () => testCase.steps[manualCurrentStep];
+
   // Build test case data for API
   const buildTestCaseData = (name?: string) => ({
     title: name || testCase.name,
@@ -2303,35 +2982,81 @@ export default function UnifiedWorkflowEditor() {
   const saveTestCase = async () => {
     try {
       const testCaseData = buildTestCaseData();
+      const testCaseId = savedTestCaseId || `tc_${Date.now()}`;
       
-      if (savedTestCaseId) {
-        // Update existing test case
-        const response = await fetch(`http://localhost:8000/test-cases/${savedTestCaseId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testCaseData),
-        });
-        
-        if (response.ok) {
-          toast.success('✅ Test case updated');
+      // Create the full test case object
+      const fullTestCase = {
+        id: testCaseId,
+        ...testCaseData,
+        unified_data: testCase,
+        steps: testCase.steps,
+        createdAt: testCase.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Save to Electron local storage (JSON files) if available
+      if (isElectron()) {
+        await localData.saveTestCase(fullTestCase);
+        console.log('[Save] Saved to Electron local storage');
+      }
+      
+      // Also save to browser localStorage (for web and as backup)
+      try {
+        const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        const existingIndex = localCases.findIndex((tc: any) => tc.id === testCaseId);
+        if (existingIndex >= 0) {
+          localCases[existingIndex] = fullTestCase;
         } else {
-          toast.error('Failed to update');
+          localCases.push(fullTestCase);
         }
-      } else {
-        // Create new test case
-        const response = await fetch('http://localhost:8000/test-cases', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(testCaseData),
-        });
+        localStorage.setItem('test_cases', JSON.stringify(localCases));
+        console.log('[Save] Saved to browser localStorage');
+      } catch (localStorageError) {
+        console.warn('[Save] Could not save to localStorage:', localStorageError);
+      }
+      
+      // Update saved ID
+      if (!savedTestCaseId) {
+        setSavedTestCaseId(testCaseId);
+      }
+      
+      // Also try to save to backend (may fail if offline)
+      try {
+        if (savedTestCaseId) {
+          // Update existing test case
+          const response = await fetch(`http://localhost:8000/test-cases/${savedTestCaseId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testCaseData),
+          });
+          
+          if (response.ok) {
+            toast.success('✅ Test case saved');
+          } else {
+            // Backend failed but already saved locally
+            toast.success('✅ Saved locally');
+          }
+        } else {
+          // Create new test case
+          const response = await fetch('http://localhost:8000/test-cases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testCaseData),
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          setSavedTestCaseId(data.id);
-          toast.success('✅ Test case saved');
-        } else {
-          toast.error('Failed to save');
+          if (response.ok) {
+            const data = await response.json();
+            setSavedTestCaseId(data.id);
+            toast.success('✅ Test case saved');
+          } else {
+            // Backend failed but already saved locally
+            toast.success('✅ Saved locally');
+          }
         }
+      } catch (networkError) {
+        // Network error - already saved locally
+        console.log('[Save] Backend unavailable, saved locally');
+        toast.success('✅ Saved locally');
       }
     } catch (error) {
       console.error('[Save] Error:', error);
@@ -2437,7 +3162,7 @@ export default function UnifiedWorkflowEditor() {
     setTestCase(prev => ({
       ...prev,
       steps: prev.steps.map(step => {
-        if (step.type === 'input' && (forceRegenerate || !step.value)) {
+        if ((step.type === 'input' || step.type === 'fill') && (forceRegenerate || !step.value)) {
           count++;
           // Use the step name to detect field type
           const fieldLabel = step.name || step.target || 'text';
@@ -2475,25 +3200,27 @@ export default function UnifiedWorkflowEditor() {
     toast.success(`Exported as ${mode}`);
   };
 
+  // Debug: Log state on render
+  console.log('[Builder] Rendering with', testCase.steps.length, 'steps');
+  
   return (
-    <Layout>
-      <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-background">
+    <div className="flex flex-col overflow-hidden bg-gray-950 h-full text-white" style={{ maxHeight: 'calc(100vh - 4rem)', minHeight: '600px' }}>
         {/* Header */}
-        <header className="flex-none border-b bg-card px-4 py-3">
+        <header className="flex-none border-b border-gray-800 bg-gray-900 px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left: Title */}
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg gradient-primary shadow-lg">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25">
                 <Layers className="h-5 w-5 text-white" />
               </div>
               <div>
                 <Input
                   value={testCase.name}
                   onChange={(e) => setTestCase(prev => ({ ...prev, name: e.target.value }))}
-                  className="text-lg font-semibold border-none p-0 h-auto bg-transparent focus-visible:ring-0"
+                  className="text-lg font-semibold border-none p-0 h-auto bg-transparent focus-visible:ring-0 text-white"
                   placeholder="Test Case Name"
                 />
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-gray-400">
                   <span>{testCase.steps.length} steps</span>
                   <span>•</span>
                   <span>v{testCase.metadata.version}</span>
@@ -2503,12 +3230,12 @@ export default function UnifiedWorkflowEditor() {
 
             {/* Center: View Toggle */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+              <div className="flex items-center gap-1 p-1 bg-gray-800 rounded-lg border border-gray-700">
                 <Button
                   variant={viewMode === 'no-code' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('no-code')}
-                  className={viewMode === 'no-code' ? 'gradient-primary text-white' : ''}
+                  className={viewMode === 'no-code' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:text-white'}
                 >
                   <ToggleLeft className="h-4 w-4 mr-1" />
                   No-Code
@@ -2517,7 +3244,7 @@ export default function UnifiedWorkflowEditor() {
                   variant={viewMode === 'code' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('code')}
-                  className={viewMode === 'code' ? 'gradient-primary text-white' : ''}
+                  className={viewMode === 'code' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:text-white'}
                 >
                   <Code className="h-4 w-4 mr-1" />
                   Code
@@ -2527,7 +3254,7 @@ export default function UnifiedWorkflowEditor() {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white">
                 <Settings className="h-4 w-4" />
               </Button>
               
@@ -2538,8 +3265,9 @@ export default function UnifiedWorkflowEditor() {
                     variant="outline" 
                     size="sm" 
                     title="Generate test data for all input fields"
+                    className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
                   >
-                    <Zap className="h-4 w-4 mr-1" />
+                    <Zap className="h-4 w-4 mr-1 text-amber-500" />
                     Fill Data
                   </Button>
                 </DropdownMenuTrigger>
@@ -2558,8 +3286,8 @@ export default function UnifiedWorkflowEditor() {
               {/* Accessibility Scan - Dropdown with URL input option */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" title="Accessibility Scanner (WCAG)">
-                    ♿ A11y
+                  <Button variant="outline" size="sm" title="Accessibility Scanner (WCAG)" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+                    <span className="text-green-400">♿</span> A11y
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80">
@@ -2682,8 +3410,8 @@ export default function UnifiedWorkflowEditor() {
               {/* Export Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-1" />
+                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+                    <Download className="h-4 w-4 mr-1 text-amber-500" />
                     Export
                   </Button>
                 </DropdownMenuTrigger>
@@ -2731,36 +3459,89 @@ export default function UnifiedWorkflowEditor() {
                   }}>
                     📝 Markdown Format
                   </DropdownMenuItem>
+                  
+                  {/* Electron-specific options */}
+                  {isElectron() && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">Desktop Export</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          const api = (window as any).electronAPI;
+                          const result = await api?.localStorage?.exportToFile();
+                          if (result?.success) {
+                            toast.success(`Exported to ${result.filePath}`);
+                          } else if (!result?.canceled) {
+                            toast.error('Export failed');
+                          }
+                        } catch (e) {
+                          toast.error('Export failed');
+                        }
+                      }}>
+                        💾 Export All to File
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          const api = (window as any).electronAPI;
+                          const result = await api?.localStorage?.importFromFile();
+                          if (result?.success) {
+                            toast.success('Imported successfully');
+                            window.location.reload();
+                          } else if (!result?.canceled) {
+                            toast.error(result?.error || 'Import failed');
+                          }
+                        } catch (e) {
+                          toast.error('Import failed');
+                        }
+                      }}>
+                        📥 Import from File
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Save className="h-4 w-4 mr-1" />
+                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+                    <Save className="h-4 w-4 mr-1 text-amber-500" />
                     Save
                     <ChevronDown className="h-3 w-3 ml-1" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={saveTestCase}>
+                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                  <DropdownMenuItem onClick={saveTestCase} className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800 focus:text-white">
                     <Save className="h-4 w-4 mr-2" />
                     {savedTestCaseId ? 'Save (Update)' : 'Save'}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => {
                     setSaveAsName(testCase.name + ' - Copy');
                     setShowSaveAsDialog(true);
-                  }}>
+                  }} className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800 focus:text-white">
                     <FolderPlus className="h-4 w-4 mr-2" />
                     Save As...
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              
+              {/* Manual Execution Button */}
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={startManualExecution}
+                disabled={isRunning || isManualExecution || testCase.steps.length === 0}
+                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 disabled:opacity-50"
+              >
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Manual
+              </Button>
+              
+              {/* Automated Run Button */}
               <Button 
                 size="sm" 
                 onClick={runTest}
-                disabled={isRunning || testCase.steps.length === 0}
-                className="gradient-primary text-white"
+                disabled={isRunning || isManualExecution || testCase.steps.length === 0}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white disabled:opacity-50"
               >
                 {isRunning ? (
                   <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
@@ -2776,168 +3557,113 @@ export default function UnifiedWorkflowEditor() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Compact & Focused */}
-          <aside className="w-48 flex-none border-r bg-card overflow-y-auto">
+          <aside className="w-48 flex-none border-r border-gray-800 bg-gray-900 overflow-y-auto">
             <div className="p-2 space-y-2">
-              {/* Domain & Coverage Section */}
-              <div className="p-2 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 rounded-lg border border-violet-200 dark:border-violet-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium text-violet-700 dark:text-violet-300">DOMAIN</span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-5 px-1 text-[10px]"
+              {/* Settings Section - Compact */}
+              <Collapsible defaultOpen={false}>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-gray-700 bg-gray-800/50 hover:bg-gray-800 transition-all text-gray-400 hover:text-white">
+                    <Settings className="h-3.5 w-3.5" />
+                    <span className="text-[11px] font-medium flex-1 text-left">Settings</span>
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2 space-y-2">
+                  {/* Domain Selector */}
+                  <button 
+                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-gray-800/30 border border-gray-700 hover:border-amber-500/50 flex items-center gap-2"
                     onClick={() => setShowDomainSelector(true)}
                   >
-                    <Settings className="h-3 w-3" />
-                  </Button>
-                </div>
-                <button 
-                  className="w-full text-left text-xs font-medium flex items-center gap-1 hover:text-violet-600"
-                  onClick={() => setShowDomainSelector(true)}
-                >
-                  <span>{DOMAINS[selectedDomain]?.icon}</span>
-                  <span className="truncate">{DOMAINS[selectedDomain]?.label || 'Select Domain'}</span>
-                </button>
-                
-                {/* Coverage Meter */}
-                {(() => {
-                  const coverage = calculateCoverage(coveredValidations, selectedDomain);
-                  return (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-[10px] mb-1">
-                        <span className="text-muted-foreground">Coverage</span>
-                        <span className={`font-medium ${
-                          coverage.percentage >= 80 ? 'text-green-600' :
-                          coverage.percentage >= 50 ? 'text-amber-600' : 'text-red-600'
-                        }`}>
-                          {coverage.percentage}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full transition-all ${
-                            coverage.percentage >= 80 ? 'bg-green-500' :
-                            coverage.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${coverage.percentage}%` }}
-                        />
-                      </div>
-                      {coverage.missingHigh.length > 0 && (
-                        <button
-                          className="mt-1 text-[9px] text-red-600 hover:underline flex items-center gap-0.5"
-                          onClick={() => setShowValidationPanel(true)}
-                        >
-                          <AlertTriangle className="h-2.5 w-2.5" />
-                          {coverage.missingHigh.length} high priority gaps
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Quick Actions */}
-              <div className="flex gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 h-7 text-[10px] px-2"
-                  onClick={() => setShowModules(true)}
-                >
-                  <Package className="h-3 w-3 mr-1" />
-                  Modules
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 h-7 text-[10px] px-2"
-                  onClick={() => window.open('/flowstral', '_blank')}
-                >
-                  <Video className="h-3 w-3 mr-1" />
-                  Record
-                </Button>
-              </div>
-
-              {/* Compact Step Categories */}
-              <div className="space-y-1">
-                <p className="text-[9px] text-muted-foreground text-center py-1">ADD STEPS</p>
-                
-                {Object.entries(STEP_CATEGORIES).map(([key, category]) => {
-                  const cat = category as any;
-                  const isCompact = cat.compact;
-                  const isCollapsedByDefault = cat.collapsed;
-                  const isOpen = isCollapsedByDefault 
-                    ? expandedCategories.includes(key)
-                    : !expandedCategories.includes(`${key}_closed`);
+                    <span>{DOMAINS[selectedDomain]?.icon}</span>
+                    <span className="truncate text-gray-300">{DOMAINS[selectedDomain]?.label || 'Select Domain'}</span>
+                  </button>
                   
-                  // Compact mode: show all steps inline
-                  if (isCompact) {
+                  {/* Coverage - Only show if relevant */}
+                  {(() => {
+                    const coverage = calculateCoverage(coveredValidations, selectedDomain);
+                    if (coverage.percentage === 0) return null;
                     return (
-                      <div key={key} className="space-y-0.5">
-                        <p className="text-[10px] font-medium text-muted-foreground px-1">{category.label}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {category.steps.map((step) => (
-                            <Button
-                              key={step.type}
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px]"
-                              onClick={() => addStep(step.type as StepType)}
-                              title={step.label}
-                            >
-                              <div className={`p-0.5 rounded mr-1 ${step.color} text-white`}>
-                                <step.icon className="h-2.5 w-2.5" />
-                              </div>
-                              {step.label}
-                            </Button>
-                          ))}
+                      <div className="px-2">
+                        <div className="flex items-center justify-between text-[10px] mb-1">
+                          <span className="text-gray-500">Coverage</span>
+                          <span className={`font-medium ${
+                            coverage.percentage >= 80 ? 'text-green-400' :
+                            coverage.percentage >= 50 ? 'text-amber-400' : 'text-red-400'
+                          }`}>
+                            {coverage.percentage}%
+                          </span>
+                        </div>
+                        <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all ${
+                              coverage.percentage >= 80 ? 'bg-green-500' :
+                              coverage.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${coverage.percentage}%` }}
+                          />
                         </div>
                       </div>
                     );
-                  }
+                  })()}
+                </CollapsibleContent>
+              </Collapsible>
+
+              {/* Step Palette - Clean, organized categories */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider px-1">Add Steps</p>
+                
+                {Object.entries(STEP_CATEGORIES).map(([key, category]) => {
+                  const cat = category as any;
+                  const isExpanded = expandedCategories.includes(key);
+                  const CategoryIcon = cat.icon;
                   
-                  // Collapsible mode for less common steps
+                  // Color mapping for category headers
+                  const colorMap: Record<string, string> = {
+                    amber: 'border-amber-500/30 hover:border-amber-500/50 text-amber-400',
+                    green: 'border-green-500/30 hover:border-green-500/50 text-green-400',
+                    blue: 'border-blue-500/30 hover:border-blue-500/50 text-blue-400',
+                    purple: 'border-purple-500/30 hover:border-purple-500/50 text-purple-400',
+                    cyan: 'border-cyan-500/30 hover:border-cyan-500/50 text-cyan-400',
+                    violet: 'border-violet-500/30 hover:border-violet-500/50 text-violet-400',
+                    rose: 'border-rose-500/30 hover:border-rose-500/50 text-rose-400',
+                  };
+                  const headerColor = colorMap[cat.color] || 'border-gray-500/30 text-gray-400';
+                  
                   return (
                     <Collapsible
                       key={key}
-                      open={isOpen}
+                      open={isExpanded}
                       onOpenChange={(open) => {
-                        if (isCollapsedByDefault) {
-                          setExpandedCategories(prev =>
-                            open ? [...prev, key] : prev.filter(k => k !== key)
-                          );
-                        } else {
-                          setExpandedCategories(prev =>
-                            open ? prev.filter(k => k !== `${key}_closed`) : [...prev, `${key}_closed`]
-                          );
-                        }
+                        setExpandedCategories(prev =>
+                          open ? [...prev, key] : prev.filter(k => k !== key)
+                        );
                       }}
                     >
                       <CollapsibleTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="w-full justify-between h-6 text-[10px] text-muted-foreground"
+                        <button 
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border bg-gray-900/50 transition-all ${headerColor}`}
                         >
-                          <span>{category.label}</span>
-                          <ChevronRight className={`h-2.5 w-2.5 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                        </Button>
+                          <CategoryIcon className="h-3.5 w-3.5" />
+                          <span className="text-[11px] font-medium flex-1 text-left">{cat.label}</span>
+                          <ChevronRight className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        </button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="flex flex-wrap gap-1 mt-1 pl-1">
-                        {category.steps.map((step) => (
-                          <Button
-                            key={step.type}
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[10px]"
-                            onClick={() => addStep(step.type as StepType)}
-                          >
-                            <div className={`p-0.5 rounded mr-1 ${step.color} text-white`}>
-                              <step.icon className="h-2.5 w-2.5" />
-                            </div>
-                            {step.label}
-                          </Button>
-                        ))}
+                      <CollapsibleContent className="pt-1.5">
+                        <div className="space-y-0.5">
+                          {cat.steps.map((step: any) => (
+                            <button
+                              key={step.type}
+                              onClick={() => addStep(step.type as StepType)}
+                              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-800/70 transition-colors group"
+                              title={step.desc}
+                            >
+                              <div className={`p-1 rounded ${step.color} text-white group-hover:scale-105 transition-transform flex-shrink-0`}>
+                                <step.icon className="h-3 w-3" />
+                              </div>
+                              <span className="text-[11px] text-gray-300 group-hover:text-white">{step.label}</span>
+                            </button>
+                          ))}
+                        </div>
                       </CollapsibleContent>
                     </Collapsible>
                   );
@@ -3127,7 +3853,7 @@ export default function UnifiedWorkflowEditor() {
                       </div>
                     )}
                     
-                    {/* Test Steps */}
+                    {/* Test Steps - Drag and Drop enabled */}
                     <div className="space-y-2">
                       {testCase.steps.map((step, index) => (
                         <StepCard
@@ -3140,6 +3866,10 @@ export default function UnifiedWorkflowEditor() {
                           onDelete={() => deleteStep(step.id)}
                           onMove={(dir) => moveStep(step.id, dir)}
                           onDuplicate={() => duplicateStep(step.id)}
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragEnd={handleDragEnd}
+                          isDragging={draggedIndex === index}
                           isFirst={index === 0}
                           isLast={index === testCase.steps.length - 1}
                           executionStatus={executionResult.results.find(r => r.stepId === step.id)?.status}
@@ -3189,7 +3919,7 @@ export default function UnifiedWorkflowEditor() {
 
           {/* Right Panel: Step Editor OR Protocol Panel */}
           {viewMode === 'no-code' && (selectedStep || protocolData || rightPanelMode === 'protocol') && (
-            <aside className="w-80 flex-none border-l bg-card overflow-hidden flex flex-col">
+            <aside className="w-80 flex-none border-l bg-card flex flex-col max-h-full overflow-hidden">
               {/* Panel Tabs */}
               <div className="p-2 border-b bg-muted/30">
                 <div className="flex gap-1">
@@ -3923,8 +4653,234 @@ export default function UnifiedWorkflowEditor() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* MANUAL EXECUTION OVERLAY */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {isManualExecution && (
+          <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
+            {/* Header */}
+            <div className="flex-none border-b bg-card px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="h-6 w-6 text-amber-500" />
+                    <h2 className="text-xl font-bold">Manual Execution</h2>
+                  </div>
+                  <Badge variant="outline" className="text-amber-600 border-amber-300">
+                    Step {manualCurrentStep + 1} of {testCase.steps.length}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4">
+                  {/* Progress */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-green-600 font-medium">
+                      ✅ {Object.values(manualResults).filter(r => r.result === 'passed').length}
+                    </span>
+                    <span className="text-red-600 font-medium">
+                      ❌ {Object.values(manualResults).filter(r => r.result === 'failed').length}
+                    </span>
+                    <span className="text-gray-500 font-medium">
+                      ⏭️ {Object.values(manualResults).filter(r => r.result === 'skipped').length}
+                    </span>
+                  </div>
+                  <Button variant="outline" onClick={endManualExecution}>
+                    <X className="h-4 w-4 mr-1" />
+                    End Execution
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Step Navigator */}
+              <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-2">
+                {testCase.steps.map((step, idx) => {
+                  const result = manualResults[step.id];
+                  const isCurrent = idx === manualCurrentStep;
+                  return (
+                    <button
+                      key={step.id}
+                      onClick={() => setManualCurrentStep(idx)}
+                      className={`flex-none px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                        isCurrent 
+                          ? 'bg-amber-500 text-white ring-2 ring-amber-300' 
+                          : result?.result === 'passed' 
+                          ? 'bg-green-100 text-green-700' 
+                          : result?.result === 'failed' 
+                          ? 'bg-red-100 text-red-700' 
+                          : result?.result === 'skipped' 
+                          ? 'bg-gray-100 text-gray-500' 
+                          : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Main Content */}
+            <div className="flex-1 overflow-auto p-6">
+              {getCurrentManualStep() && (
+                <div className="max-w-3xl mx-auto space-y-6">
+                  {/* Step Title */}
+                  <div className="text-center">
+                    <h3 className="text-2xl font-bold text-foreground">
+                      {getCurrentManualStep().name}
+                    </h3>
+                    {getCurrentManualStep().description && (
+                      <p className="text-muted-foreground mt-1">{getCurrentManualStep().description}</p>
+                    )}
+                  </div>
+                  
+                  {/* Action Card */}
+                  <Card className="border-2 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-amber-100 rounded-lg">
+                          <MousePointer className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-2">
+                            Action to Perform
+                          </h4>
+                          <p className="text-lg">
+                            {getCurrentManualStep().manualAction || getCurrentManualStep().name || 
+                             `${getCurrentManualStep().type}: ${getCurrentManualStep().target || getCurrentManualStep().value || ''}`}
+                          </p>
+                          
+                          {/* Test Data */}
+                          {getCurrentManualStep().value && (
+                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
+                              <span className="text-xs text-muted-foreground">Test Data:</span>
+                              <p className="font-mono text-sm mt-1">{getCurrentManualStep().value}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Expected Result Card */}
+                  <Card className="border-2 border-green-200 bg-green-50/50 dark:bg-green-950/20">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2">
+                            Expected Result
+                          </h4>
+                          <p className="text-lg">
+                            {getCurrentManualStep().expectedResult || 
+                             (getCurrentManualStep().assertion?.expected 
+                               ? `Verify: ${getCurrentManualStep().assertion.type?.replace(/_/g, ' ')} - "${getCurrentManualStep().assertion.expected}"`
+                               : 'Step should complete successfully')}
+                          </p>
+                          
+                          {/* Assertions to verify */}
+                          {getCurrentManualStep().assertion?.enabled && (
+                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
+                              <span className="text-xs text-muted-foreground">Verify:</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline">{getCurrentManualStep().assertion.type}</Badge>
+                                <span className="font-mono text-sm">{getCurrentManualStep().assertion.expected}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Notes Input */}
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Notes (optional)</Label>
+                    <Input 
+                      placeholder="Add any observations or issues..."
+                      className="mt-1"
+                      id={`manual-notes-${getCurrentManualStep().id}`}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer - Action Buttons */}
+            <div className="flex-none border-t bg-card px-6 py-4">
+              <div className="max-w-3xl mx-auto flex items-center justify-between">
+                {/* Navigation */}
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setManualCurrentStep(prev => Math.max(0, prev - 1))}
+                    disabled={manualCurrentStep === 0}
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setManualCurrentStep(prev => Math.min(testCase.steps.length - 1, prev + 1))}
+                    disabled={manualCurrentStep === testCase.steps.length - 1}
+                  >
+                    Next
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+                
+                {/* Result Buttons */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const notes = (document.getElementById(`manual-notes-${getCurrentManualStep().id}`) as HTMLInputElement)?.value;
+                      markStepResult(getCurrentManualStep().id, 'skipped', notes);
+                    }}
+                    className="border-gray-300"
+                  >
+                    <SkipForward className="h-4 w-4 mr-1" />
+                    Skip
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const notes = (document.getElementById(`manual-notes-${getCurrentManualStep().id}`) as HTMLInputElement)?.value;
+                      markStepResult(getCurrentManualStep().id, 'blocked', notes);
+                    }}
+                    className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                  >
+                    <Ban className="h-4 w-4 mr-1" />
+                    Blocked
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const notes = (document.getElementById(`manual-notes-${getCurrentManualStep().id}`) as HTMLInputElement)?.value;
+                      markStepResult(getCurrentManualStep().id, 'failed', notes);
+                    }}
+                    className="border-red-300 text-red-600 hover:bg-red-50"
+                  >
+                    <XCircleIcon className="h-4 w-4 mr-1" />
+                    Fail
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const notes = (document.getElementById(`manual-notes-${getCurrentManualStep().id}`) as HTMLInputElement)?.value;
+                      markStepResult(getCurrentManualStep().id, 'passed', notes);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-6"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Pass
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </Layout>
   );
 }
 
@@ -3941,9 +4897,41 @@ interface StepCardProps {
   onDelete: () => void;
   onMove: (direction: 'up' | 'down') => void;
   onDuplicate: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
   isFirst: boolean;
   isLast: boolean;
   executionStatus?: string;
+}
+
+// Helper to mask sensitive values in step names/descriptions
+function maskSensitiveStepName(name: string, step: TestStep): string {
+  if (!name) return name;
+  
+  // Detect if this is a password/sensitive field
+  const isSensitive = step.isSensitive || 
+                     step.inputType === 'password' ||
+                     /password|passwd|pwd|^pw$|secret|token|api[_-]?key/i.test(step.name || '') ||
+                     /password|passwd|pwd|^pw$|secret|token|api[_-]?key/i.test(step.target || '');
+  
+  if (!isSensitive) return name;
+  
+  // Replace any quoted value with masked dots
+  // Matches: "value", 'value', "ā口¢ā口¢...", etc.
+  return name.replace(/["'][^"']+["']/g, (match) => {
+    // Keep the first quote and replace content with mask
+    const quote = match[0];
+    return `${quote}••••••••${quote}`;
+  });
+}
+
+// Helper to detect and fix corrupted/garbled characters
+function hasCorruptedChars(str: string): boolean {
+  if (!str) return false;
+  // Detect UTF-8 encoding issues - these characters indicate corruption
+  return /[āã口¢Γ]/.test(str) || /^[•●○◦]{4,}$/.test(str);
 }
 
 function StepCard({
@@ -3955,6 +4943,10 @@ function StepCard({
   onDelete,
   onMove,
   onDuplicate,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  isDragging,
   isFirst,
   isLast,
   executionStatus,
@@ -3962,21 +4954,50 @@ function StepCard({
   const info = getStepInfo(step.type);
   
   // Get human-readable description (NO selectors shown)
-  const description = getStepDescription(step);
+  let description = getStepDescription(step);
+  
+  // Extra security: if this is a password field, force mask the description
+  const isPasswordStep = step.isSensitive || 
+                         step.inputType === 'password' ||
+                         /password|passwd|pwd|["']pw["']|\/pw\/|:pw:|_pw_|\bpw\b/i.test(step.name || '') ||
+                         /password|passwd|pwd|["']pw["']|\/pw\/|:pw:|_pw_|\bpw\b/i.test(step.target || '') ||
+                         /password|passwd|pwd|["']pw["']|\/pw\/|:pw:|_pw_|\bpw\b/i.test(step.selector || '') ||
+                         /[āã口¢Γ]/.test(step.value || ''); // Detect garbled chars
+  
+  if (isPasswordStep && description) {
+    // Force mask any password-related description
+    description = '🔒 Type "••••••••"';
+  }
+  
+  // Mask sensitive values in step name
+  const displayName = maskSensitiveStepName(step.name, step);
 
   return (
     <div
-      className={`group relative flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      className={`group relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
         isSelected
-          ? 'ring-2 ring-primary bg-primary/5 border-primary'
+          ? 'ring-2 ring-amber-500 bg-amber-500/10 border-amber-500/50'
+          : isDragging
+          ? 'ring-2 ring-purple-500 bg-purple-500/10 border-purple-500/50 opacity-90'
           : executionStatus === 'passed'
-          ? 'bg-green-50 border-green-200'
+          ? 'bg-emerald-500/10 border-emerald-500/30'
           : executionStatus === 'failed'
-          ? 'bg-red-50 border-red-200'
-          : 'bg-card hover:border-primary/50'
+          ? 'bg-red-500/10 border-red-500/30'
+          : 'bg-[#1a1a25] border-white/10 hover:border-amber-500/30 hover:bg-[#1f1f2e]'
       }`}
       onClick={onSelect}
     >
+      {/* Drag Handle */}
+      <div className="cursor-grab opacity-0 group-hover:opacity-100 active:cursor-grabbing flex items-center">
+        <svg className="h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+        </svg>
+      </div>
+      
       {/* Step Number & Icon */}
       <div className="flex flex-col items-center">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${info.color}`}>
@@ -3987,33 +5008,40 @@ function StepCard({
 
       {/* Content - NO CODE/SELECTOR shown */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <info.icon className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{step.name}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <info.icon className="h-4 w-4 text-gray-400" />
+          <span className="font-semibold text-white text-base">{displayName}</span>
           {!step.enabled && (
-            <Badge variant="secondary" className="text-xs">Disabled</Badge>
+            <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-300">Disabled</Badge>
           )}
           {step.fallback && (
-            <Badge variant="outline" className="text-xs bg-amber-50">
+            <Badge variant="outline" className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
               <Wand2 className="h-3 w-3 mr-1" />
               Fallback
             </Badge>
           )}
           {step.assertion?.enabled && (
-            <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+            <Badge variant="outline" className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
               <CheckCircle className="h-3 w-3 mr-1" />
               Assert
+            </Badge>
+          )}
+          {/* Show automation status */}
+          {((step as any).qword && (step as any).args?.length > 0) && (
+            <Badge variant="outline" className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+              <Zap className="h-3 w-3 mr-1" />
+              Script
             </Badge>
           )}
         </div>
         {/* Show human-readable description, not selector */}
         {description && (
-          <div className="text-sm text-muted-foreground mt-1">
+          <div className="text-sm text-gray-300 mt-2">
             {description}
           </div>
         )}
         {step.expectedResult && (
-          <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+          <div className="text-xs text-emerald-400 mt-1.5 flex items-center gap-1">
             <CheckCircle className="h-3 w-3" />
             {step.expectedResult.slice(0, 60)}
           </div>
@@ -4185,6 +5213,16 @@ function StepEditor({
   // Smart Fill Dialog state
   const [showSmartFillDialog, setShowSmartFillDialog] = useState(false);
   
+  // Check if step has automation data (recorded/merged)
+  const hasAutomation = !!(
+    (step as any).qword && 
+    (step as any).args && 
+    Array.isArray((step as any).args) && 
+    (step as any).args.length > 0
+  );
+  const hasSmartSelectors = !!(step as any).selectorObj && Object.keys((step as any).selectorObj || {}).length > 0;
+  const isAutomated = hasAutomation || hasSmartSelectors;
+  
   // Get smart suggestions based on step content
   const fieldText = [step.name, step.target, step.selector, step.description].filter(Boolean).join(' ');
   const smartSuggestions = getSuggestionsForField(fieldText, domain);
@@ -4230,7 +5268,15 @@ function StepEditor({
       <div className="p-3 border-b">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="font-semibold text-sm">Edit Step</h3>
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              Edit Step
+              {isAutomated && (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] px-1.5 py-0">
+                  <Zap className="h-3 w-3 mr-0.5" />
+                  Automated
+                </Badge>
+              )}
+            </h3>
             <span className="text-[10px] text-muted-foreground capitalize">{step.type} action</span>
           </div>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
@@ -4386,7 +5432,7 @@ function StepEditor({
         </div>
       )}
 
-      {['click', 'input', 'select', 'hover', 'assert'].includes(step.type) && (
+      {['click', 'input', 'fill', 'select', 'hover', 'assert'].includes(step.type) && (
         <>
           {/* Human-readable target name - with type-specific label */}
           <div className="space-y-2">
@@ -4428,7 +5474,7 @@ function StepEditor({
               </div>
               
               {/* Element Index for handling duplicates */}
-              {['click', 'input', 'select', 'hover'].includes(step.type) && (
+              {['click', 'input', 'fill', 'select', 'hover'].includes(step.type) && (
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
                     Element Index
@@ -4466,10 +5512,36 @@ function StepEditor({
               </Button>
             </CollapsibleContent>
           </Collapsible>
+          
+          {/* Automation Data (readonly when automated) */}
+          {isAutomated && (
+            <div className="mt-3 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="h-4 w-4 text-green-600" />
+                <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                  Automation Script Attached
+                </span>
+              </div>
+              <div className="text-xs text-green-600 dark:text-green-500 space-y-1">
+                {hasAutomation && (
+                  <>
+                    <div><span className="font-medium">Action:</span> {(step as any).qword}</div>
+                    <div><span className="font-medium">Args:</span> {(step as any).args?.join(', ')}</div>
+                  </>
+                )}
+                {hasSmartSelectors && (
+                  <div><span className="font-medium">Smart Selectors:</span> Available for auto-healing</div>
+                )}
+              </div>
+              <p className="text-[10px] text-green-600/70 mt-2">
+                ✓ You can edit the step name and expected result without affecting the automation script
+              </p>
+            </div>
+          )}
         </>
       )}
 
-      {step.type === 'input' && (
+      {(step.type === 'input' || step.type === 'fill') && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label>Value to Enter</Label>
@@ -4616,11 +5688,39 @@ function StepEditor({
               </Button>
             </div>
           ) : (
-            <Input
-              value={step.value || ''}
-              onChange={(e) => onUpdate({ value: e.target.value })}
-              placeholder="Text to enter"
-            />
+            <>
+              {/* Detect password fields by name */}
+              {(() => {
+                const isPasswordField = /password|pwd|^pass$|passwd/i.test(
+                  (step.name || '') + (step.target || '') + (step.selector || '')
+                );
+                const hasCorruptedValue = (step.value || '').includes('ã') || 
+                  (step.value || '').includes('Γ') || 
+                  /^[•●○◦]+$/.test(step.value || '');
+                
+                return (
+                  <div className="space-y-1">
+                    <Input
+                      type={isPasswordField ? 'password' : 'text'}
+                      value={step.value || ''}
+                      onChange={(e) => onUpdate({ value: e.target.value })}
+                      placeholder={isPasswordField ? "Enter password" : "Text to enter"}
+                      className={hasCorruptedValue ? 'border-amber-500' : ''}
+                    />
+                    {hasCorruptedValue && (
+                      <p className="text-xs text-amber-600">
+                        ⚠️ Password may have encoding issues. Please re-enter the correct value.
+                      </p>
+                    )}
+                    {isPasswordField && !hasCorruptedValue && (
+                      <p className="text-xs text-muted-foreground">
+                        🔒 Password field detected
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
           )}
           
           {/* Store As Variable (auto-shown for runtime random) */}
@@ -5101,103 +6201,191 @@ function StepEditor({
           </Label>
         </div>
         
-        {/* Assertion Type Selector */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">What do you want to verify?</Label>
-          <Select
-            value={step.assertion?.type || ''}
-            onValueChange={(value) => {
-              const suggestions = getAssertionSuggestions(step.type, value);
+        {/* Multiple Assertions Support */}
+        <div className="space-y-3">
+          {/* Current Assertions List */}
+          {(step.assertions || (step.assertion?.type ? [step.assertion] : [])).map((assertion, idx) => (
+            <div key={assertion.id || idx} className="p-2 bg-muted/50 rounded-lg border border-muted space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Assertion {idx + 1}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-red-500"
+                  onClick={() => {
+                    const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                    const newAssertions = assertions.filter((_, i) => i !== idx);
+                    const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                    onUpdate({ 
+                      assertions: newAssertions.length > 0 ? newAssertions : undefined, 
+                      assertion: newAssertions[0] || undefined,
+                      expectedResult: newExpectedResult || step.expectedResult
+                    });
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              
+              {/* Assertion Type */}
+              <Select
+                value={assertion.type || ''}
+                onValueChange={(value) => {
+                  const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                  const newAssertions = [...assertions];
+                  newAssertions[idx] = { ...assertion, type: value, enabled: true };
+                  const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                  onUpdate({ 
+                    assertions: newAssertions, 
+                    assertion: newAssertions[0],
+                    expectedResult: newExpectedResult
+                  });
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select verification..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="element_visible">✓ Element visible</SelectItem>
+                  <SelectItem value="element_hidden">✗ Element hidden</SelectItem>
+                  <SelectItem value="text_contains">📝 Page contains text</SelectItem>
+                  <SelectItem value="value_contains">📝 Input contains</SelectItem>
+                  <SelectItem value="value_equals">📝 Input equals</SelectItem>
+                  <SelectItem value="url_contains">🔗 URL contains</SelectItem>
+                  <SelectItem value="title_contains">📄 Title contains</SelectItem>
+                  <SelectItem value="toast_message">💬 Toast/Alert</SelectItem>
+                  <SelectItem value="count_equals">🔢 Element count</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Expected Value - Show for types that need it */}
+              {assertion.type && !['element_visible', 'element_hidden', 'element_enabled', 'element_disabled'].includes(assertion.type) && (
+                <Input
+                  value={assertion.expected || ''}
+                  onChange={(e) => {
+                    const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                    const newAssertions = [...assertions];
+                    newAssertions[idx] = { ...assertion, expected: e.target.value };
+                    const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                    onUpdate({ 
+                      assertions: newAssertions, 
+                      assertion: newAssertions[0],
+                      expectedResult: newExpectedResult
+                    });
+                  }}
+                  placeholder={
+                    assertion.type?.includes('value') ? (step.value || 'Expected value...') :
+                    assertion.type?.includes('url') ? '/success, /dashboard...' :
+                    assertion.type?.includes('title') ? 'Page title...' :
+                    assertion.type?.includes('toast') ? 'Success message...' :
+                    assertion.type?.includes('count') ? '1, 5, 10...' :
+                    'Expected text...'
+                  }
+                  className="h-8 text-xs"
+                />
+              )}
+              
+              {/* Target Element - Optional, defaults to step selector */}
+              {assertion.type && ['element_visible', 'element_hidden', 'value_contains', 'value_equals', 'text_equals', 'count_equals'].includes(assertion.type) && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={assertion.target || ''}
+                    onChange={(e) => {
+                      const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                      const newAssertions = [...assertions];
+                      newAssertions[idx] = { ...assertion, target: e.target.value };
+                      onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
+                    }}
+                    placeholder={step.selector ? `Uses: ${step.selector.slice(0, 25)}...` : 'CSS selector (optional)'}
+                    className="h-7 text-xs flex-1"
+                  />
+                  {step.selector && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                        const newAssertions = [...assertions];
+                        newAssertions[idx] = { ...assertion, target: step.selector };
+                        onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
+                      }}
+                    >
+                      Use Step
+                    </Button>
+                  )}
+                </div>
+              )}
+              
+              {/* Assertion Status Indicator */}
+              <div className="flex items-center gap-2 text-xs">
+                {assertion.enabled && assertion.type && (
+                  <>
+                    <span className="text-green-500">✓</span>
+                    <span className="text-muted-foreground truncate">
+                      {getAssertionDescription(assertion, step.selector)}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          
+          {/* Add Assertion Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-8 text-xs border-dashed"
+            onClick={() => {
+              const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+              const newAssertion: StepAssertion = {
+                id: `assert_${Date.now()}`,
+                enabled: true,
+                type: '',
+                target: step.selector || '',
+                expected: step.value || ''
+              };
               onUpdate({ 
-                assertion: { 
-                  ...step.assertion, 
-                  enabled: true, 
-                  type: value,
-                  target: step.assertion?.target || step.selector || '',
-                },
-                expectedResult: step.expectedResult || suggestions.expectedResult
+                assertions: [...assertions, newAssertion],
+                assertion: assertions[0] || newAssertion
               });
             }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select verification type..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="element_visible">✓ Element is visible</SelectItem>
-              <SelectItem value="element_hidden">✗ Element is hidden</SelectItem>
-              <SelectItem value="text_contains">📝 Text contains...</SelectItem>
-              <SelectItem value="text_equals">📝 Text equals exactly...</SelectItem>
-              <SelectItem value="url_contains">🔗 URL contains...</SelectItem>
-              <SelectItem value="url_equals">🔗 URL equals...</SelectItem>
-              <SelectItem value="value_equals">📋 Input value equals...</SelectItem>
-              <SelectItem value="element_enabled">✓ Element is enabled</SelectItem>
-              <SelectItem value="element_disabled">✗ Element is disabled</SelectItem>
-              <SelectItem value="count_equals">🔢 Element count equals...</SelectItem>
-              <SelectItem value="attribute_equals">🏷️ Attribute equals...</SelectItem>
-              <SelectItem value="page_title">📄 Page title...</SelectItem>
-              <SelectItem value="toast_message">💬 Toast/Alert message...</SelectItem>
-              <SelectItem value="custom">✏️ Custom verification</SelectItem>
-            </SelectContent>
-          </Select>
+            <Plus className="h-3 w-3 mr-1" />
+            Add Verification
+          </Button>
         </div>
         
-        {/* Dynamic fields based on assertion type */}
-        {step.assertion?.type && ['text_contains', 'text_equals', 'value_equals', 'url_contains', 'url_equals', 'count_equals', 'page_title', 'toast_message', 'attribute_equals'].includes(step.assertion.type) && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              {step.assertion.type === 'count_equals' ? 'Expected count:' : 
-               step.assertion.type.includes('url') ? 'Expected URL value:' :
-               step.assertion.type === 'page_title' ? 'Expected page title:' :
-               step.assertion.type === 'toast_message' ? 'Expected message:' :
-               'Expected value:'}
-            </Label>
-            <Input
-              value={step.assertion?.expected || ''}
-              onChange={(e) => {
-                const newAssertion = { ...step.assertion, expected: e.target.value };
-                onUpdate({ 
-                  assertion: newAssertion,
-                  expectedResult: generateExpectedResultText(step.assertion?.type || '', e.target.value, step.target)
-                });
-              }}
-              placeholder={
-                step.assertion.type === 'text_contains' ? 'Text to look for...' :
-                step.assertion.type === 'url_contains' ? '/dashboard, /success, etc.' :
-                step.assertion.type === 'toast_message' ? 'Success! Account created' :
-                'Expected value...'
-              }
-            />
+        {/* Quick Suggestions */}
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Quick Add</Label>
+          <div className="flex flex-wrap gap-1">
+            {getQuickSuggestions(step.type).slice(0, 4).map((suggestion, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                  const newAssertion: StepAssertion = {
+                    id: `assert_${Date.now()}`,
+                    enabled: true,
+                    type: suggestion.type,
+                    expected: suggestion.expected || step.value || '',
+                    target: step.selector || ''
+                  };
+                  const newAssertions = [...assertions, newAssertion];
+                  const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                  onUpdate({
+                    assertions: newAssertions,
+                    assertion: newAssertions[0],
+                    expectedResult: newExpectedResult
+                  });
+                }}
+                className="text-[10px] px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded transition-colors"
+              >
+                + {suggestion.label}
+              </button>
+            ))}
           </div>
-        )}
-        
-        {/* Target element for certain assertions */}
-        {step.assertion?.type && ['element_visible', 'element_hidden', 'text_contains', 'text_equals', 'count_equals', 'attribute_equals'].includes(step.assertion.type) && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Target element (optional):</Label>
-            <Input
-              value={step.assertion?.target || ''}
-              onChange={(e) => onUpdate({ assertion: { ...step.assertion, target: e.target.value } })}
-              placeholder={step.selector || 'Leave blank to use step selector'}
-            />
-          </div>
-        )}
-        
-        {/* Quick suggestion chips based on step type */}
-        <div className="flex flex-wrap gap-1">
-          {getQuickSuggestions(step.type).map((suggestion, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                onUpdate({
-                  assertion: { enabled: true, type: suggestion.type, expected: suggestion.expected },
-                  expectedResult: suggestion.text
-                });
-              }}
-              className="text-xs px-2 py-1 bg-muted hover:bg-muted/80 rounded-full transition-colors"
-            >
-              💡 {suggestion.label}
-            </button>
-          ))}
         </div>
         
         {/* Free-form expected result */}
@@ -5206,7 +6394,7 @@ function StepEditor({
           <Textarea
             value={step.expectedResult || ''}
             onChange={(e) => onUpdate({ expectedResult: e.target.value })}
-            placeholder="Describe what should happen after this step..."
+            placeholder="Auto-generated from assertions above, or type custom..."
             rows={2}
             className="text-sm"
           />
@@ -5612,7 +6800,7 @@ def run_boundary_test(page, input_selector, min_val, max_val, submit_selector=No
             page.locator(input_selector).fill(str(value))
             # Submit if selector provided
             if submit_selector:
-                page.locator(submit_selector).click()
+                page.locator(submit_selector).click(force=True, no_wait_after=True, timeout=10000)
                 page.wait_for_timeout(500)
             # Check for error
             has_error = False
@@ -5629,7 +6817,7 @@ def run_boundary_test(page, input_selector, min_val, max_val, submit_selector=No
 def store_variable(name, value):
     """Store a value for later use"""
     _variables[name] = value
-    print(f"📦 Stored variable '{name}' = {value}")
+    print(f"[STORED] Variable '{name}' = {value}")
     return value
 
 def get_variable(name, default=None):
@@ -5639,12 +6827,204 @@ def get_variable(name, default=None):
 def test_${safeName}():
     """${tc.description || tc.name}"""
     global test_results
+
+    # Use persistent browser context to remember MFA/login sessions
+    user_data_dir = os.path.join(os.environ.get('TEMP', '/tmp'), 'playwright_salesforce_session')
+    os.makedirs(user_data_dir, exist_ok=True)
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        page = browser.new_page()
+        # Launch with persistent context - remembers cookies, localStorage, MFA verification
+        context = p.chromium.launch_persistent_context(
+            user_data_dir,
+            headless=False,
+            viewport={"width": 1280, "height": 720}
+        )
+        page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(30000)  # 30 second timeout
+
+        # ==================== SALESFORCE AUTOMATION HELPER ====================
+        class SalesforceHelper:
+            """Comprehensive Salesforce Lightning automation helper."""
+            ELEMENT_SELECTORS = {
+                'app_launcher_button': ['div.slds-icon-waffle', 'button[class*="appLauncher"]', '.slds-context-bar__icon-action'],
+                'app_launcher_search': [
+                    'one-app-launcher-menu input[type="search"]', 'one-app-launcher-menu input[placeholder*="Search"]',
+                    'input[placeholder*="Search apps and items"]', 'input[placeholder*="Search Apps"]',
+                    '.slds-modal input[type="search"]', 'input.slds-input[placeholder*="Search"]', 'input[type="search"]',
+                ],
+                'app_launcher_modal': ['one-app-launcher-menu', 'section.slds-modal', '[role="dialog"]'],
+                'spinner': ['lightning-spinner', '.slds-spinner_container', '.slds-spinner', '[aria-busy="true"]'],
+                'record_tab': [
+                    'a[data-tab-value="detailTab"]', 'a[data-label="Details"]',
+                    '[role="tab"]', 'a.slds-tabs_default__link', 
+                    'li.slds-tabs_default__item a', 'lightning-tab-bar a',
+                ],
+            }
+            def __init__(self, page):
+                self.page = page
+            def wait_for_ready(self, timeout=15000):
+                try: self.page.wait_for_load_state("domcontentloaded", timeout=timeout)
+                except: pass
+                for spinner in self.ELEMENT_SELECTORS['spinner']:
+                    try: self.page.locator(spinner).wait_for(state="hidden", timeout=3000)
+                    except: pass
+                self.page.wait_for_timeout(300)
+            def find(self, desc, selectors=None):
+                desc_lower = desc.lower()
+                sels = list(selectors or [])
+                if 'app launcher' in desc_lower or 'waffle' in desc_lower:
+                    sels.extend(self.ELEMENT_SELECTORS['app_launcher_button'])
+                if 'search' in desc_lower:
+                    sels.extend(self.ELEMENT_SELECTORS['app_launcher_search'])
+                # Salesforce record page tabs (Details, Related, Activity, etc.)
+                if desc_lower in ['details', 'related', 'activity', 'news', 'chatter'] or 'tab' in desc_lower:
+                    sels.extend(self.ELEMENT_SELECTORS['record_tab'])
+                    sels.extend([
+                        f'a[data-label="{desc}"]', f'a[data-tab-name="{desc}"]',
+                        f'[role="tab"][aria-label*="{desc}"]', f'a.slds-tabs_default__link:has-text("{desc}")',
+                        f'li.slds-tabs_default__item:has-text("{desc}") a',
+                    ])
+                sels.extend([f'text="{desc}"', f'[title="{desc}"]', f'[aria-label="{desc}"]', f'[placeholder*="{desc}"]'])
+                for retry in range(5):
+                    if retry > 0: self.page.wait_for_timeout(1000 * retry)
+                    for sel in sels:
+                        try:
+                            loc = self.page.locator(sel)
+                            if loc.count() > 0:
+                                loc.first.wait_for(state="visible", timeout=3000)
+                                return loc.first
+                        except: continue
+                return None
+            def click(self, desc, selectors=None):
+                el = self.find(desc, selectors)
+                if not el: raise Exception(f"Element not found: {desc}")
+                for strat in [lambda: el.click(force=True, no_wait_after=True, timeout=10000), lambda: el.dispatch_event('click')]:
+                    try:
+                        strat()
+                        self.wait_for_ready()
+                        return True
+                    except: continue
+                raise Exception(f"Click failed: {desc}")
+            def fill(self, desc, value, selectors=None):
+                el = self.find(desc, selectors)
+                if not el: raise Exception(f"Input not found: {desc}")
+                strategies = [
+                    lambda: (el.click(timeout=3000), self.page.wait_for_timeout(200), el.fill(value, timeout=5000)),
+                    lambda: (el.click(timeout=3000), self.page.wait_for_timeout(200), el.type(value, delay=30)),
+                    lambda: (el.click(click_count=3, timeout=3000), self.page.keyboard.type(value)),
+                    lambda: (el.focus(), self.page.keyboard.press('Control+a'), self.page.keyboard.type(value)),
+                ]
+                for strat in strategies:
+                    try:
+                        strat()
+                        return True
+                    except: continue
+                raise Exception(f"Fill failed: {desc}")
+            def open_app_launcher(self):
+                result = self.click("App Launcher")
+                # Wait for modal to appear after clicking waffle icon
+                self.page.wait_for_timeout(1500)  # Initial wait
+                for sel in self.ELEMENT_SELECTORS['app_launcher_modal']:
+                    try:
+                        self.page.locator(sel).first.wait_for(state="visible", timeout=5000)
+                        break
+                    except: continue
+                return result
+            def search_app_launcher(self, text):
+                # ROBUST: Check if modal is open, if not click waffle icon again
+                def is_modal_visible():
+                    for sel in self.ELEMENT_SELECTORS['app_launcher_modal']:
+                        try:
+                            if self.page.locator(sel).first.is_visible(timeout=1000):
+                                return True
+                        except: continue
+                    return False
+                
+                # If modal not visible, click waffle icon to open it
+                if not is_modal_visible():
+                    print("   [+] App Launcher modal not visible, clicking waffle icon...")
+                    for waffle_sel in self.ELEMENT_SELECTORS['app_launcher_button']:
+                        try:
+                            waffle = self.page.locator(waffle_sel)
+                            if waffle.count() > 0:
+                                waffle.first.click(force=True)
+                                self.page.wait_for_timeout(2000)
+                                break
+                        except: continue
+                
+                # Wait for modal with longer timeout
+                for attempt in range(5):
+                    if is_modal_visible(): break
+                    self.page.wait_for_timeout(1000)
+                
+                self.page.wait_for_timeout(1000)  # Extra wait for search input
+                
+                # Extensive list of search selectors
+                search_selectors = [
+                    'one-app-launcher-menu input[type="search"]',
+                    'one-app-launcher-menu input',
+                    'input[placeholder*="Search apps"]',
+                    'input[placeholder*="Search Apps"]',
+                    'input[placeholder*="Search items"]',
+                    '.slds-modal input[type="search"]',
+                    'input.slds-input[placeholder*="Search"]',
+                    '[role="searchbox"]',
+                    'input[type="search"]:visible',
+                    'one-app-launcher-search-bar input',
+                    'lightning-input input[type="search"]',
+                ] + self.ELEMENT_SELECTORS['app_launcher_search']
+                
+                for attempt in range(5):
+                    print(f"   [+] Attempt {attempt + 1} to find search input...")
+                    for sel in search_selectors:
+                        try:
+                            el = self.page.locator(sel)
+                            count = el.count()
+                            if count > 0:
+                                print(f"   [+] Found {count} element(s) with: {sel[:50]}")
+                                target = el.first
+                                target.wait_for(state="visible", timeout=2000)
+                                # Try multiple fill strategies
+                                for strategy in ['click_fill', 'click_type', 'focus_type', 'keyboard']:
+                                    try:
+                                        if strategy == 'click_fill':
+                                            target.click(timeout=2000)
+                                            self.page.wait_for_timeout(300)
+                                            target.fill(text, timeout=3000)
+                                        elif strategy == 'click_type':
+                                            target.click(timeout=2000)
+                                            self.page.wait_for_timeout(300)
+                                            target.type(text, delay=50)
+                                        elif strategy == 'focus_type':
+                                            target.focus()
+                                            self.page.keyboard.type(text)
+                                        elif strategy == 'keyboard':
+                                            target.click(timeout=2000)
+                                            self.page.keyboard.press('Control+a')
+                                            self.page.keyboard.type(text)
+                                        print(f"   [+] Filled search with strategy: {strategy}")
+                                        return True
+                                    except Exception as e:
+                                        print(f"   Strategy {strategy} failed: {str(e)[:30]}")
+                                        continue
+                        except: continue
+                    self.page.wait_for_timeout(1500)
+                raise Exception(f"Could not fill App Launcher search after retries")
+            def select_app(self, name):
+                self.page.wait_for_timeout(1000)
+                for sel in [f'one-app-launcher-menu-item a:has-text("{name}")', f'text="{name}"']:
+                    try:
+                        app = self.page.locator(sel).first
+                        if app.is_visible(timeout=3000):
+                            app.click()
+                            self.wait_for_ready()
+                            return True
+                    except: continue
+                raise Exception(f"App not found: {name}")
         
+        sf = SalesforceHelper(page)  # Create Salesforce helper instance
+        # ==================== END SALESFORCE HELPER ====================
+
         try:
 `;
 
@@ -5652,17 +7032,17 @@ def test_${safeName}():
   if (baseUrl && !hasNavigateFirst) {
     code += `
             # Initial Navigation (from Base URL)
-            print("🌐 Navigating to base URL: ${baseUrl}")
+            print("[NAV] Navigating to base URL: ${baseUrl}")
             page.goto("${baseUrl}")
             page.wait_for_load_state("domcontentloaded")
-            print("✅ Page loaded successfully")
+            print("[OK] Page loaded successfully")
 `;
   } else if (!hasNavigateFirst && !baseUrl) {
     // No navigate step and no baseUrl - add a warning
     code += `
-            # ⚠️ WARNING: No initial URL specified!
+            # [!] WARNING: No initial URL specified!
             # Please add a Navigate step or set Base URL in test settings
-            print("⚠️ WARNING: No initial URL - browser will open to blank page")
+            print("[WARN] No initial URL - browser will open to blank page")
             print("   Add a Navigate step or set Base URL in Settings")
 `;
   }
@@ -5698,9 +7078,42 @@ def test_${safeName}():
         code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
         break;
       case 'click': {
+        // CHECK: Is this actually a HOVER disguised as a click?
+        // If the step name contains "Hover" at start or after "Click:", treat it as a hover (skip)
+        const stepNameRaw = step.name || '';
+        const isActuallyHover = /^(?:\[Precond\]\s*)?(?:Click:\s*)?Hover\s/i.test(stepNameRaw);
+        
+        if (isActuallyHover) {
+          // This is a hover recorded as click - make it non-blocking
+          const hoverTarget = stepNameRaw.replace(/^\[Precond\]\s*/i, '').replace(/^Click:\s*/i, '').replace(/^Hover\s*/i, '').trim();
+          const safeHoverTarget = hoverTarget.replace(/"/g, '\\"').replace(/'/g, "\\'").replace(/[^\x00-\x7F]/g, '');
+          code += `${indent}# HOVER (non-critical): ${safeHoverTarget}\n`;
+          code += `${indent}try:\n`;
+          code += `${indent}    print(f"[SKIP] Hover '${safeHoverTarget}' - hovers are non-critical, skipping")\n`;
+          code += `${indent}except:\n`;
+          code += `${indent}    pass\n`;
+          break;
+        }
+        
         // Generate selectors with fallbacks - SAME LOGIC AS SUGGEST FEATURE
         const stepNameClean = step.name.replace(/^\[Precond\]\s*/i, '').replace(/^Click:\s*/i, '').trim();
         const elementIndex = (step as any).elementIndex;
+        const stepNameLowerClick = stepNameClean.toLowerCase();
+        const selectorStrClick = JSON.stringify(step.selectorObj || step.selector || {}).toLowerCase();
+        
+        // SALESFORCE: Detect App Launcher WAFFLE ICON click ONLY (not navigation items containing "App Launcher")
+        // Must match waffle icon specifically, not text like "App LauncherDeveloper Edition"
+        const isWaffleIconClick = selectorStrClick.includes('waffle') || selectorStrClick.includes('slds-icon-waffle') ||
+                                  selectorStrClick.includes('appLauncher') ||
+                                  (stepNameLowerClick === 'app launcher' || stepNameLowerClick === 'click app launcher' ||
+                                   stepNameLowerClick === 'click "app launcher"');
+        
+        if (isWaffleIconClick) {
+          code += `${indent}# SALESFORCE: Use dedicated App Launcher click (waffle icon)\n`;
+          code += `${indent}sf.open_app_launcher()\n`;
+          code += `${indent}print(f"   [+] Clicked App Launcher (via Salesforce Helper)")\n`;
+          break; // Skip the normal click handling - sf helper handles everything
+        }
         
         // Build list of selectors to try (same order as Suggest)
         const selectorsToTry: string[] = [];
@@ -5727,34 +7140,65 @@ def test_${safeName}():
             selectorsToTry.push(`page.${convertSelector(selectorObj.selector)}`);
           }
         }
-        // 4. Text from selectorObj
+        // 4. Text from selectorObj (escape newlines and special chars)
         if (step.selectorObj?.text) {
-          selectorsToTry.push(`page.get_by_text("${step.selectorObj.text.replace(/"/g, '\\"')}", exact=True)`);
-          selectorsToTry.push(`page.get_by_text("${step.selectorObj.text.replace(/"/g, '\\"')}")`);
+          const escapedText = escapeForPython(step.selectorObj.text);
+          selectorsToTry.push(`page.get_by_text("${escapedText}", exact=True)`);
+          selectorsToTry.push(`page.get_by_text("${escapedText}")`);
         }
         // 5. Target-based selector
         if (step.target && step.target.trim()) {
-          selectorsToTry.push(`page.get_by_text("${step.target.replace(/"/g, '\\"')}", exact=True)`);
+          const escapedTarget = escapeForPython(step.target);
+          selectorsToTry.push(`page.get_by_text("${escapedTarget}", exact=True)`);
         }
-        // 6. Step name-based selector  
+        // 6. Step name-based selector
         if (stepNameClean) {
-          selectorsToTry.push(`page.get_by_text("${stepNameClean.replace(/"/g, '\\"')}")`);
-          selectorsToTry.push(`page.get_by_role("button", name="${stepNameClean.replace(/"/g, '\\"')}")`);
-          selectorsToTry.push(`page.get_by_role("link", name="${stepNameClean.replace(/"/g, '\\"')}")`);
+          const escapedName = escapeForPython(stepNameClean);
+          selectorsToTry.push(`page.get_by_text("${escapedName}")`);
+          selectorsToTry.push(`page.get_by_role("button", name="${escapedName}")`);
+          selectorsToTry.push(`page.get_by_role("link", name="${escapedName}")`);
         }
-        
+        // 7. Title/aria-label based selectors (CRITICAL for Salesforce App Launcher)
+        if (step.selectorObj?.ariaLabel) {
+          const escapedAriaLabel = escapeForPython(step.selectorObj.ariaLabel);
+          selectorsToTry.push(`page.locator('[aria-label="${escapedAriaLabel}"]')`);
+        }
+        // Also try title selector based on step name (common pattern)
+        if (stepNameClean) {
+          const cleanName = stepNameClean.replace(/^Click:\s*/i, '').replace(/^Click\s*/i, '').replace(/^Hover:?\s*/i, '').replace(/"/g, '').trim();
+          if (cleanName && cleanName.length > 0 && cleanName.length < 50) {
+            const escapedTitle = escapeForPython(cleanName);
+            selectorsToTry.push(`page.locator('[title="${escapedTitle}"]')`);
+            selectorsToTry.push(`page.locator('button[title="${escapedTitle}"]')`);
+            
+            // 8. SALESFORCE: Record page tabs (Details, Related, Activity, News, etc.)
+            const tabNames = ['details', 'related', 'activity', 'news', 'chatter', 'files', 'history'];
+            if (tabNames.includes(cleanName.toLowerCase())) {
+              selectorsToTry.push(`page.locator('a[data-label="${cleanName}"]')`);
+              selectorsToTry.push(`page.locator('a[data-tab-name="${cleanName}"]')`);
+              selectorsToTry.push(`page.locator('a[data-tab-value="${cleanName.toLowerCase()}Tab"]')`);
+              selectorsToTry.push(`page.locator('[role="tab"]:has-text("${cleanName}")')`);
+              selectorsToTry.push(`page.locator('a.slds-tabs_default__link:has-text("${cleanName}")')`);
+              selectorsToTry.push(`page.locator('li.slds-tabs_default__item a:has-text("${cleanName}")')`);
+              selectorsToTry.push(`page.locator('lightning-tab-bar a:has-text("${cleanName}")')`);
+              selectorsToTry.push(`page.get_by_role("tab", name="${cleanName}")`);
+              selectorsToTry.push(`page.locator('one-record-home-flexipage2 a:has-text("${cleanName}")')`);
+            }
+          }
+        }
+
         // Deduplicate selectors and ensure at least one exists
         const uniqueSelectors = [...new Set(selectorsToTry)].filter(s => s && s.length > 0);
-        
+
         // Fallback: if no selectors found, use step name as text selector
         if (uniqueSelectors.length === 0 && stepNameClean) {
-          uniqueSelectors.push(`page.get_by_text("${stepNameClean.replace(/"/g, '\\"')}")`);
+          uniqueSelectors.push(`page.get_by_text("${escapeForPython(stepNameClean)}")`);
         }
         
         code += `${indent}# Click element with fallback selectors (same logic as Suggest)\n`;
-        // Escape quotes in step name for Python f-string
-        const stepNameForPython = stepNameClean.replace(/"/g, '\\"').replace(/'/g, "\\'");
-        code += `${indent}print(f"🔍 Looking for: ${stepNameForPython}")\n`;
+        // Escape quotes in step name for Python f-string AND remove non-ASCII chars (Windows cp1252 compatibility)
+        const stepNameForPython = stepNameClean.replace(/"/g, '\\"').replace(/'/g, "\\'").replace(/[^\x00-\x7F]/g, '');
+        code += `${indent}print(f"[FIND] Looking for: ${stepNameForPython}")\n`;
         code += `${indent}_selectors_to_try = [\n`;
         uniqueSelectors.forEach((sel, i) => {
           // Escape selector string properly for Python
@@ -5763,51 +7207,105 @@ def test_${safeName}():
         });
         code += `${indent}]\n`;
         code += `${indent}_element_found = False\n`;
-        code += `${indent}for _selector_str, _priority in _selectors_to_try:\n`;
-        code += `${indent}    try:\n`;
-        code += `${indent}        _el = eval(_selector_str)\n`;
-        code += `${indent}        _count = _el.count()\n`;
-        code += `${indent}        if _count > 0:\n`;
-        code += `${indent}            print(f"   ✓ Found {_count} element(s) with selector #{_priority}")\n`;
-        if (elementIndex !== undefined && elementIndex !== null) {
-          code += `${indent}            _el.nth(${elementIndex}).click()\n`;
-        } else {
-          code += `${indent}            if _count > 1:\n`;
-          code += `${indent}                print(f"   ⚠️ Multiple matches, clicking first visible")\n`;
-          code += `${indent}                for i in range(_count):\n`;
-          code += `${indent}                    try:\n`;
-          code += `${indent}                        if _el.nth(i).is_visible():\n`;
-          code += `${indent}                            _el.nth(i).click()\n`;
-          code += `${indent}                            break\n`;
-          code += `${indent}                    except:\n`;
-          code += `${indent}                        continue\n`;
-          code += `${indent}                else:\n`;
-          code += `${indent}                    _el.first.click()\n`;
-          code += `${indent}            else:\n`;
-          code += `${indent}                _el.click()\n`;
-        }
-        code += `${indent}            _element_found = True\n`;
-        code += `${indent}            break\n`;
-        code += `${indent}    except Exception as _e:\n`;
-        code += `${indent}        print(f"   Selector #{_priority} failed: {str(_e)[:50]}")\n`;
-        code += `${indent}        continue\n`;
-        code += `${indent}if not _element_found:\n`;
-        code += `${indent}    # Wait and retry with primary selector\n`;
-        code += `${indent}    print("   Waiting for element to appear...")\n`;
-        code += `${indent}    page.wait_for_timeout(2000)\n`;
-        code += `${indent}    for _selector_str, _priority in _selectors_to_try[:3]:  # Retry top 3\n`;
+        // ROBUST: Progressive retry with increasing wait times for dynamic elements (modals, SPAs)
+        code += `${indent}_max_retries = 3\n`;
+        code += `${indent}_retry_delays = [0, 2000, 4000]  # Progressive wait times\n`;
+        code += `${indent}for _retry in range(_max_retries):\n`;
+        code += `${indent}    if _retry > 0:\n`;
+        code += `${indent}        print(f"   [RETRY {_retry}] Waiting {_retry_delays[_retry]}ms for element...")\n`;
+        code += `${indent}        page.wait_for_timeout(_retry_delays[_retry])\n`;
+        code += `${indent}    for _selector_str, _priority in _selectors_to_try:\n`;
         code += `${indent}        try:\n`;
+        code += `${indent}            print(f"   Trying selector #{_priority}: {_selector_str[:60]}...")\n`;
         code += `${indent}            _el = eval(_selector_str)\n`;
-        code += `${indent}            if _el.count() > 0:\n`;
-        code += `${indent}                _el.first.click()\n`;
+        code += `${indent}            _count = _el.count()\n`;
+        code += `${indent}            if _count > 0:\n`;
+        code += `${indent}                # ROBUST: Wait for element to be visible and scroll into view\n`;
+        code += `${indent}                try:\n`;
+        code += `${indent}                    _el.first.wait_for(state="visible", timeout=5000)\n`;
+        code += `${indent}                except:\n`;
+        code += `${indent}                    pass  # Continue even if wait times out\n`;
+        code += `${indent}                try:\n`;
+        code += `${indent}                    _el.first.scroll_into_view_if_needed()\n`;
+        code += `${indent}                except:\n`;
+        code += `${indent}                    pass  # Continue even if scroll fails\n`;
+        code += `${indent}                print(f"   [+] Found {_count} element(s) with selector #{_priority}")\n`;
+        if (elementIndex !== undefined && elementIndex !== null) {
+          code += `${indent}                # Click with force and no_wait_after to bypass actionability and navigation timeout\n`;
+          code += `${indent}                _el.nth(${elementIndex}).click(force=True, no_wait_after=True, timeout=10000)\n`;
+        } else {
+        code += `${indent}                if _count > 1:\n`;
+        code += `${indent}                    print(f"   [WARN] Multiple matches, clicking first visible")\n`;
+        code += `${indent}                    _clicked = False\n`;
+        code += `${indent}                    for i in range(_count):\n`;
+        code += `${indent}                        try:\n`;
+        code += `${indent}                            if _el.nth(i).is_visible():\n`;
+        code += `${indent}                                _el.nth(i).scroll_into_view_if_needed()\n`;
+        code += `${indent}                                _el.nth(i).click(force=True, no_wait_after=True, timeout=10000)\n`;
+        code += `${indent}                                _clicked = True\n`;
+        code += `${indent}                                break\n`;
+        code += `${indent}                        except:\n`;
+        code += `${indent}                            continue\n`;
+        code += `${indent}                    if not _clicked:\n`;
+        code += `${indent}                        _el.first.scroll_into_view_if_needed()\n`;
+        code += `${indent}                        _el.first.click(force=True, no_wait_after=True, timeout=10000)\n`;
+        code += `${indent}                else:\n`;
+        code += `${indent}                    _el.scroll_into_view_if_needed()\n`;
+        code += `${indent}                    _el.click(force=True, no_wait_after=True, timeout=10000)\n`;
+        }
         code += `${indent}                _element_found = True\n`;
-        code += `${indent}                print(f"   ✓ Found after wait with selector #{_priority}")\n`;
         code += `${indent}                break\n`;
-        code += `${indent}        except:\n`;
+        code += `${indent}            else:\n`;
+        code += `${indent}                print(f"   Selector #{_priority}: 0 elements found")\n`;
+        code += `${indent}        except Exception as _e:\n`;
+        code += `${indent}            print(f"   Selector #{_priority} click failed: {str(_e)[:60]}")\n`;
         code += `${indent}            continue\n`;
+        code += `${indent}    if _element_found:\n`;
+        code += `${indent}        break\n`;
         code += `${indent}if not _element_found:\n`;
-        code += `${indent}    print("❌ Element not found with any selector")\n`;
+        code += `${indent}    print("[FAIL] Element not found with any selector after retries")\n`;
         code += `${indent}    raise Exception("Click failed: No elements found matching any selector")\n`;
+        
+        // CRITICAL: Add extra wait after login button clicks (Salesforce Lightning needs time to load)
+        // Detect login buttons by: name, target, selector attributes, or if it's a submit-type button after password field
+        const stepNameLower = (step.name || '').toLowerCase();
+        const stepTargetLower = (step.target || '').toLowerCase();
+        const selectorLower = (step.selector || '').toLowerCase();
+        const selectorObjStr = JSON.stringify(step.selectorObj || {}).toLowerCase();
+        
+        const isLoginButton = 
+          stepNameLower.includes('log in') || stepNameLower.includes('login') || stepNameLower.includes('sign in') ||
+          stepTargetLower.includes('log in') || stepTargetLower.includes('login') || stepTargetLower.includes('sign in') ||
+          selectorLower.includes('login') || selectorLower.includes('submit') ||
+          selectorObjStr.includes('login') || selectorObjStr.includes('name="login"') ||
+          // Also detect by context: input[type=submit] button right after password field
+          (step.selectorObj?.name?.toLowerCase() === 'login');
+          
+        if (isLoginButton) {
+          code += `${indent}# Wait for post-login page load (Salesforce Lightning needs extra time)\n`;
+          code += `${indent}# Note: Skip networkidle wait - Salesforce makes continuous API calls\n`;
+          code += `${indent}try:\n`;
+          code += `${indent}    page.wait_for_load_state("domcontentloaded", timeout=15000)\n`;
+          code += `${indent}except:\n`;
+          code += `${indent}    pass  # Continue even if page is still loading\n`;
+          code += `${indent}page.wait_for_timeout(8000)  # Fixed wait for Lightning Experience to fully load\n`;
+        }
+        
+        // CRITICAL: Add wait for App Launcher modal after clicking waffle icon
+        const isAppLauncher = 
+          stepNameLower.includes('app launcher') || stepNameLower.includes('applauncher') ||
+          stepTargetLower.includes('app launcher') || stepTargetLower.includes('applauncher') ||
+          selectorLower.includes('waffle') || selectorLower.includes('app-launcher') ||
+          selectorObjStr.includes('waffle') || selectorObjStr.includes('slds-icon-waffle');
+          
+        if (isAppLauncher) {
+          code += `${indent}# Wait for App Launcher modal to open\n`;
+          code += `${indent}try:\n`;
+          code += `${indent}    page.locator('div.slds-modal__content, div.appLauncherMenu, one-app-launcher-menu').wait_for(state="visible", timeout=10000)\n`;
+          code += `${indent}except:\n`;
+          code += `${indent}    pass  # Modal might already be visible or use different selector\n`;
+          code += `${indent}page.wait_for_timeout(1500)  # Extra wait for search input to be interactive\n`;
+        }
         break;
       }
       case 'input': {
@@ -5836,16 +7334,36 @@ def test_${safeName}():
           code += `${indent}_runtime_value = generate_runtime_random("${runtimeType}", ${constraintsJson.replace(/'/g, '"')}, "${fieldHintEscaped}")\n`;
           if (storeAsVar) {
             code += `${indent}_variables["${storeAsVar}"] = _runtime_value\n`;
-            code += `${indent}print(f"   💾 Stored as '${storeAsVar}': {_runtime_value}")\n`;
+            code += `${indent}print(f"   [SAVED] Stored as '${storeAsVar}': {_runtime_value}")\n`;
           }
         }
         
         // Build list of selectors to try (same order as Suggest)
         const inputSelectorsToTry: string[] = [];
         
-        // 1. Primary selector from selectorObj (same as Suggest)
+        // Helper: Ensure playwright locator uses proper CSS selector format
+        const ensureProperSelector = (playwright: string): string => {
+          if (!playwright) return '';
+          console.log('[ensureProperSelector] Input:', playwright);
+          // Extract inner selector from locator('...')
+          const match = playwright.match(/^locator\(['"](.+)['"]\)$/);
+          if (match) {
+            const inner = match[1];
+            console.log('[ensureProperSelector] Inner selector:', inner);
+            // Check if it's a simple name without CSS prefix - convert to [name="..."]
+            if (/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(inner) && !inner.includes(' ')) {
+              const result = `locator('[name="${inner}"]')`;
+              console.log('[ensureProperSelector] Converted to:', result);
+              return result;
+            }
+          }
+          console.log('[ensureProperSelector] No conversion needed, returning:', playwright);
+          return playwright;
+        };
+        
+        // 1. Primary selector from selectorObj (same as Suggest) - ENSURE PROPER FORMAT
         if (step.selectorObj?.playwright) {
-          inputSelectorsToTry.push(`page.${step.selectorObj.playwright}`);
+          inputSelectorsToTry.push(`page.${ensureProperSelector(step.selectorObj.playwright)}`);
         }
         // 2. Fallbacks from selectorObj (same as Suggest)
         if (step.selectorObj?.fallbacks && Array.isArray(step.selectorObj.fallbacks)) {
@@ -5865,16 +7383,44 @@ def test_${safeName}():
             inputSelectorsToTry.push(`page.${convertSelector(selectorObj.selector)}`);
           }
         }
-        // 4. Label-based selectors
+        // 4. Label-based selectors (escape newlines and special chars)
         if (step.selectorObj?.text || step.target || inputNameClean) {
-          const labelText = step.selectorObj?.text || step.target || inputNameClean;
-          inputSelectorsToTry.push(`page.get_by_label("${labelText.replace(/"/g, '\\"')}")`);
-          inputSelectorsToTry.push(`page.get_by_placeholder("${labelText.replace(/"/g, '\\"')}")`);
-          inputSelectorsToTry.push(`page.get_by_label("${labelText.replace(/"/g, '\\"')}", exact=False)`);
+          const labelText = escapeForPython(step.selectorObj?.text || step.target || inputNameClean);
+          inputSelectorsToTry.push(`page.get_by_label("${labelText}")`);
+          inputSelectorsToTry.push(`page.get_by_placeholder("${labelText}")`);
+          inputSelectorsToTry.push(`page.get_by_label("${labelText}", exact=False)`);
         }
         // 5. Name attribute
         if (step.selectorObj?.name) {
           inputSelectorsToTry.push(`page.locator('[name="${step.selectorObj.name}"]')`);
+        }
+        
+        // 6. SALESFORCE-SPECIFIC: Add robust fallbacks for common Salesforce UI patterns
+        const inputNameLower = inputNameClean.toLowerCase();
+        
+        // App Launcher search box
+        if (inputNameLower.includes('search apps') || inputNameLower.includes('search items') || inputNameLower.includes('app launcher')) {
+          inputSelectorsToTry.push(`page.locator('input[placeholder*="Search apps"]')`);
+          inputSelectorsToTry.push(`page.locator('input[placeholder*="Search Apps"]')`);
+          inputSelectorsToTry.push(`page.locator('one-app-launcher-menu input[type="search"]')`);
+          inputSelectorsToTry.push(`page.locator('.slds-modal input[type="search"]')`);
+          inputSelectorsToTry.push(`page.locator('input.slds-input[placeholder*="Search"]')`);
+          inputSelectorsToTry.push(`page.get_by_role("searchbox")`);
+          inputSelectorsToTry.push(`page.locator('[data-aura-class*="appLauncher"] input')`);
+        }
+        
+        // Global search box
+        if (inputNameLower.includes('search salesforce') || inputNameLower.includes('global search')) {
+          inputSelectorsToTry.push(`page.locator('input[placeholder*="Search Salesforce"]')`);
+          inputSelectorsToTry.push(`page.locator('button.slds-button[aria-label*="Search"]')`);
+          inputSelectorsToTry.push(`page.get_by_role("combobox", name=re.compile("search", re.I))`);
+        }
+        
+        // Generic search fallback
+        if (inputNameLower.includes('search')) {
+          inputSelectorsToTry.push(`page.get_by_role("searchbox")`);
+          inputSelectorsToTry.push(`page.locator('input[type="search"]')`);
+          inputSelectorsToTry.push(`page.locator('input[placeholder*="Search"]')`);
         }
         
         // Deduplicate selectors and ensure at least one exists
@@ -5882,17 +7428,37 @@ def test_${safeName}():
         
         // Fallback: if no selectors found, use step name as label selector
         if (uniqueInputSelectors.length === 0 && inputNameClean) {
-          uniqueInputSelectors.push(`page.get_by_label("${inputNameClean.replace(/"/g, '\\"')}")`);
+          uniqueInputSelectors.push(`page.get_by_label("${escapeForPython(inputNameClean)}")`);
         }
         
         // Determine the value to use (runtime or static)
         const valueExpr = isRuntimeRandom ? '_runtime_value' : `"${escapedInputValue}"`;
         const valuePreview = isRuntimeRandom ? '{_runtime_value}' : (escapedInputValue.slice(0, 20) + (inputValue.length > 20 ? '...' : ''));
         
+        // SALESFORCE: Detect App Launcher search and use dedicated helper
+        const isAppLauncherSearch = inputNameLower.includes('search apps') || inputNameLower.includes('app launcher') || 
+                                    inputNameLower.includes('search items');
+        
+        if (isAppLauncherSearch) {
+          // Use the Salesforce helper's robust App Launcher search
+          code += `${indent}# SALESFORCE: Use dedicated App Launcher search (robust with fallbacks)\n`;
+          code += `${indent}sf.search_app_launcher("${escapedInputValue}")\n`;
+          code += `${indent}print(f"   [+] Filled App Launcher search with: ${valuePreview}")\n`;
+          break; // Skip the normal input handling - sf helper handles everything
+        }
+        
+        // For other modal inputs, wait for modal first
+        const isModalInput = inputNameLower.includes('modal') || inputNameLower.includes('dialog') || inputNameLower.includes('popup');
+        
+        if (isModalInput) {
+          code += `${indent}# SALESFORCE: Wait for modal/popup to be fully rendered before searching for input\n`;
+          code += `${indent}sf.wait_for_ready()\n`;
+        }
+        
         code += `${indent}# Fill input with fallback selectors (same logic as Suggest)\n`;
-        // Escape quotes in step name for Python f-string
-        const inputNameForPython = inputNameClean.replace(/"/g, '\\"').replace(/'/g, "\\'");
-        code += `${indent}print(f"🔍 Looking for input: ${inputNameForPython}")\n`;
+        // Escape quotes in step name for Python f-string AND remove non-ASCII chars (Windows cp1252 compatibility)
+        const inputNameForPython = inputNameClean.replace(/"/g, '\\"').replace(/'/g, "\\'").replace(/[^\x00-\x7F]/g, '');
+        code += `${indent}print(f"[FIND] Looking for input: ${inputNameForPython}")\n`;
         code += `${indent}_input_selectors = [\n`;
         uniqueInputSelectors.forEach((sel, i) => {
           // Escape selector string properly for Python
@@ -5906,54 +7472,152 @@ def test_${safeName}():
         } else {
           code += `${indent}_fill_value = "${escapedInputValue}"\n`;
         }
-        code += `${indent}for _selector_str, _priority in _input_selectors:\n`;
-        code += `${indent}    try:\n`;
-        code += `${indent}        _el = eval(_selector_str)\n`;
-        code += `${indent}        _count = _el.count()\n`;
-        code += `${indent}        if _count > 0:\n`;
-        code += `${indent}            print(f"   ✓ Found {_count} input(s) with selector #{_priority}")\n`;
-        code += `${indent}            if _count > 1:\n`;
-        code += `${indent}                print(f"   ⚠️ Multiple matches, filling first visible")\n`;
-        code += `${indent}                for i in range(_count):\n`;
-        code += `${indent}                    try:\n`;
-        code += `${indent}                        if _el.nth(i).is_visible():\n`;
-        code += `${indent}                            _el.nth(i).fill(_fill_value)\n`;
-        code += `${indent}                            break\n`;
-        code += `${indent}                    except:\n`;
-        code += `${indent}                        continue\n`;
-        code += `${indent}                else:\n`;
-        code += `${indent}                    _el.first.fill(_fill_value)\n`;
-        code += `${indent}            else:\n`;
-        code += `${indent}                _el.fill(_fill_value)\n`;
-        code += `${indent}            _input_found = True\n`;
-        code += `${indent}            print(f"   ✓ Filled with: {_fill_value[:30] if len(str(_fill_value)) > 30 else _fill_value}")\n`;
-        code += `${indent}            break\n`;
-        code += `${indent}    except Exception as _e:\n`;
-        code += `${indent}        print(f"   Selector #{_priority} failed: {str(_e)[:50]}")\n`;
-        code += `${indent}        continue\n`;
-        code += `${indent}if not _input_found:\n`;
-        code += `${indent}    page.wait_for_timeout(1500)\n`;
-        code += `${indent}    for _selector_str, _priority in _input_selectors[:3]:\n`;
+        // ROBUST: Try with progressive waits - elements may not be visible immediately (modals, dynamic content)
+        code += `${indent}_max_retries = 3\n`;
+        code += `${indent}_retry_delays = [0, 1500, 3000]  # Progressive wait times\n`;
+        code += `${indent}for _retry in range(_max_retries):\n`;
+        code += `${indent}    if _retry > 0:\n`;
+        code += `${indent}        print(f"   [RETRY {_retry}] Waiting {_retry_delays[_retry]}ms for element to appear...")\n`;
+        code += `${indent}        page.wait_for_timeout(_retry_delays[_retry])\n`;
+        code += `${indent}    for _selector_str, _priority in _input_selectors:\n`;
         code += `${indent}        try:\n`;
         code += `${indent}            _el = eval(_selector_str)\n`;
-        code += `${indent}            if _el.count() > 0:\n`;
-        code += `${indent}                _el.first.fill(_fill_value)\n`;
-        code += `${indent}                _input_found = True\n`;
-        code += `${indent}                print(f"   ✓ Found after wait with selector #{_priority}")\n`;
+        code += `${indent}            _count = _el.count()\n`;
+        code += `${indent}            if _count > 0:\n`;
+        code += `${indent}                # ROBUST: Wait for element to be VISIBLE before interacting\n`;
+        code += `${indent}                try:\n`;
+        code += `${indent}                    _el.first.wait_for(state="visible", timeout=5000)\n`;
+        code += `${indent}                except:\n`;
+        code += `${indent}                    pass  # Continue even if wait times out - element might still work\n`;
+        code += `${indent}                print(f"   [+] Found {_count} input(s) with selector #{_priority}")\n`;
+        code += `${indent}                # SALESFORCE FIX: Scroll into view, then click to focus, then fill\n`;
+        code += `${indent}                _target_el = _el.first if _count == 1 else None\n`;
+        code += `${indent}                if _count > 1:\n`;
+        code += `${indent}                    print(f"   [WARN] Multiple matches, using first visible")\n`;
+        code += `${indent}                    for i in range(_count):\n`;
+        code += `${indent}                        try:\n`;
+        code += `${indent}                            if _el.nth(i).is_visible():\n`;
+        code += `${indent}                                _target_el = _el.nth(i)\n`;
+        code += `${indent}                                break\n`;
+        code += `${indent}                        except:\n`;
+        code += `${indent}                            continue\n`;
+        code += `${indent}                    if _target_el is None:\n`;
+        code += `${indent}                        _target_el = _el.first\n`;
+        code += `${indent}                # Scroll element into view before interacting\n`;
+        code += `${indent}                try:\n`;
+        code += `${indent}                    _target_el.scroll_into_view_if_needed()\n`;
+        code += `${indent}                except:\n`;
+        code += `${indent}                    pass\n`;
+        code += `${indent}                # Try multiple fill strategies for Salesforce custom components\n`;
+        code += `${indent}                _fill_success = False\n`;
+        code += `${indent}                # Strategy 1: Click to focus, then fill with short timeout\n`;
+        code += `${indent}                try:\n`;
+        code += `${indent}                    _target_el.click(timeout=3000)\n`;
+        code += `${indent}                    page.wait_for_timeout(300)\n`;
+        code += `${indent}                    _target_el.fill(_fill_value, timeout=5000)\n`;
+        code += `${indent}                    _fill_success = True\n`;
+        code += `${indent}                except:\n`;
+        code += `${indent}                    pass\n`;
+        code += `${indent}                # Strategy 2: Use type() for custom Salesforce inputs\n`;
+        code += `${indent}                if not _fill_success:\n`;
+        code += `${indent}                    try:\n`;
+        code += `${indent}                        _target_el.click(timeout=3000)\n`;
+        code += `${indent}                        page.wait_for_timeout(300)\n`;
+        code += `${indent}                        _target_el.type(_fill_value, delay=50)\n`;
+        code += `${indent}                        _fill_success = True\n`;
+        code += `${indent}                    except:\n`;
+        code += `${indent}                        pass\n`;
+        code += `${indent}                # Strategy 3: Use keyboard directly\n`;
+        code += `${indent}                if not _fill_success:\n`;
+        code += `${indent}                    try:\n`;
+        code += `${indent}                        _target_el.click(timeout=3000)\n`;
+        code += `${indent}                        page.keyboard.type(_fill_value)\n`;
+        code += `${indent}                        _fill_success = True\n`;
+        code += `${indent}                    except Exception as _ke:\n`;
+        code += `${indent}                        print(f"   Selector #{_priority} failed: {str(_ke)[:50]}")\n`;
+        code += `${indent}                        continue\n`;
+        code += `${indent}                if _fill_success:\n`;
+        code += `${indent}                    _input_found = True\n`;
+        code += `${indent}                    print(f"   [+] Filled with: {_fill_value[:30] if len(str(_fill_value)) > 30 else _fill_value}")\n`;
         code += `${indent}                break\n`;
-        code += `${indent}        except:\n`;
+        code += `${indent}        except Exception as _e:\n`;
+        code += `${indent}            print(f"   Selector #{_priority} failed: {str(_e)[:50]}")\n`;
         code += `${indent}            continue\n`;
+        code += `${indent}    if _input_found:\n`;
+        code += `${indent}        break\n`;
         code += `${indent}if not _input_found:\n`;
-        code += `${indent}    print("❌ Input not found with any selector")\n`;
+        code += `${indent}    print("[FAIL] Input not found with any selector after retries")\n`;
         code += `${indent}    raise Exception("Input failed: No elements found matching any selector")\n`;
+        
+        // SALESFORCE: If this is a search/lookup field, wait for and click on search results
+        const isSearchField = inputNameLower.includes('search') || inputNameLower.includes('lookup') || 
+                              inputNameLower.includes('find') || inputNameLower.includes('filter');
+        const isGlobalSearch = inputNameLower.includes('search salesforce') || inputNameLower.includes('search...');
+        
+        if (isSearchField && !isAppLauncherSearch) {
+          code += `${indent}# SALESFORCE: Wait for search results and click on matching result\n`;
+          code += `${indent}page.wait_for_timeout(1500)  # Wait for search results to appear\n`;
+          code += `${indent}try:\n`;
+          code += `${indent}    # Try to find and click the search result matching our input\n`;
+          code += `${indent}    _search_result_selectors = [\n`;
+          code += `${indent}        f'li[role="option"]:has-text("{_fill_value}")',\n`;
+          code += `${indent}        f'lightning-base-combobox-item:has-text("{_fill_value}")',\n`;
+          code += `${indent}        f'.slds-listbox__item:has-text("{_fill_value}")',\n`;
+          code += `${indent}        f'[role="option"]:has-text("{_fill_value}")',\n`;
+          code += `${indent}        f'a:has-text("{_fill_value}")',\n`;
+          code += `${indent}    ]\n`;
+          code += `${indent}    _result_clicked = False\n`;
+          code += `${indent}    for _result_sel in _search_result_selectors:\n`;
+          code += `${indent}        try:\n`;
+          code += `${indent}            _result = page.locator(_result_sel).first\n`;
+          code += `${indent}            if _result.is_visible(timeout=2000):\n`;
+          code += `${indent}                _result.click()\n`;
+          code += `${indent}                print(f"   [+] Clicked search result: {_fill_value}")\n`;
+          code += `${indent}                _result_clicked = True\n`;
+          code += `${indent}                break\n`;
+          code += `${indent}        except:\n`;
+          code += `${indent}            continue\n`;
+          code += `${indent}    if not _result_clicked:\n`;
+          code += `${indent}        print(f"   [INFO] No search result dropdown found - may need Enter key")\n`;
+          code += `${indent}except:\n`;
+          code += `${indent}    pass  # Search results clicking is optional\n`;
+        }
         break;
       }
       case 'select':
         code += `${indent}page.${convertSelector(step.selector || '')}.select_option("${step.value || ''}")\n`;
         break;
-      case 'hover':
-        code += `${indent}page.${convertSelector(step.selector || '')}.hover()\n`;
+      case 'hover': {
+        // HOVERS ARE NON-CRITICAL - Skip them entirely or do quick try
+        // Hovers are usually incidental mouse movements during recording, not actual test actions
+        const hoverStepNameClean = step.name.replace(/^\[Precond\]\s*/i, '').replace(/^Hover:\s*/i, '').replace(/^Click:\s*/i, '').trim();
+        const hoverStepNameForPython = hoverStepNameClean.replace(/"/g, '\\"').replace(/'/g, "\\'").replace(/[^\x00-\x7F]/g, '');
+        
+        code += `${indent}# HOVER: Non-critical action - quick try and skip if not found\n`;
+        code += `${indent}# Hovers are incidental mouse movements - they shouldn't fail tests\n`;
+        code += `${indent}try:\n`;
+        
+        // Build ONE simple selector
+        let hoverSelector = '';
+        if (step.selectorObj?.playwright) {
+          hoverSelector = `page.${step.selectorObj.playwright}`;
+        } else if (step.selector && typeof step.selector === 'string') {
+          hoverSelector = `page.${convertSelector(step.selector)}`;
+        } else {
+          hoverSelector = `page.get_by_text("${escapeForPython(hoverStepNameClean)}")`;
+        }
+        
+        const safeHoverSel = hoverSelector.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        code += `${indent}    _hover_el = ${hoverSelector}\n`;
+        code += `${indent}    if _hover_el.count() > 0:\n`;
+        code += `${indent}        _hover_el.first.hover(timeout=2000)\n`;
+        code += `${indent}        print(f"[HOVER] ${hoverStepNameForPython} - done")\n`;
+        code += `${indent}    else:\n`;
+        code += `${indent}        print(f"[SKIP] Hover '${hoverStepNameForPython}' - element not found, continuing...")\n`;
+        code += `${indent}except:\n`;
+        code += `${indent}    print(f"[SKIP] Hover '${hoverStepNameForPython}' - skipped (non-critical)")\n`;
         break;
+      }
       case 'wait':
         code += `${indent}page.wait_for_timeout(${step.waitTime || 1000})\n`;
         break;
@@ -5989,7 +7653,7 @@ def test_${safeName}():
         code += `${indent}# Verify date is in the future\n`;
         code += `${indent}_date_text = ${sel}\n`;
         code += `${indent}verify_date_is_future(_date_text)\n`;
-        code += `${indent}print(f"✓ Date '{_date_text}' is in the future")\n`;
+        code += `${indent}print(f"[+] Date '{_date_text}' is in the future")\n`;
         break;
       }
       
@@ -6000,7 +7664,7 @@ def test_${safeName}():
         code += `${indent}_start_date = page.${convertSelector(startSel || '')}.inner_text()\n`;
         code += `${indent}_end_date = page.${convertSelector(endSel || '')}.inner_text()\n`;
         code += `${indent}verify_date_sequence(_start_date, _end_date)\n`;
-        code += `${indent}print(f"✓ Date sequence valid: {_start_date} → {_end_date}")\n`;
+        code += `${indent}print(f"[+] Date sequence valid: {_start_date} -> {_end_date}")\n`;
         break;
       }
       
@@ -6014,7 +7678,7 @@ def test_${safeName}():
         code += `${indent}_factor2 = page.${convertSelector(f2 || '')}.inner_text()\n`;
         code += `${indent}_result = page.${convertSelector(res || '')}.inner_text()\n`;
         code += `${indent}verify_multiplication(_factor1, _factor2, _result)\n`;
-        code += `${indent}print(f"✓ Multiplication verified: {_factor1} × {_factor2} = {_result}")\n`;
+        code += `${indent}print(f"[+] Multiplication verified: {_factor1} x {_factor2} = {_result}")\n`;
         break;
       }
       
@@ -6025,7 +7689,7 @@ def test_${safeName}():
         code += `${indent}_items = page.${convertSelector(listSel || '')}.all_inner_texts()\n`;
         code += `${indent}_total = page.${convertSelector(totalSel || '')}.inner_text()\n`;
         code += `${indent}verify_sum(_items, _total)\n`;
-        code += `${indent}print(f"✓ Sum verified: {len(_items)} items = {_total}")\n`;
+        code += `${indent}print(f"[+] Sum verified: {len(_items)} items = {_total}")\n`;
         break;
       }
       
@@ -6037,7 +7701,7 @@ def test_${safeName}():
         code += `${indent}_original = page.${convertSelector(origSel || '')}.inner_text()\n`;
         code += `${indent}_final = page.${convertSelector(finalSel || '')}.inner_text()\n`;
         code += `${indent}verify_percentage_discount(_original, ${disc}, _final)\n`;
-        code += `${indent}print(f"✓ Discount verified: {_original} - ${disc}% = {_final}")\n`;
+        code += `${indent}print(f"[+] Discount verified: {_original} - ${disc}% = {_final}")\n`;
         break;
       }
       
@@ -6053,7 +7717,7 @@ def test_${safeName}():
         } else {
           code += `${indent}verify_text_format(_text, "${fmtType}")\n`;
         }
-        code += `${indent}print(f"✓ Format verified: '{_text}' matches ${fmtType}")\n`;
+        code += `${indent}print(f"[+] Format verified: '{_text}' matches ${fmtType}")\n`;
         break;
       }
       
@@ -6083,10 +7747,10 @@ def test_${safeName}():
         code += `${indent}page.wait_for_timeout(500)\n`;
         if (shouldShow) {
           code += `${indent}expect(page.${convertSelector(targetSel || '')}).to_be_visible()\n`;
-          code += `${indent}print(f"✓ Target field is visible after trigger")\n`;
+          code += `${indent}print(f"[+] Target field is visible after trigger")\n`;
         } else {
           code += `${indent}expect(page.${convertSelector(targetSel || '')}).to_be_hidden()\n`;
-          code += `${indent}print(f"✓ Target field is hidden after trigger")\n`;
+          code += `${indent}print(f"[+] Target field is hidden after trigger")\n`;
         }
         break;
       }
@@ -6109,7 +7773,7 @@ def test_${safeName}():
         code += `${indent}# Check all boundary tests passed\n`;
         code += `${indent}_all_passed = all(r.get("test_passed", False) for r in _boundary_results.values())\n`;
         code += `${indent}for name, result in _boundary_results.items():\n`;
-        code += `${indent}    status = "✓" if result.get("test_passed") else "✗"\n`;
+        code += `${indent}    status = "PASS" if result.get("test_passed") else "FAIL"\n`;
         code += `${indent}    print(f"  {status} {name}: value={result.get('value')}")\n`;
         code += `${indent}assert _all_passed, f"Boundary tests failed: {_boundary_results}"\n`;
         break;
@@ -6125,7 +7789,7 @@ def test_${safeName}():
     }
 
     code += `                test_results["steps_passed"] += 1
-                print(f"✓ Step ${index + 1}: ${step.name.replace(/"/g, '\\"')}")
+                print(f"[+] Step ${index + 1}: ${step.name.replace(/"/g, '\\"').replace(/[^\x00-\x7F]/g, '')}")
             except Exception as step_error:
                 test_results["status"] = "failed"
                 test_results["steps_failed"] += 1
@@ -6138,15 +7802,15 @@ def test_${safeName}():
                 try:
                     page.screenshot(path=screenshot_path, full_page=True)
                     test_results["screenshot_path"] = screenshot_path
-                    print(f"📸 Screenshot saved: {screenshot_path}")
+                    print(f"[SCREENSHOT] Saved: {screenshot_path}")
                 except:
                     pass
                 
-                print(f"✗ Step ${index + 1} FAILED: ${step.name.replace(/"/g, '\\"')}")
+                print(f"[X] Step ${index + 1} FAILED: ${step.name.replace(/"/g, '\\"').replace(/[^\x00-\x7F]/g, '')}")
                 print(f"  Error: {step_error}")
                 
                 # Keep browser open for 5 seconds so user can see the failure
-                print("⏳ Keeping browser open for 5 seconds...")
+                print("[WAIT] Keeping browser open for 5 seconds...")
                 page.wait_for_timeout(5000)
                 raise step_error
 `;
@@ -6154,12 +7818,12 @@ def test_${safeName}():
 
   code += `
             print("\\n" + "="*50)
-            print("✅ TEST PASSED - All steps completed successfully")
+            print("[PASS] TEST PASSED - All steps completed successfully")
             print("="*50)
             
         except Exception as e:
             print("\\n" + "="*50)
-            print(f"❌ TEST FAILED at step {test_results['failed_step']}")
+            print(f"[FAIL] TEST FAILED at step {test_results['failed_step']}")
             print(f"Error: {test_results['error_message']}")
             if test_results['screenshot_path']:
                 print(f"Screenshot: {test_results['screenshot_path']}")
@@ -6167,8 +7831,8 @@ def test_${safeName}():
             sys.exit(1)  # Exit with error code
             
         finally:
-            browser.close()
-    
+            context.close()
+
     return test_results
 
 if __name__ == "__main__":
@@ -6296,7 +7960,7 @@ export default async function () {
 ${tc.steps.filter(s => s.enabled).map((step) => {
   if (step.type === 'navigate') return `    await page.goto('${step.url || tc.settings.baseUrl || ''}');`;
   if (step.type === 'click' && step.selector) return `    await page.locator('${step.selector}').click();`;
-  if (step.type === 'input' && step.selector) return `    await page.locator('${step.selector}').fill('${step.value || ''}');`;
+  if ((step.type === 'input' || step.type === 'fill') && step.selector) return `    await page.locator('${step.selector}').fill('${step.value || ''}');`;
   return '';
 }).filter(Boolean).join('\n')}
   } finally {
@@ -6455,8 +8119,8 @@ Feature: ${tc.name}
       keyword = 'Given';
       hasGiven = true;
     }
-    // Actions (click, input, select) are When
-    else if (['click', 'input', 'select', 'hover'].includes(step.type) && !hasWhen) {
+    // Actions (click, input, fill, select) are When
+    else if (['click', 'input', 'fill', 'select', 'hover'].includes(step.type) && !hasWhen) {
       keyword = 'When';
       hasWhen = true;
     }
@@ -6468,7 +8132,7 @@ Feature: ${tc.name}
     else if (hasGiven && step.type === 'navigate') {
       keyword = 'And';
     }
-    else if (hasWhen && ['click', 'input', 'select', 'hover'].includes(step.type)) {
+    else if (hasWhen && ['click', 'input', 'fill', 'select', 'hover'].includes(step.type)) {
       keyword = 'And';
     }
     
@@ -6646,73 +8310,16 @@ function generateAssertionCode(assertion: StepAssertion, step: TestStep, stepInd
   return code;
 }
 
-function convertSelector(selector: string): string {
-  if (!selector) return 'locator("body")';
-
-  // Clean up the selector
-  selector = selector.trim();
-  
-  // Log for debugging
-  console.log('[convertSelector] Input:', selector);
-
-  // Already in Python format
-  if (selector.includes('get_by_')) {
-    const result = selector.replace(/^page\./, '');
-    console.log('[convertSelector] Python format:', result);
-    return result;
-  }
-
-  // Handle page.getByRole, page.getByText etc. (JavaScript Playwright format from recordings)
-  if (selector.startsWith('page.getBy') || selector.startsWith('page.locator')) {
-    let result = selector
-      .replace(/^page\./, '')
-      .replace(/getByRole\(\s*['"](\w+)['"](?:\s*,\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*\})?\s*\)/g, 
-        (_, role, name) => name ? `get_by_role("${role}", name="${name}")` : `get_by_role("${role}")`)
-      .replace(/getByText\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_text("$1")')
-      .replace(/getByLabel\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_label("$1")')
-      .replace(/getByPlaceholder\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_placeholder("$1")')
-      .replace(/getByTestId\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_test_id("$1")')
-      .replace(/getByTitle\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_title("$1")')
-      .replace(/locator\(\s*['"]([^'"]+)['"]\s*\)/g, 'locator("$1")');
-    
-    console.log('[convertSelector] JS Playwright format converted:', result);
-    return result;
-  }
-
-  // Handle locator('...') format - extract the inner selector
-  const locatorMatch = selector.match(/^(?:page\.)?locator\(\s*['"](.+)['"]\s*\)$/);
-  if (locatorMatch) {
-    const innerSelector = locatorMatch[1].replace(/\\"/g, '"').replace(/\\'/g, "'");
-    const result = `locator("${innerSelector.replace(/"/g, '\\"')}")`;
-    console.log('[convertSelector] Locator format:', result);
-    return result;
-  }
-
-  // Handle raw CSS selectors (e.g., [name="firstName"], #myId, .myClass)
-  if (selector.startsWith('[') || selector.startsWith('#') || selector.startsWith('.')) {
-    const result = `locator("${selector.replace(/"/g, '\\"')}")`;
-    console.log('[convertSelector] CSS selector:', result);
-    return result;
-  }
-
-  // Handle getByRole, getByText, etc. without page. prefix (JavaScript to Python conversion)
-  let result = selector
-    .replace(/getByRole\(\s*['"](\w+)['"](?:\s*,\s*\{[^}]*name:\s*['"]([^'"]+)['"][^}]*\})?\s*\)/g, 
-      (_, role, name) => name ? `get_by_role("${role}", name="${name}")` : `get_by_role("${role}")`)
-    .replace(/getByText\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_text("$1")')
-    .replace(/getByLabel\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_label("$1")')
-    .replace(/getByPlaceholder\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_placeholder("$1")')
-    .replace(/getByTestId\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_test_id("$1")')
-    .replace(/getByTitle\(\s*['"]([^'"]+)['"]\s*\)/g, 'get_by_title("$1")')
-    .replace(/^page\./, '');
-
-  // If no transformation happened and it's not empty, wrap in locator
-  if (result === selector && selector.trim()) {
-    result = `locator("${selector.replace(/"/g, '\\"')}")`;
-  }
-
-  console.log('[convertSelector] Final result:', result);
-  return result || 'locator("body")';
+// Helper function to escape text for Python strings (handles newlines, quotes, special chars)
+function escapeForPython(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\\/g, '\\\\')     // Escape backslashes first
+    .replace(/"/g, '\\"')       // Escape double quotes
+    .replace(/\n/g, '\\n')      // Escape newlines
+    .replace(/\r/g, '\\r')      // Escape carriage returns
+    .replace(/\t/g, '\\t')      // Escape tabs
+    .slice(0, 100);             // Limit length to avoid huge selectors
 }
 
 
