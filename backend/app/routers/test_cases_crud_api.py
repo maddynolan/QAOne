@@ -113,6 +113,464 @@ async def get_test_cases(
         raise HTTPException(status_code=500, detail=f"Error getting test cases: {str(e)}")
 
 
+@router.post("/bulk-import")
+async def bulk_import_test_cases(request: Request):
+    """Bulk import test cases for scale testing - stores in SQLite for persistence"""
+    try:
+        data = await request.json()
+        test_cases = data.get("testCases", [])
+        suites = data.get("suites", [])
+        plans = data.get("plans", [])
+        releases = data.get("releases", [])
+        
+        logger.info(f"Bulk import: {len(test_cases)} test cases, {len(suites)} suites, {len(plans)} plans, {len(releases)} releases")
+        
+        # Use SQLite for persistent storage
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create tables if not exist
+        cursor.execute('''CREATE TABLE IF NOT EXISTS scale_test_cases (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            folder_id TEXT,
+            folder_name TEXT,
+            priority TEXT,
+            status TEXT,
+            tags TEXT,
+            steps TEXT,
+            automation_status TEXT,
+            automation_script_path TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )''')
+        
+        cursor.execute('''CREATE TABLE IF NOT EXISTS scale_test_suites (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            test_case_ids TEXT,
+            created_at TEXT
+        )''')
+        
+        cursor.execute('''CREATE TABLE IF NOT EXISTS scale_test_plans (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            status TEXT,
+            suite_ids TEXT,
+            test_case_ids TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            created_at TEXT
+        )''')
+        
+        cursor.execute('''CREATE TABLE IF NOT EXISTS scale_releases (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            description TEXT,
+            status TEXT,
+            suite_ids TEXT,
+            version TEXT,
+            release_date TEXT,
+            created_at TEXT
+        )''')
+        
+        # Clear existing data
+        cursor.execute("DELETE FROM scale_test_cases")
+        cursor.execute("DELETE FROM scale_test_suites")
+        cursor.execute("DELETE FROM scale_test_plans")
+        cursor.execute("DELETE FROM scale_releases")
+        
+        # Insert test cases in batches
+        for tc in test_cases:
+            cursor.execute('''INSERT OR REPLACE INTO scale_test_cases 
+                (id, name, description, folder_id, folder_name, priority, status, tags, steps, 
+                 automation_status, automation_script_path, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (tc.get('id'), tc.get('name'), tc.get('description'), 
+                 tc.get('folderId'), tc.get('folderName'), tc.get('priority', 'Medium'),
+                 tc.get('status', 'Active'), json.dumps(tc.get('tags', [])),
+                 json.dumps(tc.get('steps', [])), tc.get('automationStatus', 'manual'),
+                 tc.get('automationScriptPath'), tc.get('createdAt'), tc.get('updatedAt')))
+        
+        # Insert suites
+        for suite in suites:
+            cursor.execute('''INSERT OR REPLACE INTO scale_test_suites 
+                (id, name, description, test_case_ids, created_at)
+                VALUES (?, ?, ?, ?, ?)''',
+                (suite.get('id'), suite.get('name'), suite.get('description'),
+                 json.dumps(suite.get('testCaseIds', [])), suite.get('createdAt')))
+        
+        # Insert plans
+        for plan in plans:
+            cursor.execute('''INSERT OR REPLACE INTO scale_test_plans 
+                (id, name, description, status, suite_ids, test_case_ids, start_date, end_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (plan.get('id'), plan.get('name'), plan.get('description'),
+                 plan.get('status', 'draft'), json.dumps(plan.get('suiteIds', [])),
+                 json.dumps(plan.get('testCaseIds', [])), plan.get('startDate'),
+                 plan.get('endDate'), plan.get('createdAt')))
+        
+        # Insert releases
+        for release in releases:
+            cursor.execute('''INSERT OR REPLACE INTO scale_releases 
+                (id, name, description, status, suite_ids, version, release_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (release.get('id'), release.get('name'), release.get('description'),
+                 release.get('status', 'planning'), json.dumps(release.get('suiteIds', [])),
+                 release.get('version'), release.get('releaseDate'), release.get('createdAt')))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Bulk import complete: {len(test_cases)} TCs, {len(suites)} suites, {len(plans)} plans, {len(releases)} releases saved to {db_path}")
+        
+        return {
+            "status": "success",
+            "imported": {
+                "testCases": len(test_cases),
+                "suites": len(suites),
+                "plans": len(plans),
+                "releases": len(releases)
+            },
+            "database": db_path
+        }
+    except Exception as e:
+        logger.error(f"Bulk import error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Bulk import failed: {str(e)}")
+
+
+@router.get("/scale-data/summary")
+async def get_scale_data_summary():
+    """Get summary counts - FAST endpoint for UI stats"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"testCases": 0, "suites": 0, "plans": 0, "releases": 0}
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_test_cases")
+        tc_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_test_suites")
+        suite_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_test_plans")
+        plan_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_releases")
+        release_count = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            "testCases": tc_count,
+            "suites": suite_count,
+            "plans": plan_count,
+            "releases": release_count
+        }
+    except Exception as e:
+        return {"testCases": 0, "suites": 0, "plans": 0, "releases": 0}
+
+
+@router.get("/scale-data/paginated")
+async def get_paginated_test_cases(
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
+    priority: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: str = "updated_at",
+    sort_order: str = "desc"
+):
+    """Paginated test cases endpoint - Enterprise scale ready"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"testCases": [], "total": 0, "page": page, "limit": limit, "totalPages": 0}
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Build WHERE clause
+        where_clauses = []
+        params = []
+        
+        if search:
+            where_clauses.append("(name LIKE ? OR description LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        
+        if priority and priority != 'all':
+            where_clauses.append("priority = ?")
+            params.append(priority)
+        
+        if status and status != 'all':
+            where_clauses.append("automation_status = ?")
+            params.append(status)
+        
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        # Get total count
+        cursor.execute(f"SELECT COUNT(*) FROM scale_test_cases WHERE {where_sql}", params)
+        total = cursor.fetchone()[0]
+        
+        # Get paginated results
+        offset = (page - 1) * limit
+        order_col = "updated_at" if sort_by == "updated" else sort_by
+        order_dir = "DESC" if sort_order == "desc" else "ASC"
+        
+        cursor.execute(f"""
+            SELECT id, name, description, folder_id, folder_name, priority, status, 
+                   tags, automation_status, automation_script_path, created_at, updated_at
+            FROM scale_test_cases 
+            WHERE {where_sql}
+            ORDER BY {order_col} {order_dir}
+            LIMIT ? OFFSET ?
+        """, params + [limit, offset])
+        
+        test_cases = []
+        for row in cursor.fetchall():
+            tc = dict(row)
+            tc['tags'] = json.loads(tc.get('tags') or '[]')
+            # Don't include steps in list view - load on demand
+            test_cases.append(tc)
+        
+        conn.close()
+        
+        total_pages = (total + limit - 1) // limit
+        
+        logger.info(f"Paginated query: page={page}, limit={limit}, total={total}, returned={len(test_cases)}")
+        
+        return {
+            "testCases": test_cases,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "totalPages": total_pages
+        }
+    except Exception as e:
+        logger.error(f"Error in paginated query: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scale-data/test-case/{test_case_id}")
+async def get_single_test_case(test_case_id: str):
+    """Get single test case with full details including steps - for builder"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            raise HTTPException(status_code=404, detail="Test case not found")
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM scale_test_cases WHERE id = ?", (test_case_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Test case not found")
+        
+        tc = dict(row)
+        tc['tags'] = json.loads(tc.get('tags') or '[]')
+        tc['steps'] = json.loads(tc.get('steps') or '[]')
+        
+        conn.close()
+        
+        logger.info(f"Loaded test case {test_case_id} with {len(tc['steps'])} steps")
+        
+        return tc
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading test case: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scale-data/suites")
+async def get_suites_paginated(page: int = 1, limit: int = 50):
+    """Get paginated suites"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"suites": [], "total": 0, "page": page, "limit": limit}
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_test_suites")
+        total = cursor.fetchone()[0]
+        
+        offset = (page - 1) * limit
+        cursor.execute("SELECT * FROM scale_test_suites LIMIT ? OFFSET ?", (limit, offset))
+        
+        suites = []
+        for row in cursor.fetchall():
+            suite = dict(row)
+            suite['testCaseIds'] = json.loads(suite.get('test_case_ids') or '[]')
+            suites.append(suite)
+        
+        conn.close()
+        return {"suites": suites, "total": total, "page": page, "limit": limit}
+    except Exception as e:
+        return {"suites": [], "total": 0, "page": page, "limit": limit}
+
+
+@router.get("/scale-data/plans")
+async def get_plans_paginated(page: int = 1, limit: int = 50):
+    """Get paginated plans"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"plans": [], "total": 0, "page": page, "limit": limit}
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_test_plans")
+        total = cursor.fetchone()[0]
+        
+        offset = (page - 1) * limit
+        cursor.execute("SELECT * FROM scale_test_plans LIMIT ? OFFSET ?", (limit, offset))
+        
+        plans = []
+        for row in cursor.fetchall():
+            plan = dict(row)
+            plan['suiteIds'] = json.loads(plan.get('suite_ids') or '[]')
+            plan['testCaseIds'] = json.loads(plan.get('test_case_ids') or '[]')
+            plans.append(plan)
+        
+        conn.close()
+        return {"plans": plans, "total": total, "page": page, "limit": limit}
+    except Exception as e:
+        return {"plans": [], "total": 0, "page": page, "limit": limit}
+
+
+@router.get("/scale-data/releases")
+async def get_releases_paginated(page: int = 1, limit: int = 50):
+    """Get paginated releases"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"releases": [], "total": 0, "page": page, "limit": limit}
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) FROM scale_releases")
+        total = cursor.fetchone()[0]
+        
+        offset = (page - 1) * limit
+        cursor.execute("SELECT * FROM scale_releases LIMIT ? OFFSET ?", (limit, offset))
+        
+        releases = []
+        for row in cursor.fetchall():
+            release = dict(row)
+            release['suiteIds'] = json.loads(release.get('suite_ids') or '[]')
+            releases.append(release)
+        
+        conn.close()
+        return {"releases": releases, "total": total, "page": page, "limit": limit}
+    except Exception as e:
+        return {"releases": [], "total": 0, "page": page, "limit": limit}
+
+
+@router.get("/scale-data")
+async def get_scale_test_data():
+    """Get all scale test data from SQLite database - WARNING: Use paginated endpoints for production"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"testCases": [], "suites": [], "plans": [], "releases": []}
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get test cases
+        cursor.execute("SELECT * FROM scale_test_cases")
+        test_cases = []
+        for row in cursor.fetchall():
+            tc = dict(row)
+            tc['tags'] = json.loads(tc.get('tags') or '[]')
+            tc['steps'] = json.loads(tc.get('steps') or '[]')
+            test_cases.append(tc)
+        
+        # Get suites
+        cursor.execute("SELECT * FROM scale_test_suites")
+        suites = []
+        for row in cursor.fetchall():
+            suite = dict(row)
+            suite['testCaseIds'] = json.loads(suite.get('test_case_ids') or '[]')
+            suites.append(suite)
+        
+        # Get plans
+        cursor.execute("SELECT * FROM scale_test_plans")
+        plans = []
+        for row in cursor.fetchall():
+            plan = dict(row)
+            plan['suiteIds'] = json.loads(plan.get('suite_ids') or '[]')
+            plan['testCaseIds'] = json.loads(plan.get('test_case_ids') or '[]')
+            plans.append(plan)
+        
+        # Get releases
+        cursor.execute("SELECT * FROM scale_releases")
+        releases = []
+        for row in cursor.fetchall():
+            release = dict(row)
+            release['suiteIds'] = json.loads(release.get('suite_ids') or '[]')
+            releases.append(release)
+        
+        conn.close()
+        
+        logger.info(f"Scale data loaded: {len(test_cases)} TCs, {len(suites)} suites, {len(plans)} plans, {len(releases)} releases")
+        
+        return {
+            "testCases": test_cases,
+            "suites": suites,
+            "plans": plans,
+            "releases": releases
+        }
+    except Exception as e:
+        logger.error(f"Error loading scale data: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load scale data: {str(e)}")
+
+
 @router.get("/{case_id}")
 async def get_test_case(case_id: str):
     """Get a specific test case"""

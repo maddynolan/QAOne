@@ -1499,6 +1499,16 @@ export default function UnifiedWorkflowEditor() {
         console.error('Failed to parse URL data:', e);
       }
     } else {
+      // IMPORTANT: If testCaseIdFromUrl is present, skip localStorage loading
+      // because loadTestCaseById will handle it in a separate useEffect
+      const testCaseIdParam = searchParams.get('testCaseId');
+      if (testCaseIdParam) {
+        console.log('[Builder] testCaseId in URL, skipping localStorage load - will load by ID');
+        // Clear any stale localStorage data to prevent confusion
+        localStorage.removeItem('unified_test_case_timestamp');
+        return;
+      }
+      
       // Load from localStorage (recording import)
       const saved = localStorage.getItem('unified_test_case');
       const timestamp = localStorage.getItem('unified_test_case_timestamp');
@@ -1693,7 +1703,21 @@ export default function UnifiedWorkflowEditor() {
       const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
       let foundCase = localCases.find((tc: any) => tc.id === testCaseId);
       
-      // Try backend if not found locally
+      // Try scale-data backend endpoint (for scale testing data)
+      if (!foundCase) {
+        try {
+          console.log('[Builder] Trying scale-data endpoint...');
+          const scaleResponse = await fetch(`http://localhost:8000/test-cases/scale-data/test-case/${testCaseId}`);
+          if (scaleResponse.ok) {
+            foundCase = await scaleResponse.json();
+            console.log('[Builder] Found in scale-data:', foundCase?.name);
+          }
+        } catch {
+          console.log('[Builder] Scale-data endpoint not available');
+        }
+      }
+      
+      // Try regular backend endpoint
       if (!foundCase) {
         try {
           const response = await fetch(`http://localhost:8000/test-cases/${testCaseId}`);

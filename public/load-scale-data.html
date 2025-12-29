@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Load Scale Test Data</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #0f0f0f;
+      color: #e5e5e5;
+    }
+    h1 { color: #f59e0b; }
+    .status { 
+      padding: 15px; 
+      border-radius: 8px; 
+      margin: 15px 0;
+      background: #1a1a1a;
+      border: 1px solid #333;
+    }
+    .success { background: #052e16; border-color: #166534; color: #22c55e; }
+    .error { background: #450a0a; border-color: #991b1b; color: #ef4444; }
+    .info { background: #172554; border-color: #1e40af; color: #60a5fa; }
+    button {
+      background: linear-gradient(to right, #f59e0b, #ea580c);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .progress {
+      width: 100%;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(to right, #f59e0b, #ea580c);
+      transition: width 0.3s;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .stat {
+      background: #1a1a1a;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid #333;
+    }
+    .stat .value { font-size: 24px; font-weight: bold; color: #f59e0b; }
+    .stat .label { font-size: 12px; color: #888; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Scale Test Data Loader</h1>
+  <p>Load large-scale test data to test the application's performance with 5000+ test cases.</p>
+  
+  <div class="stats">
+    <div class="stat">
+      <div class="value" id="tcCount">0</div>
+      <div class="label">Test Cases</div>
+    </div>
+    <div class="stat">
+      <div class="value" id="suiteCount">0</div>
+      <div class="label">Test Suites</div>
+    </div>
+    <div class="stat">
+      <div class="value" id="planCount">0</div>
+      <div class="label">Test Plans</div>
+    </div>
+    <div class="stat">
+      <div class="value" id="releaseCount">0</div>
+      <div class="label">Releases</div>
+    </div>
+  </div>
+
+  <div>
+    <button onclick="loadScaleData()">Load Scale Test Data (5000+ TCs)</button>
+    <button onclick="loadLightData()">Load Light Data (500 TCs)</button>
+    <button onclick="loadFromDatabase()" style="background: linear-gradient(to right, #059669, #0d9488);">Load from Database</button>
+    <button onclick="clearData()" style="background: #dc2626;">Clear All Data</button>
+  </div>
+
+  <div class="progress" style="display: none;" id="progressContainer">
+    <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    // Update current counts
+    async function updateStats() {
+      // First try to get from backend (persistent)
+      try {
+        const response = await fetch('http://localhost:8000/test-cases/scale-data');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.testCases && data.testCases.length > 0) {
+            document.getElementById('tcCount').textContent = data.testCases.length.toLocaleString();
+            document.getElementById('suiteCount').textContent = (data.suites || []).length.toLocaleString();
+            document.getElementById('planCount').textContent = (data.plans || []).length.toLocaleString();
+            document.getElementById('releaseCount').textContent = (data.releases || []).length.toLocaleString();
+            
+            // Also sync to localStorage for the main app
+            if (data.testCases.length > 0) {
+              localStorage.setItem('test_cases', JSON.stringify(data.testCases));
+              localStorage.setItem('test_suites', JSON.stringify(data.suites || []));
+              localStorage.setItem('test_plans', JSON.stringify(data.plans || []));
+              localStorage.setItem('test_releases', JSON.stringify(data.releases || []));
+              showStatus('📊 Data loaded from persistent database', 'info');
+            }
+            return;
+          }
+        }
+      } catch (error) {
+        console.log('Backend not available, checking localStorage');
+      }
+      
+      // Fallback to localStorage
+      const testCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+      const suites = JSON.parse(localStorage.getItem('test_suites') || '[]');
+      const plans = JSON.parse(localStorage.getItem('test_plans') || '[]');
+      const releases = JSON.parse(localStorage.getItem('test_releases') || '[]');
+      
+      document.getElementById('tcCount').textContent = testCases.length.toLocaleString();
+      document.getElementById('suiteCount').textContent = suites.length.toLocaleString();
+      document.getElementById('planCount').textContent = plans.length.toLocaleString();
+      document.getElementById('releaseCount').textContent = releases.length.toLocaleString();
+    }
+    
+    updateStats();
+    
+    function showStatus(message, type = 'info') {
+      document.getElementById('status').innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+    
+    function setProgress(percent) {
+      document.getElementById('progressContainer').style.display = 'block';
+      document.getElementById('progressBar').style.width = percent + '%';
+    }
+
+    // Domain configurations
+    const DOMAINS = {
+      ecommerce: {
+        name: "E-Commerce Platform",
+        areas: ["Cart", "Checkout", "Payment", "Products", "Orders", "Returns"],
+        tags: ["ecommerce", "shopping"]
+      },
+      healthcare: {
+        name: "Healthcare System",
+        areas: ["Patients", "Appointments", "Prescriptions", "Billing", "Labs"],
+        tags: ["healthcare", "hipaa"]
+      },
+      banking: {
+        name: "Banking Portal",
+        areas: ["Accounts", "Transfers", "Payments", "Loans", "Cards"],
+        tags: ["banking", "finance"]
+      },
+      crm: {
+        name: "CRM System",
+        areas: ["Contacts", "Leads", "Opportunities", "Campaigns", "Reports"],
+        tags: ["crm", "sales"]
+      },
+      hr: {
+        name: "HR Management",
+        areas: ["Employees", "Payroll", "Leave", "Performance", "Training"],
+        tags: ["hr", "payroll"]
+      },
+      api: {
+        name: "API Testing",
+        areas: ["Auth", "Users", "Products", "Orders", "Webhooks"],
+        tags: ["api", "integration"]
+      },
+      mobile: {
+        name: "Mobile App",
+        areas: ["Login", "Home", "Profile", "Settings", "Notifications"],
+        tags: ["mobile", "responsive"]
+      },
+      security: {
+        name: "Security Testing",
+        areas: ["Auth", "Input Validation", "Sessions", "Encryption", "CSRF"],
+        tags: ["security", "penetration"]
+      }
+    };
+
+    function generateTestSteps(numSteps, domain) {
+      const config = DOMAINS[domain];
+      const actions = [
+        "Navigate to {area} page",
+        "Click {button} button",
+        "Enter test data in {field} field",
+        "Verify {element} is displayed",
+        "Submit the form",
+        "Wait for response",
+        "Verify success message",
+        "Check data persistence",
+        "Validate UI elements",
+        "Logout from application"
+      ];
+      
+      const steps = [];
+      for (let i = 0; i < numSteps; i++) {
+        const area = config.areas[i % config.areas.length];
+        const action = actions[i % actions.length]
+          .replace('{area}', area)
+          .replace('{button}', ['Submit', 'Save', 'Cancel', 'Next'][i % 4])
+          .replace('{field}', ['username', 'email', 'amount', 'date'][i % 4])
+          .replace('{element}', ['header', 'form', 'table', 'message'][i % 4]);
+        
+        steps.push({
+          id: `step_${Date.now()}_${i}`,
+          action: action,
+          expectedResult: `Step ${i + 1} completes successfully`,
+          testData: `Test data ${i + 1}`,
+          type: ['navigate', 'click', 'fill', 'assert'][i % 4]
+        });
+      }
+      return steps;
+    }
+
+    function generateTestCase(index, numSteps = null) {
+      const domains = Object.keys(DOMAINS);
+      const domain = domains[index % domains.length];
+      const config = DOMAINS[domain];
+      const area = config.areas[index % config.areas.length];
+      
+      const priorities = ['critical', 'high', 'medium', 'low'];
+      const statuses = ['none', 'partial', 'full'];
+      const stepsCount = numSteps || Math.floor(Math.random() * 6) + 5; // 5-10 steps
+      
+      return {
+        id: `tc_scale_${index}_${Date.now()}`,
+        name: `TC-${String(index).padStart(4, '0')}: ${area} - ${config.name}`,
+        description: `Automated test case for ${area} functionality in ${config.name}`,
+        folderId: 'root',
+        priority: priorities[index % 4],
+        status: 'ready',
+        automationStatus: statuses[index % 3],
+        tags: [...config.tags, area.toLowerCase(), 'scale-test'],
+        steps: generateTestSteps(stepsCount, domain),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    function generateSuite(index, testCaseIds) {
+      return {
+        id: `suite_scale_${index}`,
+        name: `Suite-${String(index).padStart(3, '0')}: Scale Test Suite`,
+        description: `Test suite containing ${testCaseIds.length} test cases`,
+        testCaseIds: testCaseIds,
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    function generatePlan(index, suiteIds, testCaseIds) {
+      return {
+        id: `plan_scale_${index}`,
+        name: `Plan-${String(index).padStart(3, '0')}: Sprint ${index} Test Plan`,
+        description: `Test plan for sprint ${index}`,
+        suiteIds: suiteIds,
+        testCaseIds: testCaseIds,
+        status: ['draft', 'ready', 'in-progress', 'completed'][index % 4],
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    function generateRelease(index, suiteIds) {
+      const today = new Date();
+      return {
+        id: `release_scale_${index}`,
+        name: `Release v${Math.floor(index / 10) + 1}.${index % 10}.0`,
+        description: `Release containing ${suiteIds.length} suites`,
+        startDate: new Date(today - index * 86400000).toISOString(),
+        endDate: new Date(today - (index - 7) * 86400000).toISOString(),
+        status: ['planning', 'active', 'completed'][index % 3],
+        suiteIds: suiteIds,
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    async function loadFromDatabase() {
+      showStatus('Loading from database...', 'info');
+      setProgress(10);
+      
+      try {
+        const response = await fetch('http://localhost:8000/test-cases/scale-data');
+        if (!response.ok) {
+          throw new Error('Failed to load from database');
+        }
+        
+        const data = await response.json();
+        setProgress(50);
+        
+        if (!data.testCases || data.testCases.length === 0) {
+          showStatus('⚠️ No data found in database. Use "Load Scale Test Data" to generate and save data.', 'error');
+          return;
+        }
+        
+        setProgress(75);
+        
+        // For large datasets, skip localStorage (quota exceeded) - app will load from API
+        const isLargeDataset = data.testCases.length > 1000;
+        
+        if (!isLargeDataset) {
+          showStatus('Syncing to localStorage...', 'info');
+          localStorage.setItem('test_cases', JSON.stringify(data.testCases));
+          localStorage.setItem('test_suites', JSON.stringify(data.suites || []));
+          localStorage.setItem('test_plans', JSON.stringify(data.plans || []));
+          localStorage.setItem('test_releases', JSON.stringify(data.releases || []));
+        } else {
+          // Store a flag so the app knows to load from API
+          localStorage.setItem('use_scale_db', 'true');
+          localStorage.setItem('scale_data_stats', JSON.stringify({
+            testCases: data.testCases.length,
+            suites: (data.suites || []).length,
+            plans: (data.plans || []).length,
+            releases: (data.releases || []).length
+          }));
+        }
+        
+        setProgress(100);
+        
+        // Update stats display
+        document.getElementById('tcCount').textContent = data.testCases.length.toLocaleString();
+        document.getElementById('suiteCount').textContent = (data.suites || []).length.toLocaleString();
+        document.getElementById('planCount').textContent = (data.plans || []).length.toLocaleString();
+        document.getElementById('releaseCount').textContent = (data.releases || []).length.toLocaleString();
+        
+        const storageNote = isLargeDataset 
+          ? '<br>⚠️ Data too large for localStorage - app will load directly from backend API'
+          : '';
+        
+        showStatus(`✅ Loaded from database:<br>
+          - ${data.testCases.length.toLocaleString()} test cases<br>
+          - ${(data.suites || []).length} test suites<br>
+          - ${(data.plans || []).length} test plans<br>
+          - ${(data.releases || []).length} releases${storageNote}<br><br>
+          <a href="/test-cases" style="color: #f59e0b;">Open Test Repository →</a>
+        `, 'success');
+      } catch (error) {
+        showStatus(`❌ Failed to load from database: ${error.message}<br><br>
+          Make sure the backend is running (uvicorn app.main:app --reload --port 8000)`, 'error');
+      }
+    }
+
+    async function loadScaleData() {
+      await loadData(5255, 220, 210, 205, 55); // Match backend generation
+    }
+
+    async function loadLightData() {
+      await loadData(500, 25, 20, 15, 5);
+    }
+
+    async function loadData(tcCount, suiteCount, planCount, releaseCount, largeStepCount) {
+      showStatus('Generating test cases...', 'info');
+      setProgress(0);
+      
+      const testCases = [];
+      const batchSize = 100;
+      
+      // Generate regular test cases
+      for (let i = 0; i < tcCount - largeStepCount; i++) {
+        testCases.push(generateTestCase(i));
+        if (i % batchSize === 0) {
+          setProgress(Math.floor((i / tcCount) * 50));
+          await new Promise(r => setTimeout(r, 0)); // Allow UI update
+        }
+      }
+      
+      // Generate large step test cases (50 steps each)
+      for (let i = 0; i < largeStepCount; i++) {
+        const tc = generateTestCase(tcCount - largeStepCount + i, 50);
+        tc.name = tc.name.replace('TC-', 'TC-LARGE-');
+        testCases.push(tc);
+      }
+      
+      showStatus('Generating suites, plans, releases...', 'info');
+      setProgress(50);
+      
+      // Generate suites
+      const suites = [];
+      const tcPerSuite = Math.floor(testCases.length / suiteCount);
+      for (let i = 0; i < suiteCount; i++) {
+        const start = i * tcPerSuite;
+        const tcIds = testCases.slice(start, start + Math.floor(Math.random() * 20) + 15).map(tc => tc.id);
+        suites.push(generateSuite(i, tcIds));
+      }
+      
+      setProgress(65);
+      
+      // Generate plans
+      const plans = [];
+      const suitesPerPlan = Math.floor(suites.length / planCount);
+      for (let i = 0; i < planCount; i++) {
+        const start = i * suitesPerPlan;
+        const suiteIds = suites.slice(start, start + Math.floor(Math.random() * 3) + 2).map(s => s.id);
+        const tcIds = suiteIds.flatMap(sid => {
+          const suite = suites.find(s => s.id === sid);
+          return suite ? suite.testCaseIds.slice(0, 10) : [];
+        });
+        plans.push(generatePlan(i, suiteIds, tcIds));
+      }
+      
+      setProgress(80);
+      
+      // Generate releases
+      const releases = [];
+      for (let i = 0; i < releaseCount; i++) {
+        const numSuites = Math.floor(Math.random() * 3) + 2;
+        const suiteIds = [];
+        for (let j = 0; j < numSuites; j++) {
+          suiteIds.push(suites[Math.floor(Math.random() * suites.length)].id);
+        }
+        releases.push(generateRelease(i, [...new Set(suiteIds)]));
+      }
+      
+      showStatus('Saving to backend database for persistence...', 'info');
+      setProgress(85);
+      
+      // Save to backend database (for persistence)
+      let backendSaved = false;
+      try {
+        const response = await fetch('http://localhost:8000/test-cases/bulk-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            testCases: testCases,
+            suites: suites,
+            plans: plans,
+            releases: releases
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Backend save result:', result);
+          backendSaved = true;
+          showStatus('✅ Saved to database!', 'info');
+        } else {
+          console.warn('Backend save failed:', await response.text());
+        }
+      } catch (error) {
+        console.warn('Backend not available:', error);
+      }
+      
+      setProgress(95);
+      
+      // For large datasets, skip localStorage (quota limit ~5-10MB)
+      const isLargeDataset = testCases.length > 1000;
+      
+      if (!isLargeDataset) {
+        showStatus('Saving to localStorage...', 'info');
+        localStorage.setItem('test_cases', JSON.stringify(testCases));
+        localStorage.setItem('test_suites', JSON.stringify(suites));
+        localStorage.setItem('test_plans', JSON.stringify(plans));
+        localStorage.setItem('test_releases', JSON.stringify(releases));
+      } else {
+        // Store flag so app loads from API
+        localStorage.setItem('use_scale_db', 'true');
+        localStorage.setItem('scale_data_stats', JSON.stringify({
+          testCases: testCases.length,
+          suites: suites.length,
+          plans: plans.length,
+          releases: releases.length
+        }));
+      }
+      
+      setProgress(100);
+      
+      // Update stats display directly
+      document.getElementById('tcCount').textContent = testCases.length.toLocaleString();
+      document.getElementById('suiteCount').textContent = suites.length.toLocaleString();
+      document.getElementById('planCount').textContent = plans.length.toLocaleString();
+      document.getElementById('releaseCount').textContent = releases.length.toLocaleString();
+      
+      const persistenceStatus = backendSaved 
+        ? '✅ Data persisted to SQLite database (will survive refresh)' 
+        : '⚠️ Backend not available - data not persisted';
+      
+      const storageNote = isLargeDataset 
+        ? '<br>ℹ️ Large dataset - app will load from backend API (localStorage quota exceeded)'
+        : '';
+      
+      showStatus(`✅ Successfully loaded:<br>
+        - ${testCases.length.toLocaleString()} test cases (including ${largeStepCount} with 50 steps)<br>
+        - ${suites.length} test suites<br>
+        - ${plans.length} test plans<br>
+        - ${releases.length} releases<br><br>
+        ${persistenceStatus}${storageNote}<br><br>
+        <a href="/test-cases" style="color: #f59e0b;">Open Test Repository →</a>
+      `, 'success');
+    }
+
+    function clearData() {
+      if (!confirm('Clear all test data from localStorage?')) return;
+      
+      localStorage.removeItem('test_cases');
+      localStorage.removeItem('test_suites');
+      localStorage.removeItem('test_plans');
+      localStorage.removeItem('test_releases');
+      localStorage.removeItem('test_repository_folders');
+      
+      updateStats();
+      showStatus('All data cleared.', 'info');
+    }
+  </script>
+</body>
+</html>
+
