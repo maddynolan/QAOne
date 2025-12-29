@@ -1,15 +1,12 @@
 /**
- * Playwright Recorder Page - Flowstral Desktop
+ * Playwright Recorder Page - Full Featured UI
  * 
- * Features:
- * - Start/Stop/Pause/Resume recording
- * - Embedded browser preview with suggestions
- * - SF-aware context for Salesforce pages
- * - Element discovery and smart suggestions
- * 
- * APIs used:
- * - window.flowstral.playwrightRecorder (for standalone browser)
- * - window.electronAPI (for embedded browser)
+ * Matches the original design with:
+ * - Top toolbar: Settings, Code, Run, Builder, Export
+ * - Left: Recorded Steps list
+ * - Right: Suggestions panel with SF Tools and SF Context tabs
+ * - Auto-loading suggestions during recording
+ * - Play/Execute and Add buttons for each suggestion
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -17,19 +14,18 @@ import { useNavigate } from "react-router-dom";
 import { 
   Play, Square, Pause, Trash2, Download, ExternalLink, Save,
   CheckCircle, Loader2, Video, Globe, Search, Filter,
-  Folder, Tag, Calendar, ChevronDown, ChevronRight,
-  Zap, FileText, ArrowLeft, Merge, RotateCcw, X,
+  Folder, Tag, ChevronDown, ChevronRight, Settings, Code,
+  Zap, FileText, Merge, RotateCcw, X, Sparkles,
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
   MousePointer, Keyboard, Eye, Target, Cloud, Link,
   Hash, Type, CircleDot, FormInput, Database, Copy,
-  Shield, Wand2, CheckSquare, Plus, Settings, ArrowRight,
-  SkipForward, Circle
+  Shield, Wand2, CheckSquare, Plus, Circle, Hand,
+  PenLine, LayoutGrid, ArrowRight, Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -77,6 +73,7 @@ interface Suggestion {
   category: string;
   selector?: string;
   selectorObj?: any;
+  count?: number; // For "X FOUND" badge
 }
 
 interface SuggestResult {
@@ -87,47 +84,119 @@ interface SuggestResult {
   total: number;
 }
 
-interface TestStep {
-  id: string;
-  type?: string;
-  name?: string;
-  action?: string;
-  expectedResult?: string;
-  qword?: string;
-  args?: string[];
-  selectorObj?: any;
-  automationStatus?: 'none' | 'recorded' | 'manual';
-}
-
 interface TestCase {
   id: string;
   name: string;
   title?: string;
   description?: string;
-  steps: TestStep[];
+  steps: any[];
   folderId?: string;
-  folderName?: string;
   tags?: string[];
   automationStatus?: 'none' | 'partial' | 'full';
-}
-
-interface Folder {
-  id: string;
-  name: string;
-  parentId?: string;
 }
 
 // Check if running in Electron
 const isElectron = () => !!(window as any).flowstral?.playwrightRecorder || !!(window as any).electronAPI;
 
-// Pagination config
-const PAGE_SIZE = 50;
+// Helper to detect password-related fields
+const isPasswordField = (action: RecordedAction): boolean => {
+  const qword = (action.qword || '').toLowerCase();
+  const arg0 = (action.args?.[0] || '').toLowerCase();
+  const desc = (action.description || '').toLowerCase();
+  const selector = JSON.stringify(action.selectorObj || {}).toLowerCase();
+  
+  // Check if this is a fill/input action on a password field
+  const isInputAction = ['fill', 'type', 'input'].includes(qword);
+  const hasPasswordIndicator = 
+    /password|passwd|pwd|^pw$|secret|token|pin/i.test(arg0) ||
+    /password|passwd|pwd|secret|token|pin/i.test(desc) ||
+    /type="password"|type='password'|inputtype.*password/i.test(selector) ||
+    action.type === 'password';
+  
+  return isInputAction && hasPasswordIndicator;
+};
+
+// Helper to detect garbled/corrupted characters from password encoding
+const hasPasswordArtifacts = (str: string): boolean => {
+  if (!str) return false;
+  // Detect UTF-8 encoding artifacts common in password recording
+  return /[āã口¢Γ¡¥©®°±²³µ¶¹º¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏ]/.test(str) ||
+         /[\u0100-\u024F]/.test(str) || // Extended Latin characters
+         str.includes('ã') ||
+         str.includes('Γ');
+};
+
+// Helper to mask sensitive values and fix corrupted characters
+const maskSensitiveAction = (action: RecordedAction): RecordedAction => {
+  const isPwField = isPasswordField(action);
+  const hasArtifacts = hasPasswordArtifacts(action.args?.[1] || '') || 
+                       hasPasswordArtifacts(action.description || '');
+  
+  // If not a password field and no artifacts, return as-is
+  if (!isPwField && !hasArtifacts) return action;
+  
+  // Mask the password value in args[1] and description
+  const maskedArgs = [...(action.args || [])];
+  if (maskedArgs[1]) {
+    maskedArgs[1] = '••••••••';
+  }
+  
+  // Build a clean description
+  let maskedDesc = action.description || '';
+  
+  // Strategy 1: Replace any quoted values after the field name with mask
+  maskedDesc = maskedDesc.replace(/["'][^"']+["']/g, (match, offset) => {
+    // Only mask values after the field name (typically after offset 10)
+    if (offset > 8) return `"••••••••"`;
+    return match;
+  });
+  
+  // Strategy 2: For "Type X" or "Fill field: X" patterns, mask the value part
+  // Match patterns like "Type Tenet@123" -> "Type ••••••••"
+  if (isPwField || hasArtifacts) {
+    // Pattern: "Type <value>" without quotes
+    maskedDesc = maskedDesc.replace(/^(Type|Fill|Input)\s+([^"'\s:]+)$/i, '$1 ••••••••');
+    // Pattern: "Type '<value>'" or 'Fill "<value>"'
+    maskedDesc = maskedDesc.replace(/^(Type|Fill|Input)\s+["']([^"']+)["']$/i, '$1 "••••••••"');
+    // Pattern: "Fill 'field': <value>" without quotes on value
+    maskedDesc = maskedDesc.replace(/^(Fill|Type)\s+["']([^"']+)["']:\s+(\S+)$/i, '$1 "$2": "••••••••"');
+    // Pattern: "Type "value" into field"
+    maskedDesc = maskedDesc.replace(/(into\s+\w+)$/i, '••••••••" $1');
+    
+    // Fallback: If description still has artifacts, fully rebuild it
+    if (hasPasswordArtifacts(maskedDesc)) {
+      const fieldName = action.args?.[0] || 'password';
+      maskedDesc = `Fill "${fieldName}": "••••••••"`;
+    }
+  }
+  
+  return {
+    ...action,
+    args: maskedArgs,
+    displayArgs: maskedArgs,
+    description: maskedDesc
+  };
+};
+
+// Helper to detect and clean corrupted UTF-8 characters
+const hasCorruptedChars = (str: string): boolean => {
+  if (!str) return false;
+  return /[āã口¢Γ]/.test(str);
+};
+
+const cleanCorruptedString = (str: string, isPassword: boolean): string => {
+  if (!str) return str;
+  if (hasCorruptedChars(str) || isPassword) {
+    return '••••••••';
+  }
+  return str;
+};
 
 export default function PlaywrightRecorderPage() {
   const navigate = useNavigate();
   
   // Recording state
-  const [url, setUrl] = useState("https://");
+  const [url, setUrl] = useState("https://orgfarm-bac28d1362-dev-ed.develop.my.salesforce.com/");
   const [currentUrl, setCurrentUrl] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -141,6 +210,7 @@ export default function PlaywrightRecorderPage() {
   const [elementFilter, setElementFilter] = useState<string>('all');
   const [suggestionSearch, setSuggestionSearch] = useState('');
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['fill', 'click', 'link', 'heading']));
   
   // Right panel tab state
   const [rightPanelTab, setRightPanelTab] = useState<string>('suggestions');
@@ -148,25 +218,50 @@ export default function PlaywrightRecorderPage() {
   // Mode state
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [showTestPicker, setShowTestPicker] = useState(false);
-  
-  // Test case selection for "Automate Existing"
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [allTestCases, setAllTestCases] = useState<TestCase[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]);
+  const [allFolders, setAllFolders] = useState<{ id: string; name: string }[]>([]);
   
-  // Filters for scalable test picker
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'manual' | 'partial' | 'automated'>('all');
-  const [folderFilter, setFolderFilter] = useState<string>('all');
-  const [tagFilter, setTagFilter] = useState<string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  // Test Picker filters (Enterprise scale)
+  const [testSearchQuery, setTestSearchQuery] = useState('');
+  const [testStatusFilter, setTestStatusFilter] = useState<'all' | 'none' | 'partial' | 'full'>('all');
+  const [testFolderFilter, setTestFolderFilter] = useState<string>('all');
+  const [testTagFilter, setTestTagFilter] = useState<string>('all');
+  const [testPage, setTestPage] = useState(1);
+  const TESTS_PER_PAGE = 50;
   
-  // Merge state
-  const [mergedSteps, setMergedSteps] = useState<TestStep[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  // Merge preview state
+  const [showMergePreview, setShowMergePreview] = useState(false);
+  const [mergedSteps, setMergedSteps] = useState<any[]>([]);
+  
+  // Test execution state
+  const [showTestResultModal, setShowTestResultModal] = useState(false);
+  const [testExecutionResult, setTestExecutionResult] = useState<{
+    status: 'running' | 'passed' | 'failed';
+    currentStep: number;
+    stepResults: { index: number; status: string; error?: string; screenshot?: string }[];
+    totalSteps: number;
+    error?: string;
+    selectedScreenshot?: string;
+  } | null>(null);
+  
+  // Export dropdown
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // SF Tools customization dialog
+  const [showSFToolDialog, setShowSFToolDialog] = useState(false);
+  const [sfToolType, setSfToolType] = useState<'soql' | 'apex' | 'clone' | 'validation' | 'api' | 'datafactory' | 'permission' | 'flow' | null>(null);
+  const [sfToolInput, setSfToolInput] = useState('');
+  const [sfToolInput2, setSfToolInput2] = useState('');
+  const [sfToolInput3, setSfToolInput3] = useState('');
+  
+  // Drag and drop for steps reordering
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   
   // Timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const suggestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect if current URL is Salesforce
   const isSalesforceUrl = useMemo(() => {
@@ -189,6 +284,36 @@ export default function PlaywrightRecorderPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRecording, isPaused]);
 
+  // Auto-refresh suggestions during recording (with debounce to prevent blinking)
+  const lastSuggestionsRef = useRef<string>('');
+  
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      // Initial fetch after a short delay
+      const initialTimeout = setTimeout(() => {
+        handleRefreshSuggestions();
+      }, 500);
+      
+      // Refresh every 5 seconds during recording (longer interval to reduce blinking)
+      suggestIntervalRef.current = setInterval(() => {
+        handleRefreshSuggestions();
+      }, 5000);
+      
+      return () => {
+        clearTimeout(initialTimeout);
+        if (suggestIntervalRef.current) clearInterval(suggestIntervalRef.current);
+      };
+    } else {
+      if (suggestIntervalRef.current) {
+        clearInterval(suggestIntervalRef.current);
+        suggestIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (suggestIntervalRef.current) clearInterval(suggestIntervalRef.current);
+    };
+  }, [isRecording, isPaused]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -197,177 +322,258 @@ export default function PlaywrightRecorderPage() {
 
   // Load test data on mount
   useEffect(() => {
+    const loadTestData = async () => {
+      try {
+        // Try SQLite first (electron)
+        const electronAPI = (window as any).electronAPI;
+        if (electronAPI?.localStorage?.getAllTestCases) {
+          const cases = await electronAPI.localStorage.getAllTestCases();
+          if (cases?.length > 0) {
+            setAllTestCases(cases);
+            // Extract unique folders
+            const folders = new Map<string, string>();
+            cases.forEach((tc: any) => {
+              if (tc.folderId && tc.folderName) {
+                folders.set(tc.folderId, tc.folderName);
+              }
+            });
+            setAllFolders(Array.from(folders.entries()).map(([id, name]) => ({ id, name })));
+            return;
+          }
+        }
+        
+        // Fallback to localStorage
+        const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+        const allCases = [...localCases];
+        flowstralCases.forEach((tc: TestCase) => {
+          if (!allCases.some(c => c.id === tc.id)) allCases.push(tc);
+        });
+        setAllTestCases(allCases);
+        
+        // Extract folders from localStorage
+        const localFolders = JSON.parse(localStorage.getItem('test_folders') || '[]');
+        setAllFolders(localFolders);
+    } catch (error) {
+        console.error('[Recorder] Failed to load test data:', error);
+    }
+    };
     loadTestData();
   }, []);
 
-  const loadTestData = useCallback(async () => {
-    try {
-      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
-      
-      const allCases = [...localCases];
-      flowstralCases.forEach((tc: TestCase) => {
-        if (!allCases.some(c => c.id === tc.id)) {
-          allCases.push(tc);
-        }
-      });
-      
-      const casesWithStatus = allCases.map(tc => ({
-        ...tc,
-        automationStatus: calculateAutomationStatus(tc)
-      }));
-      
-      setAllTestCases(casesWithStatus);
-      
-      const localFolders = JSON.parse(localStorage.getItem('test_repository_folders') || '[]');
-      setFolders(localFolders);
-    } catch (error) {
-      console.error('[Recorder] Error loading test data:', error);
-    }
-  }, []);
-
-  const calculateAutomationStatus = (tc: TestCase): 'none' | 'partial' | 'full' => {
-    const steps = tc.steps || [];
-    if (steps.length === 0) return 'none';
-    
-    const automatedSteps = steps.filter((s: TestStep) => {
-      if (s.qword && s.args && s.args.length > 0) return true;
-      if (s.selectorObj && Object.keys(s.selectorObj).length > 0) return true;
-      if (s.automationStatus === 'recorded') return true;
-      return false;
-    });
-    
-    if (automatedSteps.length === steps.length) return 'full';
-    if (automatedSteps.length > 0) return 'partial';
-    return 'none';
-  };
-
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    allTestCases.forEach(tc => {
-      (tc.tags || []).forEach(tag => tags.add(tag));
-    });
-    return Array.from(tags).sort();
-  }, [allTestCases]);
-
+  // Filtered and paginated test cases (Enterprise scale)
   const filteredTestCases = useMemo(() => {
     let filtered = allTestCases;
     
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    // Search filter
+    if (testSearchQuery.trim()) {
+      const query = testSearchQuery.toLowerCase();
       filtered = filtered.filter(tc => 
-        (tc.name || tc.title || '').toLowerCase().includes(query) ||
-        (tc.description || '').toLowerCase().includes(query) ||
-        tc.id.toLowerCase().includes(query)
+        tc.name?.toLowerCase().includes(query) ||
+        tc.id?.toLowerCase().includes(query) ||
+        tc.description?.toLowerCase().includes(query) ||
+        tc.tags?.some(t => t.toLowerCase().includes(query))
       );
     }
     
-    if (statusFilter !== 'all') {
+    // Status filter
+    if (testStatusFilter !== 'all') {
       filtered = filtered.filter(tc => {
-        const status = tc.automationStatus || 'none';
-        if (statusFilter === 'manual') return status === 'none';
-        if (statusFilter === 'partial') return status === 'partial';
-        if (statusFilter === 'automated') return status === 'full';
-        return true;
+        const status = tc.automationStatus || 
+          (tc.steps?.some((s: any) => s.qword || s.selector) ? 
+            (tc.steps.every((s: any) => s.qword || s.selector) ? 'full' : 'partial') : 'none');
+        return status === testStatusFilter;
       });
     }
     
-    if (folderFilter !== 'all') {
-      filtered = filtered.filter(tc => tc.folderId === folderFilter);
+    // Folder filter
+    if (testFolderFilter !== 'all') {
+      if (testFolderFilter === 'orphan') {
+        filtered = filtered.filter(tc => !tc.folderId);
+      } else {
+        filtered = filtered.filter(tc => tc.folderId === testFolderFilter);
+      }
     }
     
-    if (tagFilter !== 'all') {
-      filtered = filtered.filter(tc => (tc.tags || []).includes(tagFilter));
+    // Tag filter
+    if (testTagFilter !== 'all') {
+      filtered = filtered.filter(tc => tc.tags?.includes(testTagFilter));
     }
     
     return filtered;
-  }, [allTestCases, searchQuery, statusFilter, folderFilter, tagFilter]);
+  }, [allTestCases, testSearchQuery, testStatusFilter, testFolderFilter, testTagFilter]);
 
   const paginatedTestCases = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredTestCases.slice(start, start + PAGE_SIZE);
-  }, [filteredTestCases, currentPage]);
+    const start = (testPage - 1) * TESTS_PER_PAGE;
+    return filteredTestCases.slice(start, start + TESTS_PER_PAGE);
+  }, [filteredTestCases, testPage]);
 
-  const totalPages = Math.ceil(filteredTestCases.length / PAGE_SIZE);
+  const totalTestPages = Math.ceil(filteredTestCases.length / TESTS_PER_PAGE);
 
+  // All unique tags from test cases
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    allTestCases.forEach(tc => tc.tags?.forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [allTestCases]);
+
+  // Reset page when filters change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, statusFilter, folderFilter, tagFilter]);
+    setTestPage(1);
+  }, [testSearchQuery, testStatusFilter, testFolderFilter, testTagFilter]);
 
-  // Listen for actions from Playwright recorder
+  // Position-based merge: Action N → Step N
+  const performMerge = useCallback(() => {
+    if (!selectedTestCase || actions.length === 0) return;
+    
+    const manualSteps = selectedTestCase.steps || [];
+    const maxLength = Math.max(manualSteps.length, actions.length);
+    const merged: any[] = [];
+    
+    for (let i = 0; i < maxLength; i++) {
+      const manualStep = manualSteps[i];
+      const recordedAction = actions[i];
+      
+      if (manualStep && recordedAction) {
+        // Both exist: merge automation into manual step
+        merged.push({
+          ...manualStep,
+          qword: recordedAction.qword,
+          args: recordedAction.args,
+          selector: recordedAction.selectorObj?.selector,
+          selectorObj: recordedAction.selectorObj,
+          automationStatus: 'automated',
+          _merged: true
+        });
+      } else if (manualStep) {
+        // Only manual step exists
+        merged.push({
+          ...manualStep,
+          automationStatus: manualStep.qword ? 'automated' : 'manual',
+          _manualOnly: !manualStep.qword
+        });
+      } else if (recordedAction) {
+        // Only recorded action exists (extra automation)
+        merged.push({
+          id: `step_${Date.now()}_${i}`,
+          name: recordedAction.description || `${recordedAction.qword} ${recordedAction.args?.[0] || ''}`,
+          description: recordedAction.description,
+          qword: recordedAction.qword,
+          args: recordedAction.args,
+          selectorObj: recordedAction.selectorObj,
+          automationStatus: 'automated',
+          _extra: true
+        });
+      }
+    }
+    
+    setMergedSteps(merged);
+    setShowMergePreview(true);
+  }, [selectedTestCase, actions]);
+
+  // Save merged test case
+  const saveMergedTest = async () => {
+    if (!selectedTestCase || mergedSteps.length === 0) return;
+    
+    const automationStatus: 'none' | 'partial' | 'full' = mergedSteps.every(s => s.qword) ? 'full' : 
+                        mergedSteps.some(s => s.qword) ? 'partial' : 'none';
+    const updatedTestCase: TestCase = {
+      ...selectedTestCase,
+      steps: mergedSteps.map(s => {
+        const { _merged, _manualOnly, _extra, ...step } = s;
+        return step;
+      }),
+      automationStatus,
+    };
+    
+    try {
+      // Save to localStorage
+      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+      const idx = localCases.findIndex((tc: any) => tc.id === updatedTestCase.id);
+      if (idx >= 0) {
+        localCases[idx] = updatedTestCase;
+      } else {
+        localCases.push(updatedTestCase);
+      }
+      localStorage.setItem('test_cases', JSON.stringify(localCases));
+      
+      // Update state
+      setAllTestCases(prev => {
+        const updated = [...prev];
+        const i = updated.findIndex(tc => tc.id === updatedTestCase.id);
+        if (i >= 0) updated[i] = updatedTestCase;
+        return updated;
+      });
+      
+      toast.success(`Merged ${mergedSteps.filter(s => s.qword).length} automated steps into "${selectedTestCase.name}"`);
+      setShowMergePreview(false);
+      setSelectedTestCase(null);
+      setActions([]);
+      setMode('new');
+    } catch (error) {
+      toast.error('Failed to save merged test');
+    }
+  };
+
+  // Listen for actions from recorder
   useEffect(() => {
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
-    
+
     if (flowstral?.on) {
-      const unsubAction = flowstral.on('playwright-recorder-action', (action: RecordedAction) => {
-        console.log('[PlaywrightRecorder] Action:', action);
-        setActions(prev => {
-          if (prev.some(a => a.id === action.id)) return prev;
-          return [...prev, action];
+    const unsubAction = flowstral.on('playwright-recorder-action', (action: RecordedAction) => {
+      setActions(prev => {
+        if (prev.some(a => a.id === action.id)) return prev;
+        return [...prev, action];
+      });
+    });
+
+    const unsubStopped = flowstral.on('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
+      // Merge recorded actions with manually added ones (SF Tools, etc.)
+      setActions(prev => {
+        // Keep manually added actions (those with id starting with 'action_' - our manual prefix)
+        // Recorded actions from playwright typically have different id format
+        const manualActions = prev.filter(a => {
+          const id = a.id || '';
+          // Our manually added actions always start with 'action_' followed by timestamp
+          return id.startsWith('action_') || id.startsWith('assert_');
         });
-      });
-
-      const unsubStopped = flowstral.on('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
-        console.log('[PlaywrightRecorder] Stopped with', finalActions?.length, 'actions');
-        if (finalActions?.length > 0) {
-          setActions(finalActions);
+        
+        // Get recorded actions, removing any that match manual ones by description
+        const manualDescriptions = new Set(manualActions.map(a => a.description));
+        const recordedOnly = (finalActions || []).filter(a => !manualDescriptions.has(a.description));
+        
+        // Combine: recorded actions + manually added (preserve order)
+        if (recordedOnly.length > 0 || manualActions.length > 0) {
+          return [...recordedOnly, ...manualActions];
         }
-        setIsRecording(false);
-        setIsPaused(false);
+        return prev;
       });
+      setIsRecording(false);
+      setIsPaused(false);
+    });
 
-      const unsubPaused = flowstral.on('playwright-recorder-paused', () => {
-        setIsPaused(true);
-      });
-
-      const unsubResumed = flowstral.on('playwright-recorder-resumed', () => {
-        setIsPaused(false);
-      });
-
-      // Check if already recording
       flowstral.playwrightRecorder?.isRecording?.().then((recording: boolean) => {
-        setIsRecording(recording);
-        if (recording) {
-          flowstral.playwrightRecorder.getActions().then((acts: RecordedAction[]) => {
-            if (acts?.length > 0) setActions(acts);
-          });
-          flowstral.playwrightRecorder.isPaused?.().then((paused: boolean) => {
-            setIsPaused(paused);
-          });
-        }
-      });
+      setIsRecording(recording);
+      if (recording) {
+        flowstral.playwrightRecorder.getActions().then((acts: RecordedAction[]) => {
+          if (acts?.length > 0) setActions(acts);
+        });
+      }
+    });
 
-      return () => {
-        unsubAction?.();
-        unsubStopped?.();
-        unsubPaused?.();
-        unsubResumed?.();
-      };
+      return () => { unsubAction?.(); unsubStopped?.(); };
     }
     
-    // Electron API handlers
     if (electronAPI?.on) {
       const unsubAction = electronAPI.on('action-recorded', (action: RecordedAction) => {
-        console.log('[ElectronRecorder] Action:', action);
         setActions(prev => [...prev, action]);
       });
-
       const unsubUrl = electronAPI.on('browser-url-changed', (newUrl: string) => {
         setCurrentUrl(newUrl);
         if (newUrl.startsWith('http')) setUrl(newUrl);
       });
-
-      const unsubStatus = electronAPI.on('recording-status', ({ recording, paused }: { recording: boolean; paused?: boolean }) => {
-        setIsRecording(recording);
-        if (typeof paused === 'boolean') setIsPaused(paused);
-      });
-
-      return () => {
-        unsubAction?.();
-        unsubUrl?.();
-        unsubStatus?.();
-      };
+      return () => { unsubAction?.(); unsubUrl?.(); };
     }
   }, []);
 
@@ -380,89 +586,364 @@ export default function PlaywrightRecorderPage() {
     
     try {
       let result: SuggestResult | null = null;
+      let rawResponse: any = null;
       
-      if (electronAPI?.suggestActions) {
-        result = await electronAPI.suggestActions();
-      } else if (flowstral?.playwrightRecorder?.analyze) {
-        result = await flowstral.playwrightRecorder.analyze();
+      // Try multiple APIs to get suggestions
+      if (flowstral?.playwrightRecorder?.analyze) {
+        console.log('[Recorder] Calling flowstral.playwrightRecorder.analyze');
+        rawResponse = await flowstral.playwrightRecorder.analyze();
+        console.log('[Recorder] analyze() response:', rawResponse);
+      } else if (electronAPI?.suggestActions) {
+        console.log('[Recorder] Calling electronAPI.suggestActions');
+        rawResponse = await electronAPI.suggestActions();
+      } else if (electronAPI?.getPageElements) {
+        console.log('[Recorder] Calling electronAPI.getPageElements');
+        rawResponse = await electronAPI.getPageElements();
       }
       
-      if (result) {
-        setSuggestResult(result);
-        if (result.total > 0) {
-          toast.success(`Found ${result.total} elements`, { duration: 2000 });
-        } else {
-          toast.info("No elements found on this page");
+      // Convert raw response to SuggestResult format
+      if (rawResponse) {
+        // Handle { success: true, suggestions: [...] } format from analyze()
+        if (rawResponse.suggestions && Array.isArray(rawResponse.suggestions)) {
+          result = convertAnalyzeToSuggestResult(rawResponse.suggestions);
+        } 
+        // Handle direct array format
+        else if (Array.isArray(rawResponse)) {
+          result = convertAnalyzeToSuggestResult(rawResponse);
         }
+        // Handle elements format { buttons: [...], inputs: [...] }
+        else if (rawResponse.buttons || rawResponse.inputs || rawResponse.links) {
+          result = convertElementsToSuggestions(rawResponse);
+        }
+      }
+      
+      if (result && result.suggestions?.length > 0) {
+        console.log('[Recorder] Got suggestions:', result.suggestions.length);
+        // Only update if suggestions actually changed (prevents blinking)
+        const newKey = result.suggestions.map(s => s.element || s.description).join('|');
+        if (newKey !== lastSuggestionsRef.current) {
+          lastSuggestionsRef.current = newKey;
+          setSuggestResult(result);
+        }
+      } else if (!suggestResult?.suggestions?.length) {
+        // Only set empty if we don't already have suggestions
+        console.log('[Recorder] No suggestions returned or empty');
+        setSuggestResult({ suggestions: [], categories: {}, counts: {}, timing: 'now', total: 0 });
       }
     } catch (error) {
       console.error('[Recorder] Failed to get suggestions:', error);
-      toast.error("Failed to analyze page");
     } finally {
       setIsLoadingSuggestions(false);
     }
   };
 
-  // Filter suggestions
-  const filteredSuggestions = useMemo(() => {
-    if (!suggestResult?.suggestions) return [];
+  // Convert analyze() response (from PlaywrightRecorder) to SuggestResult format
+  const convertAnalyzeToSuggestResult = (suggestions: any[]): SuggestResult => {
+    const result: Suggestion[] = [];
+    const counts: Record<string, number> = { buttons: 0, links: 0, inputs: 0, headings: 0 };
     
-    return suggestResult.suggestions.filter(s => {
-      if (elementFilter !== 'all') {
-        const category = s.category?.toLowerCase() || s.type?.toLowerCase() || '';
-        if (elementFilter === 'buttons' && !category.includes('button')) return false;
-        if (elementFilter === 'links' && !category.includes('link')) return false;
-        if (elementFilter === 'inputs' && !category.includes('input') && s.qword !== 'Fill') return false;
-        if (elementFilter === 'headings' && !category.includes('heading')) return false;
+    console.log('[Recorder] Converting', suggestions.length, 'raw suggestions');
+    
+    suggestions.forEach((s, idx) => {
+      const type = (s.type || '').toLowerCase();
+      const label = s.label || s.text || s.description || s.element || '';
+      
+      // Debug first few
+      if (idx < 3) {
+        console.log('[Recorder] Raw suggestion', idx, ':', { type: s.type, label, isInput: s.isInput, isButton: s.isButton, isLink: s.isLink, tag: s.tag });
       }
-      if (suggestionSearch.trim()) {
-        const query = suggestionSearch.toLowerCase();
-        return s.description?.toLowerCase().includes(query) || 
-               s.element?.toLowerCase().includes(query) ||
-               s.args?.some(a => a.toLowerCase().includes(query));
+      
+      // Categorize based on multiple indicators
+      let category = 'button'; // Default
+      let qword = 'Click';
+      
+      // Input fields
+      if (type === 'fill' || type === 'input' || s.isInput || s.tag === 'INPUT' || s.tag === 'TEXTAREA') {
+        category = 'input';
+        qword = 'Fill';
+        counts.inputs++;
       }
-      return true;
+      // Links
+      else if (type === 'link' || s.isLink || s.tag === 'A' || s.selector?.includes('link') || s.selector?.includes('href')) {
+        category = 'link';
+        qword = 'Click';
+        counts.links++;
+      }
+      // Headings
+      else if (s.tag?.match(/^H[1-6]$/) || s.isHeading || type === 'heading') {
+        category = 'heading';
+        qword = 'AssertText';
+        counts.headings++;
+      }
+      // Buttons (default for clicks)
+      else if (type === 'click' || type === 'button' || s.isButton || s.tag === 'BUTTON') {
+        category = 'button';
+        qword = 'Click';
+        counts.buttons++;
+      }
+      // Default to button
+      else {
+        category = 'button';
+        qword = 'Click';
+        counts.buttons++;
+      }
+      
+      result.push({
+        type: s.type || 'click',
+        qword,
+        args: [label, s.selector || ''],
+        description: s.description || label,
+        element: label,
+        category, // This is the key field for grouping!
+        selector: s.selector,
+        selectorObj: s.selectorObj || { selector: s.selector },
+        count: s.duplicateCount || s.count || 1
+      });
     });
-  }, [suggestResult, elementFilter, suggestionSearch]);
+    
+    console.log('[Recorder] Converted to', result.length, 'suggestions. Counts:', counts);
+    
+    return {
+      suggestions: result,
+      categories: {},
+      counts,
+      timing: 'now',
+      total: result.length
+    };
+  };
 
-  const toggleSuggestionSelection = (index: number) => {
-    setSelectedSuggestions(prev => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
+  // Convert raw page elements to suggestion format
+  const convertElementsToSuggestions = (elements: any): SuggestResult => {
+    const suggestions: Suggestion[] = [];
+    const counts: Record<string, number> = { buttons: 0, links: 0, inputs: 0, headings: 0 };
+    
+    // Process buttons
+    if (elements.buttons) {
+      elements.buttons.forEach((btn: any) => {
+        suggestions.push({
+          type: 'click',
+          qword: 'Click',
+          args: [btn.text || btn.label || 'Button'],
+          description: btn.text || btn.label || 'Button',
+          element: btn.text || btn.label || 'Button',
+          category: 'button',
+          selector: btn.selector,
+          selectorObj: btn.selectorObj,
+          count: btn.count
+        });
+        counts.buttons++;
+      });
+    }
+    
+    // Process links
+    if (elements.links) {
+      elements.links.forEach((link: any) => {
+        suggestions.push({
+          type: 'click',
+          qword: 'Click',
+          args: [link.text || link.href || 'Link'],
+          description: link.text || 'Link',
+          element: link.text || link.href || 'Link',
+          category: 'link',
+          selector: link.selector,
+          selectorObj: link.selectorObj,
+          count: link.count
+        });
+        counts.links++;
+      });
+    }
+    
+    // Process inputs
+    if (elements.inputs) {
+      elements.inputs.forEach((input: any) => {
+        suggestions.push({
+          type: 'fill',
+          qword: 'Fill',
+          args: [input.name || input.placeholder || input.label || 'Input', ''],
+          description: input.name || input.placeholder || input.label || 'Input field',
+          element: input.name || input.placeholder || input.label || 'Input',
+          category: 'input',
+          selector: input.selector,
+          selectorObj: input.selectorObj,
+          count: input.count
+        });
+        counts.inputs++;
+      });
+    }
+    
+    // Process headings
+    if (elements.headings) {
+      elements.headings.forEach((h: any) => {
+        suggestions.push({
+          type: 'assertText',
+          qword: 'AssertText',
+          args: [h.text || 'Heading'],
+          description: h.text || 'Heading',
+          element: h.text || 'Heading',
+          category: 'heading',
+          selector: h.selector,
+          selectorObj: h.selectorObj,
+          count: h.count
+        });
+        counts.headings++;
+      });
+    }
+    
+    return {
+      suggestions,
+      categories: {},
+      counts,
+      timing: 'now',
+      total: suggestions.length
+    };
+  };
+
+  // Group suggestions by type
+  const groupedSuggestions = useMemo(() => {
+    if (!suggestResult?.suggestions || suggestResult.suggestions.length === 0) {
+      console.log('[Recorder] No suggestions to group');
+      return { fill: [], click: [], link: [], heading: [], other: [] };
+    }
+    
+    console.log('[Recorder] Grouping', suggestResult.suggestions.length, 'suggestions');
+    
+    const groups: Record<string, Suggestion[]> = {
+      fill: [],
+      click: [],
+      link: [],
+      heading: [],
+      other: []
+    };
+    
+    suggestResult.suggestions.forEach(s => {
+      const qword = (s.qword || s.type || '').toLowerCase();
+      const category = (s.category || '').toLowerCase();
+      const type = (s.type || '').toLowerCase();
+      
+      // More flexible grouping logic
+      if (qword === 'fill' || type === 'fill' || category === 'input' || category.includes('input')) {
+        groups.fill.push(s);
+      } else if (category === 'button' || category.includes('button') || type === 'button') {
+        groups.click.push(s);
+      } else if (category === 'link' || category.includes('link') || type === 'link') {
+        groups.link.push(s);
+      } else if (category === 'heading' || category.includes('heading') || type === 'heading') {
+        groups.heading.push(s);
+      } else if (qword.includes('click') || type === 'click') {
+        // Default clicks to buttons
+        groups.click.push(s);
       } else {
-        next.add(index);
+        groups.other.push(s);
       }
-      return next;
     });
-  };
-
-  const selectAllSuggestions = () => {
-    if (!filteredSuggestions.length) return;
-    setSelectedSuggestions(new Set(filteredSuggestions.map((_, i) => i)));
-  };
-
-  const addSelectedToTest = async () => {
-    if (selectedSuggestions.size === 0) return;
     
-    const newActions: RecordedAction[] = [];
-    for (const index of selectedSuggestions) {
-      const suggestion = filteredSuggestions[index];
-      if (suggestion) {
-        newActions.push({
-          id: `action_${Date.now()}_${index}`,
+    console.log('[Recorder] Grouped - fill:', groups.fill.length, 'click:', groups.click.length, 'link:', groups.link.length, 'heading:', groups.heading.length, 'other:', groups.other.length);
+    
+    // Apply search filter
+    if (suggestionSearch.trim()) {
+      const query = suggestionSearch.toLowerCase();
+      Object.keys(groups).forEach(key => {
+        groups[key] = groups[key].filter(s => 
+          s.description?.toLowerCase().includes(query) ||
+          s.element?.toLowerCase().includes(query) ||
+          s.args?.some(a => a?.toLowerCase().includes(query))
+        );
+      });
+    }
+    
+    return groups;
+  }, [suggestResult, suggestionSearch]);
+
+  // Category counts - use API counts if available, otherwise count from grouped
+  const categoryCounts = useMemo(() => {
+    if (suggestResult?.counts) {
+      return {
+        buttons: suggestResult.counts.buttons || suggestResult.counts.button || groupedSuggestions.click?.length || 0,
+        links: suggestResult.counts.links || suggestResult.counts.link || groupedSuggestions.link?.length || 0,
+        inputs: suggestResult.counts.inputs || suggestResult.counts.input || groupedSuggestions.fill?.length || 0,
+        headings: suggestResult.counts.headings || suggestResult.counts.heading || groupedSuggestions.heading?.length || 0,
+      };
+    }
+    return {
+      buttons: groupedSuggestions.click?.length || 0,
+      links: groupedSuggestions.link?.length || 0,
+      inputs: groupedSuggestions.fill?.length || 0,
+      headings: groupedSuggestions.heading?.length || 0,
+    };
+  }, [groupedSuggestions, suggestResult]);
+
+  const totalSuggestions = useMemo(() => {
+    const total = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
+    console.log('[Recorder] totalSuggestions:', total, 'from categoryCounts:', categoryCounts);
+    return total;
+  }, [categoryCounts]);
+
+  // Execute action on page (requires active recording session)
+  const executeAction = async (suggestion: Suggestion) => {
+    const electronAPI = (window as any).electronAPI;
+    const flowstral = (window as any).flowstral;
+    
+    // Check if recording is active first
+    if (!isRecording) {
+      toast.error('Start recording first to execute actions', { id: 'exec', duration: 3000 });
+      return;
+    }
+    
+    try {
+      toast.loading('Executing...', { id: 'exec' });
+      
+      let result;
+      if (flowstral?.playwrightRecorder?.executeAction) {
+        result = await flowstral.playwrightRecorder.executeAction({
+          type: suggestion.type || suggestion.qword,
           qword: suggestion.qword,
           args: suggestion.args,
-          description: suggestion.description,
-          timestamp: Date.now(),
+          label: suggestion.args?.[0],
+          selector: suggestion.selector,
+          selectorObj: suggestion.selectorObj
+        });
+      } else if (electronAPI?.executeAction) {
+        result = await electronAPI.executeAction({
+          qword: suggestion.qword,
+          args: suggestion.args,
+          selector: suggestion.selector,
           selectorObj: suggestion.selectorObj
         });
       }
+      
+      if (result?.success !== false) {
+        toast.success('Done!', { id: 'exec' });
+      } else {
+        const errorMsg = result?.error || 'Failed';
+        // Provide more helpful error messages
+        if (errorMsg.toLowerCase().includes('no browser')) {
+          toast.error('Browser not active. Start recording first.', { id: 'exec', duration: 3000 });
+        } else {
+          toast.error(errorMsg, { id: 'exec' });
+        }
+      }
+    } catch (error: any) {
+      const msg = error?.message || 'Failed to execute';
+      if (msg.toLowerCase().includes('no browser')) {
+        toast.error('Browser not active. Start recording first.', { id: 'exec', duration: 3000 });
+      } else {
+        toast.error(msg, { id: 'exec' });
+      }
     }
-    
-    setActions(prev => [...prev, ...newActions]);
-    toast.success(`Added ${newActions.length} actions`);
-    setSelectedSuggestions(new Set());
+  };
+
+  // Add suggestion to test
+  const addToTest = (suggestion: Suggestion) => {
+    const newAction: RecordedAction = {
+      id: `action_${Date.now()}`,
+      qword: suggestion.qword,
+      args: suggestion.args,
+      description: suggestion.description,
+      timestamp: Date.now(),
+      selectorObj: suggestion.selectorObj
+    };
+    setActions(prev => [...prev, newAction]);
+    toast.success('Added to test steps', { duration: 1500 });
   };
 
   const handleStartRecording = async () => {
@@ -470,18 +951,17 @@ export default function PlaywrightRecorderPage() {
     const electronAPI = (window as any).electronAPI;
     
     if (!flowstral?.playwrightRecorder && !electronAPI?.startRecording) {
-      toast.error("Recorder not available. Make sure you're running in Flowstral Desktop.");
+      toast.error("Recorder not available");
       return;
     }
 
-    if (!url || url === 'https://' || url === 'http://' || !url.match(/^https?:\/\/.+/)) {
-      toast.error("Please enter a complete URL (e.g., https://example.com)");
+    if (!url || !url.match(/^https?:\/\/.+/)) {
+      toast.error("Please enter a valid URL");
       return;
     }
 
     setIsStarting(true);
     setActions([]);
-    setMergedSteps([]);
     setRecordingTime(0);
 
     try {
@@ -489,8 +969,7 @@ export default function PlaywrightRecorderPage() {
       if (flowstral?.playwrightRecorder) {
         result = await flowstral.playwrightRecorder.start(url);
       } else if (electronAPI?.startRecording) {
-        // First navigate, then start recording
-        await electronAPI.navigateEmbeddedBrowser(url);
+        await electronAPI.navigateEmbeddedBrowser?.(url);
         result = await electronAPI.startRecording();
       }
       
@@ -498,14 +977,11 @@ export default function PlaywrightRecorderPage() {
         setIsRecording(true);
         setIsPaused(false);
         setCurrentUrl(url);
-        toast.success("Recording started - interact with the browser!");
+        toast.success("Recording started!");
       } else {
-        setIsRecording(false);
-        toast.error(result?.error || "Failed to start recording");
+        toast.error(result?.error || "Failed to start");
       }
     } catch (error: any) {
-      console.error('[PlaywrightRecorder] Start error:', error);
-      setIsRecording(false);
       toast.error(error?.message || "Failed to start browser");
     } finally {
       setIsStarting(false);
@@ -514,7 +990,7 @@ export default function PlaywrightRecorderPage() {
 
   const handleStopRecording = async () => {
     const flowstral = (window as any).flowstral;
-    const electronAPI = (window as any).electronAPI;
+      const electronAPI = (window as any).electronAPI;
 
     try {
       let result;
@@ -527,161 +1003,364 @@ export default function PlaywrightRecorderPage() {
       setIsRecording(false);
       setIsPaused(false);
       
-      const finalActions = result?.actions || result;
-      if (Array.isArray(finalActions) && finalActions.length > 0) {
-        setActions(finalActions);
-        toast.success(`Recorded ${finalActions.length} actions`);
-        
-        if (mode === 'existing' && selectedTestCase) {
-          performMerge(finalActions);
-        }
-      } else if (actions.length > 0) {
-        toast.success(`Recording stopped - ${actions.length} actions`);
-      } else {
-        toast.info("Recording stopped - no actions captured");
+      // Merge recorded actions with manually added ones (SF Tools, navigation, etc.)
+      const recordedActions = result?.actions || result;
+      if (Array.isArray(recordedActions)) {
+        setActions(prev => {
+          // Keep manually added actions (those with id starting with 'action_' or 'assert_')
+          const manualActions = prev.filter(a => {
+            const id = a.id || '';
+            return id.startsWith('action_') || id.startsWith('assert_');
+          });
+          
+          if (manualActions.length === 0) {
+            // No manual actions to preserve, just use recorded
+            return recordedActions.length > 0 ? recordedActions : prev;
+          }
+          
+          // Remove duplicates from recorded (by description)
+          const manualDescriptions = new Set(manualActions.map(a => a.description));
+          const recordedOnly = recordedActions.filter(a => !manualDescriptions.has(a.description));
+          
+          // Combine: recorded actions first, then manual actions (SF Tools, etc.)
+          console.log(`[Recorder] Merging ${recordedOnly.length} recorded + ${manualActions.length} manual actions`);
+          return [...recordedOnly, ...manualActions];
+        });
       }
+      toast.success(`Recording stopped - ${actions.length} actions`);
     } catch (error) {
-      console.error('[PlaywrightRecorder] Stop error:', error);
       toast.error("Failed to stop recording");
-    }
-  };
-
-  const handlePauseRecording = async () => {
-    const flowstral = (window as any).flowstral;
-    
-    try {
-      if (flowstral?.playwrightRecorder?.pause) {
-        await flowstral.playwrightRecorder.pause();
-        setIsPaused(true);
-        toast.info("Recording paused");
-      }
-    } catch (error) {
-      console.error('[PlaywrightRecorder] Pause error:', error);
-    }
-  };
-
-  const handleResumeRecording = async () => {
-    const flowstral = (window as any).flowstral;
-    
-    try {
-      if (flowstral?.playwrightRecorder?.resume) {
-        await flowstral.playwrightRecorder.resume();
-        setIsPaused(false);
-        toast.info("Recording resumed");
-      }
-    } catch (error) {
-      console.error('[PlaywrightRecorder] Resume error:', error);
     }
   };
 
   const handleClearActions = () => {
     setActions([]);
-    setMergedSteps([]);
     (window as any).flowstral?.playwrightRecorder?.clearActions?.();
     (window as any).electronAPI?.clearActions?.();
-    toast.info("Actions cleared");
+    toast.info("Cleared");
   };
 
-  const performMerge = (recordedActions: RecordedAction[]) => {
-    if (!selectedTestCase) return;
-    
-    const existingSteps = selectedTestCase.steps || [];
-    const merged: TestStep[] = [];
-    
-    const maxLength = Math.max(existingSteps.length, recordedActions.length);
-    
-    for (let i = 0; i < maxLength; i++) {
-      const existingStep = existingSteps[i];
-      const action = recordedActions[i];
-      
-      if (existingStep && action) {
-        merged.push({
-          ...existingStep,
-          qword: action.qword,
-          args: action.args,
-          selectorObj: action.selectorObj,
-          automationStatus: 'recorded'
-        });
-      } else if (existingStep) {
-        merged.push({
-          ...existingStep,
-          automationStatus: 'manual'
-        });
-      } else if (action) {
-        merged.push({
-          id: `step_${Date.now()}_${i}`,
-          name: action.description || `${action.qword} ${action.args?.join(' ')}`,
-          type: action.qword.toLowerCase(),
-          qword: action.qword,
-          args: action.args,
-          selectorObj: action.selectorObj,
-          automationStatus: 'recorded',
-          expectedResult: `Action: ${action.qword}`
-        });
-      }
+  // Drag and drop handlers for reordering steps
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
     }
-    
-    setMergedSteps(merged);
   };
 
-  const handleSaveMerged = async () => {
-    if (!selectedTestCase || mergedSteps.length === 0) {
-      toast.error("Nothing to save");
+  const handleDragEnd = () => {
+    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+      const newActions = [...actions];
+      const [draggedItem] = newActions.splice(draggedIndex, 1);
+      newActions.splice(dragOverIndex, 0, draggedItem);
+      setActions(newActions);
+      toast.success(`Step moved to position ${dragOverIndex + 1}`);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handlePauseResume = async () => {
+    const flowstral = (window as any).flowstral;
+    const electronAPI = (window as any).electronAPI;
+    
+    try {
+      if (isPaused) {
+        // Resume
+        if (flowstral?.playwrightRecorder?.resume) {
+          await flowstral.playwrightRecorder.resume();
+        } else if (electronAPI?.resumeRecording) {
+          await electronAPI.resumeRecording();
+        }
+        setIsPaused(false);
+        toast.success("Recording resumed");
+      } else {
+        // Pause
+        if (flowstral?.playwrightRecorder?.pause) {
+          await flowstral.playwrightRecorder.pause();
+        } else if (electronAPI?.pauseRecording) {
+          await electronAPI.pauseRecording();
+        }
+        setIsPaused(true);
+        toast.info("Recording paused - interact with app then resume");
+      }
+    } catch (error) {
+      toast.error("Failed to pause/resume");
+    }
+  };
+
+const handleExportToBuilder = async () => {
+    if (actions.length === 0) {
+      toast.error("No actions to export");
       return;
     }
     
-    setIsSaving(true);
-    
     try {
-      const updatedTestCase = {
-        ...selectedTestCase,
-        steps: mergedSteps,
-        automationStatus: calculateAutomationStatus({ ...selectedTestCase, steps: mergedSteps }),
-        updatedAt: new Date().toISOString()
+      const electronAPI = (window as any).electronAPI;
+      const flowstral = (window as any).flowstral;
+      
+      // Build a proper test case object with ALL actions
+      const testCase = {
+        id: `tc_${Date.now()}`,
+        name: 'Recorded Test',
+        description: `Recorded on ${new Date().toISOString()}`,
+        steps: actions.map((action, idx) => {
+          // Determine step type from qword
+          let stepType = 'click';
+          const qword = (action.qword || '').toLowerCase();
+          if (qword.includes('goto') || qword.includes('navigate')) stepType = 'navigate';
+          else if (qword.includes('fill') || qword.includes('type') || qword.includes('input')) stepType = 'input';
+          else if (qword.includes('select')) stepType = 'select';
+          else if (qword.includes('assert')) stepType = 'assert';
+          else if (qword.includes('wait')) stepType = 'wait';
+          else if (qword.includes('click')) stepType = 'click';
+          else if (qword.includes('hover')) stepType = 'hover';
+          // For SF Tools, use custom type
+          else if (['executesoql', 'executeapex', 'createtestdata', 'createrecord', 'clonerecord', 
+                    'deleterecord', 'triggerflow', 'assertvalidation', 'assertfieldvalue',
+                    'managepermissionset', 'runapextest', 'bulkload', 'runreport', 'restapicall'].includes(qword)) {
+            stepType = 'custom';
+          }
+          
+          return {
+            id: action.id || `step_${Date.now()}_${idx}`,
+            type: stepType,
+            name: action.description || `${action.qword || 'Action'} ${action.args?.[0] || ''}`,
+            url: stepType === 'navigate' ? (action.args?.[0] || action.url || '') : '',
+            selector: action.selector || action.selectorObj?.selector || '',
+            selectorObj: action.selectorObj,
+            value: stepType === 'input' ? (action.args?.[1] || action.value || '') : '',
+            qword: action.qword,  // CRITICAL: Preserve qword for execution
+            args: action.args,   // CRITICAL: Preserve args for execution
+            enabled: true,
+            // Preserve password masking info
+            isSensitive: action.isSensitive || /password|pw/i.test(action.args?.[0] || ''),
+            inputType: action.inputType,
+          };
+        }),
+        settings: {
+          baseUrl: url || '',
+        },
+        metadata: { 
+          source: 'playwright-recorder',
+          createdAt: new Date().toISOString(),
+        }
       };
       
-      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      const idx = localCases.findIndex((tc: TestCase) => tc.id === selectedTestCase.id);
-      if (idx >= 0) {
-        localCases[idx] = updatedTestCase;
+      console.log('[Recorder] Exporting test case with', testCase.steps.length, 'steps');
+      console.log('[Recorder] Steps:', testCase.steps.map(s => `${s.qword}: ${s.name}`));
+
+      if (electronAPI?.exportToTestBuilder) {
+        await electronAPI.exportToTestBuilder(testCase);
+      } else if (flowstral?.export?.toTestBuilder) {
+        await flowstral.export.toTestBuilder(testCase);
       } else {
-        localCases.push(updatedTestCase);
+        // Fallback: Save to localStorage and navigate
+        localStorage.setItem('unified_test_case', JSON.stringify(testCase));
+        localStorage.setItem('unified_test_case_timestamp', Date.now().toString());
+        window.location.href = '/test-cases/builder';
       }
-      localStorage.setItem('test_cases', JSON.stringify(localCases));
-      
-      toast.success(`Saved "${selectedTestCase.name}" with ${mergedSteps.length} steps`);
-      
-      setSelectedTestCase(null);
-      setMergedSteps([]);
-      setActions([]);
-      setMode('new');
-      loadTestData();
+      toast.success(`Exported ${actions.length} steps to Builder!`);
     } catch (error) {
-      console.error('[Recorder] Save error:', error);
-      toast.error("Failed to save");
-    } finally {
-      setIsSaving(false);
+      console.error('[Recorder] Export failed:', error);
+      toast.error("Failed to export");
     }
   };
 
-  const handleExportToBuilder = async () => {
-    const flowstral = (window as any).flowstral;
-    const electronAPI = (window as any).electronAPI;
-
-    try {
-      if (electronAPI?.exportToTestBuilder) {
-        const result = await electronAPI.exportToTestBuilder("Recorded Test");
-        if (result?.success) {
-          toast.success("Exported to Test Builder!");
-        }
-      } else if (flowstral?.export?.toTestBuilder) {
-        await flowstral.export.toTestBuilder("Recorded Test");
-        toast.success("Exported to Test Builder");
-      }
-    } catch (error) {
-      console.error('[PlaywrightRecorder] Export error:', error);
-      toast.error("Failed to export");
+  const handleExport = async (format: string) => {
+    if (actions.length === 0) {
+      toast.error("No actions to export");
+      return;
     }
+    
+    const flowstral = (window as any).flowstral;
+    const testName = `recorded_test_${Date.now()}`;
+    
+    try {
+      let code = '';
+      let filename = '';
+      
+      switch (format) {
+        case 'playwright':
+          code = generatePlaywrightCode(actions, url);
+          filename = `${testName}.spec.ts`;
+          break;
+        case 'cypress':
+          code = generateCypressCode(actions, url);
+          filename = `${testName}.cy.js`;
+          break;
+        case 'selenium':
+          code = generateSeleniumCode(actions, url);
+          filename = `${testName}_test.py`;
+          break;
+        case 'robot':
+          if (flowstral?.export?.robotFramework) {
+            await flowstral.export.robotFramework(testName);
+            toast.success("Exported to Robot Framework!");
+            return;
+          }
+          code = generateRobotCode(actions, url);
+          filename = `${testName}.robot`;
+          break;
+        case 'json':
+          code = JSON.stringify({ name: testName, url, actions }, null, 2);
+          filename = `${testName}.json`;
+          break;
+        case 'csv':
+          code = actionsToCSV(actions);
+          filename = `${testName}.csv`;
+          break;
+        default:
+          return;
+      }
+      
+      // Download the file
+      const blob = new Blob([code], { type: 'text/plain' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(downloadUrl);
+      toast.success(`Exported as ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error(`Failed to export as ${format}`);
+    }
+  };
+
+  // Code generators
+  const generatePlaywrightCode = (acts: RecordedAction[], startUrl: string) => {
+    let code = `import { test, expect } from '@playwright/test';
+
+test('Recorded Test', async ({ page }) => {
+  await page.goto('${startUrl}');
+`;
+    acts.forEach(action => {
+      const selector = action.selectorObj?.selector || action.args?.[1] || '';
+      const value = action.args?.[1] || action.args?.[0] || '';
+      switch (action.qword?.toLowerCase()) {
+        case 'fill':
+          code += `  await page.fill('${selector}', '${value}');\n`;
+          break;
+        case 'click':
+        case 'clicktext':
+          code += `  await page.click('${selector || `text=${action.args?.[0]}`}');\n`;
+          break;
+        case 'goto':
+          code += `  await page.goto('${action.args?.[0]}');\n`;
+          break;
+        default:
+          code += `  // ${action.description || action.qword}\n`;
+      }
+    });
+    code += '});\n';
+    return code;
+  };
+
+  const generateCypressCode = (acts: RecordedAction[], startUrl: string) => {
+    let code = `describe('Recorded Test', () => {
+  it('should complete the test flow', () => {
+    cy.visit('${startUrl}');
+`;
+    acts.forEach(action => {
+      const selector = action.selectorObj?.selector || action.args?.[1] || '';
+      const value = action.args?.[1] || action.args?.[0] || '';
+      switch (action.qword?.toLowerCase()) {
+        case 'fill':
+          code += `    cy.get('${selector}').type('${value}');\n`;
+          break;
+        case 'click':
+        case 'clicktext':
+          code += `    cy.${selector ? `get('${selector}')` : `contains('${action.args?.[0]}')`}.click();\n`;
+          break;
+        case 'goto':
+          code += `    cy.visit('${action.args?.[0]}');\n`;
+          break;
+        default:
+          code += `    // ${action.description || action.qword}\n`;
+      }
+    });
+    code += `  });
+});
+`;
+    return code;
+  };
+
+  const generateSeleniumCode = (acts: RecordedAction[], startUrl: string) => {
+    let code = `from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+def test_recorded():
+    driver = webdriver.Chrome()
+    driver.get('${startUrl}')
+    wait = WebDriverWait(driver, 10)
+`;
+    acts.forEach(action => {
+      const selector = action.selectorObj?.selector || action.args?.[1] || '';
+      const value = action.args?.[1] || action.args?.[0] || '';
+      switch (action.qword?.toLowerCase()) {
+        case 'fill':
+          code += `    driver.find_element(By.CSS_SELECTOR, '${selector}').send_keys('${value}')\n`;
+          break;
+        case 'click':
+        case 'clicktext':
+          code += `    driver.find_element(By.CSS_SELECTOR, '${selector}').click()\n`;
+          break;
+        case 'goto':
+          code += `    driver.get('${action.args?.[0]}')\n`;
+          break;
+        default:
+          code += `    # ${action.description || action.qword}\n`;
+      }
+    });
+    code += `    driver.quit()
+`;
+    return code;
+  };
+
+  const generateRobotCode = (acts: RecordedAction[], startUrl: string) => {
+    let code = `*** Settings ***
+Library    SeleniumLibrary
+
+*** Test Cases ***
+Recorded Test
+    Open Browser    ${startUrl}    chrome
+`;
+    acts.forEach(action => {
+      const selector = action.selectorObj?.selector || action.args?.[1] || '';
+      const value = action.args?.[1] || action.args?.[0] || '';
+      switch (action.qword?.toLowerCase()) {
+        case 'fill':
+          code += `    Input Text    ${selector}    ${value}\n`;
+          break;
+        case 'click':
+        case 'clicktext':
+          code += `    Click Element    ${selector || `//\*[contains(text(),'${action.args?.[0]}')]`}\n`;
+          break;
+        case 'goto':
+          code += `    Go To    ${action.args?.[0]}\n`;
+          break;
+        default:
+          code += `    # ${action.description || action.qword}\n`;
+      }
+    });
+    code += `    Close Browser
+`;
+    return code;
+  };
+
+  const actionsToCSV = (acts: RecordedAction[]) => {
+    let csv = 'Step,Action,Target,Value,Description\n';
+    acts.forEach((action, i) => {
+      csv += `${i + 1},"${action.qword}","${action.args?.[0] || ''}","${action.args?.[1] || ''}","${action.description || ''}"\n`;
+    });
+    return csv;
   };
 
   const handleSaveAsNew = async () => {
@@ -690,19 +1369,17 @@ export default function PlaywrightRecorderPage() {
       return;
     }
     
-    const newTestCase: TestCase = {
+    const newTestCase = {
       id: `tc_${Date.now()}`,
       name: `Recorded Test ${new Date().toLocaleString()}`,
       description: `Recorded from ${url}`,
       steps: actions.map((action, idx) => ({
         id: `step_${Date.now()}_${idx}`,
         name: action.description || `${action.qword} ${action.args?.join(' ')}`,
-        type: action.qword?.toLowerCase() || action.type || 'click',
         qword: action.qword,
         args: action.args,
         selectorObj: action.selectorObj,
-        automationStatus: 'recorded' as const,
-        expectedResult: `Action: ${action.qword}`
+        automationStatus: 'recorded',
       })),
       automationStatus: 'full',
     };
@@ -711,28 +1388,151 @@ export default function PlaywrightRecorderPage() {
     localCases.push(newTestCase);
     localStorage.setItem('test_cases', JSON.stringify(localCases));
     
-    toast.success(`Created new test case with ${actions.length} steps`);
+    toast.success(`Saved ${actions.length} steps!`);
     navigate('/test-cases');
   };
 
-  const getActionIcon = (qword: string) => {
-    const type = qword?.toLowerCase() || '';
-    if (type.includes('goto') || type.includes('nav')) return <Globe className="h-4 w-4 text-blue-400" />;
-    if (type.includes('click')) return <MousePointer className="h-4 w-4 text-emerald-400" />;
-    if (type.includes('fill') || type.includes('type')) return <Type className="h-4 w-4 text-violet-400" />;
-    if (type.includes('assert')) return <Eye className="h-4 w-4 text-cyan-400" />;
-    return <CircleDot className="h-4 w-4 text-gray-400" />;
+  const handleRunTest = async () => {
+    if (actions.length === 0) {
+      toast.error("No steps to run");
+      return;
+    }
+    
+    const flowstral = (window as any).flowstral;
+    const electronAPI = (window as any).electronAPI;
+    
+    // Show modal with running state
+    setTestExecutionResult({
+      status: 'running',
+      currentStep: 0,
+      stepResults: [],
+      totalSteps: actions.length
+    });
+    setShowTestResultModal(true);
+    
+    // Simulate step progress for visual feedback (since IPC events are unreliable)
+    let progressInterval: NodeJS.Timeout | null = null;
+    let currentIdx = 0;
+    
+    progressInterval = setInterval(() => {
+      if (currentIdx < actions.length) {
+        setTestExecutionResult(prev => prev && prev.status === 'running' ? { 
+          ...prev, 
+          currentStep: currentIdx 
+        } : prev);
+        currentIdx++;
+      }
+    }, 800); // Update progress every 800ms
+    
+    try {
+      let result: any;
+      
+      if (flowstral?.playwrightRecorder?.runTest) {
+        result = await flowstral.playwrightRecorder.runTest({
+          steps: actions,
+          url: url
+        });
+      } else if (electronAPI?.testRunner?.executeTest) {
+        result = await electronAPI.testRunner.executeTest({
+          name: 'Recorded Test',
+          steps: actions.map(a => ({
+            type: a.qword,
+            qword: a.qword,
+            args: a.args,
+            selector: a.selectorObj?.selector,
+            selectorObj: a.selectorObj,
+            description: a.description
+          })),
+          settings: { baseUrl: url }
+        });
+      }
+      
+      // Stop progress simulation
+      if (progressInterval) clearInterval(progressInterval);
+      
+      console.log('[Test] Result:', result);
+      
+      // Generate step results from the response
+      const generateStepResults = () => {
+        // If result has stepResults, use those
+        if (result?.stepResults && Array.isArray(result.stepResults)) {
+          return result.stepResults.map((s: any, i: number) => ({
+            index: i,
+            status: s.status || 'passed',
+            error: s.error,
+            screenshot: s.screenshot
+          }));
+        }
+        
+        // If result has steps array, use that
+        if (result?.steps && Array.isArray(result.steps)) {
+          return result.steps.map((s: any, i: number) => ({
+            index: i,
+            status: s.status || 'passed',
+            error: s.error,
+            screenshot: s.screenshot
+          }));
+        }
+        
+        // If test passed, mark all steps as passed
+        const testPassed = result?.success !== false && result?.status !== 'failed';
+        const failedStep = result?.failedStep ?? (testPassed ? -1 : actions.length - 1);
+        
+        return actions.map((_, i) => ({
+          index: i,
+          status: testPassed || i < failedStep ? 'passed' : (i === failedStep ? 'failed' : 'skipped'),
+          error: i === failedStep ? (result?.error || result?.failError) : undefined
+        }));
+      };
+      
+      const stepResults = generateStepResults();
+      const testPassed = result?.success !== false && result?.status !== 'failed';
+      
+      setTestExecutionResult({
+        status: testPassed ? 'passed' : 'failed',
+        currentStep: actions.length - 1,
+        stepResults,
+        totalSteps: actions.length,
+        error: testPassed ? undefined : (result?.error || result?.failError || 'Test failed')
+      });
+      
+      if (testPassed) {
+        toast.success(`✅ Test Passed! (${actions.length} steps)`, { id: 'run' });
+      } else {
+        toast.error(`❌ Test Failed: ${result?.error || 'Unknown error'}`, { id: 'run' });
+      }
+    } catch (error: any) {
+      if (progressInterval) clearInterval(progressInterval);
+      
+      setTestExecutionResult({
+        status: 'failed',
+        currentStep: 0,
+        stepResults: actions.map((_, i) => ({ index: i, status: 'skipped' })),
+        totalSteps: actions.length,
+        error: error?.message || 'Test execution error'
+      });
+      toast.error('Failed to run test', { id: 'run' });
+    }
   };
 
-  const getStatusBadge = (status?: 'none' | 'partial' | 'full') => {
-    switch (status) {
-      case 'full':
-        return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">Automated</Badge>;
-      case 'partial':
-        return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">Partial</Badge>;
-      default:
-        return <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs">Manual</Badge>;
-    }
+  const getActionIcon = (qword: string, small = false) => {
+    const size = small ? "h-3 w-3" : "h-4 w-4";
+    const type = qword?.toLowerCase() || '';
+    if (type.includes('goto') || type.includes('nav')) return <Globe className={`${size} text-blue-400`} />;
+    if (type.includes('fill')) return <PenLine className={`${size} text-purple-400`} />;
+    if (type.includes('click')) return <Hand className={`${size} text-emerald-400`} />;
+    if (type.includes('assert')) return <Eye className={`${size} text-cyan-400`} />;
+    return <CircleDot className={`${size} text-gray-400`} />;
+  };
+
+  // Toggle group expansion
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
   };
 
   if (!isElectron()) {
@@ -742,16 +1542,7 @@ export default function PlaywrightRecorderPage() {
           <CardContent className="pt-6 text-center">
             <Video className="h-12 w-12 mx-auto mb-4 text-gray-400" />
             <h2 className="text-xl font-semibold mb-2 text-white">Desktop App Required</h2>
-            <p className="text-gray-400 mb-4">
-              The Playwright Recorder requires the Flowstral Desktop application.
-            </p>
-            <Button 
-              onClick={() => window.open('https://flowstral.dev/download', '_blank')}
-              className="bg-gradient-to-r from-cyan-500 to-violet-500"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download Flowstral Desktop
-            </Button>
+            <p className="text-gray-400">Playwright Recorder requires Flowstral Desktop.</p>
           </CardContent>
         </Card>
       </div>
@@ -759,646 +1550,1018 @@ export default function PlaywrightRecorderPage() {
   }
 
   return (
-    <div className="h-screen bg-[#0a0a0f] text-white flex overflow-hidden">
-      {/* ============ LEFT PANEL - Recording Controls & Steps ============ */}
-      <div className="w-[420px] flex flex-col border-r border-white/10">
-        {/* Header */}
-        <div className="p-4 border-b border-white/10">
-          <div className="flex items-center justify-between mb-1">
-            <h1 className="text-lg font-bold flex items-center gap-2">
-              <Video className="h-5 w-5 text-red-500" />
-              Playwright Recorder
-            </h1>
-            {isRecording && (
-              <div className="flex items-center gap-2 px-2 py-1 bg-red-500/20 rounded-full border border-red-500/30">
-                <div className={cn("w-2 h-2 rounded-full", isPaused ? "bg-amber-500" : "bg-red-500 animate-pulse")} />
-                <span className="text-xs font-mono text-red-400">{formatTime(recordingTime)}</span>
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-gray-500">Record browser interactions and create automated tests</p>
+    <div className="h-screen bg-[#0a0a0f] text-white flex flex-col overflow-hidden">
+      {/* ============ TOP TOOLBAR ============ */}
+      <div className="h-12 bg-[#0d0d14] border-b border-white/10 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          {isRecording && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
+              <div className={cn("w-2 h-2 rounded-full", isPaused ? "bg-amber-500" : "bg-red-500 animate-pulse")} />
+              <span className="text-xs text-gray-300">Ready</span>
+              <span className="text-xs text-gray-500">•</span>
+              <span className="text-xs text-gray-300">{actions.length} steps</span>
         </div>
-
-        {/* Mode Selector */}
-        <div className="px-4 py-2 border-b border-white/10">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as 'new' | 'existing')}>
-            <TabsList className="grid w-full grid-cols-2 h-9 bg-[#1a1a25]">
-              <TabsTrigger value="new" className="text-xs data-[state=active]:bg-red-600 data-[state=active]:text-white">
-                <Play className="h-3 w-3 mr-1.5" />
-                Record New Test
-              </TabsTrigger>
-              <TabsTrigger value="existing" className="text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white">
-                <Merge className="h-3 w-3 mr-1.5" />
-                Automate Existing
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-
-        {/* Automate Existing - Test Case Selection */}
-        {mode === 'existing' && (
-          <div className="px-4 py-2 border-b border-white/10 bg-violet-900/10">
-            {selectedTestCase ? (
-              <div className="flex items-center gap-2 p-2 bg-violet-900/20 border border-violet-500/30 rounded-lg">
-                <FileText className="h-4 w-4 text-violet-400" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{selectedTestCase.name}</div>
-                  <div className="text-xs text-gray-400">{selectedTestCase.steps?.length || 0} steps</div>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setShowTestPicker(true)} className="h-6 text-xs text-violet-400 px-2">
-                  Change
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => setSelectedTestCase(null)} className="h-6 w-6 text-gray-400">
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <Button onClick={() => setShowTestPicker(true)} variant="outline" className="w-full h-8 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
-                <Search className="h-3 w-3 mr-1.5" />
-                Select Test Case to Automate
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* URL Input */}
-        <div className="px-4 py-3 border-b border-white/10">
-          <label className="block text-xs text-gray-400 mb-1.5">Starting URL</label>
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-              <Input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                disabled={isRecording}
-                className="pl-9 h-9 bg-[#1a1a25] border-white/10 text-white text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Recording Controls */}
-        <div className="px-4 py-3 border-b border-white/10 flex gap-2">
-          {!isRecording ? (
-            <Button
-              onClick={handleStartRecording}
-              disabled={isStarting || !url.startsWith('http') || (mode === 'existing' && !selectedTestCase)}
-              className="flex-1 h-10 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium"
-            >
-              {isStarting ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Circle className="h-4 w-4 mr-2 fill-current" />
-              )}
-              Start Recording
-            </Button>
-          ) : (
-            <>
-              <Button
-                onClick={isPaused ? handleResumeRecording : handlePauseRecording}
-                variant="outline"
-                className="flex-1 h-10 border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
-              >
-                {isPaused ? (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Resume
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-4 w-4 mr-2" />
-                    Pause
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={handleStopRecording}
-                className="flex-1 h-10 bg-red-600 hover:bg-red-700"
-              >
-                <Square className="h-4 w-4 mr-2 fill-current" />
-                Stop
-              </Button>
-            </>
           )}
-        </div>
-
-        {/* Recorded Steps Header */}
-        <div className="px-4 py-2 flex items-center justify-between border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Recorded Steps</span>
-            <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
-              {actions.length}
-            </Badge>
-          </div>
-          {actions.length > 0 && (
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-gray-400 hover:text-red-400">
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Recorded Steps List */}
-        <ScrollArea className="flex-1">
-          {actions.length === 0 ? (
-            <div className="text-center py-16 px-4 text-gray-500">
-              <Video className="h-12 w-12 mx-auto mb-4 opacity-30" />
-              <p className="text-sm font-medium">No actions recorded yet.</p>
-              <p className="text-xs mt-1">
-                {isRecording 
-                  ? (isPaused ? "Recording paused. Click Resume to continue." : "Interact with the browser to record actions.")
-                  : "Click 'Start Recording' to begin."}
-              </p>
-            </div>
-          ) : (
-            <div className="p-2 space-y-1">
-              {actions.map((action, index) => (
-                <div
-                  key={action.id || index}
-                  className="flex items-center gap-2 p-2.5 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] transition-colors border border-transparent hover:border-white/5 group"
-                >
-                  <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-gray-500 font-mono">
-                    {String(index + 1).padStart(2, '0')}
+                      </div>
+        
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white">
+            <Settings className="h-3.5 w-3.5 mr-1.5" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-400 hover:text-white">
+            <Code className="h-3.5 w-3.5 mr-1.5" />
+            Code
+          </Button>
+                    <Button
+            onClick={handleRunTest}
+                      size="sm"
+            className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700"
+            disabled={actions.length === 0}
+                    >
+            <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
+            Run
+                    </Button>
+                    <Button
+            onClick={handleExportToBuilder}
+                      size="sm"
+            className="h-8 px-4 text-xs bg-amber-600 hover:bg-amber-700"
+            disabled={actions.length === 0}
+                    >
+            <Layers className="h-3.5 w-3.5 mr-1.5" />
+            Builder
+                    </Button>
+          <Select onValueChange={handleExport}>
+            <SelectTrigger className="h-8 w-[100px] text-xs border-white/20 bg-transparent">
+              <Download className="h-3.5 w-3.5 mr-1" />
+              <SelectValue placeholder="Export" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#1a1a25] border-white/10">
+              <SelectItem value="playwright" className="text-xs">Playwright</SelectItem>
+              <SelectItem value="cypress" className="text-xs">Cypress</SelectItem>
+              <SelectItem value="selenium" className="text-xs">Selenium</SelectItem>
+              <SelectItem value="robot" className="text-xs">Robot Framework</SelectItem>
+              <SelectItem value="json" className="text-xs">JSON</SelectItem>
+              <SelectItem value="csv" className="text-xs">CSV</SelectItem>
+            </SelectContent>
+          </Select>
                   </div>
-                  {getActionIcon(action.qword || action.type || '')}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">
-                      {action.description || `${action.qword || action.type} ${action.args?.[0] || ''}`}
-                    </p>
-                    {action.args && action.args.length > 0 && (
-                      <p className="text-xs text-gray-500 truncate">
-                        {action.args.slice(0, 2).join(' → ')}
-                      </p>
-                    )}
+      </div>
+
+      {/* ============ MAIN CONTENT ============ */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ============ LEFT PANEL - URL & Recorded Steps ============ */}
+        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-white/10">
+          {/* URL Bar */}
+          <div className="p-3 border-b border-white/10">
+            <div className="flex items-center gap-2 p-2 bg-[#1a1a25] rounded-lg border border-white/10">
+              <Globe className="h-4 w-4 text-gray-500 shrink-0" />
+              <Input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://..."
+                  disabled={isRecording}
+                className="h-7 bg-transparent border-0 text-sm p-0 focus-visible:ring-0"
+                />
+            </div>
+              </div>
+              
+{/* Recording Controls */}
+          <div className="p-3 border-b border-white/10 space-y-2">
+            {/* Selected Test Info (Automate Existing mode) */}
+            {selectedTestCase && (
+              <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-400" />
+                    <span className="text-sm font-medium text-purple-300">Automating:</span>
+                    <span className="text-sm text-white truncate max-w-[200px]">{selectedTestCase.name}</span>
+                    <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">
+                      {selectedTestCase.steps?.length || 0} steps
+                    </Badge>
                   </div>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400"
-                    onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
+                    size="sm"
+                    onClick={() => {
+                      setSelectedTestCase(null);
+                      setMode('new');
+                    }}
+                    className="h-6 px-2 text-xs text-gray-400 hover:text-white"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <X className="h-3 w-3" />
                   </Button>
                 </div>
-              ))}
+              </div>
+            )}
+            
+            {/* Recording Buttons */}
+            <div className="flex gap-2">
+              {!isRecording ? (
+                <>
+                <Button
+                  onClick={handleStartRecording}
+                    disabled={isStarting || !url.startsWith('http')}
+                    className="flex-1 h-10 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 font-medium"
+                >
+                  {isStarting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                      <Circle className="h-4 w-4 mr-2 fill-current" />
+                  )}
+                  Start Recording
+                  </Button>
+                  {!selectedTestCase ? (
+                    <Button
+                      onClick={() => setShowTestPicker(true)}
+                      variant="outline"
+                      className="flex-1 h-10 border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Automate Existing
+                </Button>
+              ) : (
+                <Button
+                      onClick={() => setShowTestPicker(true)}
+                      variant="outline"
+                      className="h-10 px-3 border-white/20 text-gray-400 hover:text-white"
+                >
+                      Change
+                </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button onClick={handleStopRecording} className="flex-1 h-10 bg-red-600 hover:bg-red-700">
+                    <Square className="h-4 w-4 mr-2 fill-current" />
+                    Stop
+                  </Button>
+                  <Button 
+                    onClick={handlePauseResume} 
+                    className={cn(
+                      "w-28 h-10",
+                      isPaused 
+                        ? "bg-emerald-600 hover:bg-emerald-700" 
+                        : "bg-amber-600 hover:bg-amber-700"
+                    )}
+                  >
+                    {isPaused ? (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Resume
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="h-4 w-4 mr-2" />
+                        Pause
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
             </div>
-          )}
-        </ScrollArea>
+            </div>
 
-        {/* Footer Actions */}
-        {actions.length > 0 && (
-          <div className="p-3 border-t border-white/10 space-y-2">
-            {mode === 'new' ? (
-              <>
-                <Button onClick={handleSaveAsNew} className="w-full h-9 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
+          {/* Recorded Steps Header */}
+          <div className="px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Recorded Steps</span>
+              <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
+                {actions.length}
+                </Badge>
+              </div>
+              {actions.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-gray-400 hover:text-red-400">
+                <Trash2 className="h-3 w-3 mr-1" />
+                    Clear
+                  </Button>
+            )}
+          </div>
+
+          {/* Recorded Steps List */}
+          <ScrollArea className="flex-1">
+            {actions.length === 0 ? (
+              <div className="text-center py-12 px-4 text-gray-500">
+                <Video className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No actions recorded yet.</p>
+                <p className="text-xs mt-1">Click 'Start Recording' to begin.</p>
+              </div>
+            ) : (
+              <div className="px-2 pb-2 space-y-1">
+                {actions.map((action, index) => {
+                  // Apply masking for sensitive fields (passwords)
+                  const displayAction = maskSensitiveAction(action);
+                  const isPw = isPasswordField(action);
+                  
+                  return (
+                  <div
+                    key={action.id || index}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={cn(
+                      "flex items-center gap-2 p-2.5 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] border group cursor-grab active:cursor-grabbing transition-all",
+                      draggedIndex === index && "opacity-50 border-cyan-500/50",
+                      dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
+                      draggedIndex === null && "border-transparent hover:border-white/5"
+                    )}
+                  >
+                    {/* Drag handle */}
+                    <div className="flex flex-col gap-0.5 text-gray-600 group-hover:text-gray-400 shrink-0 cursor-grab">
+                      <div className="flex gap-0.5">
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                      </div>
+                      <div className="flex gap-0.5">
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className="w-1 h-1 rounded-full bg-current" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-gray-500 font-mono shrink-0">
+                      {String(index + 1).padStart(2, '0')}
+                    </div>
+                    {getActionIcon(action.qword || action.type || '')}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">
+                        {displayAction.description || `${action.qword || action.type} ${displayAction.args?.[0] || ''}`}
+                        {isPw && <span className="ml-1 text-amber-400">🔒</span>}
+                      </p>
+                      {displayAction.args?.[0] && (
+                        <p className="text-xs text-gray-500 truncate">
+                          {isPw ? `${displayAction.args[0]} → ••••••••` : displayAction.args.join(' → ')}
+                        </p>
+                      )}
+                    </div>
+                  <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 shrink-0"
+                      onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                  </Button>
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+                  
+{/* Footer - Save/Merge Button */}
+              {actions.length > 0 && (
+            <div className="p-3 border-t border-white/10 space-y-2">
+              {selectedTestCase ? (
+                <>
+                  <Button
+                    onClick={performMerge} 
+                    className="w-full h-10 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                  >
+                    <Merge className="h-4 w-4 mr-2" />
+                    Merge {actions.length} Actions into "{selectedTestCase.name?.slice(0, 20)}..."
+                      </Button>
+                  <p className="text-[11px] text-gray-500 text-center">
+                    Position-based merge: Action 1 → Step 1, Action 2 → Step 2, etc.
+                  </p>
+                </>
+              ) : (
+                <Button onClick={handleSaveAsNew} className="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600">
                   <Save className="h-4 w-4 mr-2" />
                   Save as New Test Case
                 </Button>
-                <Button onClick={handleExportToBuilder} variant="outline" className="w-full h-9 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Export to Test Builder
-                </Button>
-              </>
-            ) : (
-              <Button 
-                onClick={handleSaveMerged} 
-                disabled={isSaving || mergedSteps.length === 0}
-                className="w-full h-9 bg-gradient-to-r from-violet-500 to-violet-600"
-              >
-                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Save Merged Test
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+              )}
+            </div>
+          )}
+        </div>
 
-      {/* ============ RIGHT PANEL - Suggestions & SF Context ============ */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
-          {/* Tab Headers */}
-          <div className="px-4 py-2 border-b border-white/10">
-            <TabsList className="h-9 bg-[#1a1a25] p-1">
-              <TabsTrigger value="suggestions" className="h-7 px-3 text-xs data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
-                <Lightbulb className="h-3.5 w-3.5 mr-1.5" />
-                Suggestions
-                {suggestResult?.total ? (
-                  <Badge className="ml-1.5 h-4 bg-amber-500/30 text-amber-300 text-[10px] px-1">
-                    {suggestResult.total}
-                  </Badge>
-                ) : null}
-              </TabsTrigger>
-              <TabsTrigger value="sftools" className="h-7 px-3 text-xs data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
-                <Cloud className="h-3.5 w-3.5 mr-1.5" />
-                SF Tools
-              </TabsTrigger>
-              <TabsTrigger value="sfcontext" className="h-7 px-3 text-xs data-[state=active]:bg-violet-500/20 data-[state=active]:text-violet-400">
-                <Target className="h-3.5 w-3.5 mr-1.5" />
-                SF Context
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          {/* ========== SUGGESTIONS TAB ========== */}
-          <TabsContent value="suggestions" className="flex-1 m-0 overflow-hidden flex flex-col">
-            {/* Suggestions Header */}
+        {/* ============ RIGHT PANEL - Suggestions ============ */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
+            {/* Tab Headers */}
             <div className="px-4 py-2 border-b border-white/10">
-              <div className="flex items-center justify-between mb-2">
+              <TabsList className="h-9 bg-[#1a1a25] p-1">
+                <TabsTrigger value="suggestions" className="h-7 px-3 text-xs data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+                  <Lightbulb className="h-3.5 w-3.5 mr-1.5" />
+                  Suggestions
+                  {totalSuggestions > 0 && (
+                    <Badge className="ml-1.5 h-4 bg-amber-500/30 text-amber-300 text-[10px] px-1.5">
+                      {totalSuggestions}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="sftools" className="h-7 px-3 text-xs data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+                  <Cloud className="h-3.5 w-3.5 mr-1.5" />
+                  SF Tools
+                </TabsTrigger>
+                <TabsTrigger value="sfcontext" className="h-7 px-3 text-xs data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                  <Target className="h-3.5 w-3.5 mr-1.5" />
+                  SF Context
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* ========== SUGGESTIONS TAB ========== */}
+            <TabsContent value="suggestions" className="flex-1 m-0 flex flex-col" style={{ minHeight: 0 }}>
+              {/* Compact Header Row */}
+              <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between sticky top-0 bg-[#0f0f15] z-10">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-amber-400" />
                   <span className="text-sm font-semibold">Suggested Actions</span>
-                  {suggestResult?.total ? (
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-                      {suggestResult.total} ITEMS
+                  {totalSuggestions > 0 && (
+                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5">
+                      {totalSuggestions}
                     </Badge>
-                  ) : null}
-                </div>
-                <Button
-                  onClick={handleRefreshSuggestions}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                  disabled={isLoadingSuggestions}
-                >
-                  {isLoadingSuggestions ? (
-                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3 w-3 mr-1.5" />
                   )}
-                  Refresh
-                </Button>
-              </div>
-
-              {/* Category Filter Badges */}
-              <div className="flex gap-1.5 flex-wrap">
-                {[
-                  { key: 'all', label: 'All', icon: null, color: 'cyan' },
-                  { key: 'buttons', label: 'Buttons', icon: CircleDot, color: 'emerald' },
-                  { key: 'links', label: 'Links', icon: Link, color: 'blue' },
-                  { key: 'inputs', label: 'Inputs', icon: FormInput, color: 'violet' },
-                  { key: 'headings', label: 'Headings', icon: Hash, color: 'amber' },
-                ].map(({ key, label, icon: Icon, color }) => (
-                  <Badge 
-                    key={key}
-                    variant="outline" 
-                    className={cn(
-                      "cursor-pointer transition-colors text-[10px] px-2 py-0.5",
-                      elementFilter === key
-                        ? `bg-${color}-500/20 border-${color}-500/50 text-${color}-400`
-                        : "border-white/20 text-gray-400 hover:border-white/40"
-                    )}
-                    style={elementFilter === key ? {
-                      backgroundColor: `rgb(var(--${color}-500) / 0.2)`,
-                      borderColor: `rgb(var(--${color}-500) / 0.5)`,
-                      color: `rgb(var(--${color}-400))`
-                    } : undefined}
-                    onClick={() => setElementFilter(key)}
-                  >
-                    {Icon && <Icon className="h-2.5 w-2.5 mr-1" />}
-                    {label} {suggestResult?.counts?.[key] || 0}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-
-            {/* Action Buttons Row */}
-            <div className="px-4 py-2 border-b border-white/10 flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAllSuggestions}
-                className="h-7 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                disabled={!filteredSuggestions.length}
-              >
-                <CheckSquare className="h-3 w-3 mr-1.5" />
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addSelectedToTest}
-                className="h-7 text-xs border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                disabled={selectedSuggestions.size === 0}
-              >
-                <Plus className="h-3 w-3 mr-1.5" />
-                Add Selected
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
-                disabled={!filteredSuggestions.length}
-              >
-                <Wand2 className="h-3 w-3 mr-1.5" />
-                AI Enhance
-              </Button>
-            </div>
-
-            {/* Search and Filter */}
-            <div className="px-4 py-2 border-b border-white/10 flex gap-2">
-              <div className="flex-1 relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500" />
-                <Input
-                  value={suggestionSearch}
-                  onChange={(e) => setSuggestionSearch(e.target.value)}
-                  placeholder="Search elements..."
-                  className="pl-8 h-8 bg-[#1a1a25] border-white/10 text-white text-xs"
-                />
-              </div>
-              <Select value={elementFilter} onValueChange={setElementFilter}>
-                <SelectTrigger className="w-28 h-8 bg-[#1a1a25] border-white/10 text-white text-xs">
-                  <SelectValue placeholder="All Elements" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1a25] border-white/10">
-                  <SelectItem value="all" className="text-xs">All Elements</SelectItem>
-                  <SelectItem value="buttons" className="text-xs">Buttons</SelectItem>
-                  <SelectItem value="links" className="text-xs">Links</SelectItem>
-                  <SelectItem value="inputs" className="text-xs">Inputs</SelectItem>
-                  <SelectItem value="headings" className="text-xs">Headings</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Suggestions List */}
-            <ScrollArea className="flex-1">
-              <div className="p-3">
-                {!suggestResult ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm font-medium">Start recording to see suggestions</p>
-                    <p className="text-xs mt-1">Click Refresh to analyze current page</p>
-                  </div>
-                ) : filteredSuggestions.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <Search className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">No matching elements found</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {filteredSuggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        onClick={() => toggleSuggestionSelection(index)}
-                        className={cn(
-                          "flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all",
-                          selectedSuggestions.has(index)
-                            ? "bg-cyan-500/10 border-cyan-500/50"
-                            : "bg-[#12121a] border-transparent hover:border-white/10"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                          selectedSuggestions.has(index)
-                            ? "bg-cyan-500 border-cyan-500"
-                            : "border-gray-600"
-                        )}>
-                          {selectedSuggestions.has(index) && <Check className="h-2.5 w-2.5 text-white" />}
-                        </div>
-                        
-                        <div className={cn(
-                          "w-7 h-7 rounded flex items-center justify-center shrink-0",
-                          suggestion.qword === 'ClickText' && "bg-emerald-500/20 text-emerald-400",
-                          suggestion.qword === 'Fill' && "bg-violet-500/20 text-violet-400",
-                          suggestion.qword === 'AssertText' && "bg-cyan-500/20 text-cyan-400",
-                          !['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && "bg-gray-500/20 text-gray-400"
-                        )}>
-                          {suggestion.qword === 'ClickText' && <MousePointer className="h-3.5 w-3.5" />}
-                          {suggestion.qword === 'Fill' && <Keyboard className="h-3.5 w-3.5" />}
-                          {suggestion.qword === 'AssertText' && <Eye className="h-3.5 w-3.5" />}
-                          {!['ClickText', 'Fill', 'AssertText'].includes(suggestion.qword) && <CircleDot className="h-3.5 w-3.5" />}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-white truncate">{suggestion.description}</p>
-                          <p className="text-[10px] text-gray-500 truncate">{suggestion.element || suggestion.args?.[0]}</p>
-                        </div>
-
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-rose-500/30 text-rose-400 hover:bg-rose-500/10">
+                    <CheckSquare className="h-3 w-3 mr-1" />
+                    All
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
+                    <Eye className="h-3 w-3 mr-1" />
+                    Assert
+                  </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newAction: RecordedAction = {
-                              id: `action_${Date.now()}`,
-                              qword: suggestion.qword,
-                              args: suggestion.args,
-                              description: suggestion.description,
-                              timestamp: Date.now(),
-                              selectorObj: suggestion.selectorObj
-                            };
-                            setActions(prev => [...prev, newAction]);
-                            toast.success('Added to test', { duration: 1500 });
-                          }}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                    onClick={handleRefreshSuggestions}
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                    disabled={isLoadingSuggestions}
+                  >
+                    {isLoadingSuggestions ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Category Filter & Search Row - Combined */}
+              <div className="px-3 py-1.5 border-b border-white/10 flex items-center gap-2 flex-wrap sticky top-[42px] bg-[#0f0f15] z-10">
+                <div className="flex gap-1.5 flex-wrap">
+                  <Badge 
+                    className={cn(
+                      "cursor-pointer transition-colors text-[10px] px-1.5 py-0.5",
+                      elementFilter === 'buttons' ? "bg-emerald-500/30 border-emerald-500 text-emerald-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400/70"
+                    )}
+                    onClick={() => setElementFilter(elementFilter === 'buttons' ? 'all' : 'buttons')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1" />
+                    Buttons {categoryCounts.buttons}
+                  </Badge>
+                  <Badge 
+                    className={cn(
+                      "cursor-pointer transition-colors text-[10px] px-1.5 py-0.5",
+                      elementFilter === 'links' ? "bg-blue-500/30 border-blue-500 text-blue-400" : "bg-blue-500/10 border-blue-500/30 text-blue-400/70"
+                    )}
+                    onClick={() => setElementFilter(elementFilter === 'links' ? 'all' : 'links')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1" />
+                    Links {categoryCounts.links}
+                  </Badge>
+                  <Badge 
+                    className={cn(
+                      "cursor-pointer transition-colors text-[10px] px-1.5 py-0.5",
+                      elementFilter === 'inputs' ? "bg-purple-500/30 border-purple-500 text-purple-400" : "bg-purple-500/10 border-purple-500/30 text-purple-400/70"
+                    )}
+                    onClick={() => setElementFilter(elementFilter === 'inputs' ? 'all' : 'inputs')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mr-1" />
+                    Inputs {categoryCounts.inputs}
+                  </Badge>
+                  <Badge 
+                    className={cn(
+                      "cursor-pointer transition-colors text-[10px] px-1.5 py-0.5",
+                      elementFilter === 'headings' ? "bg-amber-500/30 border-amber-500 text-amber-400" : "bg-amber-500/10 border-amber-500/30 text-amber-400/70"
+                    )}
+                    onClick={() => setElementFilter(elementFilter === 'headings' ? 'all' : 'headings')}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1" />
+                    Headings {categoryCounts.headings}
+                  </Badge>
+            </div>
+                <div className="flex-1 relative min-w-[120px]">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-500" />
+                  <Input
+                    value={suggestionSearch}
+                    onChange={(e) => setSuggestionSearch(e.target.value)}
+                    placeholder="Search..."
+                    className="pl-7 h-6 bg-[#1a1a25] border-white/10 text-white text-[10px]"
+                  />
+                </div>
+              </div>
+
+              {/* Suggestions List - Scrollable, fills remaining space */}
+              <div className="flex-1 overflow-auto">
+                <div className="p-2 min-h-full">
+                {isLoadingSuggestions && !suggestResult?.suggestions?.length && (
+                  <div className="text-center py-8">
+                    <Loader2 className="h-8 w-8 mx-auto animate-spin text-amber-400" />
+                    <p className="text-xs mt-2 text-gray-500">Analyzing page...</p>
                   </div>
                 )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          {/* ========== SF TOOLS TAB ========== */}
-          <TabsContent value="sftools" className="flex-1 m-0 overflow-y-auto">
-            <div className="p-4 space-y-4">
-              <div className="text-center py-4">
-                <Cloud className="h-10 w-10 mx-auto mb-2 text-blue-400 opacity-50" />
-                <h3 className="text-base font-semibold mb-1">Salesforce Tools</h3>
-                <p className="text-xs text-gray-400">Quick access to Salesforce-specific testing tools</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Card className="bg-[#12121a] border-white/10 hover:border-blue-500/30 cursor-pointer transition-colors">
-                  <CardContent className="p-4 text-center">
-                    <Database className="h-7 w-7 mx-auto mb-2 text-blue-400" />
-                    <p className="text-sm font-medium">Query Builder</p>
-                    <p className="text-xs text-gray-500">Build SOQL queries</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-[#12121a] border-white/10 hover:border-emerald-500/30 cursor-pointer transition-colors">
-                  <CardContent className="p-4 text-center">
-                    <Zap className="h-7 w-7 mx-auto mb-2 text-emerald-400" />
-                    <p className="text-sm font-medium">Apex Runner</p>
-                    <p className="text-xs text-gray-500">Execute Apex code</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-[#12121a] border-white/10 hover:border-violet-500/30 cursor-pointer transition-colors">
-                  <CardContent className="p-4 text-center">
-                    <Copy className="h-7 w-7 mx-auto mb-2 text-violet-400" />
-                    <p className="text-sm font-medium">Record Cloner</p>
-                    <p className="text-xs text-gray-500">Clone test data</p>
-                  </CardContent>
-                </Card>
-                <Card className="bg-[#12121a] border-white/10 hover:border-amber-500/30 cursor-pointer transition-colors">
-                  <CardContent className="p-4 text-center">
-                    <Shield className="h-7 w-7 mx-auto mb-2 text-amber-400" />
-                    <p className="text-sm font-medium">Validation Rules</p>
-                    <p className="text-xs text-gray-500">View active rules</p>
-                  </CardContent>
-                </Card>
-              </div>
+                
+                {suggestResult?.suggestions && suggestResult.suggestions.length > 0 && (
+                  <div className="space-y-1.5">
+                    {/* Filter suggestions based on elementFilter and search */}
+                    {suggestResult.suggestions
+                      .filter(s => {
+                        // Apply category filter
+                        if (elementFilter === 'buttons' && s.category !== 'button') return false;
+                        if (elementFilter === 'links' && s.category !== 'link') return false;
+                        if (elementFilter === 'inputs' && s.category !== 'input') return false;
+                        if (elementFilter === 'headings' && s.category !== 'heading') return false;
+                        // Apply search filter
+                        if (suggestionSearch.trim()) {
+                          const query = suggestionSearch.toLowerCase();
+                          const text = (s.element || s.description || s.args?.[0] || '').toLowerCase();
+                          if (!text.includes(query)) return false;
+                        }
+                        return true;
+                      })
+                      .map((s, i) => (
+                        <div 
+                          key={`${s.element}-${i}`}
+                          className="flex items-center gap-2 p-2.5 rounded-lg bg-[#1a1a25] hover:bg-[#252530] border border-transparent hover:border-white/10 group transition-colors"
+                        >
+                          {/* Icon based on category */}
+                          <div className={cn(
+                            "p-1.5 rounded shrink-0",
+                            s.category === 'input' && 'bg-purple-500/20 text-purple-400',
+                            s.category === 'link' && 'bg-blue-500/20 text-blue-400',
+                            s.category === 'heading' && 'bg-amber-500/20 text-amber-400',
+                            s.category === 'button' && 'bg-emerald-500/20 text-emerald-400',
+                            !['input', 'link', 'heading', 'button'].includes(s.category || '') && 'bg-gray-500/20 text-gray-400'
+                          )}>
+                            {s.category === 'input' ? <PenLine className="h-3.5 w-3.5" /> :
+                             s.category === 'link' ? <Link className="h-3.5 w-3.5" /> :
+                             s.category === 'heading' ? <Type className="h-3.5 w-3.5" /> :
+                             <Hand className="h-3.5 w-3.5" />}
+                          </div>
+                          
+                          {/* Label */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white truncate font-medium">{s.element || s.description || s.args?.[0] || 'Unknown'}</p>
+                            <p className="text-[10px] text-gray-500 capitalize">{s.qword || s.type || s.category}</p>
+                          </div>
+                          
+                          {/* Action buttons - always visible on mobile, hover on desktop */}
+                      <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                            onClick={() => executeAction(s)}
+                            title="Execute action on page"
+                          >
+                            <Play className="h-3 w-3" />
+                      </Button>
+                      <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                            onClick={() => addToTest(s)}
+                            title="Add to test steps"
+                          >
+                            <Plus className="h-3 w-3" />
+                      </Button>
+                        </div>
+                      ))}
+                    
+                    {/* Show message if filter results in no items */}
+                    {suggestResult.suggestions.filter(s => {
+                      if (elementFilter === 'buttons' && s.category !== 'button') return false;
+                      if (elementFilter === 'links' && s.category !== 'link') return false;
+                      if (elementFilter === 'inputs' && s.category !== 'input') return false;
+                      if (elementFilter === 'headings' && s.category !== 'heading') return false;
+                      if (suggestionSearch.trim()) {
+                        const query = suggestionSearch.toLowerCase();
+                        const text = (s.element || s.description || '').toLowerCase();
+                        if (!text.includes(query)) return false;
+                      }
+                      return true;
+                    }).length === 0 && (
+                      <div className="text-center py-6 text-gray-500">
+                        <p className="text-xs">No {elementFilter !== 'all' ? elementFilter : 'elements'} match{suggestionSearch ? ` "${suggestionSearch}"` : ''}</p>
+                        <Button
+                          onClick={() => { setElementFilter('all'); setSuggestionSearch(''); }}
+                          variant="ghost"
+                        size="sm"
+                          className="mt-2 text-xs text-gray-400"
+                      >
+                          Clear filters
+                      </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {!isLoadingSuggestions && (!suggestResult?.suggestions || suggestResult.suggestions.length === 0) && (
+                  <div className="text-center py-12 text-gray-500">
+                    <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">No suggestions yet</p>
+                    <p className="text-xs mt-1">Start recording to see page elements</p>
+                        <Button
+                      onClick={handleRefreshSuggestions}
+                      variant="outline"
+                          size="sm"
+                      className="mt-4 text-xs border-amber-500/30 text-amber-400"
+                        >
+                      <RefreshCw className="h-3 w-3 mr-1.5" />
+                      Analyze Page
+                        </Button>
+                  </div>
+              )}
             </div>
-          </TabsContent>
+              </div>
+            </TabsContent>
 
-          {/* ========== SF CONTEXT TAB ========== */}
-          <TabsContent value="sfcontext" className="flex-1 m-0 overflow-hidden flex flex-col">
-            {isSalesforceUrl ? (
-              <SalesforceContextPanel
-                currentUrl={currentUrl || url}
-                isRecording={isRecording}
-                onAddAssertion={(code) => {
-                  const action: RecordedAction = {
-                    id: `assert_${Date.now()}`,
-                    qword: 'AssertText',
-                    args: [code],
-                    description: `Assert: ${code.slice(0, 30)}...`,
-                    timestamp: Date.now()
-                  };
-                  setActions(prev => [...prev, action]);
-                  toast.success('Assertion added');
-                }}
-                onAddAction={(code) => {
-                  const action: RecordedAction = {
-                    id: `action_${Date.now()}`,
-                    qword: 'Custom',
-                    args: [code],
-                    description: code.slice(0, 50),
-                    timestamp: Date.now()
-                  };
-                  setActions(prev => [...prev, action]);
-                  toast.success('Action added');
-                }}
-                onGenerateTestData={(data) => {
-                  toast.success(`Generated ${data.length} test records`);
-                }}
-                className="flex-1"
-              />
-            ) : (
-              <div className="flex-1 flex items-center justify-center p-4">
-                <div className="text-center">
-                  <Target className="h-10 w-10 mx-auto mb-3 text-violet-400 opacity-50" />
-                  <h3 className="text-base font-semibold mb-1">SF Context</h3>
-                  <p className="text-xs text-gray-400">
-                    Navigate to a Salesforce page to see<br />context-aware suggestions
-                  </p>
+{/* ========== SF TOOLS TAB ========== */}
+            <TabsContent value="sftools" className="m-0 overflow-auto">
+              <div className="p-2 space-y-2">
+                {/* Data & Query Tools */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Data & Query</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                        <Button
+                      variant="outline"
+                          size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('soql'); setSfToolInput('SELECT Id, Name FROM Account LIMIT 10'); setShowSFToolDialog(true); }}
+                    >
+                      <Database className="h-4 w-4 text-blue-400" />
+                      <span>SOQL Query</span>
+                        </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('apex'); setSfToolInput('// Apex code\nSystem.debug(\'Test\');'); setShowSFToolDialog(true); }}
+                    >
+                      <Zap className="h-4 w-4 text-emerald-400" />
+                      <span>Execute Apex</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('api'); setSfToolInput('/services/data/v59.0/sobjects/Account'); setSfToolInput2('GET'); setShowSFToolDialog(true); }}
+                    >
+                      <Globe className="h-4 w-4 text-cyan-400" />
+                      <span>REST API Call</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('datafactory'); setSfToolInput('Account'); setSfToolInput2('5'); setShowSFToolDialog(true); }}
+                    >
+                      <Sparkles className="h-4 w-4 text-pink-400" />
+                      <span>Data Factory</span>
+                    </Button>
+            </div>
+                        </div>
+
+                {/* Record Operations */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Record Operations</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('clone'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Copy className="h-4 w-4 text-purple-400" />
+                      <span>Clone Record</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => {
+                        const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'DeleteRecord', args: ['CurrentRecord'], description: 'Delete Current Record', timestamp: Date.now() };
+                        setActions(prev => [...prev, action]);
+                        toast.success('Added Delete step');
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-rose-400" />
+                      <span>Delete Record</span>
+                    </Button>
+                      </div>
+                        </div>
+
+                {/* Assertions & Validation */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Assertions</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-amber-500/50 hover:bg-amber-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('validation'); setSfToolInput(''); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Shield className="h-4 w-4 text-amber-400" />
+                      <span>Validation Rule</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-12 text-[10px] border-white/10 hover:border-teal-500/50 hover:bg-teal-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => {
+                        const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'AssertFieldValue', args: ['FieldName', 'ExpectedValue'], description: 'Assert Field Value', timestamp: Date.now() };
+                        setActions(prev => [...prev, action]);
+                        toast.success('Added Field Assert - edit args in Builder');
+                      }}
+                    >
+                      <CheckCircle className="h-4 w-4 text-teal-400" />
+                      <span>Assert Field</span>
+                    </Button>
+                    </div>
+                  </div>
+
+                {/* Automation & Permissions */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Automation & Admin</h4>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('flow'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <ArrowRight className="h-4 w-4 text-orange-400" />
+                      <span>Trigger Flow</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('permission'); setSfToolInput(''); setSfToolInput2('assign'); setShowSFToolDialog(true); }}
+                    >
+                      <Layers className="h-4 w-4 text-indigo-400" />
+                      <span>Permission Set</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-lime-500/50 hover:bg-lime-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('apextest'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <Play className="h-4 w-4 text-lime-400" />
+                      <span>Run Apex Test</span>
+                    </Button>
+              </div>
+              </div>
+
+                {/* Additional SF Tools */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">More Tools</h4>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('createrecord'); setSfToolInput('Account'); setSfToolInput2('{}'); setShowSFToolDialog(true); }}
+                    >
+                      <Plus className="h-4 w-4 text-sky-400" />
+                      <span>Create Record</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('bulkload'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Upload className="h-4 w-4 text-fuchsia-400" />
+                      <span>Bulk Load</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('runreport'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <FileText className="h-4 w-4 text-yellow-400" />
+                      <span>Run Report</span>
+                    </Button>
+                      </div>
+                      </div>
+
+                {/* Quick UI Actions */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Quick Actions</h4>
+                  <div className="grid grid-cols-4 gap-1">
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                      onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['Global Search'], description: 'Click Global Search', timestamp: Date.now() }]); toast.success('Added'); }}>
+                      <Search className="h-3 w-3" />Search
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                      onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['App Launcher'], description: 'Click App Launcher', timestamp: Date.now() }]); toast.success('Added'); }}>
+                      <LayoutGrid className="h-3 w-3" />Apps
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                      onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Wait', args: ['2000'], description: 'Wait 2 seconds', timestamp: Date.now() }]); toast.success('Added'); }}>
+                      <RefreshCw className="h-3 w-3" />Wait
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                      onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Screenshot', args: [`ss_${Date.now()}.png`], description: 'Take Screenshot', timestamp: Date.now() }]); toast.success('Added'); }}>
+                      <Eye className="h-3 w-3" />Screenshot
+                    </Button>
+                    </div>
+                  </div>
+
+                {/* Navigate To - Sales */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Navigate - Sales</h4>
+                  <div className="grid grid-cols-4 gap-1">
+                    {['Accounts', 'Contacts', 'Opportunities', 'Leads', 'Campaigns', 'Products', 'Quotes', 'Contracts'].map(obj => (
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-white/10 hover:bg-white/5"
+                        onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
+                        {obj}
+                      </Button>
+                    ))}
+                    </div>
+                  </div>
+
+                {/* Navigate To - Service */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Navigate - Service & More</h4>
+                  <div className="grid grid-cols-4 gap-1">
+                    {['Cases', 'Tasks', 'Events', 'Reports', 'Dashboards', 'Files', 'Chatter', 'Setup'].map(obj => (
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-white/10 hover:bg-white/5"
+                        onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
+                        {obj}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Full SF Tools Link */}
+                <div className="pt-1">
+                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-gray-500 hover:text-white hover:bg-white/5"
+                    onClick={() => navigate('/salesforce')}>
+                    <ExternalLink className="h-3 w-3 mr-1" />Open Full SF Tools<ChevronRight className="h-3 w-3 ml-auto" />
+                  </Button>
                 </div>
               </div>
+            </TabsContent>
+
+{/* ========== SF CONTEXT TAB ========== */}
+            <TabsContent value="sfcontext" className="flex-1 m-0 overflow-hidden flex flex-col">
+              <ScrollArea className="flex-1">
+                {isSalesforceUrl ? (
+                  <SalesforceContextPanel
+                    currentUrl={currentUrl || url}
+                    isRecording={isRecording}
+                    onAddAssertion={(code) => {
+                      const action: RecordedAction = {
+                        id: `assert_${Date.now()}`,
+                        qword: 'AssertText',
+                        args: [code],
+                        description: `Assert: ${code.slice(0, 30)}...`,
+                        timestamp: Date.now()
+                      };
+                      setActions(prev => [...prev, action]);
+                      toast.success('Assertion added');
+                    }}
+                    onAddAction={(code) => {
+                      const action: RecordedAction = {
+                        id: `action_${Date.now()}`,
+                        qword: 'Custom',
+                        args: [code],
+                        description: code.slice(0, 50),
+                        timestamp: Date.now()
+                      };
+                      setActions(prev => [...prev, action]);
+                      toast.success('Action added');
+                    }}
+                    onGenerateTestData={(data) => {
+                      toast.success(`Generated ${data.length} test records`);
+                    }}
+                    className="h-full"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center p-8 h-full min-h-[300px]">
+                    <div className="text-center">
+                      <Target className="h-10 w-10 mx-auto mb-3 text-purple-400 opacity-50" />
+                      <h3 className="text-base font-semibold mb-1">SF Context</h3>
+                      <p className="text-xs text-gray-400 mb-4">Navigate to a Salesforce page to see context</p>
+                      <p className="text-[11px] text-gray-500">
+                        Shows fields, validation rules, flows, and related objects<br/>
+                        for the current Salesforce page
+                      </p>
+                    </div>
+              </div>
             )}
-          </TabsContent>
-        </Tabs>
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
-      {/* Test Case Picker Dialog */}
+      {/* Test Picker Dialog - Enterprise Scale */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
-        <DialogContent className="max-w-3xl max-h-[80vh] bg-[#12121a] border-white/10">
+        <DialogContent className="max-w-4xl max-h-[85vh] bg-[#12121a] border-white/10 flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Select Test Case to Automate
-              <Badge variant="secondary" className="ml-2">
-                {filteredTestCases.length} of {allTestCases.length}
+            <DialogTitle className="text-white flex items-center justify-between">
+              <span>Select Test Case to Automate</span>
+              <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
+                {filteredTestCases.length} of {allTestCases.length} tests
               </Badge>
             </DialogTitle>
           </DialogHeader>
           
-          {/* Filters */}
-          <div className="grid grid-cols-4 gap-2 pb-3 border-b border-white/10">
-            <div className="col-span-2 relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-              <Input
-                placeholder="Search by name, ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 bg-[#1a1a25] border-white/10 text-white text-sm"
+          {/* Search & Filters */}
+          <div className="space-y-3 pb-3 border-b border-white/10">
+            {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <Input
+                value={testSearchQuery}
+                onChange={(e) => setTestSearchQuery(e.target.value)}
+                placeholder="Search by name, ID, description, or tags..."
+                className="pl-10 bg-[#1a1a25] border-white/10 text-white"
               />
             </div>
             
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-              <SelectTrigger className="h-9 bg-[#1a1a25] border-white/10 text-white text-sm">
+            {/* Filters Row */}
+            <div className="flex gap-2 flex-wrap">
+            {/* Status Filter */}
+              <Select value={testStatusFilter} onValueChange={(v: any) => setTestStatusFilter(v)}>
+                <SelectTrigger className="w-[140px] h-8 bg-[#1a1a25] border-white/10 text-xs">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent className="bg-[#1a1a25] border-white/10">
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="manual">Manual Only</SelectItem>
-                <SelectItem value="partial">Partial</SelectItem>
-                <SelectItem value="automated">Automated</SelectItem>
+                <SelectContent className="bg-[#1a1a25] border-white/10">
+                  <SelectItem value="all" className="text-xs">All Status</SelectItem>
+                  <SelectItem value="none" className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-gray-500" />
+                      Manual Only
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="partial" className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      Partial
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="full" className="text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Automated
+                    </span>
+                  </SelectItem>
               </SelectContent>
             </Select>
             
-            <Select value={folderFilter} onValueChange={setFolderFilter}>
-              <SelectTrigger className="h-9 bg-[#1a1a25] border-white/10 text-white text-sm">
+            {/* Folder Filter */}
+              <Select value={testFolderFilter} onValueChange={setTestFolderFilter}>
+                <SelectTrigger className="w-[160px] h-8 bg-[#1a1a25] border-white/10 text-xs">
+                  <Folder className="h-3 w-3 mr-1" />
                 <SelectValue placeholder="Folder" />
               </SelectTrigger>
-              <SelectContent className="bg-[#1a1a25] border-white/10">
-                <SelectItem value="all">All Folders</SelectItem>
-                {folders.map(folder => (
-                  <SelectItem key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </SelectItem>
+                <SelectContent className="bg-[#1a1a25] border-white/10">
+                  <SelectItem value="all" className="text-xs">All Folders</SelectItem>
+                  <SelectItem value="orphan" className="text-xs text-amber-400">⚠️ Orphaned (No Folder)</SelectItem>
+                  {allFolders.map(f => (
+                    <SelectItem key={f.id} value={f.id} className="text-xs">{f.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            
+            {/* Tag Filter */}
+              {allTags.length > 0 && (
+                <Select value={testTagFilter} onValueChange={setTestTagFilter}>
+                  <SelectTrigger className="w-[140px] h-8 bg-[#1a1a25] border-white/10 text-xs">
+                    <Tag className="h-3 w-3 mr-1" />
+                <SelectValue placeholder="Tag" />
+              </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a25] border-white/10">
+                    <SelectItem value="all" className="text-xs">All Tags</SelectItem>
+                {allTags.map(tag => (
+                      <SelectItem key={tag} value={tag} className="text-xs">{tag}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+              )}
+              
+              {/* Clear Filters */}
+              {(testSearchQuery || testStatusFilter !== 'all' || testFolderFilter !== 'all' || testTagFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setTestSearchQuery('');
+                    setTestStatusFilter('all');
+                    setTestFolderFilter('all');
+                    setTestTagFilter('all');
+                  }}
+                  className="h-8 text-xs text-gray-400 hover:text-white"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
           
-          {/* Test Case List */}
-          <ScrollArea className="h-[350px]">
+          {/* Test Cases List */}
+          <ScrollArea className="flex-1 min-h-[300px]">
             {paginatedTestCases.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">No test cases found</p>
+                <p className="text-sm">
+                  {allTestCases.length === 0 ? 'No test cases found' : 'No tests match your filters'}
+                </p>
+                {testSearchQuery && (
+                  <p className="text-xs mt-1">Try adjusting your search or filters</p>
+                )}
               </div>
             ) : (
-              <div className="space-y-2 pr-4">
-                {paginatedTestCases.map(tc => (
+              <div className="space-y-2 pr-2">
+                {paginatedTestCases.map(tc => {
+                  const status = tc.automationStatus || 
+                    (tc.steps?.some((s: any) => s.qword || s.selector) ? 
+                      (tc.steps.every((s: any) => s.qword || s.selector) ? 'full' : 'partial') : 'none');
+                  const automatedCount = tc.steps?.filter((s: any) => s.qword || s.selector).length || 0;
+                  
+                  return (
                   <div
                     key={tc.id}
                     onClick={() => {
                       setSelectedTestCase(tc);
+                        setMode('existing');
                       setShowTestPicker(false);
-                    }}
-                    className={cn(
-                      "p-3 rounded-lg border cursor-pointer transition-all",
-                      "hover:border-violet-500 hover:bg-white/5",
-                      selectedTestCase?.id === tc.id
-                        ? "border-violet-500 bg-violet-500/10"
-                        : "border-white/10 bg-white/5"
-                    )}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium text-white text-sm">{tc.name || tc.title}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-[10px] border-white/20">
-                            {tc.steps?.length || 0} steps
-                          </Badge>
+                        toast.success(`Selected: ${tc.name}`);
+                      }}
+                      className="p-3 rounded-lg border border-white/10 hover:border-purple-500/50 cursor-pointer transition-colors group"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Status Indicator */}
+                        <div className={cn(
+                          "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                          status === 'full' && "bg-emerald-500",
+                          status === 'partial' && "bg-amber-500",
+                          status === 'none' && "bg-gray-500"
+                        )} />
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-white truncate">{tc.name || tc.title}</span>
+                            {status === 'full' && (
+                              <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5">Automated</Badge>
+                            )}
+                            {status === 'partial' && (
+                              <Badge className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5">Partial</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                            <span>{tc.steps?.length || 0} steps</span>
+                            {status !== 'none' && (
+                              <span className="text-emerald-400/70">{automatedCount} automated</span>
+                            )}
+                            {tc.folderId && allFolders.find(f => f.id === tc.folderId) && (
+                              <span className="flex items-center gap-1">
+                                <Folder className="h-3 w-3" />
+                                {allFolders.find(f => f.id === tc.folderId)?.name}
+                              </span>
+                            )}
+                          </div>
+                          {tc.tags && tc.tags.length > 0 && (
+                            <div className="flex gap-1 mt-1.5">
+                              {tc.tags.slice(0, 3).map(tag => (
+                                <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-gray-400">
+                              {tag}
+                            </Badge>
+                          ))}
+                              {tc.tags.length > 3 && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-gray-400">
+                                  +{tc.tags.length - 3}
+                                </Badge>
+                              )}
                         </div>
+                          )}
                       </div>
-                      {getStatusBadge(tc.automationStatus)}
+                        
+                        <ChevronRight className="h-4 w-4 text-gray-500 group-hover:text-purple-400 shrink-0" />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
           
-          {totalPages > 1 && (
+          {/* Pagination */}
+          {totalTestPages > 1 && (
             <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              <div className="text-xs text-gray-400">
-                Page {currentPage} of {totalPages}
-              </div>
+              <span className="text-xs text-gray-500">
+                Page {testPage} of {totalTestPages} • Showing {((testPage - 1) * TESTS_PER_PAGE) + 1}-{Math.min(testPage * TESTS_PER_PAGE, filteredTestCases.length)} of {filteredTestCases.length}
+              </span>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  onClick={() => setTestPage(p => Math.max(1, p - 1))}
+                  disabled={testPage === 1}
                   className="h-7 text-xs border-white/20"
                 >
                   Previous
@@ -1406,8 +2569,8 @@ export default function PlaywrightRecorderPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setTestPage(p => Math.min(totalTestPages, p + 1))}
+                  disabled={testPage === totalTestPages}
                   className="h-7 text-xs border-white/20"
                 >
                   Next
@@ -1417,6 +2580,707 @@ export default function PlaywrightRecorderPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Test Execution Result Modal */}
+      <Dialog open={showTestResultModal} onOpenChange={setShowTestResultModal}>
+        <DialogContent className="max-w-2xl bg-[#12121a] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              {testExecutionResult?.status === 'running' && (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+                  Running Test...
+                </>
+              )}
+              {testExecutionResult?.status === 'passed' && (
+                <>
+                  <CheckCircle className="h-5 w-5 text-emerald-400" />
+                  Test Passed!
+                </>
+              )}
+              {testExecutionResult?.status === 'failed' && (
+                <>
+                  <AlertCircle className="h-5 w-5 text-red-400" />
+                  Test Failed
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Progress */}
+            {testExecutionResult?.status === 'running' && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">Step {(testExecutionResult?.currentStep || 0) + 1} of {testExecutionResult?.totalSteps}</span>
+                  <span className="text-gray-400">{Math.round(((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-blue-500 transition-all duration-300"
+                    style={{ width: `${((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Step Results */}
+            <div className="flex gap-4">
+              <ScrollArea className="h-[350px] flex-1">
+                <div className="space-y-1 pr-2">
+                  {actions.map((action, idx) => {
+                    const stepResult = testExecutionResult?.stepResults.find(r => r.index === idx);
+                    const isCurrent = testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx;
+                    const hasScreenshot = !!stepResult?.screenshot;
+                    
+                    return (
+                      <div 
+                        key={action.id || idx}
+                        className={cn(
+                          "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all",
+                          isCurrent && "bg-blue-500/20 border border-blue-500/30",
+                          stepResult?.status === 'passed' && "bg-emerald-500/10 hover:bg-emerald-500/20",
+                          stepResult?.status === 'failed' && "bg-red-500/10 hover:bg-red-500/20",
+                          testExecutionResult?.selectedScreenshot === stepResult?.screenshot && "ring-2 ring-blue-500"
+                        )}
+                        onClick={() => {
+                          if (hasScreenshot) {
+                            setTestExecutionResult(prev => prev ? { 
+                              ...prev, 
+                              selectedScreenshot: prev.selectedScreenshot === stepResult.screenshot ? undefined : stepResult.screenshot 
+                            } : null);
+                          }
+                        }}
+                      >
+                        <span className="text-gray-500 w-6 shrink-0 pt-0.5">{idx + 1}</span>
+                        <div className="shrink-0 pt-0.5">
+                          {isCurrent && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
+                          {stepResult?.status === 'passed' && <Check className="h-4 w-4 text-emerald-400" />}
+                          {stepResult?.status === 'failed' && <X className="h-4 w-4 text-red-400" />}
+                          {!isCurrent && !stepResult && <Circle className="h-4 w-4 text-gray-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className={cn(
+                            "break-words",
+                            stepResult?.status === 'passed' && "text-emerald-400",
+                            stepResult?.status === 'failed' && "text-red-400",
+                            !stepResult && "text-gray-400"
+                          )}>
+                            {(() => {
+                              const displayAction = maskSensitiveAction(action);
+                              return displayAction.description || `${action.qword} ${displayAction.args?.[0] || ''}`;
+                            })()}
+                            {isPasswordField(action) && <span className="ml-1">🔒</span>}
+                          </span>
+                          {stepResult?.error && (
+                            <p className="text-xs text-red-400 mt-1 truncate">{stepResult.error}</p>
+                          )}
+                        </div>
+                        {hasScreenshot && (
+                          <Eye className="h-4 w-4 text-gray-400 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+              
+              {/* Screenshot Preview */}
+              {testExecutionResult?.selectedScreenshot && (
+                <div className="w-[300px] shrink-0 bg-gray-900 rounded-lg p-2 border border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-400">Step Screenshot</span>
+            <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setTestExecutionResult(prev => prev ? { ...prev, selectedScreenshot: undefined } : null)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <img 
+                    src={testExecutionResult.selectedScreenshot} 
+                    alt="Step screenshot" 
+                    className="w-full rounded border border-white/10"
+                  />
+                </div>
+              )}
+            </div>
+            
+            {/* Error Message */}
+            {testExecutionResult?.status === 'failed' && testExecutionResult?.error && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-sm text-red-400">{testExecutionResult.error}</p>
+              </div>
+            )}
+            
+            {/* Summary */}
+            {testExecutionResult?.status !== 'running' && (
+              <div className="flex justify-between items-center pt-2 border-t border-white/10">
+                <span className="text-sm text-gray-400">
+                  {testExecutionResult?.stepResults.filter(r => r.status === 'passed').length || 0} / {testExecutionResult?.totalSteps || actions.length} steps passed
+                </span>
+            <Button
+                  onClick={() => setShowTestResultModal(false)}
+                  className={testExecutionResult?.status === 'passed' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-600 hover:bg-gray-700"}
+                >
+                  {testExecutionResult?.status === 'passed' ? "Done" : "Close"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge Preview Dialog */}
+      <Dialog open={showMergePreview} onOpenChange={setShowMergePreview}>
+        <DialogContent className="max-w-3xl max-h-[80vh] bg-[#12121a] border-white/10 flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Merge className="h-5 w-5 text-purple-400" />
+              Merge Preview - {selectedTestCase?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="text-sm text-gray-400 pb-3 border-b border-white/10">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Automated ({mergedSteps.filter(s => s.qword && !s._manualOnly).length})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-500" />
+                Manual Only ({mergedSteps.filter(s => s._manualOnly).length})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-purple-500" />
+                Extra Recorded ({mergedSteps.filter(s => s._extra).length})
+              </span>
+            </div>
+          </div>
+          
+          <ScrollArea className="flex-1 min-h-[300px]">
+            <div className="space-y-2 pr-2">
+              {mergedSteps.map((step, idx) => (
+                <div
+                  key={step.id || idx}
+                  className={cn(
+                    "p-3 rounded-lg border",
+                    step._merged && "bg-emerald-500/10 border-emerald-500/30",
+                    step._manualOnly && "bg-gray-500/10 border-gray-500/30",
+                    step._extra && "bg-purple-500/10 border-purple-500/30",
+                    !step._merged && !step._manualOnly && !step._extra && step.qword && "bg-emerald-500/10 border-emerald-500/30"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-sm text-gray-500 w-6 shrink-0">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white text-sm truncate">
+                          {step.name || step.description || `${step.qword} ${step.args?.[0] || ''}`}
+                        </span>
+                        {step._merged && (
+                          <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Merged</Badge>
+                        )}
+                        {step._manualOnly && (
+                          <Badge className="bg-gray-500/20 text-gray-400 text-[10px]">Manual</Badge>
+                        )}
+                        {step._extra && (
+                          <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">New Step</Badge>
+                        )}
+                      </div>
+                      {step.qword && (
+                        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                          <Badge variant="outline" className="text-[10px] border-white/20">
+                            {step.qword}
+                          </Badge>
+                          <span className="truncate">{step.args?.join(' → ')}</span>
+                        </div>
+                      )}
+                    </div>
+                    {step.qword ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-gray-400 shrink-0" />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          
+          <DialogFooter className="border-t border-white/10 pt-4">
+            <Button variant="outline" onClick={() => setShowMergePreview(false)} className="border-white/20">
+              Cancel
+            </Button>
+            <Button onClick={saveMergedTest} className="bg-gradient-to-r from-purple-500 to-purple-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save Merged Test ({mergedSteps.filter(s => s.qword).length}/{mergedSteps.length} automated)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* SF Tools Customization Dialog */}
+      <Dialog open={showSFToolDialog} onOpenChange={setShowSFToolDialog}>
+        <DialogContent className="max-w-lg bg-[#12121a] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              {sfToolType === 'soql' && <><Database className="h-5 w-5 text-blue-400" /> Add SOQL Query Step</>}
+              {sfToolType === 'apex' && <><Zap className="h-5 w-5 text-emerald-400" /> Add Apex Execution Step</>}
+              {sfToolType === 'clone' && <><Copy className="h-5 w-5 text-purple-400" /> Add Clone Record Step</>}
+              {sfToolType === 'validation' && <><Shield className="h-5 w-5 text-amber-400" /> Add Validation Assert Step</>}
+              {sfToolType === 'api' && <><Globe className="h-5 w-5 text-cyan-400" /> Add REST API Call Step</>}
+              {sfToolType === 'datafactory' && <><Sparkles className="h-5 w-5 text-pink-400" /> Add Data Factory Step</>}
+              {sfToolType === 'permission' && <><Layers className="h-5 w-5 text-indigo-400" /> Add Permission Set Step</>}
+              {sfToolType === 'flow' && <><ArrowRight className="h-5 w-5 text-orange-400" /> Add Flow Trigger Step</>}
+              {sfToolType === 'apextest' && <><Play className="h-5 w-5 text-lime-400" /> Add Apex Test Step</>}
+              {sfToolType === 'createrecord' && <><Plus className="h-5 w-5 text-sky-400" /> Add Create Record Step</>}
+              {sfToolType === 'bulkload' && <><Upload className="h-5 w-5 text-fuchsia-400" /> Add Bulk Load Step</>}
+              {sfToolType === 'runreport' && <><FileText className="h-5 w-5 text-yellow-400" /> Add Run Report Step</>}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {sfToolType === 'soql' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">SOQL Query</label>
+                  <textarea
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="SELECT Id, Name FROM Account WHERE..."
+                    className="w-full h-24 bg-[#1a1a25] border border-white/10 rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-blue-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">The query result will be stored and can be used in later steps</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] text-gray-500">Quick:</span>
+                  {[
+                    'SELECT Id, Name FROM Account LIMIT 10',
+                    'SELECT Id, Email FROM Contact WHERE Email != null LIMIT 5',
+                    'SELECT Id, Name FROM Opportunity WHERE StageName = \'Closed Won\'',
+                  ].map((q, i) => (
+                    <Button key={i} variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-400" onClick={() => setSfToolInput(q)}>
+                      Template {i + 1}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {sfToolType === 'apex' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Apex Code (Anonymous)</label>
+                  <textarea
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="// Your Apex code here&#10;System.debug('Hello');"
+                    className="w-full h-32 bg-[#1a1a25] border border-white/10 rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-emerald-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Execute anonymous Apex during test - useful for data setup/cleanup</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] text-gray-500">Templates:</span>
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-400" 
+                    onClick={() => setSfToolInput('// Insert test data\nAccount acc = new Account(Name = \'Test Account\');\ninsert acc;')}>
+                    Insert Record
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-400"
+                    onClick={() => setSfToolInput('// Delete test data\ndelete [SELECT Id FROM Account WHERE Name LIKE \'Test%\'];')}>
+                    Delete Records
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-400"
+                    onClick={() => setSfToolInput('// Update records\nList<Account> accs = [SELECT Id FROM Account LIMIT 5];\nfor(Account a : accs) { a.Description = \'Updated\'; }\nupdate accs;')}>
+                    Update Records
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {sfToolType === 'clone' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Object Type</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Account, Contact, Opportunity..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Record ID (optional - will use current page if empty)</label>
+                  <Input
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder="001XXXXXXXXXXXX or leave empty"
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Clone will duplicate the record with a new ID, copying all cloneable fields</p>
+              </>
+            )}
+
+            {sfToolType === 'validation' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Validation Rule Name</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="e.g., Account_Name_Required"
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Expected Error Message (contains)</label>
+                  <Input
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder="e.g., Account Name is required"
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Asserts that the expected validation error appears when triggered</p>
+              </>
+            )}
+
+            {sfToolType === 'api' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">API Endpoint</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="/services/data/v59.0/sobjects/Account"
+                    className="bg-[#1a1a25] border-white/10 text-white font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">HTTP Method</label>
+                  <div className="flex gap-2">
+                    {['GET', 'POST', 'PATCH', 'DELETE'].map(m => (
+                      <Button key={m} variant={sfToolInput2 === m ? 'default' : 'outline'} size="sm"
+                        className={sfToolInput2 === m ? 'bg-cyan-600' : 'border-white/20'}
+                        onClick={() => setSfToolInput2(m)}>{m}</Button>
+                    ))}
+                  </div>
+                </div>
+                {(sfToolInput2 === 'POST' || sfToolInput2 === 'PATCH') && (
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">Request Body (JSON)</label>
+                    <textarea
+                      value={sfToolInput3}
+                      onChange={(e) => setSfToolInput3(e.target.value)}
+                      placeholder='{"Name": "Test Account"}'
+                      className="w-full h-20 bg-[#1a1a25] border border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    />
+                  </div>
+                )}
+                <p className="text-[10px] text-gray-500">Make a REST API call to Salesforce - useful for data setup/cleanup</p>
+              </>
+            )}
+
+            {sfToolType === 'datafactory' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Object Type</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Account, Contact, Lead..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Number of Records</label>
+                  <Input
+                    type="number"
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder="5"
+                    className="bg-[#1a1a25] border-white/10 text-white w-24"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Generate test records with random data - great for bulk testing</p>
+              </>
+            )}
+
+            {sfToolType === 'permission' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Permission Set Name</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Sales_Cloud_Admin, Service_User..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Action</label>
+                  <div className="flex gap-2">
+                    <Button variant={sfToolInput2 === 'assign' ? 'default' : 'outline'} size="sm"
+                      className={sfToolInput2 === 'assign' ? 'bg-indigo-600' : 'border-white/20'}
+                      onClick={() => setSfToolInput2('assign')}>Assign</Button>
+                    <Button variant={sfToolInput2 === 'remove' ? 'default' : 'outline'} size="sm"
+                      className={sfToolInput2 === 'remove' ? 'bg-indigo-600' : 'border-white/20'}
+                      onClick={() => setSfToolInput2('remove')}>Remove</Button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500">Assign or remove permission sets for the current test user</p>
+              </>
+            )}
+
+            {sfToolType === 'flow' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Flow API Name</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="My_Automation_Flow"
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Input Variables (JSON, optional)</label>
+                  <textarea
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder='{"recordId": "001XXXXXXXXXXXX"}'
+                    className="w-full h-16 bg-[#1a1a25] border border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Manually trigger a Flow to test automation logic</p>
+              </>
+            )}
+
+            {sfToolType === 'apextest' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Test Class Name</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="AccountTriggerTest, ContactServiceTest..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Test Method (optional - runs all if empty)</label>
+                  <Input
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder="testInsertAccount"
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Run Apex tests as part of your test flow - validates backend logic</p>
+              </>
+            )}
+
+            {sfToolType === 'createrecord' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Object Type</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Account, Contact, Opportunity..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Field Values (JSON)</label>
+                  <textarea
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder='{"Name": "Test Account", "Industry": "Technology"}'
+                    className="w-full h-20 bg-[#1a1a25] border border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Create a single record via API - the record ID will be stored for later use</p>
+              </>
+            )}
+
+            {sfToolType === 'bulkload' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Object Type</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Account, Contact, Lead..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">CSV File Path or Variable</label>
+                  <Input
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder="./test-data/accounts.csv or ${csvData}"
+                    className="bg-[#1a1a25] border-white/10 text-white font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Operation</label>
+                  <div className="flex gap-2">
+                    {['insert', 'update', 'upsert', 'delete'].map(op => (
+                      <Button key={op} variant={sfToolInput3 === op ? 'default' : 'outline'} size="sm"
+                        className={sfToolInput3 === op ? 'bg-fuchsia-600' : 'border-white/20 capitalize'}
+                        onClick={() => setSfToolInput3(op)}>{op}</Button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500">Bulk load data from CSV - useful for data-driven testing</p>
+              </>
+            )}
+
+            {sfToolType === 'runreport' && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Report API Name or ID</label>
+                  <Input
+                    value={sfToolInput}
+                    onChange={(e) => setSfToolInput(e.target.value)}
+                    placeholder="Monthly_Sales_Report or 00O..."
+                    className="bg-[#1a1a25] border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1.5 block">Filters (JSON, optional)</label>
+                  <textarea
+                    value={sfToolInput2}
+                    onChange={(e) => setSfToolInput2(e.target.value)}
+                    placeholder='{"column": "ACCOUNT_NAME", "operator": "contains", "value": "Test"}'
+                    className="w-full h-16 bg-[#1a1a25] border border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Run a Salesforce report and store results for assertions</p>
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowSFToolDialog(false)} className="border-white/20">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                let action: RecordedAction;
+                
+                if (sfToolType === 'soql') {
+                  action = { id: `action_${Date.now()}`, qword: 'ExecuteSOQL', args: [sfToolInput || 'SELECT Id FROM Account LIMIT 1'], description: `SOQL: ${sfToolInput.substring(0, 50)}...`, timestamp: Date.now() };
+                } else if (sfToolType === 'apex') {
+                  action = { id: `action_${Date.now()}`, qword: 'ExecuteApex', args: [sfToolInput || '// Apex code', 'anonymous'], description: `Apex: ${sfToolInput.split('\n')[0].substring(0, 40)}...`, timestamp: Date.now() };
+                } else if (sfToolType === 'clone') {
+                  action = { id: `action_${Date.now()}`, qword: 'CloneRecord', args: [sfToolInput || 'Account', sfToolInput2 || ''], description: `Clone ${sfToolInput || 'Account'} Record`, timestamp: Date.now() };
+                } else if (sfToolType === 'validation') {
+                  action = { id: `action_${Date.now()}`, qword: 'AssertValidation', args: [sfToolInput || 'Rule', sfToolInput2 || 'Error'], description: `Assert Validation: ${sfToolInput || 'Rule'}`, timestamp: Date.now() };
+                } else if (sfToolType === 'api') {
+                  action = { id: `action_${Date.now()}`, qword: 'RestApiCall', args: [sfToolInput2 || 'GET', sfToolInput || '/services/data/v59.0/', sfToolInput3 || ''], description: `API ${sfToolInput2}: ${sfToolInput.substring(0, 40)}`, timestamp: Date.now() };
+                } else if (sfToolType === 'datafactory') {
+                  action = { id: `action_${Date.now()}`, qword: 'CreateTestData', args: [sfToolInput || 'Account', sfToolInput2 || '5'], description: `Create ${sfToolInput2 || 5} ${sfToolInput || 'Account'} records`, timestamp: Date.now() };
+                } else if (sfToolType === 'permission') {
+                  action = { id: `action_${Date.now()}`, qword: 'ManagePermissionSet', args: [sfToolInput2 || 'assign', sfToolInput || 'PermissionSet'], description: `${sfToolInput2 === 'remove' ? 'Remove' : 'Assign'} Permission Set: ${sfToolInput}`, timestamp: Date.now() };
+                } else if (sfToolType === 'flow') {
+                  action = { id: `action_${Date.now()}`, qword: 'TriggerFlow', args: [sfToolInput || 'FlowName', sfToolInput2 || '{}'], description: `Trigger Flow: ${sfToolInput || 'FlowName'}`, timestamp: Date.now() };
+                } else if (sfToolType === 'apextest') {
+                  action = { id: `action_${Date.now()}`, qword: 'RunApexTest', args: [sfToolInput || 'TestClass', sfToolInput2 || ''], description: `Run Apex Test: ${sfToolInput || 'TestClass'}${sfToolInput2 ? `.${sfToolInput2}` : ''}`, timestamp: Date.now() };
+                } else if (sfToolType === 'createrecord') {
+                  action = { id: `action_${Date.now()}`, qword: 'CreateRecord', args: [sfToolInput || 'Account', sfToolInput2 || '{}'], description: `Create ${sfToolInput || 'Account'} Record`, timestamp: Date.now() };
+                } else if (sfToolType === 'bulkload') {
+                  action = { id: `action_${Date.now()}`, qword: 'BulkLoad', args: [sfToolInput || 'Account', sfToolInput2 || '', sfToolInput3 || 'insert'], description: `Bulk ${sfToolInput3 || 'insert'} ${sfToolInput || 'Account'}`, timestamp: Date.now() };
+                } else if (sfToolType === 'runreport') {
+                  action = { id: `action_${Date.now()}`, qword: 'RunReport', args: [sfToolInput || 'Report', sfToolInput2 || '{}'], description: `Run Report: ${sfToolInput || 'Report'}`, timestamp: Date.now() };
+                } else {
+                  action = { id: `action_${Date.now()}`, qword: 'Unknown', args: [], description: 'Unknown action', timestamp: Date.now() };
+                }
+                
+                setActions(prev => [...prev, action]);
+                toast.success(`Added ${sfToolType?.toUpperCase()} step to test`);
+                setShowSFToolDialog(false);
+                setSfToolInput('');
+                setSfToolInput2('');
+                setSfToolInput3('');
+              }}
+              className={cn(
+                "text-white",
+                sfToolType === 'soql' && "bg-blue-600 hover:bg-blue-700",
+                sfToolType === 'apex' && "bg-emerald-600 hover:bg-emerald-700",
+                sfToolType === 'clone' && "bg-purple-600 hover:bg-purple-700",
+                sfToolType === 'validation' && "bg-amber-600 hover:bg-amber-700",
+                sfToolType === 'api' && "bg-cyan-600 hover:bg-cyan-700",
+                sfToolType === 'datafactory' && "bg-pink-600 hover:bg-pink-700",
+                sfToolType === 'permission' && "bg-indigo-600 hover:bg-indigo-700",
+                sfToolType === 'flow' && "bg-orange-600 hover:bg-orange-700",
+                sfToolType === 'apextest' && "bg-lime-600 hover:bg-lime-700",
+                sfToolType === 'createrecord' && "bg-sky-600 hover:bg-sky-700",
+                sfToolType === 'bulkload' && "bg-fuchsia-600 hover:bg-fuchsia-700",
+                sfToolType === 'runreport' && "bg-yellow-600 hover:bg-yellow-700"
+              )}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add to Test
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Suggestion Item Component
+function SuggestionItem({ 
+  suggestion, 
+  onExecute, 
+  onAdd 
+}: { 
+  suggestion: Suggestion; 
+  onExecute: (s: Suggestion) => void;
+  onAdd: (s: Suggestion) => void;
+}) {
+  const getIcon = () => {
+    const qword = suggestion.qword?.toLowerCase() || '';
+    if (qword === 'fill') return <PenLine className="h-4 w-4 text-purple-400" />;
+    if (qword.includes('click')) return <Hand className="h-4 w-4 text-emerald-400" />;
+    return <CircleDot className="h-4 w-4 text-gray-400" />;
+  };
+
+  return (
+    <div className="flex items-center gap-2 p-2 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] border border-transparent hover:border-white/10 group">
+      {getIcon()}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-white truncate">{suggestion.element || suggestion.args?.[0] || suggestion.description}</p>
+              </div>
+      {suggestion.count && suggestion.count > 1 && (
+        <Badge className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5">
+          {suggestion.count} FOUND
+        </Badge>
+      )}
+                <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400"
+        onClick={(e) => { e.stopPropagation(); onExecute(suggestion); }}
+        title="Execute on page"
+      >
+        <Play className="h-3.5 w-3.5 fill-current" />
+                </Button>
+                <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400"
+        onClick={(e) => { e.stopPropagation(); onAdd(suggestion); }}
+        title="Add to test"
+      >
+        <Plus className="h-3.5 w-3.5" />
+                </Button>
     </div>
   );
 }

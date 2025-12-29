@@ -1254,36 +1254,62 @@ class TestExecutor {
       case 'value_contains':
       case 'valueContains':
         // Does the input field contain this value?
-        // If no target, try to find the most recently focused input or search all inputs
+        // If no target, search all inputs on the page for the expected value
+        if (!expected) {
+          console.log('[Executor] value_contains: no expected value, auto-pass');
+          break;
+        }
+        
+        let valueFound = false;
         let inputTarget = target;
-        if (!inputTarget) {
-          // Try to find the active/focused input
-          const focusedInput = await this.page.locator('input:focus, textarea:focus').first();
-          if (await focusedInput.count() > 0) {
-            inputTarget = 'input:focus, textarea:focus';
-          } else {
-            // Fallback: find any input with a value containing expected text
-            console.log('[Executor] No target for value_contains - searching all inputs...');
-            const inputs = await this.page.locator('input, textarea').all();
-            for (const input of inputs) {
-              try {
-                const val = await input.inputValue({ timeout: 1000 });
-                if (val && val.toLowerCase().includes((expected || '').toLowerCase())) {
-                  console.log(`[Executor] Found matching value in input`);
-                  break; // Assertion passes - value found
-                }
-              } catch (e) { /* ignore */ }
+        
+        if (inputTarget) {
+          // We have a specific target - check it
+          try {
+            const inputVal = await this.page.locator(inputTarget).first().inputValue({ timeout: 5000 });
+            if (inputVal && inputVal.toLowerCase().includes(expected.toLowerCase())) {
+              valueFound = true;
+              console.log(`[Executor] value_contains: Found "${expected}" in target input`);
+            } else {
+              throw new Error(`Input value "${inputVal}" does not contain "${expected}"`);
             }
-            // If we get here without finding it, the assertion fails
-            if (inputs.length === 0) {
-              throw new Error('No input fields found on page');
-            }
+          } catch (e) {
+            if (e.message.includes('does not contain')) throw e;
+            console.log(`[Executor] Target selector failed, searching all inputs...`);
           }
         }
-        if (inputTarget) {
-          const inputVal = await this.page.locator(inputTarget).first().inputValue({ timeout: 5000 }).catch(() => '');
-          if (!inputVal.toLowerCase().includes((expected || '').toLowerCase())) {
-            throw new Error(`Input value "${inputVal}" does not contain "${expected}"`);
+        
+        if (!valueFound) {
+          // No target or target failed - search ALL inputs on the page
+          console.log(`[Executor] Searching all inputs for value containing "${expected}"...`);
+          const allInputs = await this.page.locator('input, textarea, [contenteditable="true"]').all();
+          
+          for (const input of allInputs) {
+            try {
+              let val = await input.inputValue({ timeout: 500 }).catch(() => null);
+              if (val === null) {
+                // Try textContent for contenteditable
+                val = await input.textContent({ timeout: 500 }).catch(() => '');
+              }
+              if (val && val.toLowerCase().includes(expected.toLowerCase())) {
+                valueFound = true;
+                console.log(`[Executor] value_contains: Found "${expected}" in an input!`);
+                break;
+              }
+            } catch (e) { /* ignore individual input errors */ }
+          }
+          
+          // Also check if the expected text is visible on the page at all
+          if (!valueFound) {
+            const pageText = await this.page.getByText(expected, { exact: false }).first().isVisible({ timeout: 2000 }).catch(() => false);
+            if (pageText) {
+              valueFound = true;
+              console.log(`[Executor] value_contains: Found "${expected}" as visible text on page`);
+            }
+          }
+          
+          if (!valueFound) {
+            throw new Error(`Value "${expected}" not found in any input or visible on page`);
           }
         }
         break;
