@@ -771,19 +771,38 @@ export default function EnhancedWorkflowEditorPage() {
     const value = node.data.value || '';
     const waitTime = node.data.waitTime || 1000;
     
+    // CRITICAL: Escape special characters to prevent syntax errors in generated code
+    const escapeForPython = (str: string) => str
+      .replace(/\\/g, '\\\\')   // Escape backslashes first
+      .replace(/"/g, '\\"')     // Escape double quotes
+      .replace(/\n/g, '\\n')    // Escape newlines
+      .replace(/\r/g, '\\r');   // Escape carriage returns
+    
+    const escapeForJS = (str: string) => str
+      .replace(/\\/g, '\\\\')   // Escape backslashes first
+      .replace(/'/g, "\\'")     // Escape single quotes (JS uses single quotes)
+      .replace(/\n/g, '\\n')    // Escape newlines
+      .replace(/\r/g, '\\r');   // Escape carriage returns
+    
     // Use the shared selector conversion function
     const frameworkSelector = convertSelectorToFramework(selector);
+    
+    // Escape values for safe string insertion
+    const safeValuePy = escapeForPython(value);
+    const safeValueJS = escapeForJS(value);
+    const safeUrlPy = escapeForPython(url);
+    const safeUrlJS = escapeForJS(url);
     
     switch (framework) {
       // ===== PLAYWRIGHT PYTHON =====
       case 'playwright-python':
         switch (node.type) {
           case 'navigate':
-            return `    page.goto("${url}")\n    page.wait_for_load_state("domcontentloaded")`;
+            return `    page.goto("${safeUrlPy}")\n    page.wait_for_load_state("domcontentloaded")`;
           case 'click':
             return `    ${frameworkSelector || "page.get_by_role('button', name='Submit')"}.click()`;
           case 'input':
-            return `    ${frameworkSelector || "page.get_by_label('Email')"}.fill("${value}")`;
+            return `    ${frameworkSelector || "page.get_by_label('Email')"}.fill("${safeValuePy}")`;
           case 'wait':
             return `    page.wait_for_timeout(${waitTime})`;
           case 'assert':
@@ -796,11 +815,11 @@ export default function EnhancedWorkflowEditorPage() {
       case 'playwright-typescript':
         switch (node.type) {
           case 'navigate':
-            return `    await page.goto('${url}');\n    await page.waitForLoadState('domcontentloaded');`;
+            return `    await page.goto('${safeUrlJS}');\n    await page.waitForLoadState('domcontentloaded');`;
           case 'click':
             return `    await ${frameworkSelector || "page.getByRole('button', { name: 'Submit' })"}.click();`;
           case 'input':
-            return `    await ${frameworkSelector || "page.getByLabel('Email')"}.fill('${value}');`;
+            return `    await ${frameworkSelector || "page.getByLabel('Email')"}.fill('${safeValueJS}');`;
           case 'wait':
             return `    await page.waitForTimeout(${waitTime});`;
           case 'assert':
@@ -914,8 +933,12 @@ export default function EnhancedWorkflowEditorPage() {
           : 'Element responds to click';
         break;
       case 'input':
-        action = `Enter "${node.data.value || '...'}" in ${node.label}`;
-        expectedResult = node.data.assertion?.enabled 
+        // SECURITY: Mask sensitive values in step descriptions
+        const inputDisplayValue = isSensitiveField(node) 
+          ? '🔒 [MASKED]' 
+          : (node.data.value || '...');
+        action = `Enter "${inputDisplayValue}" in ${node.label}`;
+        expectedResult = node.data.assertion?.enabled
           ? getAssertionDescription(node.data.assertion)
           : 'Value is entered successfully';
         break;
@@ -1804,6 +1827,43 @@ ${workflowName.replace(/\s+/g, ' ')}
     return colors[type];
   };
 
+  // SECURITY: Helper to detect if a field contains sensitive data
+  const isSensitiveField = (node: WorkflowNode): boolean => {
+    const label = (node.label || '').toLowerCase();
+    const selector = (node.data?.selector || '').toLowerCase();
+    const description = (node.data?.description || '').toLowerCase();
+    const allText = `${label} ${selector} ${description}`;
+    
+    // Check for sensitive patterns
+    const sensitivePatterns = [
+      /password|passwd|pwd|pass\b/,
+      /secret|token|api[_-]?key/,
+      /credit[_-]?card|card[_-]?number|ccnum/,
+      /cvv|cvc|security[_-]?code/,
+      /ssn|social[_-]?security/,
+      /pin\b|otp|verification[_-]?code/,
+      /auth[_-]?code|access[_-]?token/,
+      /private[_-]?key|secret[_-]?key/,
+    ];
+    
+    return sensitivePatterns.some(pattern => pattern.test(allText)) ||
+           node.data?.isSensitive === true ||
+           node.data?.inputType === 'password';
+  };
+  
+  // Get display value (masked for sensitive fields)
+  const getDisplayValue = (node: WorkflowNode): string => {
+    const value = node.data?.value || '';
+    if (!value) return '...';
+    
+    if (isSensitiveField(node)) {
+      return '🔒 ••••••••';  // Masked with lock icon
+    }
+    
+    // Truncate long values
+    return value.length > 25 ? value.substring(0, 22) + '...' : value;
+  };
+
   return (
     <Layout>
       <div className="h-screen flex flex-col overflow-hidden">
@@ -2465,7 +2525,7 @@ ${workflowName.replace(/\s+/g, ' ')}
                             <div className="text-xs text-muted-foreground truncate">
                               {node.type === 'navigate' && node.data.url}
                               {node.type === 'click' && (node.data.selector || 'Click element')}
-                              {node.type === 'input' && `Enter: ${node.data.value || '...'}`}
+                              {node.type === 'input' && `Enter: ${getDisplayValue(node)}`}
                               {node.type === 'wait' && `${node.data.waitTime || 1000}ms`}
                               {node.type === 'assert' && (node.data.selector || 'Verify element')}
                               {node.type === 'extract_text' && `📋 Copy: ${node.data.description || 'text'}`}

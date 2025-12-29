@@ -745,7 +745,7 @@ export default function Flowstral() {
       
       // Navigate to test cases
       toast.info('Navigating to Test Cases...');
-      setTimeout(() => navigate('/test-cases'), 1000);
+      setTimeout(() => navigate('/cases'), 1000);
       
     } catch (error: any) {
       console.error('Failed to create test case:', error);
@@ -1223,9 +1223,9 @@ export default function Flowstral() {
               onClick={() => {
                 const sessionId = session.sessionId || selectedSession?.session_id;
                 if (sessionId) {
-                  navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                  navigate(`/builder?sessionId=${sessionId}`);
                 } else {
-                  navigate('/flowstral/workflow-editor');
+                  navigate('/builder');
                 }
               }}
               className="bg-primary text-primary-foreground"
@@ -1321,9 +1321,9 @@ export default function Flowstral() {
                 onClick={() => {
                   const sessionId = session.sessionId || selectedSession?.session_id;
                   if (sessionId) {
-                    navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                    navigate(`/builder?sessionId=${sessionId}`);
                   } else {
-                    navigate('/flowstral/workflow-editor');
+                    navigate('/builder');
                   }
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
@@ -1577,9 +1577,9 @@ export default function Flowstral() {
                   onClick={() => {
                     const sessionId = session.sessionId || selectedSession?.session_id;
                     if (sessionId) {
-                      navigate(`/flowstral/workflow-editor?sessionId=${sessionId}`);
+                      navigate(`/builder?sessionId=${sessionId}`);
                     } else {
-                      navigate('/flowstral/workflow-editor');
+                      navigate('/builder');
                     }
                   }}
                 >
@@ -1739,7 +1739,7 @@ export default function Flowstral() {
                               </Button>
                               {!sess.is_active && (
                                 <Button
-                                  onClick={() => navigate(`/flowstral/workflow-editor?sessionId=${sess.session_id}`)}
+                                  onClick={() => navigate(`/builder?sessionId=${sess.session_id}`)}
                                   variant="outline"
                                   size="sm"
                                 >
@@ -1791,7 +1791,7 @@ export default function Flowstral() {
                   <CardTitle>Recording Details</CardTitle>
                   <div className="flex gap-2">
                     <Button 
-                      onClick={() => navigate(`/flowstral/workflow-editor?sessionId=${selectedSession.session_id}`)} 
+                      onClick={() => navigate(`/builder?sessionId=${selectedSession.session_id}`)} 
                       variant="outline" 
                       size="sm"
                     >
