@@ -13,7 +13,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Play, Square, Pause, Trash2, Download, ExternalLink, Save,
-  CheckCircle, Loader2, Video, Globe, Search, Filter,
+  CheckCircle, Video, Globe, Search, Filter, Loader2,
   Folder, Tag, ChevronDown, ChevronRight, Settings, Code,
   Zap, FileText, Merge, RotateCcw, X, Sparkles,
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
@@ -50,6 +50,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
+import { SoqlEditor } from "@/components/SoqlEditor";
+import { salesforceApi } from "@/lib/salesforce-api";
 
 // Types
 interface RecordedAction {
@@ -250,10 +252,25 @@ export default function PlaywrightRecorderPage() {
   
   // SF Tools customization dialog
   const [showSFToolDialog, setShowSFToolDialog] = useState(false);
-  const [sfToolType, setSfToolType] = useState<'soql' | 'apex' | 'clone' | 'validation' | 'api' | 'datafactory' | 'permission' | 'flow' | null>(null);
+  const [sfToolType, setSfToolType] = useState<'soql' | 'apex' | 'clone' | 'validation' | 'api' | 'datafactory' | 'permission' | 'flow' | 'inspect' | 'schema' | 'diff' | 'bulkinsert' | null>(null);
   const [sfToolInput, setSfToolInput] = useState('');
   const [sfToolInput2, setSfToolInput2] = useState('');
   const [sfToolInput3, setSfToolInput3] = useState('');
+  
+  // Rich SOQL Editor state
+  const [soqlQuery, setSoqlQuery] = useState('SELECT Id, Name FROM Account LIMIT 10');
+  const [soqlResults, setSoqlResults] = useState<any[]>([]);
+  const [soqlColumns, setSoqlColumns] = useState<string[]>([]);
+  const [soqlError, setSoqlError] = useState<string | null>(null);
+  const [isQueryLoading, setIsQueryLoading] = useState(false);
+  const [queryHistory, setQueryHistory] = useState<Array<{ query: string; timestamp: string }>>([]);
+  const [sfObjects, setSfObjects] = useState<Array<{ name: string; label: string }>>([]);
+  const [showSoqlPanel, setShowSoqlPanel] = useState(false);
+  
+  // Record Inspector state
+  const [inspectRecordId, setInspectRecordId] = useState('');
+  const [inspectedRecord, setInspectedRecord] = useState<any>(null);
+  const [inspectObjectType, setInspectObjectType] = useState('');
   
   // Drag and drop for steps reordering
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -1171,6 +1188,121 @@ const handleExportToBuilder = async () => {
     }
   };
 
+  // Execute SOQL Query via Electron or Backend
+  const executeSOQL = async () => {
+    if (!soqlQuery.trim()) {
+      toast.error("Enter a SOQL query");
+      return;
+    }
+    
+    setIsQueryLoading(true);
+    setSoqlError(null);
+    setSoqlResults([]);
+    setSoqlColumns([]);
+    
+    try {
+      const flowstral = (window as any).flowstral;
+      const electronAPI = (window as any).electronAPI;
+      
+      let result;
+      
+      // Try Electron API first (uses browser session)
+      if (flowstral?.playwrightRecorder?.executeSOQL) {
+        result = await flowstral.playwrightRecorder.executeSOQL(soqlQuery);
+      } else if (electronAPI?.executeSOQL) {
+        result = await electronAPI.executeSOQL(soqlQuery);
+      } else {
+        // Fallback to backend
+        const backendResult = await salesforceApi.query(soqlQuery);
+        result = { success: true, records: backendResult.records };
+      }
+      
+      if (result?.success && result.records) {
+        setSoqlResults(result.records);
+        // Extract columns from first record
+        if (result.records.length > 0) {
+          const cols = Object.keys(result.records[0]).filter(k => k !== 'attributes');
+          setSoqlColumns(cols);
+        }
+        // Add to history
+        setQueryHistory(prev => [
+          { query: soqlQuery, timestamp: new Date().toISOString() },
+          ...prev.slice(0, 19)
+        ]);
+        toast.success(`Query returned ${result.records.length} records`);
+      } else {
+        setSoqlError(result?.error || 'Query failed');
+        toast.error(result?.error || 'Query failed');
+      }
+    } catch (error: any) {
+      setSoqlError(error.message);
+      toast.error(error.message);
+    } finally {
+      setIsQueryLoading(false);
+    }
+  };
+  
+  // Add SOQL assertion step using query results
+  const addSOQLAssertionStep = (column: string, value: string, row: number) => {
+    const action: RecordedAction = {
+      id: `action_${Date.now()}`,
+      qword: 'ExecuteSOQL',
+      args: [soqlQuery, `${column}=${value}`, String(row)],
+      description: `Query: Assert ${column} = "${value}"`,
+      timestamp: Date.now()
+    };
+    setActions(prev => [...prev, action]);
+    toast.success(`Added SOQL assertion for ${column}`);
+  };
+  
+  // Inspect a Salesforce record
+  const inspectRecord = async () => {
+    if (!inspectRecordId) {
+      toast.error("Enter a Record ID");
+      return;
+    }
+    
+    try {
+      const flowstral = (window as any).flowstral;
+      
+      // Detect object type from ID prefix
+      const prefix = inspectRecordId.substring(0, 3);
+      const prefixMap: { [key: string]: string } = {
+        '001': 'Account', '003': 'Contact', '00Q': 'Lead', '006': 'Opportunity',
+        '500': 'Case', '00T': 'Task', '00U': 'Event', '005': 'User'
+      };
+      const objectType = inspectObjectType || prefixMap[prefix] || 'Account';
+      
+      if (flowstral?.playwrightRecorder?.inspectRecord) {
+        const result = await flowstral.playwrightRecorder.inspectRecord(inspectRecordId, objectType);
+        if (result?.success) {
+          setInspectedRecord(result.record);
+          toast.success(`Loaded ${objectType} record`);
+        }
+      } else {
+        // Fallback to backend
+        const record = await salesforceApi.getRecord(objectType, inspectRecordId);
+        setInspectedRecord(record);
+        toast.success(`Loaded ${objectType} record`);
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+  
+  // Add assertion from inspected record
+  const addFieldAssertion = (field: string, value: any) => {
+    const action: RecordedAction = {
+      id: `action_${Date.now()}`,
+      qword: 'AssertFieldValue',
+      args: [field, String(value)],
+      description: `Assert ${field} = "${value}"`,
+      timestamp: Date.now()
+    };
+    setActions(prev => [...prev, action]);
+    toast.success(`Added field assertion for ${field}`);
+  };
+
   const handleExport = async (format: string) => {
     if (actions.length === 0) {
       toast.error("No actions to export");
@@ -2073,9 +2205,354 @@ Recorded Test
               </div>
             </TabsContent>
 
-{/* ========== SF TOOLS TAB ========== */}
-            <TabsContent value="sftools" className="m-0 overflow-auto">
-              <div className="p-2 space-y-2">
+{/* ========== SF TOOLS TAB - COMPREHENSIVE ========== */}
+            <TabsContent value="sftools" className="m-0 flex-1 flex flex-col overflow-hidden">
+              <ScrollArea className="flex-1">
+              <div className="p-2 space-y-3">
+                
+                {/* ===== QUICK SOQL SECTION ===== */}
+                <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
+                      <Database className="h-3.5 w-3.5" />
+                      Quick SOQL Query
+                    </h4>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[10px] text-blue-400"
+                      onClick={() => setShowSoqlPanel(!showSoqlPanel)}
+                    >
+                      {showSoqlPanel ? 'Hide' : 'Expand'} Editor
+                    </Button>
+                  </div>
+                  
+                  {/* Quick Query Input */}
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={soqlQuery}
+                      onChange={(e) => setSoqlQuery(e.target.value)}
+                      placeholder="SELECT Id, Name FROM Account LIMIT 10"
+                      className="h-8 text-xs bg-[#0d0d14] border-blue-500/20 text-white font-mono"
+                      onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && executeSOQL()}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
+                      onClick={executeSOQL}
+                      disabled={isQueryLoading}
+                    >
+                      {isQueryLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                  
+                  {/* Query Templates */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {[
+                      { label: 'Accounts', q: 'SELECT Id, Name, Industry, Phone FROM Account LIMIT 20' },
+                      { label: 'Contacts', q: 'SELECT Id, FirstName, LastName, Email, AccountId FROM Contact LIMIT 20' },
+                      { label: 'Leads', q: 'SELECT Id, Name, Company, Status, Email FROM Lead LIMIT 20' },
+                      { label: 'Opps', q: 'SELECT Id, Name, Amount, StageName, CloseDate FROM Opportunity LIMIT 20' },
+                      { label: 'Users', q: 'SELECT Id, Name, Email, ProfileId, IsActive FROM User LIMIT 20' },
+                    ].map(t => (
+                      <Button
+                        key={t.label}
+                        size="sm"
+                        variant="ghost"
+                        className="h-5 px-1.5 text-[9px] text-blue-300/70 hover:text-blue-300"
+                        onClick={() => setSoqlQuery(t.q)}
+                      >
+                        {t.label}
+                      </Button>
+                    ))}
+                  </div>
+                  
+                  {/* Query Results (Compact) */}
+                  {soqlResults.length > 0 && (
+                    <div className="mt-2 bg-[#0d0d14] rounded border border-blue-500/20 max-h-32 overflow-auto">
+                      <table className="w-full text-[9px]">
+                        <thead className="bg-blue-500/10 sticky top-0">
+                          <tr>
+                            <th className="px-1 py-0.5 text-left text-blue-300">#</th>
+                            {soqlColumns.slice(0, 4).map(col => (
+                              <th key={col} className="px-1 py-0.5 text-left text-blue-300 truncate max-w-[80px]">{col}</th>
+                            ))}
+                            <th className="px-1 py-0.5 text-center text-blue-300">Add</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {soqlResults.slice(0, 10).map((row, idx) => (
+                            <tr key={idx} className="border-t border-blue-500/10 hover:bg-blue-500/5">
+                              <td className="px-1 py-0.5 text-gray-500">{idx + 1}</td>
+                              {soqlColumns.slice(0, 4).map(col => (
+                                <td key={col} className="px-1 py-0.5 text-gray-300 truncate max-w-[80px]">
+                                  {String(row[col] ?? '-')}
+                                </td>
+                              ))}
+                              <td className="px-1 py-0.5 text-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-4 w-4 p-0 text-green-400 hover:text-green-300"
+                                  onClick={() => addSOQLAssertionStep(soqlColumns[1] || 'Id', row[soqlColumns[1]] || row.Id, idx)}
+                                  title="Add as assertion"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {soqlResults.length > 10 && (
+                        <div className="text-center text-[9px] text-gray-500 py-1">
+                          +{soqlResults.length - 10} more records
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {soqlError && (
+                    <div className="mt-2 p-1.5 bg-red-500/10 border border-red-500/30 rounded text-[10px] text-red-400">
+                      {soqlError}
+                    </div>
+                  )}
+                </div>
+                
+                {/* ===== RECORD INSPECTOR ===== */}
+                <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-2">
+                  <h4 className="text-xs font-medium text-purple-400 flex items-center gap-1.5 mb-2">
+                    <Eye className="h-3.5 w-3.5" />
+                    Record Inspector
+                  </h4>
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={inspectRecordId}
+                      onChange={(e) => setInspectRecordId(e.target.value)}
+                      placeholder="Enter Record ID (e.g., 001...)"
+                      className="h-7 text-xs bg-[#0d0d14] border-purple-500/20 text-white font-mono"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 bg-purple-600 hover:bg-purple-700"
+                      onClick={inspectRecord}
+                    >
+                      <Search className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  
+                  {/* Inspected Record Fields */}
+                  {inspectedRecord && (
+                    <div className="mt-2 bg-[#0d0d14] rounded border border-purple-500/20 max-h-40 overflow-auto">
+                      <div className="p-1">
+                        {Object.entries(inspectedRecord)
+                          .filter(([k]) => k !== 'attributes')
+                          .slice(0, 15)
+                          .map(([field, value]) => (
+                          <div key={field} className="flex items-center justify-between py-0.5 px-1 text-[9px] hover:bg-purple-500/10 rounded group">
+                            <span className="text-purple-300 truncate max-w-[100px]">{field}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-400 truncate max-w-[100px]">{String(value ?? 'null')}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 text-green-400"
+                                onClick={() => addFieldAssertion(field, value)}
+                                title="Add assertion"
+                              >
+                                <Plus className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* ===== DATA SETUP TOOLS ===== */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Data Setup</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 text-[10px] border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('datafactory'); setSfToolInput('Account'); setSfToolInput2('5'); setShowSFToolDialog(true); }}
+                    >
+                      <Sparkles className="h-4 w-4 text-pink-400" />
+                      <span>Data Factory</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 text-[10px] border-white/10 hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('createrecord'); setSfToolInput('Account'); setSfToolInput2('{"Name":"Test"}'); setShowSFToolDialog(true); }}
+                    >
+                      <Plus className="h-4 w-4 text-sky-400" />
+                      <span>Create Record</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 text-[10px] border-white/10 hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('clone'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Copy className="h-4 w-4 text-purple-400" />
+                      <span>Clone Record</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 text-[10px] border-white/10 hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('bulkload'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Upload className="h-4 w-4 text-fuchsia-400" />
+                      <span>Bulk Insert</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* ===== CODE EXECUTION ===== */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Code & API</h4>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('apex'); setSfToolInput('// Apex code\nSystem.debug(\'Test\');'); setShowSFToolDialog(true); }}
+                    >
+                      <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Apex</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('api'); setSfToolInput('/services/data/v59.0/sobjects/Account'); setSfToolInput2('GET'); setShowSFToolDialog(true); }}
+                    >
+                      <Globe className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>REST API</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('flow'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <ArrowRight className="h-3.5 w-3.5 text-orange-400" />
+                      <span>Flow</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* ===== ASSERTIONS & VALIDATIONS ===== */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Assertions</h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-amber-500/50 hover:bg-amber-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('validation'); setSfToolInput(''); setSfToolInput2(''); setShowSFToolDialog(true); }}
+                    >
+                      <Shield className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Validation Rule</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-teal-500/50 hover:bg-teal-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => {
+                        const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'AssertFieldValue', args: ['FieldName', 'ExpectedValue'], description: 'Assert Field Value', timestamp: Date.now() };
+                        setActions(prev => [...prev, action]);
+                        toast.success('Added Field Assert - configure in Builder');
+                      }}
+                    >
+                      <CheckCircle className="h-3.5 w-3.5 text-teal-400" />
+                      <span>Assert Field</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('soql'); setSfToolInput('SELECT COUNT() FROM Account'); setShowSFToolDialog(true); }}
+                    >
+                      <Database className="h-3.5 w-3.5 text-blue-400" />
+                      <span>SOQL Assert</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 text-[10px] border-white/10 hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('runreport'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <FileText className="h-3.5 w-3.5 text-yellow-400" />
+                      <span>Report Assert</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* ===== ADMIN & CLEANUP ===== */}
+                <div>
+                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Admin & Cleanup</h4>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-[10px] border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('permission'); setSfToolInput(''); setSfToolInput2('assign'); setShowSFToolDialog(true); }}
+                    >
+                      <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Perm Set</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-[10px] border-white/10 hover:border-lime-500/50 hover:bg-lime-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => { setSfToolType('apextest'); setSfToolInput(''); setShowSFToolDialog(true); }}
+                    >
+                      <Play className="h-3.5 w-3.5 text-lime-400" />
+                      <span>Apex Test</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-[10px] border-white/10 hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
+                      onClick={() => {
+                        const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'DeleteRecord', args: ['CurrentRecord'], description: 'Delete Current Record', timestamp: Date.now() };
+                        setActions(prev => [...prev, action]);
+                        toast.success('Added Delete step');
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                      <span>Delete</span>
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* ===== NAVIGATE TO FULL SF TAB ===== */}
+                <div className="pt-2 border-t border-white/10">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    onClick={() => window.location.href = '/salesforce'}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 mr-2" />
+                    Open Full Salesforce Tools
+                  </Button>
+                  <p className="text-[9px] text-gray-500 text-center mt-1.5">
+                    Access Schema Browser, Debug Logs, Data Diff, and 20+ more tools
+                  </p>
+                </div>
+              </div>
+              </ScrollArea>
+            </TabsContent>
+
+{/* ========== LEGACY SF TOOLS FOR REFERENCE (HIDDEN) ========== */}
+            <div style={{ display: 'none' }}>
                 {/* Data & Query Tools */}
                 <div>
                   <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Data & Query</h4>
@@ -2148,70 +2625,9 @@ Recorded Test
                       </div>
                         </div>
 
-                {/* Assertions & Validation */}
-                <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Assertions</h4>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-12 text-[10px] border-white/10 hover:border-amber-500/50 hover:bg-amber-500/5 flex-col gap-0.5 justify-center"
-                      onClick={() => { setSfToolType('validation'); setSfToolInput(''); setSfToolInput2(''); setShowSFToolDialog(true); }}
-                    >
-                      <Shield className="h-4 w-4 text-amber-400" />
-                      <span>Validation Rule</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-12 text-[10px] border-white/10 hover:border-teal-500/50 hover:bg-teal-500/5 flex-col gap-0.5 justify-center"
-                      onClick={() => {
-                        const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'AssertFieldValue', args: ['FieldName', 'ExpectedValue'], description: 'Assert Field Value', timestamp: Date.now() };
-                        setActions(prev => [...prev, action]);
-                        toast.success('Added Field Assert - edit args in Builder');
-                      }}
-                    >
-                      <CheckCircle className="h-4 w-4 text-teal-400" />
-                      <span>Assert Field</span>
-                    </Button>
-                    </div>
-                  </div>
+                {/* Assertions & Validation - OLD SECTION REMOVED */}
 
-                {/* Automation & Permissions */}
-                <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Automation & Admin</h4>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 text-[10px] border-white/10 hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
-                      onClick={() => { setSfToolType('flow'); setSfToolInput(''); setShowSFToolDialog(true); }}
-                    >
-                      <ArrowRight className="h-4 w-4 text-orange-400" />
-                      <span>Trigger Flow</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 text-[10px] border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5 flex-col gap-0.5 justify-center"
-                      onClick={() => { setSfToolType('permission'); setSfToolInput(''); setSfToolInput2('assign'); setShowSFToolDialog(true); }}
-                    >
-                      <Layers className="h-4 w-4 text-indigo-400" />
-                      <span>Permission Set</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 text-[10px] border-white/10 hover:border-lime-500/50 hover:bg-lime-500/5 flex-col gap-0.5 justify-center"
-                      onClick={() => { setSfToolType('apextest'); setSfToolInput(''); setShowSFToolDialog(true); }}
-                    >
-                      <Play className="h-4 w-4 text-lime-400" />
-                      <span>Run Apex Test</span>
-                    </Button>
-              </div>
-              </div>
-
-                {/* Additional SF Tools */}
+                {/* More Tools - OLD SECTION */}
                 <div>
                   <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">More Tools</h4>
                   <div className="grid grid-cols-3 gap-1.5">
