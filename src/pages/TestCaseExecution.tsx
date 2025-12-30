@@ -393,7 +393,18 @@ export default function TestCaseExecution() {
         const overallStatus = values.some((s: string) => s === 'failed') ? 'failed'
           : values.every((s: string) => s === 'passed') ? 'passed'
           : values.some((s: string) => s === 'running' || s === 'pending') ? 'running' : 'pending';
-        const allStatuses = Object.values(testCaseStatuses) as string[];
+        
+        // Calculate step-level results for manual execution (more meaningful than test-case level)
+        let totalPassed = 0, totalFailed = 0, totalSkipped = 0;
+        Object.values(updatedResults).forEach((stepResults: any) => {
+          if (Array.isArray(stepResults)) {
+            stepResults.forEach((step: StepResult) => {
+              if (step.status === 'passed') totalPassed++;
+              else if (step.status === 'failed') totalFailed++;
+              else totalSkipped++; // pending counts as skipped for now
+            });
+          }
+        });
         
         return {
           ...r,
@@ -401,9 +412,9 @@ export default function TestCaseExecution() {
           testCaseStatuses,
           status: overallStatus,
           results: {
-            passed: allStatuses.filter(s => s === 'passed').length,
-            failed: allStatuses.filter(s => s === 'failed').length,
-            skipped: allStatuses.filter(s => s === 'skipped' || s === 'pending').length
+            passed: totalPassed,
+            failed: totalFailed,
+            skipped: totalSkipped
           },
           endTime: overallStatus !== 'running' ? new Date().toISOString() : undefined
         };

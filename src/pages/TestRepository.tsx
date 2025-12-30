@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Folder, FolderOpen, FileText, Plus, Search, ChevronRight, ChevronDown,
   MoreVertical, Play, Edit, Trash2, Copy, Move, FolderPlus, File,
@@ -1028,109 +1028,166 @@ function TestRunResultsDialog({
               ) : (
                 // Single test step results (both automated and manual)
                 stepResults.length > 0 ? (
-                  stepResults.map((step: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "rounded-lg border p-3 transition-colors",
-                        step.status === 'passed' ? "bg-emerald-900/10 border-emerald-800/50" :
-                        step.status === 'failed' ? "bg-red-900/20 border-red-800/50" :
-                        step.status === 'skipped' ? "bg-gray-800/50 border-gray-700/50" :
-                        "bg-amber-900/10 border-amber-800/50"
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          {step.status === 'passed' ? (
-                            <CheckCircle className="h-5 w-5 text-emerald-400" />
-                          ) : step.status === 'failed' ? (
-                            <AlertCircle className="h-5 w-5 text-red-400" />
-                          ) : step.status === 'skipped' ? (
-                            <Clock className="h-5 w-5 text-gray-500" />
-                          ) : (
-                            <RefreshCw className="h-5 w-5 text-amber-400 animate-spin" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300">
-                                Step {(step.stepIndex ?? idx) + 1}
-                              </span>
-                              <span className="text-sm text-white font-medium truncate">
-                                {step.stepName || `Step ${(step.stepIndex ?? idx) + 1}`}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {step.duration !== undefined && (
-                                <span className="text-xs text-gray-500">
-                                  {step.duration}ms
+                  stepResults.map((step: any, idx: number) => {
+                    // Get step definition from test case for details
+                    const tcSteps = testCase?.unified_data?.steps || testCase?.steps || [];
+                    const stepDef = tcSteps[step.stepIndex ?? idx];
+                    const stepAction = stepDef?.action || stepDef?.qword || stepDef?.type || '';
+                    const stepSelector = stepDef?.selector || stepDef?.args?.selector || '';
+                    const stepValue = stepDef?.value || stepDef?.args?.value || stepDef?.args?.text || stepDef?.args?.url || stepDef?.args?.[0] || '';
+                    const expectedResult = stepDef?.expectedResult || stepDef?.expected_result || 
+                      (stepDef?.assertion?.value ? `Verify: ${stepDef.assertion.value}` : '');
+                    
+                    // Build readable action description
+                    let actionDescription = stepAction;
+                    if (stepDef?.qword) {
+                      const qword = stepDef.qword.toLowerCase();
+                      if (qword === 'goto' || qword === 'navigate') {
+                        actionDescription = `Navigate to ${stepValue || 'URL'}`;
+                      } else if (qword === 'click' || qword === 'clicktext') {
+                        actionDescription = `Click on ${stepValue || stepSelector || 'element'}`;
+                      } else if (qword === 'fill' || qword === 'type') {
+                        actionDescription = `Enter "${stepValue}" into ${stepSelector || 'field'}`;
+                      } else if (qword === 'asserttext' || qword === 'assert') {
+                        actionDescription = `Verify "${stepValue}" is visible`;
+                      } else if (qword === 'select') {
+                        actionDescription = `Select "${stepValue}" from ${stepSelector || 'dropdown'}`;
+                      } else if (qword === 'wait') {
+                        actionDescription = `Wait ${stepValue || stepDef?.args?.timeout || ''}ms`;
+                      }
+                    }
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "rounded-lg border p-3 transition-colors",
+                          step.status === 'passed' ? "bg-emerald-900/10 border-emerald-800/50" :
+                          step.status === 'failed' ? "bg-red-900/20 border-red-800/50" :
+                          step.status === 'skipped' ? "bg-gray-800/50 border-gray-700/50" :
+                          "bg-amber-900/10 border-amber-800/50"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {step.status === 'passed' ? (
+                              <CheckCircle className="h-5 w-5 text-emerald-400" />
+                            ) : step.status === 'failed' ? (
+                              <AlertCircle className="h-5 w-5 text-red-400" />
+                            ) : step.status === 'skipped' ? (
+                              <Clock className="h-5 w-5 text-gray-500" />
+                            ) : (
+                              <RefreshCw className="h-5 w-5 text-amber-400 animate-spin" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {/* Step Header */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 font-medium">
+                                  Step {(step.stepIndex ?? idx) + 1}
                                 </span>
-                              )}
-                              {step.defectId && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 flex items-center gap-1">
+                                <span className="text-sm text-white font-medium">
+                                  {step.stepName || actionDescription || `Step ${(step.stepIndex ?? idx) + 1}`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {step.duration !== undefined && (
+                                  <span className="text-xs text-gray-500">
+                                    {step.duration}ms
+                                  </span>
+                                )}
+                                {step.defectId && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 flex items-center gap-1">
+                                    <Bug className="w-3 h-3" />
+                                    {step.defectId}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Step Details - Action & Expected Result */}
+                            {(actionDescription || expectedResult) && (
+                              <div className="mt-2 space-y-1.5">
+                                {actionDescription && actionDescription !== step.stepName && (
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-gray-500 min-w-[60px]">Action:</span>
+                                    <span className="text-gray-300">{actionDescription}</span>
+                                  </div>
+                                )}
+                                {stepSelector && (
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-gray-500 min-w-[60px]">Target:</span>
+                                    <code className="text-amber-400/80 bg-gray-800 px-1.5 py-0.5 rounded font-mono text-[11px] break-all">
+                                      {stepSelector}
+                                    </code>
+                                  </div>
+                                )}
+                                {expectedResult && (
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-gray-500 min-w-[60px]">Expected:</span>
+                                    <span className="text-blue-400">{expectedResult}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Notes (manual execution) */}
+                            {step.notes && (
+                              <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-300">
+                                <span className="text-gray-500">Notes:</span> {step.notes}
+                              </div>
+                            )}
+                            
+                            {/* Error message */}
+                            {(step.error || step.errorMessage) && (
+                              <div className="mt-2 p-2 bg-red-900/30 rounded text-xs text-red-300 font-mono">
+                                {step.error || step.errorMessage}
+                              </div>
+                            )}
+                            
+                            {/* Defect details */}
+                            {step.defectTitle && (
+                              <div className="mt-2 p-2 bg-red-900/20 border border-red-800/50 rounded text-xs">
+                                <div className="flex items-center gap-2 text-red-400 font-medium">
                                   <Bug className="w-3 h-3" />
                                   {step.defectId}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Notes (manual execution) */}
-                          {step.notes && (
-                            <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-300">
-                              <span className="text-gray-500">Notes:</span> {step.notes}
-                            </div>
-                          )}
-                          
-                          {/* Error message */}
-                          {(step.error || step.errorMessage) && (
-                            <div className="mt-2 p-2 bg-red-900/30 rounded text-xs text-red-300 font-mono">
-                              {step.error || step.errorMessage}
-                            </div>
-                          )}
-                          
-                          {/* Defect details */}
-                          {step.defectTitle && (
-                            <div className="mt-2 p-2 bg-red-900/20 border border-red-800/50 rounded text-xs">
-                              <div className="flex items-center gap-2 text-red-400 font-medium">
-                                <Bug className="w-3 h-3" />
-                                {step.defectId}
+                                </div>
+                                <div className="text-gray-300 mt-1">{step.defectTitle}</div>
                               </div>
-                              <div className="text-gray-300 mt-1">{step.defectTitle}</div>
-                            </div>
-                          )}
-                          
-                          {/* Single screenshot (automated) */}
-                          {step.screenshot && typeof step.screenshot === 'string' && (
-                            <div className="mt-2">
-                              <img 
-                                src={step.screenshot} 
-                                alt={`Screenshot for step ${(step.stepIndex ?? idx) + 1}`}
-                                className="rounded border border-gray-700 max-h-48 cursor-pointer hover:opacity-80"
-                                onClick={() => window.open(step.screenshot, '_blank')}
-                              />
-                            </div>
-                          )}
-                          
-                          {/* Multiple screenshots (manual execution) */}
-                          {step.screenshots && step.screenshots.length > 0 && (
-                            <div className="mt-2 grid grid-cols-3 gap-2">
-                              {step.screenshots.map((img: string, imgIdx: number) => (
+                            )}
+                            
+                            {/* Single screenshot (automated) */}
+                            {step.screenshot && typeof step.screenshot === 'string' && (
+                              <div className="mt-2">
                                 <img 
-                                  key={imgIdx}
-                                  src={img} 
-                                  alt={`Screenshot ${imgIdx + 1}`}
-                                  className="rounded border border-gray-700 h-24 w-full object-cover cursor-pointer hover:opacity-80"
-                                  onClick={() => window.open(img, '_blank')}
+                                  src={step.screenshot} 
+                                  alt={`Screenshot for step ${(step.stepIndex ?? idx) + 1}`}
+                                  className="rounded border border-gray-700 max-h-48 cursor-pointer hover:opacity-80"
+                                  onClick={() => window.open(step.screenshot, '_blank')}
                                 />
-                              ))}
-                            </div>
-                          )}
+                              </div>
+                            )}
+                            
+                            {/* Multiple screenshots (manual execution) */}
+                            {step.screenshots && step.screenshots.length > 0 && (
+                              <div className="mt-2 grid grid-cols-3 gap-2">
+                                {step.screenshots.map((img: string, imgIdx: number) => (
+                                  <img 
+                                    key={imgIdx}
+                                    src={img} 
+                                    alt={`Screenshot ${imgIdx + 1}`}
+                                    className="rounded border border-gray-700 h-24 w-full object-cover cursor-pointer hover:opacity-80"
+                                    onClick={() => window.open(img, '_blank')}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center py-8 text-gray-500">
                     <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -1200,6 +1257,10 @@ function TestRunResultsDialog({
 
 export default function TestRepository() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Read tab from URL params
+  const tabFromUrl = searchParams.get('tab') as 'repository' | 'suites' | 'plans' | 'releases' | 'runs' | 'defects' | null;
   
   // State
   const [folders, setFolders] = useState<TestFolder[]>([]);
@@ -1265,6 +1326,7 @@ export default function TestRepository() {
   const [newRunTestCases, setNewRunTestCases] = useState<string[]>([]);
   const [newRunReleaseId, setNewRunReleaseId] = useState<string>('');
   const [newRunExecutionMode, setNewRunExecutionMode] = useState<'sequential' | 'parallel'>('sequential');
+  const [newRunTestSearch, setNewRunTestSearch] = useState('');
   
   // Create dialogs with linking
   const [showCreateSuiteDialog, setShowCreateSuiteDialog] = useState(false);
@@ -1284,7 +1346,16 @@ export default function TestRepository() {
   const [newReleaseEndDate, setNewReleaseEndDate] = useState('');
 
   // Tab state and data (must be declared before useEffects that use them)
-  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs' | 'defects'>('repository');
+  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs' | 'defects'>(
+    tabFromUrl || 'repository'
+  );
+  
+  // Sync tab with URL parameter
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
   const [suites, setSuites] = useState<TestSuite[]>([]);
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
@@ -4429,8 +4500,33 @@ export default function TestRepository() {
                             : `Step ${executingStepIndex + 1}`}
                         </div>
                       )}
-                      {/* View Results button for completed runs */}
-                      {(run.status === 'passed' || run.status === 'failed') && (
+                      {/* Continue button for partial manual execution */}
+                      {run.status === 'running' && run.mode === 'manual' && executingRunId !== run.id && (
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 bg-amber-600 hover:bg-amber-500"
+                          onClick={() => {
+                            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
+                            // Find the first test case that isn't completed
+                            let testIdToResume = testIds[0];
+                            if (run.testCaseStatuses) {
+                              for (const id of testIds) {
+                                const status = run.testCaseStatuses[id];
+                                if (status !== 'passed' && status !== 'failed') {
+                                  testIdToResume = id;
+                                  break;
+                                }
+                              }
+                            }
+                            navigate(`/execution/run/${run.id}/${testIdToResume}`);
+                          }}
+                        >
+                          <Play className="w-3 h-3 mr-1" />
+                          Continue
+                        </Button>
+                      )}
+                      {/* View Results button for completed or partial runs */}
+                      {(run.status === 'passed' || run.status === 'failed' || (run.status === 'running' && run.manualStepResults)) && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -5939,48 +6035,90 @@ export default function TestRepository() {
               <label className="text-sm text-gray-400 mb-1 block">
                 Select Test Cases ({newRunTestCases.length} selected)
               </label>
-              <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+              {/* Search input for test cases */}
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <Input
+                  value={newRunTestSearch}
+                  onChange={(e) => setNewRunTestSearch(e.target.value)}
+                  placeholder="Search by test ID or name..."
+                  className="pl-10 bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+              <div className="max-h-56 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
                 {testCases.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">No test cases available</p>
                 ) : (
-                  testCases.map((tc) => (
-                    <label
-                      key={tc.id}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                        newRunTestCases.includes(tc.id) 
-                          ? "bg-amber-500/10 border border-amber-500/30" 
-                          : "hover:bg-gray-700"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={newRunTestCases.includes(tc.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewRunTestCases(prev => [...prev, tc.id]);
-                          } else {
-                            setNewRunTestCases(prev => prev.filter(id => id !== tc.id));
-                          }
-                        }}
-                        className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{tc.name}</p>
-                        <p className="text-xs text-gray-500">{tc.priority} • {tc.automationStatus || 'manual'}</p>
-                      </div>
-                    </label>
-                  ))
+                  (() => {
+                    const searchLower = newRunTestSearch.toLowerCase();
+                    const filteredCases = searchLower 
+                      ? testCases.filter(tc => 
+                          tc.id.toLowerCase().includes(searchLower) || 
+                          tc.name.toLowerCase().includes(searchLower)
+                        )
+                      : testCases.slice(0, 50); // Show latest 50 by default
+                    
+                    if (filteredCases.length === 0) {
+                      return (
+                        <p className="text-gray-500 text-sm text-center py-4">
+                          No test cases match "{newRunTestSearch}"
+                        </p>
+                      );
+                    }
+                    
+                    return filteredCases.map((tc) => (
+                      <label
+                        key={tc.id}
+                        className={cn(
+                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
+                          newRunTestCases.includes(tc.id) 
+                            ? "bg-amber-500/10 border border-amber-500/30" 
+                            : "hover:bg-gray-700"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={newRunTestCases.includes(tc.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewRunTestCases(prev => [...prev, tc.id]);
+                            } else {
+                              setNewRunTestCases(prev => prev.filter(id => id !== tc.id));
+                            }
+                          }}
+                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-white truncate">{tc.name}</p>
+                            <code className="text-[10px] text-gray-500 bg-gray-700 px-1 rounded">{tc.id.slice(0, 8)}</code>
+                          </div>
+                          <p className="text-xs text-gray-500">{tc.priority || 'medium'} • {tc.automationStatus || 'manual'}</p>
+                        </div>
+                      </label>
+                    ));
+                  })()
                 )}
               </div>
+              {testCases.length > 50 && !newRunTestSearch && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Showing first 50 tests. Use search to find more.
+                </p>
+              )}
               <div className="flex gap-2 mt-2">
                 <Button
                   variant="outline"
                   size="sm"
                   className="text-xs border-gray-700"
-                  onClick={() => setNewRunTestCases(testCases.map(tc => tc.id))}
+                  onClick={() => {
+                    const searchLower = newRunTestSearch.toLowerCase();
+                    const toSelect = searchLower 
+                      ? testCases.filter(tc => tc.id.toLowerCase().includes(searchLower) || tc.name.toLowerCase().includes(searchLower))
+                      : testCases.slice(0, 50);
+                    setNewRunTestCases(toSelect.map(tc => tc.id));
+                  }}
                 >
-                  Select All
+                  Select All Visible
                 </Button>
                 <Button
                   variant="outline"
@@ -6001,6 +6139,7 @@ export default function TestRepository() {
               setNewRunReleaseId('');
               setNewRunExecutionMode('sequential');
               setNewRunMode('automated');
+              setNewRunTestSearch('');
             }} className="border-gray-700">
               Cancel
             </Button>
@@ -6038,7 +6177,8 @@ export default function TestRepository() {
                 setNewRunTestCases([]);
                 setNewRunReleaseId('');
                 setNewRunExecutionMode('sequential');
-                setNewRunMode('automated'); // Reset to default
+                setNewRunMode('automated');
+                setNewRunTestSearch('');
                 toast.success(`Test run created with ${newRunTestCases.length} test(s)`);
               }}
               className="border-gray-700"
@@ -6084,7 +6224,8 @@ export default function TestRepository() {
                 setNewRunTestCases([]);
                 setNewRunReleaseId('');
                 setNewRunExecutionMode('sequential');
-                setNewRunMode('automated'); // Reset to default
+                setNewRunMode('automated');
+                setNewRunTestSearch('');
                 
                 // Manual mode: Navigate to step-level execution
                 if (runMode === 'manual') {
@@ -6135,20 +6276,28 @@ export default function TestRepository() {
             <div className="space-y-4">
               <div>
                 <label className="text-sm text-gray-400 mb-1 block">Test Name *</label>
-                <Input
+                <textarea
                   value={editingTestCase.name}
                   onChange={(e) => setEditingTestCase({ ...editingTestCase, name: e.target.value })}
                   placeholder="Test case name"
-                  className="bg-gray-800 border-gray-700"
+                  rows={2}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
+                  style={{ minHeight: '42px', maxHeight: '100px' }}
                 />
+                {editingTestCase.name?.length > 50 && (
+                  <p className="text-xs text-amber-400 mt-1">
+                    {editingTestCase.name.length} characters - Consider shortening for better readability
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm text-gray-400 mb-1 block">Description</label>
-                <Input
+                <textarea
                   value={editingTestCase.description || ''}
                   onChange={(e) => setEditingTestCase({ ...editingTestCase, description: e.target.value })}
-                  placeholder="Brief description"
-                  className="bg-gray-800 border-gray-700"
+                  placeholder="Brief description of what this test case validates"
+                  rows={2}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -6442,10 +6591,10 @@ function CreateDefectForm({
             onChange={(e) => setSeverity(e.target.value as any)}
             className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
-            <option value="critical">Critical</option>
-            <option value="major">Major</option>
-            <option value="minor">Minor</option>
-            <option value="trivial">Trivial</option>
+            <option value="critical">S1 - Critical</option>
+            <option value="major">S2 - Major</option>
+            <option value="minor">S3 - Minor</option>
+            <option value="trivial">S4 - Low</option>
           </select>
         </div>
         <div>
@@ -6455,10 +6604,10 @@ function CreateDefectForm({
             onChange={(e) => setPriority(e.target.value as any)}
             className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
+            <option value="critical">P1 - Critical</option>
+            <option value="high">P2 - High</option>
+            <option value="medium">P3 - Medium</option>
+            <option value="low">P4 - Low</option>
           </select>
         </div>
         <div>
