@@ -35,7 +35,8 @@ import {
   Building2, Plane, GraduationCap, Heart, Utensils,
   Home, Briefcase, Gamepad2, BarChart3,
   Activity, FileJson, Link2, Key, Timer,
-  ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban
+  ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
+  Pencil, Flag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -157,6 +158,7 @@ type StepType =
   | 'assert' | 'verify'
   | 'api' | 'graphql'
   | 'db_query' | 'db_assert'
+  | 'note' | 'manual_step' | 'checkpoint'
   | 'screenshot' | 'visual_compare'
   | 'extract' | 'store_variable'
   | 'condition' | 'loop'
@@ -265,6 +267,12 @@ interface TestStep {
   manualAction?: string;
   expectedResult?: string;
   automationStatus?: 'manual' | 'recorded' | 'verified';
+  
+  // Freeform text for notes/manual steps
+  noteText?: string;  // Free-form text for manual test documentation
+  
+  // QA Engineer fallback selector - when nothing else works
+  qaFallbackSelector?: string;  // XPath/CSS selector input by QA when auto-detection fails
   
   // Manual execution tracking
   manualResult?: 'passed' | 'failed' | 'skipped' | 'blocked';
@@ -442,7 +450,18 @@ const STEP_CATEGORIES = {
     steps: [
       { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-rose-500', desc: 'Capture screen' },
       { type: 'log', label: 'Log Message', icon: FileText, color: 'bg-rose-500', desc: 'Add log entry' },
-      { type: 'annotation', label: 'Add Note', icon: BookOpen, color: 'bg-rose-600', desc: 'Manual note' },
+    ]
+  },
+  // MANUAL - Freeform text for manual testing
+  manual: {
+    label: 'Manual',
+    icon: Pencil,
+    color: 'slate',
+    description: 'Freeform text & manual steps',
+    steps: [
+      { type: 'note', label: 'Note / Comment', icon: FileText, color: 'bg-slate-500', desc: 'Free-form text' },
+      { type: 'manual_step', label: 'Manual Step', icon: ClipboardList, color: 'bg-slate-500', desc: 'Manual action' },
+      { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-slate-600', desc: 'Verification point' },
     ]
   },
 };
@@ -657,6 +676,15 @@ function getStepDescription(step: TestStep): string {
     
     case 'screenshot':
       return 'Take screenshot';
+    
+    case 'note':
+      return step.noteText ? `📝 ${step.noteText.slice(0, 50)}...` : 'Note';
+    
+    case 'manual_step':
+      return step.manualAction || 'Manual step';
+    
+    case 'checkpoint':
+      return step.noteText ? `🚩 ${step.noteText.slice(0, 40)}` : 'Checkpoint';
     
     default:
       return step.description || '';
@@ -3252,236 +3280,69 @@ export default function UnifiedWorkflowEditor() {
               </div>
             </div>
 
-            {/* Center: View Toggle */}
+            {/* Center: Test Type Badge */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 p-1 bg-gray-800 rounded-lg border border-gray-700">
-                <Button
-                  variant={viewMode === 'no-code' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('no-code')}
-                  className={viewMode === 'no-code' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:text-white'}
-                >
-                  <ToggleLeft className="h-4 w-4 mr-1" />
-                  No-Code
-                </Button>
-                <Button
-                  variant={viewMode === 'code' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('code')}
-                  className={viewMode === 'code' ? 'bg-amber-500/20 text-amber-400' : 'text-gray-400 hover:text-white'}
-                >
-                  <Code className="h-4 w-4 mr-1" />
-                  Code
-                </Button>
-              </div>
+              <Badge variant="outline" className="border-amber-500/50 text-amber-400 px-3 py-1">
+                <FileText className="h-3 w-3 mr-1" />
+                Visual Test Builder
+              </Badge>
             </div>
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
+              {/* Settings */}
               <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white">
                 <Settings className="h-4 w-4" />
               </Button>
-              
-              {/* Generate Test Data */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    title="Generate test data for all input fields"
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
-                  >
-                    <Zap className="h-4 w-4 mr-1 text-amber-500" />
-                    Fill Data
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => generateAllTestData(false)}>
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    Fill Empty Fields Only
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => generateAllTestData(true)}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Regenerate All Fields
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
 
-              {/* Accessibility Scan - Dropdown with URL input option */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" title="Accessibility Scanner (WCAG)" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
-                    <span className="text-green-400">♿</span> A11y
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel>♿ Accessibility Scanner</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  
-                  {/* Scan from test case URL */}
-                  <DropdownMenuItem 
-                    onClick={() => {
-                      const navigateStep = testCase.steps.find(s => s.type === 'navigate' && s.url);
-                      const urlToScan = navigateStep?.url || testCase.settings.baseUrl;
-                      
-                      if (!urlToScan) {
-                        toast.error('No URL in test case. Use "Scan Any URL" instead.');
-                        return;
-                      }
-                      
-                      toast.info(`Scanning ${urlToScan}...`);
-                      fetch('http://localhost:8000/api/a11y/scan', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: urlToScan, wcag_level: 'AA' })
-                      })
-                      .then(res => res.json())
-                      .then(data => {
-                        if (data.scan_id) {
-                          window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
-                          toast.success(`Found ${data.summary.total_violations} issues`);
-                        } else {
-                          toast.error(data.detail || 'Scan failed');
-                        }
-                      })
-                      .catch(() => toast.error('Backend not running'));
-                    }}
-                  >
-                    <Globe className="h-4 w-4 mr-2" />
-                    Scan Test Case URL
-                  </DropdownMenuItem>
-                  
-                  <DropdownMenuSeparator />
-                  
-                  {/* Scan any URL - with input */}
-                  <div className="px-2 py-2">
-                    <p className="text-xs text-muted-foreground mb-2">Scan Any Website:</p>
-                    <div className="flex gap-2">
-                      <input 
-                        type="url"
-                        placeholder="https://example.com"
-                        className="flex-1 px-2 py-1 text-sm border rounded"
-                        id="a11y-url-input"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const input = e.target as HTMLInputElement;
-                            const url = input.value.trim();
-                            if (!url) return;
-                            
-                            toast.info(`Scanning ${url}...`);
-                            fetch('http://localhost:8000/api/a11y/scan', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ url, wcag_level: 'AA' })
-                            })
-                            .then(res => res.json())
-                            .then(data => {
-                              if (data.scan_id) {
-                                window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
-                                toast.success(`Found ${data.summary.total_violations} issues`);
-                              } else {
-                                toast.error(data.detail || 'Scan failed');
-                              }
-                            })
-                            .catch(() => toast.error('Backend not running'));
-                          }
-                        }}
-                      />
-                      <Button 
-                        size="sm" 
-                        variant="secondary"
-                        onClick={() => {
-                          const input = document.getElementById('a11y-url-input') as HTMLInputElement;
-                          const url = input?.value.trim();
-                          if (!url) {
-                            toast.error('Enter a URL first');
-                            return;
-                          }
-                          
-                          toast.info(`Scanning ${url}...`);
-                          fetch('http://localhost:8000/api/a11y/scan', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ url, wcag_level: 'AA' })
-                          })
-                          .then(res => res.json())
-                          .then(data => {
-                            if (data.scan_id) {
-                              window.open(`http://localhost:8000/api/a11y/report/${data.scan_id}?format=html`, '_blank');
-                              toast.success(`Found ${data.summary.total_violations} issues`);
-                            } else {
-                              toast.error(data.detail || 'Scan failed');
-                            }
-                          })
-                          .catch(() => toast.error('Backend not running'));
-                        }}
-                      >
-                        Scan
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    onClick={() => window.open('http://localhost:8000/docs#/accessibility-v2', '_blank')}
-                    className="text-xs text-muted-foreground"
-                  >
-                    📚 API Documentation
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Export Dropdown */}
+              {/* Export Dropdown - Formats Only */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
-                    <Download className="h-4 w-4 mr-1 text-amber-500" />
+                    <Download className="h-4 w-4 mr-1.5 text-amber-500" />
                     Export
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Export As</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport('automation')}>
-                    <Monitor className="h-4 w-4 mr-2" />
-                    Automation Test
+                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700 min-w-[200px]">
+                  <DropdownMenuLabel className="text-amber-400">Export Formats</DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-gray-700" />
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setSelectedFormat('istqb');
+                      setShowFormatDialog(true);
+                    }}
+                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                  >
+                    <FileText className="h-4 w-4 mr-2 text-blue-400" />
+                    ISTQB Format
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('api')}>
-                    <Globe className="h-4 w-4 mr-2" />
-                    API Test
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setSelectedFormat('gherkin');
+                      setShowFormatDialog(true);
+                    }}
+                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                  >
+                    <Code className="h-4 w-4 mr-2 text-green-400" />
+                    Gherkin/BDD Format
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('database')}>
-                    <Database className="h-4 w-4 mr-2" />
-                    Database Test
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      setSelectedFormat('markdown');
+                      setShowFormatDialog(true);
+                    }}
+                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                  >
+                    <FileText className="h-4 w-4 mr-2 text-purple-400" />
+                    Markdown Format
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport('performance')}>
-                    <Gauge className="h-4 w-4 mr-2" />
-                    Performance Test
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport('manual')}>
-                    <BookOpen className="h-4 w-4 mr-2" />
-                    Manual Test Doc
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">View Formats</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => {
-                    setSelectedFormat('istqb');
-                    setShowFormatDialog(true);
-                  }}>
-                    📋 ISTQB Format
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    setSelectedFormat('gherkin');
-                    setShowFormatDialog(true);
-                  }}>
-                    🥒 Gherkin/BDD Format
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    setSelectedFormat('markdown');
-                    setShowFormatDialog(true);
-                  }}>
-                    📝 Markdown Format
+                  <DropdownMenuSeparator className="bg-gray-700" />
+                  <DropdownMenuItem 
+                    onClick={() => handleExport('automation')}
+                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                  >
+                    <Play className="h-4 w-4 mr-2 text-amber-400" />
+                    Playwright Script
                   </DropdownMenuItem>
                   
                   {/* Electron-specific options */}
@@ -3525,28 +3386,16 @@ export default function UnifiedWorkflowEditor() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
-                    <Save className="h-4 w-4 mr-1 text-amber-500" />
-                    Save
-                    <ChevronDown className="h-3 w-3 ml-1" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                  <DropdownMenuItem onClick={saveTestCase} className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800 focus:text-white">
-                    <Save className="h-4 w-4 mr-2" />
-                    {savedTestCaseId ? 'Save (Update)' : 'Save'}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    setSaveAsName(testCase.name + ' - Copy');
-                    setShowSaveAsDialog(true);
-                  }} className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800 focus:text-white">
-                    <FolderPlus className="h-4 w-4 mr-2" />
-                    Save As...
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* Save Button - Primary action */}
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={saveTestCase}
+                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 px-4"
+              >
+                <Save className="h-4 w-4 mr-1.5" />
+                {savedTestCaseId ? 'Save' : 'Save New'}
+              </Button>
               
               {/* Manual Execution Button */}
               <Button 
@@ -3554,25 +3403,30 @@ export default function UnifiedWorkflowEditor() {
                 variant="outline"
                 onClick={startManualExecution}
                 disabled={isRunning || isManualExecution || testCase.steps.length === 0}
-                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 disabled:opacity-50"
+                className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 disabled:opacity-50 px-4"
               >
-                <ClipboardList className="h-4 w-4 mr-1" />
+                <ClipboardList className="h-4 w-4 mr-1.5" />
                 Manual
               </Button>
               
-              {/* Automated Run Button */}
+              {/* Automated Run Button - Prominent green with clear text */}
               <Button 
                 size="sm" 
                 onClick={runTest}
                 disabled={isRunning || isManualExecution || testCase.steps.length === 0}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white disabled:opacity-50"
+                className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-500/25 disabled:opacity-50 px-5"
               >
                 {isRunning ? (
-                  <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                    <span>Running...</span>
+                  </>
                 ) : (
-                  <Play className="h-4 w-4 mr-1" />
+                  <>
+                    <Play className="h-4 w-4 mr-1.5" />
+                    <span>Run Test</span>
+                  </>
                 )}
-                Run
               </Button>
             </div>
           </div>
@@ -5534,6 +5388,27 @@ function StepEditor({
                 <Wand2 className="h-4 w-4 mr-1" />
                 Add Fallback Strategy
               </Button>
+              
+              {/* QA Engineer Fallback - Manual selector input when nothing else works */}
+              <div className="space-y-1 mt-3 pt-3 border-t border-amber-500/30">
+                <Label className="text-xs flex items-center gap-2">
+                  <span className="text-amber-500">⚙️</span>
+                  QA Override Selector
+                  <span className="text-[10px] font-normal text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
+                    Fallback
+                  </span>
+                </Label>
+                <Textarea
+                  value={step.qaFallbackSelector || ''}
+                  onChange={(e) => onUpdate({ qaFallbackSelector: e.target.value })}
+                  placeholder="// Enter XPath or CSS selector when auto-detection fails&#10;// Example: //button[@data-testid='submit']&#10;// Example: [data-qa='login-btn']"
+                  className="font-mono text-xs border-amber-500/30 bg-amber-50/50 dark:bg-amber-900/10"
+                  rows={3}
+                />
+                <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                  💡 Use this when automatic element detection doesn't work. Supports XPath (//) or CSS selectors.
+                </p>
+              </div>
             </CollapsibleContent>
           </Collapsible>
           
@@ -5844,6 +5719,95 @@ function StepEditor({
             />
           </div>
         </>
+      )}
+
+      {/* ========== MANUAL TESTING STEPS - Freeform Text ========== */}
+      
+      {/* Note/Comment - Freeform text for documentation */}
+      {step.type === 'note' && (
+        <div className="space-y-4 border-l-4 border-slate-500 pl-4">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+            <FileText className="h-4 w-4" />
+            Note / Comment
+          </div>
+          <div className="space-y-2">
+            <Label>Note Text</Label>
+            <Textarea
+              value={step.noteText || ''}
+              onChange={(e) => onUpdate({ noteText: e.target.value })}
+              placeholder="Write any notes, comments, or test documentation here...&#10;&#10;Examples:&#10;- Test setup requirements&#10;- Environment considerations&#10;- Edge cases to watch for"
+              className="text-sm min-h-[120px]"
+              rows={5}
+            />
+            <p className="text-xs text-muted-foreground">
+              📝 This is a free-form text field for documentation purposes
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Manual Step - Action description with expected result */}
+      {step.type === 'manual_step' && (
+        <div className="space-y-4 border-l-4 border-slate-600 pl-4">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 font-medium">
+            <ClipboardList className="h-4 w-4" />
+            Manual Test Step
+          </div>
+          <div className="space-y-2">
+            <Label>Action to Perform</Label>
+            <Textarea
+              value={step.manualAction || ''}
+              onChange={(e) => onUpdate({ manualAction: e.target.value })}
+              placeholder="Describe the manual action...&#10;e.g., Verify the color of the error message is red&#10;e.g., Check that the PDF downloads correctly"
+              className="text-sm"
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Expected Result</Label>
+            <Textarea
+              value={step.expectedResult || ''}
+              onChange={(e) => onUpdate({ expectedResult: e.target.value })}
+              placeholder="What should happen after this action?&#10;e.g., Error message displays in red (#FF0000)&#10;e.g., PDF opens with correct data"
+              className="text-sm"
+              rows={3}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            👆 Manual steps are for actions that cannot be automated but need to be documented and executed by a tester
+          </p>
+        </div>
+      )}
+      
+      {/* Checkpoint - Verification point marker */}
+      {step.type === 'checkpoint' && (
+        <div className="space-y-4 border-l-4 border-amber-500 pl-4">
+          <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-medium">
+            <Flag className="h-4 w-4" />
+            Verification Checkpoint
+          </div>
+          <div className="space-y-2">
+            <Label>Checkpoint Description</Label>
+            <Textarea
+              value={step.noteText || ''}
+              onChange={(e) => onUpdate({ noteText: e.target.value })}
+              placeholder="Describe what should be verified at this point...&#10;e.g., User is logged in and dashboard loads&#10;e.g., Cart contains the correct items"
+              className="text-sm"
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Pass Criteria</Label>
+            <Input
+              value={step.expectedResult || ''}
+              onChange={(e) => onUpdate({ expectedResult: e.target.value })}
+              placeholder="e.g., All elements visible, No errors in console"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            🚩 Checkpoints mark critical verification points in your test flow
+          </p>
+        </div>
       )}
 
       {/* ========== BLACK-BOX TESTING STEP EDITORS ========== */}
