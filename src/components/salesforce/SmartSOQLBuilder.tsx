@@ -483,7 +483,7 @@ export function SmartSOQLBuilder({
               {queryResults && (
                 <div className="space-y-1">
                   <span className="text-[10px] text-gray-500">{queryResults.totalSize || 0} records</span>
-                  <div className="bg-[#1a1a25] rounded border border-white/5 max-h-36 overflow-auto">
+                  <div className="bg-[#1a1a25] rounded border border-white/5 max-h-48 overflow-auto">
                     {queryResults.records?.length > 0 ? (
                       <table className="w-full text-[9px]">
                         <thead className="bg-white/5 sticky top-0">
@@ -491,14 +491,70 @@ export function SmartSOQLBuilder({
                             {Object.keys(queryResults.records[0]).filter(k => k !== 'attributes').slice(0, 5).map(key => (
                               <th key={key} className="px-1.5 py-1 text-left text-gray-400 font-medium">{key}</th>
                             ))}
+                            <th className="px-1.5 py-1 text-right text-gray-400 font-medium w-16">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {queryResults.records.slice(0, 15).map((record: any, idx: number) => (
-                            <tr key={idx} className="border-t border-white/5 hover:bg-white/5">
+                            <tr key={idx} className="border-t border-white/5 hover:bg-white/5 group">
                               {Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 5).map(([key, value]: [string, any]) => (
                                 <td key={key} className="px-1.5 py-1 text-gray-300 truncate max-w-[100px]">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</td>
                               ))}
+                              <td className="px-1.5 py-0.5 text-right">
+                                <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => {
+                                      const recordId = record.Id || record.id;
+                                      const recordName = record.Name || record.name || recordId;
+                                      if (onAddAsStep) {
+                                        onAddAsStep({
+                                          type: 'sf_query_record',
+                                          action: `Query ${selectedObject} Record`,
+                                          object: selectedObject,
+                                          recordId,
+                                          recordName,
+                                          query: `SELECT ${Array.from(selectedFields).join(', ')} FROM ${selectedObject} WHERE Id = '${recordId}'`
+                                        });
+                                        toast.success(`Added step for ${recordName}`);
+                                      }
+                                    }}
+                                    className="h-5 px-1.5 text-[8px] rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 flex items-center gap-0.5"
+                                    title="Add as step"
+                                  >
+                                    <Plus className="h-2.5 w-2.5" />
+                                    Step
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const recordId = record.Id || record.id;
+                                      const recordName = record.Name || record.name || recordId;
+                                      if (onAddAsStep) {
+                                        onAddAsStep({
+                                          type: 'sf_assert_record',
+                                          action: `Assert ${selectedObject} exists`,
+                                          object: selectedObject,
+                                          recordId,
+                                          recordName,
+                                          assertion: {
+                                            type: 'record_exists',
+                                            object: selectedObject,
+                                            recordId,
+                                            expectedFields: Object.fromEntries(
+                                              Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 3)
+                                            )
+                                          }
+                                        });
+                                        toast.success(`Added assertion for ${recordName}`);
+                                      }
+                                    }}
+                                    className="h-5 px-1.5 text-[8px] rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 flex items-center gap-0.5"
+                                    title="Add as assertion"
+                                  >
+                                    <CheckCircle className="h-2.5 w-2.5" />
+                                    Assert
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>

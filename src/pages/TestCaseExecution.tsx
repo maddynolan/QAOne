@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle, XCircle, Clock, Camera, Bug, ChevronRight, ChevronLeft, SkipForward, ImageIcon, AlertCircle, Save, Home, Trash2, Eye, Globe, MousePointer, Type, Check, Target, List, Plus } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, Camera, Bug, ChevronRight, ChevronLeft, SkipForward, ImageIcon, AlertCircle, Save, Home, Trash2, Eye, Globe, MousePointer, Type, Check, Target, List, Plus, Link, Search, Clipboard } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+// Standard severity and priority definitions following industry standards
+const SEVERITY_OPTIONS = [
+  { value: 'critical', label: 'S1 - Critical', description: 'System crash, data loss, security breach' },
+  { value: 'high', label: 'S2 - High', description: 'Major feature broken, no workaround' },
+  { value: 'medium', label: 'S3 - Medium', description: 'Feature impaired but has workaround' },
+  { value: 'low', label: 'S4 - Low', description: 'Minor issue, cosmetic' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'critical', label: 'P1 - Critical', description: 'Fix immediately' },
+  { value: 'high', label: 'P2 - High', description: 'Fix in current sprint' },
+  { value: 'medium', label: 'P3 - Medium', description: 'Fix in next sprint' },
+  { value: 'low', label: 'P4 - Low', description: 'Fix when time permits' },
+];
 
 // Step result interface for manual execution
 interface StepResult {
@@ -162,7 +177,10 @@ export default function TestCaseExecution() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [stepNotes, setStepNotes] = useState('');
   const [showDefectDialog, setShowDefectDialog] = useState(false);
-  const [newDefect, setNewDefect] = useState({ title: '', description: '', severity: 'medium' });
+  const [showLinkDefectDialog, setShowLinkDefectDialog] = useState(false);
+  const [newDefect, setNewDefect] = useState({ title: '', description: '', severity: 'medium', priority: 'medium' });
+  const [existingDefects, setExistingDefects] = useState<any[]>([]);
+  const [defectSearchQuery, setDefectSearchQuery] = useState('');
   const [allTestCases, setAllTestCases] = useState<any[]>([]);
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [showScreenshotPreview, setShowScreenshotPreview] = useState<string | null>(null);
@@ -170,8 +188,47 @@ export default function TestCaseExecution() {
 
   const testIds = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
 
+  // Clipboard paste handler for screenshots
+  const handlePaste = useCallback((e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const blob = items[i].getAsFile();
+        if (blob) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = reader.result as string;
+            const newResults = [...stepResults];
+            const currentResult = newResults[currentStepIndex] || { stepIndex: currentStepIndex, status: 'pending' as const };
+            newResults[currentStepIndex] = {
+              ...currentResult,
+              screenshots: [...(currentResult.screenshots || []), base64]
+            };
+            saveStepResults(newResults);
+            toast.success("Screenshot pasted from clipboard!");
+          };
+          reader.readAsDataURL(blob);
+          break;
+        }
+      }
+    }
+  }, [stepResults, currentStepIndex]);
+
+  // Add clipboard listener
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [handlePaste]);
+
   useEffect(() => {
     loadData();
+    // Load existing defects
+    const savedDefects = JSON.parse(localStorage.getItem('defects') || '[]');
+    const testDefects = JSON.parse(localStorage.getItem('test_defects') || '[]');
+    setExistingDefects([...savedDefects, ...testDefects]);
   }, [runId, testCaseId]);
 
   const loadData = async () => {
@@ -182,6 +239,11 @@ export default function TestCaseExecution() {
       
       if (run) {
         setTestRun(run);
+        // Set current test index based on URL
+        const ids = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
+        const idx = ids.indexOf(testCaseId);
+        if (idx !== -1) setCurrentTestIndex(idx);
+        
         if (run.manualStepResults?.[testCaseId!]) {
           const savedResults = run.manualStepResults[testCaseId!];
           setStepResults(savedResults);
@@ -191,26 +253,63 @@ export default function TestCaseExecution() {
       }
       
       let allCases: any[] = [];
-      const electronAPI = (window as any).electronAPI;
-      if (electronAPI?.localStorage?.getTestCases) {
-        try {
-          allCases = await electronAPI.localStorage.getTestCases();
-        } catch (e) {
-          console.log('Electron storage not available');
+      const seenIds = new Set<string>();
+      
+      // Helper to add cases without duplicates
+      const addCases = (cases: any[]) => {
+        for (const tc of cases) {
+          if (tc.id && !seenIds.has(tc.id)) {
+            seenIds.add(tc.id);
+            allCases.push(tc);
+          }
         }
+      };
+      
+      // 1. Load from flowstral_test_cases
+      try {
+        const localCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+        addCases(localCases);
+      } catch (e) {
+        console.log('flowstral_test_cases not available');
       }
       
-      if (allCases.length === 0) {
-        try {
-          const response = await fetch(`http://localhost:8000/test-cases`);
-          if (response.ok) {
-            const cases = await response.json();
-            allCases = Array.isArray(cases) ? cases : [];
-          }
-        } catch (e) {
-          console.log('API not available');
-        }
+      // 2. Load from test_cases key
+      try {
+        const altCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+        addCases(altCases);
+      } catch (e) {
+        console.log('test_cases not available');
       }
+      
+      // 3. Load from unified_test_case_* keys (legacy format)
+      try {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
+        for (const key of keys) {
+          try {
+            const tc = JSON.parse(localStorage.getItem(key) || '{}');
+            if (tc.id && !seenIds.has(tc.id)) {
+              seenIds.add(tc.id);
+              allCases.push(tc);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.log('unified_test_case keys not available');
+      }
+      
+      // 4. Try backend API as additional source
+      try {
+        const response = await fetch(`http://localhost:8000/test-cases`);
+        if (response.ok) {
+          const backendCases = await response.json();
+          const cases = Array.isArray(backendCases) ? backendCases : [];
+          addCases(cases);
+        }
+      } catch (e) {
+        console.log('Backend API not available');
+      }
+      
+      console.log('[Execution] Loaded', allCases.length, 'test cases from all sources');
       
       setAllTestCases(allCases);
       
@@ -224,9 +323,6 @@ export default function TestCaseExecution() {
             status: 'pending' as const
           })));
         }
-        const ids = run?.testCaseIds || (run?.testCaseId ? [run.testCaseId] : []);
-        const idx = ids.indexOf(testCaseId);
-        if (idx !== -1) setCurrentTestIndex(idx);
       } else {
         toast.error("Test case not found");
       }
@@ -346,6 +442,37 @@ export default function TestCaseExecution() {
     }
   };
 
+  // Generate steps to reproduce from executed steps up to failure
+  const generateStepsToReproduce = () => {
+    const steps = getSteps(testCase);
+    let stepsText = `Test Case: ${testCase?.name || 'Unknown'}\n`;
+    stepsText += `Environment: ${testRun?.environment || 'Not specified'}\n\n`;
+    stepsText += `Steps to Reproduce:\n`;
+    
+    for (let i = 0; i <= currentStepIndex; i++) {
+      const step = steps[i];
+      const result = stepResults[i];
+      const { action, details } = formatStepDetails(step);
+      stepsText += `${i + 1}. ${action}`;
+      if (details.length > 0) {
+        stepsText += ` - ${details.map(d => `${d.label}: ${d.value}`).join(', ')}`;
+      }
+      if (result?.status === 'failed' && result?.errorMessage) {
+        stepsText += ` [FAILED: ${result.errorMessage}]`;
+      }
+      stepsText += '\n';
+    }
+    
+    const currentStep = steps[currentStepIndex];
+    if (currentStep?.expectedResult) {
+      stepsText += `\nExpected Result:\n${currentStep.expectedResult}\n`;
+    }
+    
+    stepsText += `\nActual Result:\n[Describe what actually happened]\n`;
+    
+    return stepsText;
+  };
+
   const createDefect = () => {
     if (!newDefect.title.trim()) {
       toast.error("Defect title is required");
@@ -366,19 +493,51 @@ export default function TestCaseExecution() {
       title: newDefect.title,
       description: newDefect.description,
       severity: newDefect.severity,
+      priority: newDefect.priority,
       testCaseId,
       testCaseName: testCase?.name,
       stepIndex: currentStepIndex,
+      failedAtStep: currentStepIndex + 1,
+      stepsToReproduce: generateStepsToReproduce(),
       runId,
       status: 'open',
       createdAt: new Date().toISOString()
     });
     localStorage.setItem('defects', JSON.stringify(defects));
     
+    // Also update existing defects list
+    setExistingDefects(prev => [...prev, {
+      id: defectId,
+      title: newDefect.title,
+      severity: newDefect.severity,
+      priority: newDefect.priority,
+      status: 'open'
+    }]);
+    
     setShowDefectDialog(false);
-    setNewDefect({ title: '', description: '', severity: 'medium' });
-    toast.success(`Defect ${defectId} created!`);
+    setNewDefect({ title: '', description: '', severity: 'medium', priority: 'medium' });
+    toast.success(`Defect ${defectId} created and linked!`);
   };
+
+  // Link existing defect to current step
+  const linkExistingDefect = (defect: any) => {
+    const newResults = [...stepResults];
+    newResults[currentStepIndex] = {
+      ...newResults[currentStepIndex],
+      defectId: defect.id,
+      defectTitle: defect.title
+    };
+    saveStepResults(newResults);
+    setShowLinkDefectDialog(false);
+    setDefectSearchQuery('');
+    toast.success(`Defect ${defect.id} linked to step ${currentStepIndex + 1}`);
+  };
+
+  // Filter defects for search
+  const filteredDefects = existingDefects.filter(d => 
+    d.id?.toLowerCase().includes(defectSearchQuery.toLowerCase()) ||
+    d.title?.toLowerCase().includes(defectSearchQuery.toLowerCase())
+  );
 
   const removeDefect = () => {
     const newResults = [...stepResults];
@@ -389,7 +548,8 @@ export default function TestCaseExecution() {
   };
 
   const navigateToNextTest = () => {
-    const ids = testRun?.testCaseIds || [];
+    const ids = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
+    console.log('[Navigation] Next - current:', currentTestIndex, 'total:', ids.length, 'ids:', ids);
     const nextIndex = currentTestIndex + 1;
     if (nextIndex < ids.length) {
       navigate(`/execution/run/${runId}/${ids[nextIndex]}`);
@@ -400,10 +560,31 @@ export default function TestCaseExecution() {
   };
 
   const navigateToPrevTest = () => {
-    const ids = testRun?.testCaseIds || [];
+    const ids = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
+    console.log('[Navigation] Prev - current:', currentTestIndex, 'total:', ids.length, 'ids:', ids);
     const prevIndex = currentTestIndex - 1;
     if (prevIndex >= 0) {
       navigate(`/execution/run/${runId}/${ids[prevIndex]}`);
+    }
+  };
+
+  // Skip current test and move to next
+  const skipCurrentTest = () => {
+    // Mark all pending steps as skipped
+    const newResults = stepResults.map(r => 
+      r.status === 'pending' ? { ...r, status: 'skipped' as const, executedAt: new Date().toISOString() } : r
+    );
+    saveStepResults(newResults);
+    toast.info('Test skipped');
+    
+    // Navigate to next test
+    const ids = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
+    const nextIndex = currentTestIndex + 1;
+    if (nextIndex < ids.length) {
+      navigate(`/execution/run/${runId}/${ids[nextIndex]}`);
+    } else {
+      toast.success("All test cases completed!");
+      navigate('/test-cases?tab=runs');
     }
   };
 
@@ -467,14 +648,45 @@ export default function TestCaseExecution() {
             
             {/* Multi-test nav */}
             {testIds.length > 1 && (
-              <div className="flex items-center gap-1 bg-gray-800 rounded px-2 py-1">
-                <Button variant="ghost" size="sm" disabled={currentTestIndex === 0} onClick={navigateToPrevTest} className="h-6 w-6 p-0">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-xs text-white px-1">Test {currentTestIndex + 1}/{testIds.length}</span>
-                <Button variant="ghost" size="sm" disabled={currentTestIndex === testIds.length - 1} onClick={navigateToNextTest} className="h-6 w-6 p-0">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-gray-800 rounded px-2 py-1">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={currentTestIndex === 0} 
+                    onClick={navigateToPrevTest} 
+                    className="h-6 w-6 p-0 hover:bg-gray-700"
+                    title="Previous test"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-white px-1 min-w-[60px] text-center">
+                    Test {currentTestIndex + 1}/{testIds.length}
+                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    disabled={currentTestIndex >= testIds.length - 1} 
+                    onClick={navigateToNextTest} 
+                    className="h-6 w-6 p-0 hover:bg-gray-700"
+                    title="Next test"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                {/* Skip Test Button - allows moving to next without completing */}
+                {currentTestIndex < testIds.length - 1 && !isTestComplete && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={skipCurrentTest}
+                    className="h-7 text-xs border-gray-600 text-gray-400 hover:text-white hover:border-amber-500"
+                    title="Skip this test and move to next"
+                  >
+                    <SkipForward className="h-3 w-3 mr-1" />
+                    Skip Test
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -660,7 +872,11 @@ export default function TestCaseExecution() {
                       <Camera className="w-4 h-4 text-blue-400" />
                       Screenshots ({currentResult?.screenshots?.length || 0})
                     </Label>
-                    <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Clipboard className="w-3 h-3" />
+                        Ctrl+V to paste
+                      </span>
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -701,10 +917,13 @@ export default function TestCaseExecution() {
                       ))}
                     </div>
                   ) : (
-                    <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
+                    <div 
+                      className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
                       <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
                       <p className="text-gray-500 text-sm">No screenshots attached</p>
-                      <p className="text-gray-600 text-xs">Click "Add Screenshot" to upload evidence</p>
+                      <p className="text-gray-600 text-xs mt-1">Click to upload or press <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 text-[10px] font-mono">Ctrl+V</kbd> to paste from clipboard</p>
                     </div>
                   )}
                 </div>
@@ -717,10 +936,32 @@ export default function TestCaseExecution() {
                       Linked Defect
                     </Label>
                     {!currentResult?.defectId && (
-                      <Button size="sm" onClick={() => setShowDefectDialog(true)} className="bg-red-600 hover:bg-red-500">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Create Defect
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setShowLinkDefectDialog(true)} 
+                          className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                        >
+                          <Link className="h-4 w-4 mr-1" />
+                          Link Existing
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          onClick={() => {
+                            // Auto-populate description with steps to reproduce
+                            setNewDefect(prev => ({
+                              ...prev,
+                              description: generateStepsToReproduce()
+                            }));
+                            setShowDefectDialog(true);
+                          }} 
+                          className="bg-red-600 hover:bg-red-500"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Create Defect
+                        </Button>
+                      </div>
                     )}
                   </div>
                   
@@ -802,9 +1043,12 @@ export default function TestCaseExecution() {
 
       {/* Create Defect Dialog */}
       <Dialog open={showDefectDialog} onOpenChange={setShowDefectDialog}>
-        <DialogContent className="bg-gray-800 border-gray-700">
+        <DialogContent className="bg-gray-800 border-gray-700 max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white">Create Defect for Step {currentStepIndex + 1}</DialogTitle>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Bug className="w-5 h-5 text-red-400" />
+              Create Defect for Step {currentStepIndex + 1}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -816,26 +1060,50 @@ export default function TestCaseExecution() {
                 className="mt-1 bg-gray-900 border-gray-700 text-white"
               />
             </div>
-            <div>
-              <Label className="text-gray-400">Severity</Label>
-              <select
-                value={newDefect.severity}
-                onChange={(e) => setNewDefect({ ...newDefect, severity: e.target.value })}
-                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-gray-400">Severity</Label>
+                <select
+                  value={newDefect.severity}
+                  onChange={(e) => setNewDefect({ ...newDefect, severity: e.target.value })}
+                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
+                >
+                  {SEVERITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {SEVERITY_OPTIONS.find(o => o.value === newDefect.severity)?.description}
+                </p>
+              </div>
+              <div>
+                <Label className="text-gray-400">Priority</Label>
+                <select
+                  value={newDefect.priority}
+                  onChange={(e) => setNewDefect({ ...newDefect, priority: e.target.value })}
+                  className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
+                >
+                  {PRIORITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {PRIORITY_OPTIONS.find(o => o.value === newDefect.priority)?.description}
+                </p>
+              </div>
             </div>
+            
             <div>
-              <Label className="text-gray-400">Description</Label>
+              <Label className="text-gray-400">
+                Description / Steps to Reproduce
+                <span className="text-green-400 text-xs ml-2">(Auto-populated from test execution)</span>
+              </Label>
               <Textarea
                 value={newDefect.description}
                 onChange={(e) => setNewDefect({ ...newDefect, description: e.target.value })}
                 placeholder="Steps to reproduce, expected vs actual..."
-                className="mt-1 bg-gray-900 border-gray-700 text-white h-24"
+                className="mt-1 bg-gray-900 border-gray-700 text-white h-48 font-mono text-sm"
               />
             </div>
           </div>
@@ -843,7 +1111,80 @@ export default function TestCaseExecution() {
             <Button variant="outline" onClick={() => setShowDefectDialog(false)} className="border-gray-700">Cancel</Button>
             <Button onClick={createDefect} className="bg-red-600 hover:bg-red-500">
               <Bug className="h-4 w-4 mr-2" />
-              Create Defect
+              Create & Link Defect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link Existing Defect Dialog */}
+      <Dialog open={showLinkDefectDialog} onOpenChange={setShowLinkDefectDialog}>
+        <DialogContent className="bg-gray-800 border-gray-700 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Link className="w-5 h-5 text-amber-400" />
+              Link Existing Defect
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Input
+                value={defectSearchQuery}
+                onChange={(e) => setDefectSearchQuery(e.target.value)}
+                placeholder="Search by defect ID or title..."
+                className="pl-10 bg-gray-900 border-gray-700 text-white"
+              />
+            </div>
+            
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {filteredDefects.length > 0 ? (
+                filteredDefects.map((defect) => (
+                  <button
+                    key={defect.id}
+                    onClick={() => linkExistingDefect(defect)}
+                    className="w-full p-3 bg-gray-900 border border-gray-700 rounded-lg text-left hover:border-amber-500/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-400 font-mono text-sm">{defect.id}</span>
+                      <div className="flex gap-2">
+                        {defect.severity && (
+                          <Badge className={cn(
+                            "text-xs",
+                            defect.severity === 'critical' && "bg-red-500/20 text-red-400",
+                            defect.severity === 'high' && "bg-orange-500/20 text-orange-400",
+                            defect.severity === 'medium' && "bg-yellow-500/20 text-yellow-400",
+                            defect.severity === 'low' && "bg-blue-500/20 text-blue-400"
+                          )}>
+                            {SEVERITY_OPTIONS.find(s => s.value === defect.severity)?.label || defect.severity}
+                          </Badge>
+                        )}
+                        {defect.status && (
+                          <Badge variant="outline" className="text-xs text-gray-400">
+                            {defect.status}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-white text-sm mt-1 truncate">{defect.title}</p>
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Bug className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">
+                    {defectSearchQuery ? 'No defects found' : 'No existing defects'}
+                  </p>
+                  <p className="text-xs mt-1">
+                    {defectSearchQuery ? 'Try a different search term' : 'Create a new defect instead'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkDefectDialog(false)} className="border-gray-700">
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
