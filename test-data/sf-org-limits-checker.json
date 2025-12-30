@@ -1,0 +1,260 @@
+{
+  "id": "tc_sf_org_limits_checker",
+  "name": "SF Tools - Check Org Limits",
+  "description": "Queries your Salesforce org limits including user licenses, API calls, storage, and more. Run this to see what capacity you have before creating test data.",
+  "priority": "high",
+  "automationStatus": "automated",
+  "tags": ["salesforce", "limits", "diagnostic"],
+  "preconditions": [
+    "User is logged into Salesforce org"
+  ],
+  "unified_data": {
+    "steps": [
+      {
+        "id": "step_1",
+        "order": 1,
+        "qword": "goto",
+        "type": "navigate",
+        "action": "Navigate to Salesforce",
+        "description": "Navigate to Salesforce Home",
+        "args": ["https://YOUR_ORG.lightning.force.com"],
+        "expectedResult": "Salesforce home page loads"
+      },
+      {
+        "id": "step_2",
+        "order": 2,
+        "qword": "RestApiCall",
+        "type": "sf_rest_api",
+        "action": "Get All Org Limits",
+        "description": "Query the limits REST API endpoint",
+        "args": {
+          "method": "GET",
+          "endpoint": "/limits",
+          "storeAs": "{{orgLimits}}"
+        },
+        "expectedResult": "Returns all org limits"
+      },
+      {
+        "id": "step_3",
+        "order": 3,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Count Active Users",
+        "description": "Count how many active users exist",
+        "args": {
+          "query": "SELECT COUNT() FROM User WHERE IsActive = true",
+          "storeAs": "{{activeUserCount}}"
+        },
+        "expectedResult": "Returns active user count"
+      },
+      {
+        "id": "step_4",
+        "order": 4,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get User License Summary",
+        "description": "Query user licenses and their usage",
+        "args": {
+          "query": "SELECT Name, TotalLicenses, UsedLicenses, Status FROM UserLicense WHERE Status = 'Active' ORDER BY TotalLicenses DESC",
+          "storeAs": "{{userLicenses}}"
+        },
+        "expectedResult": "Returns license information"
+      },
+      {
+        "id": "step_5",
+        "order": 5,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Profile Summary",
+        "description": "Query available profiles",
+        "args": {
+          "query": "SELECT Id, Name, UserType, (SELECT COUNT(Id) FROM Users WHERE IsActive = true) FROM Profile ORDER BY Name",
+          "storeAs": "{{profileSummary}}"
+        },
+        "expectedResult": "Returns profiles with user counts"
+      },
+      {
+        "id": "step_6",
+        "order": 6,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Permission Set Count",
+        "description": "Count existing permission sets",
+        "args": {
+          "query": "SELECT COUNT() FROM PermissionSet WHERE IsOwnedByProfile = false",
+          "storeAs": "{{permSetCount}}"
+        },
+        "expectedResult": "Returns permission set count"
+      },
+      {
+        "id": "step_7",
+        "order": 7,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Role Count",
+        "description": "Count existing roles",
+        "args": {
+          "query": "SELECT COUNT() FROM UserRole",
+          "storeAs": "{{roleCount}}"
+        },
+        "expectedResult": "Returns role count"
+      },
+      {
+        "id": "step_8",
+        "order": 8,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Record Counts",
+        "description": "Get counts of main objects",
+        "args": {
+          "query": "SELECT COUNT() FROM Account",
+          "storeAs": "{{accountCount}}"
+        },
+        "expectedResult": "Returns account count"
+      },
+      {
+        "id": "step_9",
+        "order": 9,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Contact Count",
+        "description": "Count contacts",
+        "args": {
+          "query": "SELECT COUNT() FROM Contact",
+          "storeAs": "{{contactCount}}"
+        },
+        "expectedResult": "Returns contact count"
+      },
+      {
+        "id": "step_10",
+        "order": 10,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Opportunity Count",
+        "description": "Count opportunities",
+        "args": {
+          "query": "SELECT COUNT() FROM Opportunity",
+          "storeAs": "{{oppCount}}"
+        },
+        "expectedResult": "Returns opportunity count"
+      },
+      {
+        "id": "step_11",
+        "order": 11,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Lead Count",
+        "description": "Count leads",
+        "args": {
+          "query": "SELECT COUNT() FROM Lead",
+          "storeAs": "{{leadCount}}"
+        },
+        "expectedResult": "Returns lead count"
+      },
+      {
+        "id": "step_12",
+        "order": 12,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Case Count",
+        "description": "Count cases",
+        "args": {
+          "query": "SELECT COUNT() FROM Case",
+          "storeAs": "{{caseCount}}"
+        },
+        "expectedResult": "Returns case count"
+      },
+      {
+        "id": "step_13",
+        "order": 13,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Validation Rule Count",
+        "description": "Count validation rules via Tooling API",
+        "args": {
+          "query": "SELECT COUNT() FROM ValidationRule WHERE Active = true",
+          "useToolingApi": true,
+          "storeAs": "{{validationRuleCount}}"
+        },
+        "expectedResult": "Returns active validation rule count"
+      },
+      {
+        "id": "step_14",
+        "order": 14,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Flow Count",
+        "description": "Count active flows",
+        "args": {
+          "query": "SELECT COUNT() FROM Flow WHERE Status = 'Active'",
+          "useToolingApi": true,
+          "storeAs": "{{flowCount}}"
+        },
+        "expectedResult": "Returns active flow count"
+      },
+      {
+        "id": "step_15",
+        "order": 15,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Get Custom Object Count",
+        "description": "Count custom objects",
+        "args": {
+          "query": "SELECT COUNT() FROM EntityDefinition WHERE IsCustomSetting = false AND KeyPrefix != null AND QualifiedApiName LIKE '%__c'",
+          "useToolingApi": true,
+          "storeAs": "{{customObjectCount}}"
+        },
+        "expectedResult": "Returns custom object count"
+      },
+      {
+        "id": "step_16",
+        "order": 16,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Print Comprehensive Limits Report",
+        "description": "Generate a readable limits report in debug log",
+        "args": {
+          "code": "// Comprehensive Org Limits Report\nSystem.debug('\\n========== SALESFORCE ORG LIMITS REPORT ==========\\n');\n\n// User Limits\nList<User> activeUsers = [SELECT Id FROM User WHERE IsActive = true];\nSystem.debug('👥 USERS:');\nSystem.debug('   Active Users: ' + activeUsers.size());\n\n// License Info\nSystem.debug('\\n📋 USER LICENSES:');\nfor(UserLicense ul : [SELECT Name, TotalLicenses, UsedLicenses FROM UserLicense WHERE Status = 'Active' AND TotalLicenses > 0]) {\n    Integer available = ul.TotalLicenses - ul.UsedLicenses;\n    System.debug('   ' + ul.Name + ': ' + ul.UsedLicenses + '/' + ul.TotalLicenses + ' used (' + available + ' available)');\n}\n\n// Role & Permission Limits\nInteger roleCount = [SELECT COUNT() FROM UserRole];\nInteger permSetCount = [SELECT COUNT() FROM PermissionSet WHERE IsOwnedByProfile = false];\nSystem.debug('\\n🔐 SECURITY:');\nSystem.debug('   Roles: ' + roleCount);\nSystem.debug('   Permission Sets: ' + permSetCount);\n\n// Record Counts\nSystem.debug('\\n📊 RECORD COUNTS:');\nSystem.debug('   Accounts: ' + [SELECT COUNT() FROM Account]);\nSystem.debug('   Contacts: ' + [SELECT COUNT() FROM Contact]);\nSystem.debug('   Opportunities: ' + [SELECT COUNT() FROM Opportunity]);\nSystem.debug('   Leads: ' + [SELECT COUNT() FROM Lead]);\nSystem.debug('   Cases: ' + [SELECT COUNT() FROM Case]);\n\n// Org Info\nOrganization org = [SELECT Name, OrganizationType, IsSandbox, InstanceName FROM Organization LIMIT 1];\nSystem.debug('\\n🏢 ORG INFO:');\nSystem.debug('   Name: ' + org.Name);\nSystem.debug('   Type: ' + org.OrganizationType);\nSystem.debug('   Sandbox: ' + org.IsSandbox);\nSystem.debug('   Instance: ' + org.InstanceName);\n\nSystem.debug('\\n========== END REPORT ==========');"
+        },
+        "expectedResult": "Prints comprehensive limits report"
+      }
+    ],
+    "variables": {
+      "orgLimits": { "type": "object", "description": "Full org limits from REST API" },
+      "activeUserCount": { "type": "number", "description": "Count of active users" },
+      "userLicenses": { "type": "array", "description": "User license details" },
+      "profileSummary": { "type": "array", "description": "Profiles with user counts" },
+      "permSetCount": { "type": "number", "description": "Permission set count" },
+      "roleCount": { "type": "number", "description": "Role count" },
+      "accountCount": { "type": "number", "description": "Account record count" },
+      "contactCount": { "type": "number", "description": "Contact record count" },
+      "oppCount": { "type": "number", "description": "Opportunity record count" },
+      "leadCount": { "type": "number", "description": "Lead record count" },
+      "caseCount": { "type": "number", "description": "Case record count" },
+      "validationRuleCount": { "type": "number", "description": "Active validation rule count" },
+      "flowCount": { "type": "number", "description": "Active flow count" },
+      "customObjectCount": { "type": "number", "description": "Custom object count" }
+    }
+  },
+  "steps": [
+    { "stepNumber": 1, "action": "Navigate to SF", "expectedResult": "Home loads" },
+    { "stepNumber": 2, "action": "Get Org Limits (API)", "expectedResult": "Limits returned" },
+    { "stepNumber": 3, "action": "Count Active Users", "expectedResult": "Count returned" },
+    { "stepNumber": 4, "action": "Get User Licenses", "expectedResult": "Licenses returned" },
+    { "stepNumber": 5, "action": "Get Profile Summary", "expectedResult": "Profiles returned" },
+    { "stepNumber": 6, "action": "Count Permission Sets", "expectedResult": "Count returned" },
+    { "stepNumber": 7, "action": "Count Roles", "expectedResult": "Count returned" },
+    { "stepNumber": 8, "action": "Count Accounts", "expectedResult": "Count returned" },
+    { "stepNumber": 9, "action": "Count Contacts", "expectedResult": "Count returned" },
+    { "stepNumber": 10, "action": "Count Opportunities", "expectedResult": "Count returned" },
+    { "stepNumber": 11, "action": "Count Leads", "expectedResult": "Count returned" },
+    { "stepNumber": 12, "action": "Count Cases", "expectedResult": "Count returned" },
+    { "stepNumber": 13, "action": "Count Validation Rules", "expectedResult": "Count returned" },
+    { "stepNumber": 14, "action": "Count Flows", "expectedResult": "Count returned" },
+    { "stepNumber": 15, "action": "Count Custom Objects", "expectedResult": "Count returned" },
+    { "stepNumber": 16, "action": "Print Full Report", "expectedResult": "Report in debug log" }
+  ],
+  "createdAt": "2024-12-30T00:00:00.000Z",
+  "updatedAt": "2024-12-30T00:00:00.000Z"
+}
+
