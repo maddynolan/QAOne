@@ -3271,6 +3271,52 @@ export default function TestRepository() {
                   <Plus className="w-4 h-4 mr-2" />
                   New Test
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+                      try {
+                        const text = await file.text();
+                        const imported = JSON.parse(text);
+                        // Handle single test case or array of test cases
+                        const testCasesToImport = Array.isArray(imported) ? imported : [imported];
+                        let importedCount = 0;
+                        for (const tc of testCasesToImport) {
+                          if (tc.id && tc.name) {
+                            const newTC = {
+                              ...tc,
+                              id: tc.id.startsWith('tc_') ? tc.id : `tc_${Date.now()}_${importedCount}`,
+                              folderId: currentFolderId,
+                              createdAt: tc.createdAt || new Date().toISOString(),
+                              updatedAt: new Date().toISOString()
+                            };
+                            setTestCases(prev => {
+                              const updated = [...prev.filter(t => t.id !== newTC.id), newTC];
+                              localStorage.setItem('test_cases', JSON.stringify(updated));
+                              localStorage.setItem('flowstral_test_cases', JSON.stringify(updated));
+                              return updated;
+                            });
+                            importedCount++;
+                          }
+                        }
+                        toast.success(`Imported ${importedCount} test case(s)`);
+                      } catch (err: any) {
+                        toast.error(`Import failed: ${err.message}`);
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </Button>
               </>
             )}
             {activeTab === 'suites' && (
