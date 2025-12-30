@@ -1137,6 +1137,8 @@ export default function TestRepository() {
   // Filter state for enterprise scale
   const [statusFilter, setStatusFilter] = useState<'all' | 'none' | 'partial' | 'full'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
+  const [planFilter, setPlanFilter] = useState<string>('all');
+  const [releaseFilter, setReleaseFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'priority'>('updated');
   
   // Dialogs
@@ -1478,6 +1480,49 @@ export default function TestRepository() {
       result = result.filter(tc => tc.priority === priorityFilter);
     }
     
+    // Apply plan filter - find test cases linked to selected plan
+    if (planFilter !== 'all') {
+      const selectedPlan = testPlans.find(p => p.id === planFilter);
+      if (selectedPlan) {
+        const linkedTestIds = new Set(selectedPlan.testCaseIds || []);
+        // Also include tests from linked suites
+        for (const suiteId of (selectedPlan.suiteIds || [])) {
+          const suite = suites.find(s => s.id === suiteId);
+          if (suite) {
+            suite.testCaseIds.forEach(id => linkedTestIds.add(id));
+          }
+        }
+        result = result.filter(tc => linkedTestIds.has(tc.id));
+      }
+    }
+    
+    // Apply release filter - find test cases linked to selected release
+    if (releaseFilter !== 'all') {
+      const selectedRelease = releases.find(r => r.id === releaseFilter);
+      if (selectedRelease) {
+        const linkedTestIds = new Set<string>();
+        // Get tests from release's suites
+        for (const suiteId of (selectedRelease.suiteIds || [])) {
+          const suite = suites.find(s => s.id === suiteId);
+          if (suite) {
+            suite.testCaseIds.forEach(id => linkedTestIds.add(id));
+          }
+        }
+        // Also check plans linked to this release
+        const releasePlans = testPlans.filter(p => p.releaseId === selectedRelease.id);
+        for (const plan of releasePlans) {
+          (plan.testCaseIds || []).forEach(id => linkedTestIds.add(id));
+          for (const suiteId of (plan.suiteIds || [])) {
+            const suite = suites.find(s => s.id === suiteId);
+            if (suite) {
+              suite.testCaseIds.forEach(id => linkedTestIds.add(id));
+            }
+          }
+        }
+        result = result.filter(tc => linkedTestIds.has(tc.id));
+      }
+    }
+    
     // Apply sorting
     result = [...result].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
@@ -1490,7 +1535,7 @@ export default function TestRepository() {
     });
     
     return result;
-  }, [currentFolderContent.tests, statusFilter, priorityFilter, sortBy]);
+  }, [currentFolderContent.tests, statusFilter, priorityFilter, planFilter, releaseFilter, sortBy, testPlans, releases, suites]);
   
   // Prioritized sort: newest first, then by priority
   const prioritizedTests = useMemo(() => {
@@ -3028,6 +3073,34 @@ export default function TestRepository() {
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
+                  </select>
+                  
+                  {/* Plan Filter */}
+                  <select
+                    value={planFilter}
+                    onChange={(e) => setPlanFilter(e.target.value)}
+                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">All Plans</option>
+                    {testPlans.map(plan => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} ({(plan.testCaseIds?.length || 0) + (plan.suiteIds?.length || 0) * 10} tests)
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {/* Release Filter */}
+                  <select
+                    value={releaseFilter}
+                    onChange={(e) => setReleaseFilter(e.target.value)}
+                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">All Releases</option>
+                    {releases.map(release => (
+                      <option key={release.id} value={release.id}>
+                        {release.name} {release.version && `(${release.version})`}
+                      </option>
+                    ))}
                   </select>
                   
                   <select
