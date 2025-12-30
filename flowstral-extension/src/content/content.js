@@ -1,16 +1,44 @@
 /**
  * Content Script - Enhanced with App-Specific Selectors and Computer Vision
  * Captures user actions with intelligent, application-aware selectors
+ * 
+ * IMPORTANT: This file now uses shared recorder-engine.js for core functionality.
+ * The shared engine is loaded first via manifest.json content_scripts.
+ * This ensures IDENTICAL behavior with the desktop Electron app.
  */
 
 (function() {
   'use strict';
 
   // ============================================================================
-  // APP SELECTOR CONFIGURATIONS (Embedded)
+  // USE SHARED RECORDER ENGINE (loaded via manifest.json before this file)
   // ============================================================================
   
-  const AppSelectorConfig = {
+  const SharedEngine = window.FlowstralRecorderEngine || {};
+  const useSharedEngine = !!SharedEngine.SmartSelector;
+  
+  if (useSharedEngine) {
+    console.log('[Recorder] Using shared FlowstralRecorderEngine');
+  } else {
+    console.warn('[Recorder] Shared engine not found, using inline code');
+  }
+
+  // Import from shared engine (or use inline fallback)
+  const SharedAppSelectorConfig = SharedEngine.AppSelectorConfig;
+  const SharedSmartSelector = SharedEngine.SmartSelector;
+  const sharedFindInteractiveElement = SharedEngine.findInteractiveElement;
+  const sharedIsGenericContainer = SharedEngine.isGenericContainer;
+  const sharedIsSensitiveField = SharedEngine.isSensitiveField;
+  const sharedGetFieldLabel = SharedEngine.getFieldLabel;
+  const sharedGetVisibleText = SharedEngine.getVisibleText;
+  const sharedDetectApp = SharedEngine.detectApp;
+  const sharedIsDynamic = SharedEngine.isDynamic;
+
+  // ============================================================================
+  // APP SELECTOR CONFIGURATIONS (Fallback if shared engine not loaded)
+  // ============================================================================
+  
+  const AppSelectorConfig = SharedAppSelectorConfig || {
     'salesforce-lwc': {
       name: 'Salesforce LWC',
       detectPatterns: [/force\.com/i, /salesforce\.com/i, /lightning\.force/i],
@@ -1735,17 +1763,34 @@
 
   // ============================================================================
   // ENHANCED SMART SELECTOR
+  // Uses shared SmartSelector from recorder-engine.js if available
   // ============================================================================
 
   class EnhancedSmartSelector {
     constructor() {
-      this.currentApp = 'generic';
-      this.appConfig = AppSelectorConfig.generic;
+      // Use shared SmartSelector if available
+      if (SharedSmartSelector) {
+        this._sharedSelector = new SharedSmartSelector();
+        this._sharedSelector.detectAndSetApp();
+        this.currentApp = this._sharedSelector.currentApp;
+        this.appConfig = this._sharedSelector.appConfig;
+        console.log('[Recorder] Using shared SmartSelector, app:', this.currentApp);
+      } else {
+        this._sharedSelector = null;
+        this.currentApp = 'generic';
+        this.appConfig = AppSelectorConfig.generic;
+      }
       this.computerVision = new ComputerVision();
       this.useVisualLocators = false;
     }
 
     setApp(appKey) {
+      if (this._sharedSelector) {
+        this._sharedSelector.setApp(appKey);
+        this.currentApp = this._sharedSelector.currentApp;
+        this.appConfig = this._sharedSelector.appConfig;
+        return;
+      }
       if (AppSelectorConfig[appKey]) {
         this.currentApp = appKey;
         this.appConfig = AppSelectorConfig[appKey];
@@ -1754,6 +1799,13 @@
     }
 
     detectApp() {
+      // Use shared detectApp if available
+      if (sharedDetectApp) {
+        const app = sharedDetectApp();
+        this.setApp(app);
+        return app;
+      }
+      
       const url = window.location.href;
       const w = window;
       const d = document;
@@ -1900,9 +1952,31 @@
         confidence: 10,
       };
 
+      // CRITICAL FIX: Include more fallbacks, not just uniqueMatch ones
+      // This enables runtime retry with multiple strategies (title, aria-label, text, etc.)
+      const fallbackCandidates = selectors
+        .filter(s => s !== best) // Exclude primary
+        .sort((a, b) => (b.confidence || 0) - (a.confidence || 0)) // Sort by confidence
+        .slice(0, 6); // Take top 6 fallbacks
+      
+      // Also add title-based selector if element has title (critical for Salesforce App Launcher)
+      const title = element.getAttribute('title');
+      if (title && title.length > 0 && title.length < 50) {
+        const titleSelector = {
+          type: 'title',
+          selector: `[title="${this.escape(title)}"]`,
+          playwright: `locator('[title="${this.escape(title)}"]')`,
+          confidence: 90,
+          description: `By title: ${title}`,
+        };
+        if (!fallbackCandidates.some(s => s.selector === titleSelector.selector)) {
+          fallbackCandidates.unshift(titleSelector); // Add at front (high priority)
+        }
+      }
+
       return {
         primary: best,
-        fallbacks: selectors.slice(1, 4).filter(s => s.uniqueMatch),
+        fallbacks: fallbackCandidates,
         app: this.currentApp,
         appName: this.appConfig.name,
         visualFingerprint: this.useVisualLocators ? this.computerVision.captureFingerprint(element) : null,
@@ -2087,9 +2161,40 @@
       }
       
       // Special handling for Salesforce LWC
-      if (this.currentApp === 'salesforce-lwc') {
-        // Check for lightning-* components
+      if (this.currentApp === 'salesforce-lwc' || this.currentApp === 'salesforce-aura') {
         const tagName = element.tagName.toLowerCase();
+        const title = element.getAttribute('title');
+        const ariaLabel = element.getAttribute('aria-label');
+        
+        // CRITICAL: Special handling for Salesforce App Launcher
+        // This is a common failure point - the waffle icon button
+        if (title === 'App Launcher' || ariaLabel === 'App Launcher' ||
+            element.closest('[title="App Launcher"]') || 
+            element.closest('[aria-label="App Launcher"]')) {
+          selectors.push({
+            type: 'salesforce-app-launcher',
+            selector: 'button[title="App Launcher"]',
+            playwright: `locator('button[title="App Launcher"]')`,
+            confidence: 100,
+            description: 'Salesforce: App Launcher button',
+          });
+          selectors.push({
+            type: 'salesforce-app-launcher-fallback',
+            selector: '[aria-label="App Launcher"]',
+            playwright: `get_by_role('button', name='App Launcher')`,
+            confidence: 95,
+            description: 'Salesforce: App Launcher by role',
+          });
+          selectors.push({
+            type: 'salesforce-app-launcher-css',
+            selector: '.appLauncher button, .slds-icon-waffle_container button',
+            playwright: `locator('.appLauncher button, .slds-icon-waffle_container button')`,
+            confidence: 85,
+            description: 'Salesforce: App Launcher by class',
+          });
+        }
+        
+        // Check for lightning-* components
         if (tagName.startsWith('lightning-')) {
           const name = element.getAttribute('name');
           const label = element.getAttribute('label');
@@ -2683,6 +2788,11 @@
       this.analysisDebounceTimer = null;
       this.domObserver = null;
       
+      // CRITICAL: Navigation deduplication state (class-level to persist across re-injections)
+      this.lastNavTime = 0;
+      this.lastNavUrl = '';
+      this.recordedNavUrls = new Set();  // Track ALL recorded URLs to prevent duplicates
+      
       this.init();
     }
 
@@ -2952,21 +3062,63 @@
         const response = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
         console.log('[Recorder] Background state:', response);
         
-        if (response && response.isRecording && !this.recording) {
+        // Check both 'isRecording' and 'recording' for compatibility
+        const isActive = response && (response.isRecording || response.recording);
+        
+        if (isActive && !this.recording) {
           console.log('[Recorder] Recording is active in background, resuming...');
           this.startRecording(response.options || {});
           
-          // Record navigation to this page
-          this.addAction({
-            type: 'navigate',
-            url: window.location.href,
-            description: `Navigate to ${window.location.pathname}`,
-            timestamp: Date.now()
-          });
+          const currentUrl = window.location.href;
+          
+          // Only record navigation if:
+          // 1. Different page than startUrl
+          // 2. Not already recorded this URL
+          // 3. Not a skip pattern URL
+          const shouldSkipNav = response.startUrl === currentUrl || 
+                                this.recordedNavUrls.has(currentUrl) ||
+                                this.shouldSkipNavigationUrl(currentUrl);
+          
+          if (!shouldSkipNav) {
+            this.recordedNavUrls.add(currentUrl);
+            this.lastNavUrl = currentUrl;
+            this.lastNavTime = Date.now();
+            
+            this.addAction({
+              type: 'navigate',
+              url: currentUrl,
+              description: `Navigate to ${window.location.pathname}`,
+              timestamp: Date.now()
+            });
+          } else {
+            console.log('[Recorder] Skipping navigation on resume:', currentUrl);
+          }
         }
       } catch (error) {
         console.log('[Recorder] Could not check recording state:', error.message);
       }
+    }
+    
+    shouldSkipNavigationUrl(url) {
+      // Skip intermediate auth/redirect pages (CASE-INSENSITIVE)
+      const skipPatterns = [
+        /\/secur\//i,
+        /\/sessionserver/i,
+        /\/identity\//i,
+        /\/login\//i,
+        /contentdoor/i,
+        /\/auth\//i,
+        /\/oauth\//i,
+        /callback/i,
+        /\/sso\//i,
+        /\/setup\//i,
+        /aura\?/i,
+        /\/apexpages\//i,
+        /lightning\/setup/i,
+        /AddPhone/i,
+        /VerifyIdentity/i,
+      ];
+      return skipPatterns.some(pattern => pattern.test(url));
     }
 
     setApp(appKey) {
@@ -3861,6 +4013,11 @@
       this.startTime = Date.now();
       this.startUrl = window.location.href;
       
+      // CRITICAL: Reset navigation tracking state
+      this.lastNavTime = Date.now();
+      this.lastNavUrl = this.startUrl;
+      this.recordedNavUrls = new Set([this.startUrl]);  // Mark start URL as recorded to prevent duplicates
+      
       console.log('[Recorder] Recording started, URL:', this.startUrl);
       
       // Attach listeners FIRST (instant)
@@ -3984,7 +4141,9 @@
       
       this.flushPendingInput();
       
-      const element = event.target;
+      // CRITICAL FIX: Find the ACTUAL interactive element, not just event.target
+      // event.target might be a span/div inside a button - we need the button
+      const element = this.findInteractiveElement(event.target);
       const tagName = element.tagName.toLowerCase();
       const type = element.type?.toLowerCase();
       
@@ -3995,6 +4154,59 @@
       if (tagName === 'input' && (type === 'radio' || type === 'checkbox')) {
         console.log('[Recorder] Click on input radio/checkbox - letting handleChange handle it');
         return; // Let handleChange handle it
+      }
+      
+      // CRITICAL: Skip click on text/password/email/etc inputs - the fill action will be recorded instead
+      // Recording click before fill creates redundant "Click Input" + "Fill" entries
+      if (tagName === 'input' && !['radio', 'checkbox', 'submit', 'button', 'reset', 'file'].includes(type)) {
+        console.log('[Recorder] Click on text/password input - letting handleInput record fill instead');
+        return; // Fill action will be recorded by handleInput
+      }
+      
+      // Skip click on textareas - fill action will be recorded
+      if (tagName === 'textarea') {
+        console.log('[Recorder] Click on textarea - letting handleInput record fill instead');
+        return;
+      }
+      
+      // Skip click on contenteditable elements - fill action will be recorded
+      if (element.isContentEditable) {
+        console.log('[Recorder] Click on contenteditable - letting handleInput record fill instead');
+        return;
+      }
+      
+      // Skip click if we just recorded a fill action on this same element (within 500ms)
+      // This handles custom input components where click fires after input
+      if (this.actions.length > 0) {
+        const lastAction = this.actions[this.actions.length - 1];
+        if (lastAction.type === 'fill' && Date.now() - lastAction.timestamp < 500) {
+          const lastSel = this.normalizeSelector(this.getSelectorString(lastAction.selector));
+          const currentSel = this.normalizeSelector(this.getSelectorString(this.smartSelector.getBestSelector(element)));
+          if (lastSel && currentSel && lastSel === currentSel) {
+            console.log('[Recorder] Click on just-filled element - skipping redundant click');
+            return;
+          }
+        }
+      }
+      
+      // CRITICAL: Skip clicks on generic container elements (div, span, section, etc.) that have no meaningful identifiers
+      // These create useless "Click div" actions that always fail during playback
+      const genericContainerTags = ['div', 'span', 'section', 'article', 'main', 'header', 'footer', 'nav', 'aside'];
+      if (genericContainerTags.includes(tagName)) {
+        // Only record if element has meaningful attributes
+        const hasId = element.id && !element.id.match(/^\d+$/) && !element.id.match(/^(lwc|aura)-/i);
+        const hasTestId = element.getAttribute('data-testid') || element.getAttribute('data-test-id');
+        const hasRole = element.getAttribute('role');
+        const hasName = element.getAttribute('name');
+        const hasAriaLabel = element.getAttribute('aria-label');
+        const hasClickableRole = hasRole && ['button', 'link', 'menuitem', 'tab', 'option'].includes(hasRole);
+        const hasShortText = (element.textContent || '').trim().length > 0 && (element.textContent || '').trim().length < 50;
+        
+        // Skip if no meaningful identifiers
+        if (!hasId && !hasTestId && !hasClickableRole && !hasName && !hasAriaLabel && !hasShortText) {
+          console.log('[Recorder] Click on generic container without identifiers - skipping:', tagName);
+          return;
+        }
       }
       
       // For labels, we need to be careful - they might be:
@@ -4058,16 +4270,33 @@
     handleDblClick = (event) => {
       if (!this.recording || this.paused || this.isRecorderElement(event.target)) return;
       
+      // Use same interactive element detection as click
+      const element = this.findInteractiveElement(event.target);
+      const selector = this.smartSelector.getBestSelector(element);
+      const currentSelectorStr = this.getSelectorString(selector);
+      
+      // BUG FIX #2: Only remove clicks if they're on the SAME element AND recent
       if (this.actions.length >= 2) {
         const last = this.actions[this.actions.length - 1];
         const prev = this.actions[this.actions.length - 2];
-        if (last.type === 'click' && prev.type === 'click') {
+        const now = Date.now();
+        
+        // Verify both clicks are on the SAME element (using normalized selector comparison)
+        const lastSel = this.normalizeSelector(this.getSelectorString(last.selector));
+        const prevSel = this.normalizeSelector(this.getSelectorString(prev.selector));
+        const currentSelNorm = this.normalizeSelector(currentSelectorStr);
+        
+        // Only remove if BOTH are clicks, BOTH match current element, AND within 500ms
+        const isRecent = now - prev.timestamp < 500;
+        
+        if (last.type === 'click' && prev.type === 'click' && 
+            lastSel === currentSelNorm && prevSel === currentSelNorm && isRecent) {
           this.actions.pop();
           this.actions.pop();
+          console.log('[Recorder] Removed 2 clicks before dblclick on same element');
         }
       }
       
-      const selector = this.smartSelector.getBestSelector(event.target);
       this.addAction({
         type: 'dblclick',
         selector: selector,
@@ -4119,7 +4348,9 @@
         };
       }
       
-      this.inputTimeout = setTimeout(() => this.flushPendingInput(), 500);
+      // Increased debounce to 1500ms to consolidate typing into single action
+      // This prevents recording intermediate values like "m", "ma", "mad", "madh"...
+      this.inputTimeout = setTimeout(() => this.flushPendingInput(), 1500);
     };
 
     handleChange = (event) => {
@@ -4196,18 +4427,44 @@
         const elementAttrs = this.getElementAttributes(element);
         const value = element.value || element.getAttribute('value') || '';
         
+        // SECURITY: Check if this is a sensitive field
+        const isSensitive = this.isSensitiveField(element, type, elementAttrs);
+        const displayValue = isSensitive ? '••••••••' : value;
+        
         // Only record if we have a meaningful value change
         if (value) {
-          this.addAction({
-            type: 'fill',
-            selector: selector,
-            value: value,
-            timestamp: Date.now(),
-            description: this.generateDescription('Fill', element),
-            tagName: tagName,
-            app: selector.app,
-            ...elementAttrs,
-          });
+          // BUG FIX #6: Check for existing fill action before creating duplicate
+          const existingFillIndex = this.findExistingFillAction(selector);
+          
+          if (existingFillIndex >= 0) {
+            // Update existing fill action instead of creating duplicate
+            this.actions[existingFillIndex].value = value;
+            this.actions[existingFillIndex].displayValue = displayValue;
+            this.actions[existingFillIndex].isSensitive = isSensitive;
+            this.actions[existingFillIndex].timestamp = Date.now();
+            console.log('[Recorder] Updated existing fill from change event (deduped)');
+            
+            // Notify UI of update
+            chrome.runtime.sendMessage({
+              type: 'ACTION_UPDATED',
+              actionIndex: existingFillIndex,
+              action: this.actions[existingFillIndex],
+              count: this.actions.length,
+            }).catch(() => {});
+          } else {
+            this.addAction({
+              type: 'fill',
+              selector: selector,
+              value: value,
+              displayValue: displayValue,  // Masked for UI display
+              isSensitive: isSensitive,    // Flag for security handling
+              timestamp: Date.now(),
+              description: this.generateDescription('Fill', element, { isSensitive, displayValue }),
+              tagName: tagName,
+              app: selector.app,
+              ...elementAttrs,
+            });
+          }
         }
       }
     };
@@ -4257,7 +4514,13 @@
     handleBeforeUnload = () => {
       if (this.recording) {
         this.flushPendingInput();
-        chrome.runtime.sendMessage({ type: 'SAVE_ACTIONS', actions: this.actions });
+        // Only send actions that haven't been synced yet
+        // Background.js already receives each action via ACTION_RECORDED
+        // This is just a safety backup in case some were missed
+        if (this.actions.length > 0) {
+          console.log('[Recorder] beforeUnload - sending', this.actions.length, 'actions as backup');
+          chrome.runtime.sendMessage({ type: 'SAVE_ACTIONS', actions: this.actions });
+        }
       }
     };
 
@@ -4271,10 +4534,16 @@
     handleHover = (event) => {
       if (!this.recording || this.paused) return;
       if (this.isRecorderElement(event.target)) return;
-      
-      const element = event.target;
+
+      // Use same interactive element detection as click
+      const element = this.findInteractiveElement(event.target);
       const tagName = element.tagName.toLowerCase();
-      
+
+      // NEVER record hover on form elements - they're always filled/clicked, not hovered
+      if (['input', 'textarea', 'select', 'label'].includes(tagName)) {
+        return;
+      }
+
       // NEVER record hover on links or buttons - these are always clicked, not hovered
       // Only record hover on elements that ONLY reveal content on hover (no click action)
       if (tagName === 'a' || tagName === 'button' || element.matches('[role="button"], [role="link"]')) {
@@ -4309,6 +4578,12 @@
       // Only record hover after 800ms to ensure it's intentional (not just passing by)
       this.hoverTimeout = setTimeout(() => {
         if (this.hoverElement === element && this.recording && !this.hoverRecorded) {
+          // BUG FIX #7: Check element is still connected to DOM
+          if (!element.isConnected) {
+            console.log('[Recorder] Hover element removed from DOM, skipping');
+            return;
+          }
+          
           const selector = this.smartSelector.getBestSelector(element);
           const elementAttrs = this.getElementAttributes(element);
           
@@ -4413,25 +4688,99 @@
       };
     };
 
+    // BUG FIX #4: Helper to add URL with size limit (prevents memory leak)
+    addToRecordedNavUrls(url) {
+      // Limit to last 100 URLs to prevent memory bloat in long sessions
+      if (this.recordedNavUrls.size >= 100) {
+        const oldest = this.recordedNavUrls.values().next().value;
+        this.recordedNavUrls.delete(oldest);
+        console.log('[Recorder] Pruned oldest URL from recordedNavUrls:', oldest);
+      }
+      this.recordedNavUrls.add(url);
+    }
+    
     observeUrlChanges() {
-      let lastUrl = window.location.href;
+      let lastObservedUrl = window.location.href;
+      
       this.urlObserver = new MutationObserver(() => {
-        if (window.location.href !== lastUrl) {
-          lastUrl = window.location.href;
+        if (window.location.href !== lastObservedUrl) {
+          const now = Date.now();
+          const urlChanged = window.location.href;
+          lastObservedUrl = urlChanged;
+          
           if (this.recording) {
+            // CRITICAL: Debounce navigation events - Salesforce/SPAs do many rapid redirects
+            // Only record if at least 3 seconds since last navigation (increased from 2)
+            if (now - this.lastNavTime < 3000) {
+              console.log('[Recorder] Skipping rapid navigation (debounce):', urlChanged);
+              // Still re-analyze page but don't record duplicate navigate action
+              setTimeout(() => this.analyzeAndBroadcast(), 500);
+              return;
+            }
+            
+            // CRITICAL: Skip if we've already recorded this exact URL
+            if (this.recordedNavUrls.has(urlChanged)) {
+              console.log('[Recorder] Skipping already recorded URL:', urlChanged);
+              setTimeout(() => this.analyzeAndBroadcast(), 500);
+              return;
+            }
+            
+            // Skip intermediate auth/redirect pages (CASE-INSENSITIVE)
+            const skipPatterns = [
+              /\/secur\//i,           // Salesforce security pages
+              /\/sessionserver/i,     // Session server redirects
+              /\/identity\//i,        // Identity verification
+              /\/login\//i,           // Login redirects
+              /contentdoor/i,         // Content door pages (case-insensitive)
+              /\/auth\//i,            // Auth redirects
+              /\/oauth\//i,           // OAuth redirects
+              /callback/i,            // OAuth callbacks
+              /\/sso\//i,             // SSO redirects
+              /\/setup\//i,           // Salesforce setup pages
+              /aura\?/i,              // Lightning Aura requests
+              /\/apexpages\//i,       // Apex pages redirects
+              /lightning\/setup/i,    // Lightning setup
+              /AddPhone/i,            // Phone verification pages
+              /VerifyIdentity/i,      // Identity verification
+            ];
+            
+            const isSkipUrl = skipPatterns.some(pattern => pattern.test(urlChanged));
+            if (isSkipUrl) {
+              console.log('[Recorder] Skipping auth/redirect page:', urlChanged);
+              setTimeout(() => this.analyzeAndBroadcast(), 500);
+              return;
+            }
+            
+            // Update navigation state
+            this.lastNavTime = now;
+            this.lastNavUrl = urlChanged;
+            this.addToRecordedNavUrls(urlChanged); // BUG FIX #4: Use helper with size limit
+            
             this.addAction({
               type: 'navigate',
-              url: window.location.href,
-              timestamp: Date.now(),
+              url: urlChanged,
+              timestamp: now,
               description: `Navigate to ${window.location.pathname}`,
             });
-            
+
             // Re-analyze page after navigation (Agentic Phase 2)
             setTimeout(() => this.analyzeAndBroadcast(), 500);
           }
         }
       });
-      this.urlObserver.observe(document.body, { childList: true, subtree: true });
+      
+      // BUG FIX #3: Wait for body to exist before observing
+      const startObserving = () => {
+        if (document.body) {
+          this.urlObserver.observe(document.body, { childList: true, subtree: true });
+          console.log('[Recorder] URL observer attached to document.body');
+        } else {
+          // Retry after a short delay if body not ready
+          console.log('[Recorder] document.body not ready, retrying in 100ms...');
+          setTimeout(startObserving, 100);
+        }
+      };
+      startObserving();
     }
 
     flushPendingInput() {
@@ -4439,6 +4788,26 @@
       clearTimeout(this.inputTimeout);
       
       const element = this.pendingInput.element;
+      
+      // BUG FIX #1: Check if element is still in DOM (race condition protection)
+      if (!element || !element.isConnected) {
+        console.warn('[Recorder] Element detached before flush, using cached selector');
+        // Still record with cached selector but skip element-dependent methods
+        if (this.pendingInput.value && this.pendingInput.selector) {
+          this.addAction({
+            type: 'fill',
+            selector: this.pendingInput.selector,
+            value: this.pendingInput.value,
+            displayValue: this.pendingInput.value,
+            timestamp: this.pendingInput.startTime,
+            description: 'Fill input (element detached)',
+            app: this.pendingInput.selector?.app,
+          });
+        }
+        this.pendingInput = null;
+        return;
+      }
+      
       const tagName = element.tagName.toLowerCase();
       const type = element.type?.toLowerCase();
       
@@ -4450,20 +4819,115 @@
       
       if (this.pendingInput.value) {
         const elementAttrs = this.getElementAttributes(element);
-        this.addAction({
-          type: 'fill',
-          selector: this.pendingInput.selector,
-          value: this.pendingInput.value,
-          timestamp: this.pendingInput.startTime,
-          description: this.generateDescription('Fill', this.pendingInput.element),
-          tagName: tagName,
-          inputType: type,
-          app: this.pendingInput.selector.app,
-          // Include element attributes for backend selector building
-          ...elementAttrs,
-        });
+        
+        // SECURITY: Detect sensitive fields and mask the value for display
+        const isSensitive = this.isSensitiveField(element, type, elementAttrs);
+        const displayValue = isSensitive ? '••••••••' : this.pendingInput.value;
+        
+        // Check if we already have a fill action on the SAME element - update it instead of creating new
+        const existingFillIndex = this.findExistingFillAction(this.pendingInput.selector);
+        
+        if (existingFillIndex >= 0) {
+          // Update existing fill action with new value instead of adding duplicate
+          this.actions[existingFillIndex].value = this.pendingInput.value;
+          this.actions[existingFillIndex].displayValue = displayValue;
+          this.actions[existingFillIndex].isSensitive = isSensitive;
+          this.actions[existingFillIndex].timestamp = Date.now(); // Update timestamp
+          console.log('[Recorder] Updated existing fill action instead of creating duplicate');
+          
+          // Notify UI of update
+          chrome.runtime.sendMessage({
+            type: 'ACTION_UPDATED',
+            actionIndex: existingFillIndex,
+            action: this.actions[existingFillIndex],
+            count: this.actions.length,
+          }).catch(() => {});
+        } else {
+          // Create new fill action
+          this.addAction({
+            type: 'fill',
+            selector: this.pendingInput.selector,
+            value: this.pendingInput.value,
+            displayValue: displayValue,  // Masked value for UI display
+            isSensitive: isSensitive,    // Flag for security handling
+            timestamp: this.pendingInput.startTime,
+            description: this.generateDescription('Fill', this.pendingInput.element, { isSensitive, displayValue }),
+            tagName: tagName,
+            inputType: type,
+            app: this.pendingInput.selector.app,
+            // Include element attributes for backend selector building
+            ...elementAttrs,
+          });
+        }
       }
       this.pendingInput = null;
+    }
+    
+    // SECURITY: Detect if a field contains sensitive data
+    isSensitiveField(element, type, attrs) {
+      // Check input type
+      if (type === 'password') return true;
+      
+      // Check common sensitive field patterns
+      const name = (element.name || '').toLowerCase();
+      const id = (element.id || '').toLowerCase();
+      const placeholder = (element.placeholder || '').toLowerCase();
+      const label = (attrs?.label || '').toLowerCase();
+      const allText = `${name} ${id} ${placeholder} ${label}`;
+      
+      const sensitivePatterns = [
+        /password|passwd|pwd|pass/,
+        /secret|token|api[_-]?key/,
+        /credit[_-]?card|card[_-]?number|ccnum/,
+        /cvv|cvc|security[_-]?code/,
+        /ssn|social[_-]?security/,
+        /pin|otp|verification[_-]?code/,
+        /auth[_-]?code|access[_-]?token/,
+        /private[_-]?key|secret[_-]?key/,
+      ];
+      
+      return sensitivePatterns.some(pattern => pattern.test(allText));
+    }
+    
+    // BUG FIX #5: Normalize selector for comparison (handles equivalent selectors)
+    normalizeSelector(selectorStr) {
+      if (!selectorStr) return '';
+      return selectorStr
+        .replace(/'/g, '"')                     // Normalize quotes
+        .replace(/\s+/g, ' ')                   // Normalize whitespace
+        .replace(/locator\s*\(\s*/g, 'locator(') // Normalize spacing in locator()
+        .replace(/get_by_\s*/g, 'get_by_')      // Normalize get_by methods
+        .trim()
+        .toLowerCase();
+    }
+    
+    // Find existing fill action on the same element (to consolidate inputs)
+    findExistingFillAction(selector) {
+      if (!selector) return -1;
+      
+      const selectorStr = this.getSelectorString(selector);
+      if (!selectorStr) return -1;
+      
+      // Use normalized comparison for selectors
+      const normalizedSelector = this.normalizeSelector(selectorStr);
+      const now = Date.now();
+      
+      // Look for fill action on same element within last 30 seconds (not just last 5 actions)
+      // This handles cases where user filled many other fields before coming back
+      for (let i = this.actions.length - 1; i >= 0; i--) {
+        const action = this.actions[i];
+        
+        // Stop searching if action is too old (more than 30 seconds)
+        if (now - action.timestamp > 30000) break;
+        
+        if (action.type === 'fill') {
+          const actionSel = this.normalizeSelector(this.getSelectorString(action.selector));
+          if (actionSel === normalizedSelector) {
+            return i;
+          }
+        }
+      }
+      return -1;
     }
 
     addAction(action) {
@@ -4494,6 +4958,19 @@
     }
 
     shouldSkipAction(action) {
+      // CRITICAL: Skip navigate actions to already-recorded URLs
+      if (action.type === 'navigate') {
+        if (this.recordedNavUrls && this.recordedNavUrls.has(action.url)) {
+          console.log('[Recorder] Skipping already-recorded navigation URL:', action.url);
+          return true;
+        }
+        // Also check skip patterns
+        if (this.shouldSkipNavigationUrl && this.shouldSkipNavigationUrl(action.url)) {
+          console.log('[Recorder] Skipping navigation to skip-pattern URL:', action.url);
+          return true;
+        }
+      }
+      
       if (!this.lastAction) return false;
       
       // Skip duplicate clicks on EXACT same element within 150ms (double-click prevention)
@@ -4551,7 +5028,59 @@
       return selector.selector || selector.playwright || '';
     }
 
-    generateDescription(action, element) {
+    generateDescription(action, element, options = {}) {
+      const { isSensitive = false, displayValue = null } = options;
+      
+      // Get meaningful label for the element
+      const getElementLabel = (el) => {
+        // Priority order for element identification:
+        // 1. Explicit label via 'for' attribute
+        const id = el.id;
+        if (id) {
+          const labelEl = document.querySelector(`label[for="${id}"]`);
+          if (labelEl) {
+            const labelText = labelEl.textContent.trim();
+            if (labelText && labelText.length <= 40) return labelText;
+          }
+        }
+        // 2. Parent label element
+        const parentLabel = el.closest('label');
+        if (parentLabel) {
+          const labelText = parentLabel.textContent.trim().replace(el.value || '', '').trim();
+          if (labelText && labelText.length <= 40 && labelText.length > 0) return labelText;
+        }
+        // 3. Aria-label attribute
+        const ariaLabel = el.getAttribute('aria-label');
+        if (ariaLabel && ariaLabel.length <= 40) return ariaLabel;
+        // 4. Placeholder attribute
+        const placeholder = el.getAttribute('placeholder');
+        if (placeholder && placeholder.length <= 40) return placeholder;
+        // 5. Name attribute (formatted)
+        const name = el.getAttribute('name');
+        if (name && name.length <= 40) {
+          // Convert camelCase or snake_case to readable format
+          return name.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+        }
+        // 6. Title attribute
+        const title = el.getAttribute('title');
+        if (title && title.length <= 40) return title;
+        // 7. Fallback to element type
+        return el.tagName.toLowerCase();
+      };
+      
+      // For fill actions, include the field label and value
+      if (action === 'Fill' && displayValue !== null) {
+        const lockIcon = isSensitive ? '🔒 ' : '';
+        const fieldLabel = getElementLabel(element);
+        const val = displayValue.length > 20 ? displayValue.substring(0, 17) + '...' : displayValue;
+        
+        // Format: "🔒 Fill Password: ••••••••" or "Fill Email: test@example.com"
+        if (fieldLabel && fieldLabel !== element.tagName.toLowerCase()) {
+          return `${lockIcon}Fill ${fieldLabel}: "${val}"`;
+        }
+        return `${lockIcon}Fill input: "${val}"`;
+      }
+      
       const text = (element.textContent || '').trim().substring(0, 30);
       const label = element.getAttribute('aria-label') || element.getAttribute('placeholder');
       if (text) return `${action} "${text}${text.length >= 30 ? '...' : ''}"`;
@@ -4632,6 +5161,83 @@
       if (tag === 'a' && element.href) return true;
       if ((tag === 'button' || element.type === 'submit') && element.closest('form')) return true;
       return false;
+    }
+    
+    /**
+     * CRITICAL: Find the actual interactive element when user clicks
+     * event.target might be a nested span/icon inside a button - we need the button
+     * 
+     * Uses shared findInteractiveElement from recorder-engine.js if available.
+     * This ensures IDENTICAL behavior with the desktop Electron app.
+     */
+    findInteractiveElement(target) {
+      // USE SHARED FUNCTION if available (single source of truth)
+      if (sharedFindInteractiveElement) {
+        return sharedFindInteractiveElement(target);
+      }
+      
+      // Fallback to inline implementation
+      if (!target || target === document.body || target === document.documentElement) {
+        return target;
+      }
+      
+      const interactiveSelectors = [
+        'button', 'a[href]', '[role="button"]', '[role="link"]',
+        '[role="menuitem"]', '[role="option"]', '[role="tab"]',
+        '[role="checkbox"]', '[role="radio"]', 'input[type="submit"]',
+        'input[type="button"]', '[tabindex="0"]', '[data-action]',
+        '[onclick]', '.slds-button', 'lightning-button', 'lightning-button-icon',
+      ];
+      
+      const targetTag = target.tagName.toLowerCase();
+      if (['button', 'a', 'input', 'select', 'textarea'].includes(targetTag)) {
+        return target;
+      }
+      if (target.getAttribute('role') && ['button', 'link', 'menuitem', 'option', 'tab', 'checkbox', 'radio'].includes(target.getAttribute('role'))) {
+        return target;
+      }
+      
+      let current = target;
+      let maxDepth = 10;
+      
+      while (current && current !== document.body && maxDepth > 0) {
+        for (const selector of interactiveSelectors) {
+          try {
+            if (current.matches && current.matches(selector)) {
+              return current;
+            }
+          } catch (e) {}
+        }
+        
+        try {
+          const style = window.getComputedStyle(current);
+          if (style.cursor === 'pointer') {
+            const hasText = current.textContent?.trim().length > 0 && current.textContent?.trim().length < 100;
+            const tag = current.tagName.toLowerCase();
+            if (hasText && !['span', 'svg', 'path', 'i'].includes(tag)) {
+              return current;
+            }
+          }
+        } catch (e) {}
+        
+        current = current.parentElement;
+        maxDepth--;
+      }
+      
+      if (['span', 'svg', 'path', 'i', 'img'].includes(targetTag)) {
+        const parent = target.parentElement;
+        if (parent && parent !== document.body) {
+          const parentTag = parent.tagName.toLowerCase();
+          if (['div', 'li', 'button', 'a'].includes(parentTag)) {
+            const text = parent.textContent?.trim();
+            if (text && text.length > 0 && text.length < 100) {
+              return parent;
+            }
+          }
+        }
+      }
+      
+      return target;
     }
 
     isRecorderElement(element) {

@@ -1,0 +1,765 @@
+{
+  "id": "5e1af9c8",
+  "name": "MyNMDP Deferral",
+  "status": "approved",
+  "tags": [
+    "smoke",
+    "automated",
+    "salesforce-lwc"
+  ],
+  "created_at": "2025-12-10T17:44:50.750269",
+  "updated_at": "2025-12-10T17:44:50.750269",
+  "metadata": {
+    "start_url": "chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html",
+    "app_type": "salesforce-lwc",
+    "recorded_at": "2025-12-10T22:44:28.198Z",
+    "action_count": 17,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "smoke",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "MyNMDP Deferral",
+    "actionCount": 17,
+    "script": "from playwright.sync_api import expect\n\ndef test_mynmdp_deferral(page):\n    \"\"\"\n    MyNMDP Deferral\n    Recorded on: 2025-12-10T17:41:03.096124\n    Starting URL: chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\n    \"\"\"\n    page.goto(\"chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Get involved\"\n    page.get_by_role(\"button\", name=\"Get involved\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"button\", name=\"Get involved\").click()\n\n    # Click \"Join the donor registry\"\n    page.get_by_role(\"link\", name=\"Join the donor registry\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"link\", name=\"Join the donor registry\").click(force=True)\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /s/join\n    # Navigate to /s/join\n    page.goto(\"https://my.nmdp.org/s/join?language=en_US\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /s/join\n    # Navigate to /s/join\n    page.goto(\"https://my.nmdp.org/s/join?language=en_US\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Check input\n    page.locator(\"lightning-radio-group\").get_by_text(\"18-35\").check()\n\n    # Click \"Next\"\n    page.get_by_role(\"button\", name=\"Next\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"button\", name=\"Next\").click(force=True)\n\n    # Check input\n    page.locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]').check()\n\n    # Check input\n    page.locator('[name=\"Cancer__c\"]').check()\n\n    # Check input\n    page.locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]').check()\n\n    # Click \"Next\"\n    page.get_by_role(\"button\", name=\"Next\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"button\", name=\"Next\").click(force=True)\n\n    # Click \"Yes\"\n    page.get_by_text(\"Yes\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_text(\"Yes\").click(force=True)\n\n    # Check input\n    page.get_by_text(\"Yes\", exact=True).check()\n\n"
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "description": "Navigate to /s/",
+      "url": "https://my.nmdp.org/s/?language=en_US",
+      "timestamp": 1765406277261
+    },
+    {
+      "type": "click",
+      "description": "Click \"Get involved\"",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[title=\"Get involved\"]",
+          "playwright": "locator('[title=\"Get involved\"]')",
+          "confidence": 95,
+          "description": "Salesforce LWC: title",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "role",
+            "playwright": "getByRole('button', { name: 'Get involved' })",
+            "confidence": 80,
+            "description": "Role: button \"Get involved\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Get involved' })",
+            "confidence": 60,
+            "description": "Text: \"Get involved\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "attribute",
+            "selector": "[title=\"Get involved\"]",
+            "playwright": "locator('[title=\"Get involved\"]')",
+            "confidence": 3,
+            "description": "SF title",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[title=\"Get involved\"]",
+        "playwright": "locator('[title=\"Get involved\"]')",
+        "confidence": 95,
+        "description": "Salesforce LWC: title",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406281680,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Get involved",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Get involved",
+      "className": "lwc-59kp5sov61j",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click \"Join the donor registry\"",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[title=\"Join the donor registry\"]",
+          "playwright": "locator('[title=\"Join the donor registry\"]')",
+          "confidence": 95,
+          "description": "Salesforce LWC: title",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "role",
+            "playwright": "getByRole('link', { name: 'Join the donor registry' })",
+            "confidence": 80,
+            "description": "Role: link \"Join the donor registry\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Join the donor registry' })",
+            "confidence": 60,
+            "description": "Text: \"Join the donor registry\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[title=\"Join the donor registry\"]",
+        "playwright": "locator('[title=\"Join the donor registry\"]')",
+        "confidence": 95,
+        "description": "Salesforce LWC: title",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406282811,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Join the donor registry",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Join the donor registry",
+      "className": "lwc-44m8jpc5qct slds-p-vertical_small slds-p-horizontal_large slds-truncate",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /s/join",
+      "url": "https://my.nmdp.org/s/join?language=en_US",
+      "timestamp": 1765406282835
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /s/join",
+      "url": "https://my.nmdp.org/s/join?language=en_US",
+      "timestamp": 1765406282867
+    },
+    {
+      "type": "click",
+      "description": "Click \"18-35\"",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc-radio",
+          "selector": null,
+          "playwright": "locator('lightning-radio-group').getByText('18-35')",
+          "confidence": 85,
+          "description": "Salesforce LWC: Radio group by text",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text-span",
+            "playwright": "getByText('18-35', { exact: true })",
+            "confidence": 85,
+            "description": "Text: \"18-35\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "text-filtered",
+            "playwright": "locator('label[for=\"radio-1-77\"]').filter({ hasText: '18-35' })",
+            "confidence": 80,
+            "description": "Filtered: \"18-35\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-radio-group').getByText('18-35')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc-radio",
+        "selector": null,
+        "playwright": "locator('lightning-radio-group').getByText('18-35')",
+        "confidence": 85,
+        "description": "Salesforce LWC: Radio group by text",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765406285094,
+      "tagName": "span",
+      "innerText": "18-35",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "slds-radio_faux",
+      "triggersNavigation": false
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc-radio",
+          "selector": null,
+          "playwright": "locator('lightning-radio-group').getByText('18-35')",
+          "confidence": 85,
+          "description": "Salesforce LWC: Radio group by text",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-radio-group').getByText('18-35')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc-radio",
+        "selector": null,
+        "playwright": "locator('lightning-radio-group').getByText('18-35')",
+        "confidence": 85,
+        "description": "Salesforce LWC: Radio group by text",
+        "uniqueMatch": true
+      },
+      "value": "18-35",
+      "timestamp": 1765406285114,
+      "tagName": "input",
+      "inputType": "radio",
+      "innerText": "",
+      "name": "radioGroup",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    },
+    {
+      "type": "click",
+      "description": "Click \"Next\"",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[title=\"Next\"]",
+          "playwright": "locator('[title=\"Next\"]')",
+          "confidence": 95,
+          "description": "Salesforce LWC: title",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "role",
+            "playwright": "getByRole('button', { name: 'Next' })",
+            "confidence": 80,
+            "description": "Role: button \"Next\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Next' })",
+            "confidence": 60,
+            "description": "Text: \"Next\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "css",
+            "selector": "button.slds-button.slds-button_brand",
+            "playwright": "locator('button.slds-button.slds-button_brand')",
+            "confidence": 45,
+            "description": "CSS: button.slds-button.slds-button_brand",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[title=\"Next\"]",
+        "playwright": "locator('[title=\"Next\"]')",
+        "confidence": 95,
+        "description": "Salesforce LWC: title",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406285946,
+      "tagName": "button",
+      "inputType": "button",
+      "innerText": "Next",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Next",
+      "className": "slds-button slds-button_brand",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click span",
+      "selector": {
+        "primary": {
+          "type": "slds",
+          "selector": ".slds-checkbox_faux",
+          "playwright": "locator('.slds-checkbox_faux')",
+          "confidence": 4,
+          "description": "SF SLDS class",
+          "uniqueMatch": false,
+          "matchCount": 13
+        },
+        "fallbacks": [],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "slds",
+        "selector": ".slds-checkbox_faux",
+        "playwright": "locator('.slds-checkbox_faux')",
+        "confidence": 4,
+        "description": "SF SLDS class",
+        "uniqueMatch": false,
+        "matchCount": 13
+      },
+      "value": null,
+      "timestamp": 1765406287287,
+      "tagName": "span",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "slds-checkbox_faux",
+      "triggersNavigation": false
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[name=\"Brain_Injury_Concussion_or_Surgery__c\"]",
+          "playwright": "locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]')",
+          "confidence": 100,
+          "description": "Salesforce LWC: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"Brain_Injury_Concussion_or_Surgery__c\"]",
+            "playwright": "locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]')",
+            "confidence": 70,
+            "description": "Name: Brain_Injury_Concussion_or_Surgery__c",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-primitive-input-checkbox').getByText('Brain injury, concussion or surgery')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          },
+          {
+            "type": "attribute",
+            "selector": "[name=\"Brain_Injury_Concussion_or_Surgery__c\"]",
+            "playwright": "locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]')",
+            "confidence": 3,
+            "description": "SF name",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[name=\"Brain_Injury_Concussion_or_Surgery__c\"]",
+        "playwright": "locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]')",
+        "confidence": 100,
+        "description": "Salesforce LWC: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406287303,
+      "tagName": "input",
+      "inputType": "checkbox",
+      "innerText": "",
+      "name": "Brain_Injury_Concussion_or_Surgery__c",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    },
+    {
+      "type": "click",
+      "description": "Click span",
+      "selector": {
+        "primary": {
+          "type": "slds",
+          "selector": ".slds-checkbox_faux",
+          "playwright": "locator('.slds-checkbox_faux')",
+          "confidence": 4,
+          "description": "SF SLDS class",
+          "uniqueMatch": false,
+          "matchCount": 13
+        },
+        "fallbacks": [],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "slds",
+        "selector": ".slds-checkbox_faux",
+        "playwright": "locator('.slds-checkbox_faux')",
+        "confidence": 4,
+        "description": "SF SLDS class",
+        "uniqueMatch": false,
+        "matchCount": 13
+      },
+      "value": null,
+      "timestamp": 1765406288037,
+      "tagName": "span",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "slds-checkbox_faux",
+      "triggersNavigation": false
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[name=\"Cancer__c\"]",
+          "playwright": "locator('[name=\"Cancer__c\"]')",
+          "confidence": 100,
+          "description": "Salesforce LWC: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"Cancer__c\"]",
+            "playwright": "locator('[name=\"Cancer__c\"]')",
+            "confidence": 70,
+            "description": "Name: Cancer__c",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-primitive-input-checkbox').getByText('Cancer')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          },
+          {
+            "type": "attribute",
+            "selector": "[name=\"Cancer__c\"]",
+            "playwright": "locator('[name=\"Cancer__c\"]')",
+            "confidence": 3,
+            "description": "SF name",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[name=\"Cancer__c\"]",
+        "playwright": "locator('[name=\"Cancer__c\"]')",
+        "confidence": 100,
+        "description": "Salesforce LWC: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406288051,
+      "tagName": "input",
+      "inputType": "checkbox",
+      "innerText": "",
+      "name": "Cancer__c",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    },
+    {
+      "type": "click",
+      "description": "Click span",
+      "selector": {
+        "primary": {
+          "type": "slds",
+          "selector": ".slds-checkbox_faux",
+          "playwright": "locator('.slds-checkbox_faux')",
+          "confidence": 4,
+          "description": "SF SLDS class",
+          "uniqueMatch": false,
+          "matchCount": 13
+        },
+        "fallbacks": [],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "slds",
+        "selector": ".slds-checkbox_faux",
+        "playwright": "locator('.slds-checkbox_faux')",
+        "confidence": 4,
+        "description": "SF SLDS class",
+        "uniqueMatch": false,
+        "matchCount": 13
+      },
+      "value": null,
+      "timestamp": 1765406288687,
+      "tagName": "span",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "slds-checkbox_faux",
+      "triggersNavigation": false
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "app-salesforce-lwc",
+          "selector": "[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]",
+          "playwright": "locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]')",
+          "confidence": 100,
+          "description": "Salesforce LWC: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]",
+            "playwright": "locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]')",
+            "confidence": 70,
+            "description": "Name: Chronic_Neck_Back_Hip_or_Spine_Pain__c",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-primitive-input-checkbox').getByText('Chronic neck, back, hip or spine pain')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          },
+          {
+            "type": "attribute",
+            "selector": "[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]",
+            "playwright": "locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]')",
+            "confidence": 3,
+            "description": "SF name",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "app-salesforce-lwc",
+        "selector": "[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]",
+        "playwright": "locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]')",
+        "confidence": 100,
+        "description": "Salesforce LWC: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765406288701,
+      "tagName": "input",
+      "inputType": "checkbox",
+      "innerText": "",
+      "name": "Chronic_Neck_Back_Hip_or_Spine_Pain__c",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    },
+    {
+      "type": "click",
+      "description": "Click \"Next\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Next' })",
+          "confidence": 80,
+          "description": "Role: button \"Next\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Next' })",
+            "confidence": 60,
+            "description": "Text: \"Next\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-button').getByText('Next')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Next' })",
+        "confidence": 80,
+        "description": "Role: button \"Next\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765406290337,
+      "tagName": "button",
+      "inputType": "button",
+      "innerText": "Next",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Next",
+      "className": "slds-button slds-button_brand",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click \"Yes\"",
+      "selector": {
+        "primary": {
+          "type": "text-span",
+          "playwright": "getByText('Yes', { exact: true })",
+          "confidence": 85,
+          "description": "Text: \"Yes\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text-filtered",
+            "playwright": "locator('label[for=\"radio-131\"]').filter({ hasText: 'Yes' })",
+            "confidence": 80,
+            "description": "Filtered: \"Yes\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "lwc-text",
+            "selector": null,
+            "playwright": "locator('lightning-primitive-input-radio').getByText('Yes')",
+            "confidence": 4,
+            "description": "LWC parent text",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "text-span",
+        "playwright": "getByText('Yes', { exact: true })",
+        "confidence": 85,
+        "description": "Text: \"Yes\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765406291760,
+      "tagName": "span",
+      "innerText": "Yes",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "slds-form-element__label",
+      "triggersNavigation": false
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "lwc-text",
+          "selector": null,
+          "playwright": "locator('lightning-primitive-input-radio').getByText('Yes')",
+          "confidence": 4,
+          "description": "LWC parent text",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "selector": null,
+            "playwright": "getByText('Yes', { exact: true })",
+            "confidence": 2,
+            "description": "SF Text exact",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "salesforce-lwc",
+        "appName": "Salesforce LWC",
+        "visualFingerprint": null,
+        "type": "lwc-text",
+        "selector": null,
+        "playwright": "locator('lightning-primitive-input-radio').getByText('Yes')",
+        "confidence": 4,
+        "description": "LWC parent text",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765406291773,
+      "tagName": "input",
+      "inputType": "radio",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    }
+  ],
+  "script": "from playwright.sync_api import expect\n\ndef test_mynmdp_deferral(page):\n    \"\"\"\n    MyNMDP Deferral\n    Recorded on: 2025-12-10T17:41:03.096124\n    Starting URL: chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\n    \"\"\"\n    page.goto(\"chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Get involved\"\n    page.get_by_role(\"button\", name=\"Get involved\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"button\", name=\"Get involved\").click()\n\n    # Click \"Join the donor registry\"\n    page.get_by_role(\"link\", name=\"Join the donor registry\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"link\", name=\"Join the donor registry\").click(force=True)\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /s/join\n    # Navigate to /s/join\n    page.goto(\"https://my.nmdp.org/s/join?language=en_US\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /s/join\n    # Navigate to /s/join\n    page.goto(\"https://my.nmdp.org/s/join?language=en_US\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Check input\n    page.locator(\"lightning-radio-group\").get_by_text(\"18-35\").check()\n\n    # Click \"Next\"\n    page.get_by_role(\"button\", name=\"Next\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"button\", name=\"Next\").click(force=True)\n\n    # Check input\n    page.locator('[name=\"Brain_Injury_Concussion_or_Surgery__c\"]').check()\n\n    # Check input\n    page.locator('[name=\"Cancer__c\"]').check()\n\n    # Check input\n    page.locator('[name=\"Chronic_Neck_Back_Hip_or_Spine_Pain__c\"]').check()\n\n    # Click \"Next\"\n    page.get_by_role(\"button\", name=\"Next\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_role(\"button\", name=\"Next\").click(force=True)\n\n    # Click \"Yes\"\n    page.get_by_text(\"Yes\").wait_for(state=\"visible\", timeout=15000)\n    page.get_by_text(\"Yes\").click(force=True)\n\n    # Check input\n    page.get_by_text(\"Yes\", exact=True).check()\n\n",
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

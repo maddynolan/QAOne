@@ -41,6 +41,7 @@ import {
   Play,
   Kanban,
   Plug,
+  Eye,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -101,6 +102,13 @@ const mainNavItems: NavItem[] = [
     path: '/performance',
     icon: Gauge,
     description: 'Load testing',
+  },
+  {
+    id: 'accessibility',
+    label: 'A11y',
+    path: '/accessibility',
+    icon: Eye,
+    description: 'Accessibility testing',
   },
   {
     id: 'salesforce',

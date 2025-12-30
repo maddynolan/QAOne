@@ -1,658 +1,853 @@
-import { ArrowLeft, CheckCircle, XCircle, Clock, Upload, Camera, Link, Bug, ExternalLink, MessageSquare, User } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, Camera, Bug, ChevronRight, ChevronLeft, SkipForward, ImageIcon, AlertCircle, Save, Home, Trash2, Eye, Globe, MousePointer, Type, Check, Target, List, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+// Step result interface for manual execution
+interface StepResult {
+  stepIndex: number;
+  status: 'pending' | 'passed' | 'failed' | 'skipped';
+  notes?: string;
+  screenshots?: string[]; // Base64 images
+  defectId?: string;
+  defectTitle?: string;
+  executedAt?: string;
+  errorMessage?: string;
+}
+
+interface TestStep {
+  action: string;
+  expectedResult: string;
+  qword?: string;
+  type?: string;
+  selector?: string;
+  value?: string;
+  args?: any;
+  assertion?: {
+    type?: string;
+    target?: string;
+    selector?: string;
+    value?: string;
+    expectedValue?: string;
+  };
+}
+
+// Format step for detailed display
+const formatStepDetails = (step: TestStep): { action: string; details: { label: string; value: string }[] } => {
+  const details: { label: string; value: string }[] = [];
+  const qword = step.qword || step.type || step.action?.split(' ')[0] || 'Unknown';
+  let actionText = qword;
+  const args = step.args || {};
+  
+  switch (qword.toLowerCase()) {
+    case 'goto':
+    case 'navigate':
+      actionText = 'Navigate to URL';
+      if (args.url || args[0]) details.push({ label: 'URL', value: args.url || args[0] });
+      break;
+    case 'click':
+    case 'clicktext':
+    case 'clickelement':
+      actionText = 'Click Element';
+      if (args.selector || step.selector) details.push({ label: 'Selector', value: args.selector || step.selector });
+      if (args.text || args[0]) details.push({ label: 'Text', value: args.text || args[0] });
+      break;
+    case 'fill':
+    case 'type':
+      actionText = 'Enter Text';
+      if (args.selector || step.selector) details.push({ label: 'Field', value: args.selector || step.selector });
+      if (args.value || args.text || args[1] || step.value) details.push({ label: 'Value', value: args.value || args.text || args[1] || step.value });
+      break;
+    case 'asserttext':
+    case 'assert':
+    case 'verify':
+      actionText = 'Verify/Assert';
+      if (args[0] || args.text) details.push({ label: 'Expected Text', value: args[0] || args.text });
+      break;
+    case 'select':
+      actionText = 'Select Option';
+      if (args.selector || step.selector) details.push({ label: 'Dropdown', value: args.selector || step.selector });
+      if (args.value || args[1] || step.value) details.push({ label: 'Option', value: args.value || args[1] || step.value });
+      break;
+    case 'wait':
+      actionText = 'Wait';
+      if (args.timeout || args[0]) details.push({ label: 'Duration', value: `${args.timeout || args[0]}ms` });
+      break;
+    default:
+      if (step.action && step.action !== qword) {
+        actionText = step.action;
+      }
+      Object.entries(args).forEach(([key, value]) => {
+        if (value && typeof value === 'string') {
+          details.push({ label: key.charAt(0).toUpperCase() + key.slice(1), value });
+        }
+      });
+  }
+  
+  return { action: actionText, details };
+};
+
+// Build expected result from step data
+const buildExpectedResult = (step: any): string => {
+  if (step.qword === 'AssertText' || step.type === 'assert') {
+    const assertText = step.args?.[0] || step.args?.text || step.value;
+    if (assertText) return `✓ Verify "${assertText}" is visible on the page`;
+  }
+  if (step.assertion) {
+    const assertValue = step.assertion.value || step.assertion.expectedValue;
+    if (assertValue) return `✓ Verify: ${assertValue}`;
+  }
+  if (step.expectedResult?.trim()) return step.expectedResult;
+  if (step.expected_result?.trim()) return step.expected_result;
+  
+  const qword = step.qword || step.type || '';
+  switch (qword.toLowerCase()) {
+    case 'goto':
+    case 'navigate':
+      return `Page navigates successfully to ${step.args?.url || step.args?.[0] || 'the URL'}`;
+    case 'click':
+    case 'clicktext':
+      return `Element is clicked and responds appropriately`;
+    case 'fill':
+    case 'type':
+      return `Text is entered into the field successfully`;
+    case 'select':
+      return `Option is selected from dropdown`;
+    case 'wait':
+      return `Wait completes after specified duration`;
+    default:
+      return 'Step completes successfully';
+  }
+};
+
+// Get icon for action type
+const getActionIcon = (qword?: string) => {
+  switch (qword?.toLowerCase()) {
+    case 'goto':
+    case 'navigate':
+      return <Globe className="w-4 h-4" />;
+    case 'click':
+    case 'clicktext':
+      return <MousePointer className="w-4 h-4" />;
+    case 'fill':
+    case 'type':
+      return <Type className="w-4 h-4" />;
+    case 'asserttext':
+    case 'assert':
+      return <Check className="w-4 h-4" />;
+    case 'select':
+      return <List className="w-4 h-4" />;
+    default:
+      return <Target className="w-4 h-4" />;
+  }
+};
 
 export default function TestCaseExecution() {
-  const { runId, caseId } = useParams<{ runId: string; caseId: string }>();
+  const { runId, testCaseId } = useParams<{ runId: string; testCaseId: string }>();
   const navigate = useNavigate();
   const [testRun, setTestRun] = useState<any>(null);
   const [testCase, setTestCase] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [defects, setDefects] = useState<any[]>([]);
-  const [isLinkingDefect, setIsLinkingDefect] = useState<string | null>(null);
-  const [comments, setComments] = useState<{ [key: string]: any[] }>({});
-  const [newComment, setNewComment] = useState<{ [key: string]: string }>({});
-  const [showCommentBox, setShowCommentBox] = useState<{ [key: string]: boolean }>({});
-  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const [stepResults, setStepResults] = useState<StepResult[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [stepNotes, setStepNotes] = useState('');
+  const [showDefectDialog, setShowDefectDialog] = useState(false);
+  const [newDefect, setNewDefect] = useState({ title: '', description: '', severity: 'medium' });
+  const [allTestCases, setAllTestCases] = useState<any[]>([]);
+  const [currentTestIndex, setCurrentTestIndex] = useState(0);
+  const [showScreenshotPreview, setShowScreenshotPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const testIds = testRun?.testCaseIds || (testRun?.testCaseId ? [testRun.testCaseId] : []);
 
   useEffect(() => {
-    if (runId && caseId) {
-      loadTestRun();
-      loadDefects();
-    }
-  }, [runId, caseId]);
+    loadData();
+  }, [runId, testCaseId]);
 
-  const loadTestRun = async () => {
-    if (!runId) return;
+  const loadData = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}`);
-      if (!response.ok) {
-        throw new Error("Failed to load test run");
-      }
-      const run = await response.json();
-      setTestRun(run);
+      const savedRuns = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
+      const run = savedRuns.find((r: any) => r.id === runId);
       
-      // Find the specific test case
-      const foundCase = run.testCases?.find((tc: any) => tc.id === caseId);
+      if (run) {
+        setTestRun(run);
+        if (run.manualStepResults?.[testCaseId!]) {
+          const savedResults = run.manualStepResults[testCaseId!];
+          setStepResults(savedResults);
+          const firstPending = savedResults.findIndex((r: StepResult) => r.status === 'pending');
+          if (firstPending !== -1) setCurrentStepIndex(firstPending);
+        }
+      }
+      
+      let allCases: any[] = [];
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI?.localStorage?.getTestCases) {
+        try {
+          allCases = await electronAPI.localStorage.getTestCases();
+        } catch (e) {
+          console.log('Electron storage not available');
+        }
+      }
+      
+      if (allCases.length === 0) {
+        try {
+          const response = await fetch(`http://localhost:8000/test-cases`);
+          if (response.ok) {
+            const cases = await response.json();
+            allCases = Array.isArray(cases) ? cases : [];
+          }
+        } catch (e) {
+          console.log('API not available');
+        }
+      }
+      
+      setAllTestCases(allCases);
+      
+      const foundCase = allCases.find((tc: any) => tc.id === testCaseId);
       if (foundCase) {
         setTestCase(foundCase);
+        const steps = getSteps(foundCase);
+        if (steps.length > 0 && (!run?.manualStepResults?.[testCaseId!] || run.manualStepResults[testCaseId!].length === 0)) {
+          setStepResults(steps.map((_: any, idx: number) => ({
+            stepIndex: idx,
+            status: 'pending' as const
+          })));
+        }
+        const ids = run?.testCaseIds || (run?.testCaseId ? [run.testCaseId] : []);
+        const idx = ids.indexOf(testCaseId);
+        if (idx !== -1) setCurrentTestIndex(idx);
       } else {
         toast.error("Test case not found");
-        navigate(`/runs/${runId}`);
-      }
-      
-      // Start execution if not already started
-      if (run.status === "pending") {
-        await startExecution();
       }
     } catch (error: any) {
-      console.error("Error loading test run:", error);
-      toast.error(`Failed to load test run: ${error.message}`);
-      navigate(`/runs/${runId}`);
+      console.error("Error loading data:", error);
+      toast.error(`Failed to load data: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startExecution = async () => {
-    if (!runId) return;
-    try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to start test run");
-      }
-
-      await loadTestRun();
-    } catch (error: any) {
-      toast.error(`Failed to start execution: ${error.message}`);
-      console.error("Error starting execution:", error);
+  const getSteps = (tc: any): TestStep[] => {
+    if (tc.unified_data?.steps?.length > 0) {
+      return tc.unified_data.steps.map((s: any) => ({
+        action: s.action || '',
+        expectedResult: buildExpectedResult(s),
+        qword: s.qword,
+        type: s.type,
+        selector: s.selector,
+        value: s.value,
+        args: s.args || {},
+        assertion: s.assertion
+      }));
     }
+    if (tc.steps?.length > 0) {
+      return tc.steps.map((s: any) => ({
+        action: s.action || '',
+        expectedResult: buildExpectedResult(s),
+        qword: s.qword || s.type,
+        type: s.type,
+        selector: s.selector,
+        value: s.value,
+        args: s.args || {},
+        assertion: s.assertion
+      }));
+    }
+    return [];
   };
 
-  const loadDefects = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/defects");
-      if (response.ok) {
-        const data = await response.json();
-        setDefects(data.defects || []);
+  const saveStepResults = (newResults: StepResult[]) => {
+    setStepResults(newResults);
+    const savedRuns = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
+    const updatedRuns = savedRuns.map((r: any) => {
+      if (r.id === runId) {
+        const updatedResults = { ...r.manualStepResults, [testCaseId!]: newResults };
+        const testStatus = newResults.some(r => r.status === 'failed') ? 'failed' 
+          : newResults.every(r => r.status === 'passed' || r.status === 'skipped') ? 'passed' : 'running';
+        const testCaseStatuses = { ...r.testCaseStatuses, [testCaseId!]: testStatus };
+        const testIdsList = r.testCaseIds || [r.testCaseId];
+        const values = testIdsList.map((id: string) => testCaseStatuses[id] || 'pending');
+        const overallStatus = values.some((s: string) => s === 'failed') ? 'failed'
+          : values.every((s: string) => s === 'passed') ? 'passed'
+          : values.some((s: string) => s === 'running' || s === 'pending') ? 'running' : 'pending';
+        const allStatuses = Object.values(testCaseStatuses) as string[];
+        
+        return {
+          ...r,
+          manualStepResults: updatedResults,
+          testCaseStatuses,
+          status: overallStatus,
+          results: {
+            passed: allStatuses.filter(s => s === 'passed').length,
+            failed: allStatuses.filter(s => s === 'failed').length,
+            skipped: allStatuses.filter(s => s === 'skipped' || s === 'pending').length
+          },
+          endTime: overallStatus !== 'running' ? new Date().toISOString() : undefined
+        };
       }
-    } catch (error: any) {
-      console.error("Error loading defects:", error);
-    }
+      return r;
+    });
+    localStorage.setItem('test_execution_history', JSON.stringify(updatedRuns));
+    setTestRun(updatedRuns.find((r: any) => r.id === runId));
   };
 
-  const loadComments = async (stepId?: string) => {
-    if (!runId) return;
-    try {
-      let url = `http://localhost:8000/test-runs/${runId}/comments`;
-      if (stepId) {
-        url += `?step_id=${stepId}`;
-      } else if (caseId) {
-        url += `?case_id=${caseId}`;
-      }
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        const key = stepId || caseId || 'run';
-        setComments(prev => ({ ...prev, [key]: data.comments || [] }));
-      }
-    } catch (error: any) {
-      console.error("Error loading comments:", error);
-    }
-  };
-
-  const addComment = async (commentText: string, stepId?: string) => {
-    if (!commentText.trim() || !runId) return;
+  const markStep = (status: 'passed' | 'failed' | 'skipped', errorMessage?: string) => {
+    const newResults = [...stepResults];
+    newResults[currentStepIndex] = {
+      ...newResults[currentStepIndex],
+      status,
+      notes: stepNotes || newResults[currentStepIndex]?.notes,
+      executedAt: new Date().toISOString(),
+      errorMessage
+    };
+    saveStepResults(newResults);
+    setStepNotes('');
     
-    try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comment: commentText, case_id: caseId, step_id: stepId })
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to add comment");
-      }
-      
-      toast.success("Comment added!");
-      const key = stepId || caseId || 'run';
-      setNewComment(prev => ({ ...prev, [key]: '' }));
-      setShowCommentBox(prev => ({ ...prev, [key]: false }));
-      await loadComments(stepId);
-    } catch (error: any) {
-      toast.error(`Failed to add comment: ${error.message}`);
+    const steps = getSteps(testCase);
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(currentStepIndex + 1);
+    }
+    toast.success(`Step ${currentStepIndex + 1} marked as ${status}`);
+  };
+
+  const handleScreenshotUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      const newResults = [...stepResults];
+      const currentResult = newResults[currentStepIndex] || { stepIndex: currentStepIndex, status: 'pending' as const };
+      newResults[currentStepIndex] = {
+        ...currentResult,
+        screenshots: [...(currentResult.screenshots || []), base64]
+      };
+      saveStepResults(newResults);
+      toast.success("Screenshot added!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeScreenshot = (screenshotIndex: number) => {
+    const newResults = [...stepResults];
+    const currentResult = newResults[currentStepIndex];
+    if (currentResult?.screenshots) {
+      currentResult.screenshots = currentResult.screenshots.filter((_, i) => i !== screenshotIndex);
+      saveStepResults(newResults);
+      toast.success("Screenshot removed");
     }
   };
 
-  const markStep = async (stepId: string, status: "passed" | "failed", error?: string) => {
-    if (!testRun || !stepId || !runId) {
-      toast.error("Invalid step ID or test run");
+  const createDefect = () => {
+    if (!newDefect.title.trim()) {
+      toast.error("Defect title is required");
       return;
     }
+    const defectId = `DEF-${Date.now()}`;
+    const newResults = [...stepResults];
+    newResults[currentStepIndex] = {
+      ...newResults[currentStepIndex],
+      defectId,
+      defectTitle: newDefect.title
+    };
+    saveStepResults(newResults);
     
-    try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}/steps/${stepId}/mark`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, error: error || "" })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Failed to mark step: ${response.status} ${response.statusText}`);
-      }
-      
-      toast.success(`Step marked as ${status}`);
-      await loadTestRun();
-    } catch (error: any) {
-      toast.error(`Failed to mark step: ${error.message || "Unknown error"}`);
-    }
-  };
-
-  const handleScreenshotUpload = async (stepId: string, file: File) => {
-    if (!testRun || !runId) return;
-
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64data = reader.result?.toString().split(',')[1];
-        if (!base64data) {
-          throw new Error("Failed to read file as base64");
-        }
-
-        const response = await fetch(`http://localhost:8000/test-runs/${runId}/steps/${stepId}/screenshot`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            image: base64data,
-            type: file.type || "image/png"
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to upload screenshot");
-        }
-
-        toast.success("Screenshot uploaded!");
-        await loadTestRun();
-      };
-      reader.readAsDataURL(file);
-    } catch (error: any) {
-      toast.error(`Failed to upload screenshot: ${error.message}`);
-    }
-  };
-
-  const linkDefect = async (defectId: string, stepId: string) => {
-    if (!testRun || !runId) return;
+    const defects = JSON.parse(localStorage.getItem('defects') || '[]');
+    defects.push({
+      id: defectId,
+      title: newDefect.title,
+      description: newDefect.description,
+      severity: newDefect.severity,
+      testCaseId,
+      testCaseName: testCase?.name,
+      stepIndex: currentStepIndex,
+      runId,
+      status: 'open',
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem('defects', JSON.stringify(defects));
     
-    try {
-      const response = await fetch(`http://localhost:8000/test-runs/${runId}/steps/${stepId}/link-defect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ defect_id: defectId })
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to link defect");
-      }
+    setShowDefectDialog(false);
+    setNewDefect({ title: '', description: '', severity: 'medium' });
+    toast.success(`Defect ${defectId} created!`);
+  };
 
-      toast.success("Defect linked successfully!");
-      setIsLinkingDefect(null);
-      await loadTestRun();
-      await loadDefects();
-    } catch (error: any) {
-      toast.error(`Failed to link defect: ${error.message}`);
+  const removeDefect = () => {
+    const newResults = [...stepResults];
+    delete newResults[currentStepIndex].defectId;
+    delete newResults[currentStepIndex].defectTitle;
+    saveStepResults(newResults);
+    toast.success("Defect unlinked");
+  };
+
+  const navigateToNextTest = () => {
+    const ids = testRun?.testCaseIds || [];
+    const nextIndex = currentTestIndex + 1;
+    if (nextIndex < ids.length) {
+      navigate(`/execution/run/${runId}/${ids[nextIndex]}`);
+    } else {
+      toast.success("All test cases completed!");
+      navigate('/test-cases?tab=runs');
     }
   };
 
-  const getStepStatus = (stepIndex: number) => {
-    if (!testRun?.stepResults || !testRun.stepResults[caseId!]) {
-      return "pending";
+  const navigateToPrevTest = () => {
+    const ids = testRun?.testCaseIds || [];
+    const prevIndex = currentTestIndex - 1;
+    if (prevIndex >= 0) {
+      navigate(`/execution/run/${runId}/${ids[prevIndex]}`);
     }
-    const stepData = testRun.stepResults[caseId!][stepIndex];
-    return stepData?.status || "pending";
   };
-
-  const getStepScreenshots = (stepIndex: number) => {
-    if (!testRun?.stepResults || !testRun.stepResults[caseId!]) {
-      return [];
-    }
-    const stepData = testRun.stepResults[caseId!][stepIndex];
-    return stepData?.screenshots || [];
-  };
-
-  const getStepDefects = (stepIndex: number) => {
-    if (!testRun?.stepResults || !testRun.stepResults[caseId!]) {
-      return [];
-    }
-    const stepData = testRun.stepResults[caseId!][stepIndex];
-    return stepData?.defects || [];
-  };
-
-  const getStepResultId = (stepIndex: number) => {
-    if (!testRun?.stepResults || !testRun.stepResults[caseId!]) {
-      return null;
-    }
-    const stepData = testRun.stepResults[caseId!][stepIndex];
-    return stepData?.step_id || null;
-  };
-
-  const getTestCaseStatus = () => {
-    return testRun?.testCaseStatuses?.[caseId!] || "pending";
-  };
-
-  // Load comments for steps when test case is loaded
-  useEffect(() => {
-    if (testCase && testCase.steps && runId) {
-      testCase.steps.forEach((_: any, stepIndex: number) => {
-        const stepResultId = getStepResultId(stepIndex);
-        if (stepResultId) {
-          loadComments(stepResultId);
-        }
-      });
-    }
-  }, [testCase?.steps, runId]);
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate(`/runs/${runId}`)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Test Run
-          </Button>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Clock className="h-12 w-12 text-amber-400 mx-auto mb-4 animate-pulse" />
+          <h3 className="text-lg font-semibold text-white">Loading Test Case...</h3>
         </div>
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
-              <h3 className="text-lg font-semibold mb-2">Loading Test Case</h3>
-              <p className="text-muted-foreground">Please wait...</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   }
 
-  if (!testCase || !testRun) {
+  if (!testCase) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate(`/runs/${runId}`)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Test Run
-          </Button>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-white mb-2">Test Case Not Found</h3>
+          <Button onClick={() => navigate('/test-cases?tab=runs')}>Back to Runs</Button>
         </div>
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <XCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Test Case Not Found</h3>
-              <p className="text-muted-foreground">
-                The test case you're looking for doesn't exist or has been deleted.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   }
 
-  const testCaseStatus = getTestCaseStatus();
-  const stepsCount = testCase.steps?.length || 0;
-  const completedSteps = testCase.steps?.filter((_: any, idx: number) => {
-    const status = getStepStatus(idx);
-    return status === "passed" || status === "failed";
-  }).length || 0;
-  const progressPercent = stepsCount > 0 ? (completedSteps / stepsCount) * 100 : 0;
+  const steps = getSteps(testCase);
+  const currentStep = steps[currentStepIndex];
+  const currentResult = stepResults[currentStepIndex] || { status: 'pending' };
+  const stepDetails = currentStep ? formatStepDetails(currentStep) : { action: 'Unknown', details: [] };
+  
+  const completedSteps = stepResults.filter(r => r.status === 'passed' || r.status === 'failed' || r.status === 'skipped').length;
+  const passedSteps = stepResults.filter(r => r.status === 'passed').length;
+  const failedSteps = stepResults.filter(r => r.status === 'failed').length;
+  const progressPercent = steps.length > 0 ? (completedSteps / steps.length) * 100 : 0;
+  const isTestComplete = completedSteps === steps.length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate(`/runs/${runId}`)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Test Run
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold gradient-text">{testCase.name}</h1>
-          <div className="text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-            <span>Status:</span>
-            <Badge variant={
-              testCaseStatus === "passed" ? "default" : 
-              testCaseStatus === "failed" ? "destructive" : 
-              "secondary"
-            }>
-              {testCaseStatus === "passed" && <CheckCircle className="h-3 w-3 mr-1" />}
-              {testCaseStatus === "failed" && <XCircle className="h-3 w-3 mr-1" />}
-              {testCaseStatus === "pending" && <Clock className="h-3 w-3 mr-1" />}
-              {testCaseStatus}
-            </Badge>
-            <span>• {stepsCount} steps • {completedSteps} completed</span>
+    <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+      {/* Compact Header */}
+      <header className="flex-none bg-gray-900/95 border-b border-gray-700 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => navigate('/test-cases?tab=runs')} className="border-gray-700 text-gray-300 h-8">
+              <Home className="h-4 w-4 mr-1" />
+              Runs
+            </Button>
+            <div className="border-l border-gray-700 pl-3">
+              <h1 className="text-base font-semibold text-white">{testCase.name}</h1>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Progress */}
+            <div className="flex items-center gap-2 text-xs">
+              <Progress value={progressPercent} className="w-32 h-1.5 bg-gray-700" />
+              <span className="text-green-400">{passedSteps}✓</span>
+              <span className="text-red-400">{failedSteps}✗</span>
+              <span className="text-gray-400">{steps.length - completedSteps} left</span>
+            </div>
+            
+            {/* Multi-test nav */}
+            {testIds.length > 1 && (
+              <div className="flex items-center gap-1 bg-gray-800 rounded px-2 py-1">
+                <Button variant="ghost" size="sm" disabled={currentTestIndex === 0} onClick={navigateToPrevTest} className="h-6 w-6 p-0">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-xs text-white px-1">Test {currentTestIndex + 1}/{testIds.length}</span>
+                <Button variant="ghost" size="sm" disabled={currentTestIndex === testIds.length - 1} onClick={navigateToNextTest} className="h-6 w-6 p-0">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Progress Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Test Case Progress</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progress</span>
-              <span>{completedSteps}/{stepsCount}</span>
-            </div>
-            <div className="h-3 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-green-600 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+      {/* Main Content - Fixed Height */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel - Steps List */}
+        <aside className="w-56 flex-none border-r border-gray-700 overflow-y-auto bg-gray-900/50">
+          <div className="p-2 text-xs text-gray-400 border-b border-gray-800 sticky top-0 bg-gray-900/95 backdrop-blur">
+            Steps ({completedSteps}/{steps.length})
+          </div>
+          <div className="p-1">
+            {steps.map((step, idx) => {
+              const result = stepResults[idx];
+              const { action } = formatStepDetails(step);
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentStepIndex(idx)}
+                  className={cn(
+                    "w-full p-2 rounded text-left transition-all flex items-center gap-2 text-xs",
+                    idx === currentStepIndex ? "bg-amber-500/20 border border-amber-500/50" : "hover:bg-gray-800",
+                    result?.status === 'passed' && "border-l-2 border-l-green-500",
+                    result?.status === 'failed' && "border-l-2 border-l-red-500",
+                    result?.status === 'skipped' && "border-l-2 border-l-gray-500"
+                  )}
+                >
+                  <span className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
+                    result?.status === 'passed' && "bg-green-600 text-white",
+                    result?.status === 'failed' && "bg-red-600 text-white",
+                    result?.status === 'skipped' && "bg-gray-600 text-white",
+                    (!result || result.status === 'pending') && "bg-gray-700 text-gray-400"
+                  )}>
+                    {idx + 1}
+                  </span>
+                  <span className="truncate flex-1 text-gray-300">{action}</span>
+                  {result?.screenshots?.length > 0 && <ImageIcon className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                  {result?.defectId && <Bug className="w-3 h-3 text-red-400 flex-shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* Main Panel */}
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Step Header */}
+          <div className="flex-none p-4 border-b border-gray-700 bg-gray-800/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold",
+                  currentResult?.status === 'passed' && "bg-green-600",
+                  currentResult?.status === 'failed' && "bg-red-600",
+                  currentResult?.status === 'skipped' && "bg-gray-600",
+                  currentResult?.status === 'pending' && "bg-amber-600"
+                )}>
+                  {currentStepIndex + 1}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    {getActionIcon(currentStep?.qword)}
+                    {stepDetails.action}
+                  </h2>
+                  <p className="text-xs text-gray-500">Step {currentStepIndex + 1} of {steps.length}</p>
+                </div>
+              </div>
+              <Badge className={cn(
+                "px-3 py-1",
+                currentResult?.status === 'passed' && "bg-green-500/20 text-green-400",
+                currentResult?.status === 'failed' && "bg-red-500/20 text-red-400",
+                currentResult?.status === 'skipped' && "bg-gray-500/20 text-gray-400",
+                currentResult?.status === 'pending' && "bg-amber-500/20 text-amber-400"
+              )}>
+                {currentResult?.status || 'pending'}
+              </Badge>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Test Case Description */}
-      {testCase.description && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Description</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{testCase.description}</p>
-          </CardContent>
-        </Card>
-      )}
+          {/* Content Area with Tabs */}
+          <div className="flex-1 overflow-hidden">
+            <Tabs defaultValue="execute" className="h-full flex flex-col">
+              <TabsList className="flex-none mx-4 mt-2 bg-gray-800 border border-gray-700">
+                <TabsTrigger value="execute" className="flex-1">Execute</TabsTrigger>
+                <TabsTrigger value="evidence" className="flex-1 relative">
+                  Evidence
+                  {(currentResult?.screenshots?.length || currentResult?.defectId) && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-      {/* Test Steps */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Test Steps</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {testCase.steps?.map((step: any, stepIndex: number) => {
-            const stepStatus = getStepStatus(stepIndex);
-            const stepResultId = getStepResultId(stepIndex);
-            const screenshots = getStepScreenshots(stepIndex);
-            const stepDefects = getStepDefects(stepIndex);
-            const stepNumber = stepIndex + 1;
-            
-            return (
-              <div key={stepIndex} className="border rounded-lg p-4 space-y-3 bg-muted/30">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant={
-                        stepStatus === "passed" ? "default" : 
-                        stepStatus === "failed" ? "destructive" : 
-                        "secondary"
-                      }>
-                        {stepStatus === "passed" && <CheckCircle className="h-3 w-3 mr-1" />}
-                        {stepStatus === "failed" && <XCircle className="h-3 w-3 mr-1" />}
-                        {stepStatus === "pending" && <Clock className="h-3 w-3 mr-1" />}
-                        Step {stepNumber}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-medium">Action: {step.action}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Expected: {step.expectedResult}
-                      </p>
-                    </div>
-                  </div>
-                  {testRun.status === "executing" && stepStatus === "pending" && stepResultId ? (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-green-600 hover:text-green-700"
-                        onClick={() => markStep(stepResultId, "passed")}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Pass
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-red-600 hover:text-red-700"
-                        onClick={() => {
-                          const error = prompt("Enter error message (optional):");
-                          markStep(stepResultId, "failed", error || "");
-                        }}
-                      >
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Fail
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-                
-                {/* Screenshot Upload */}
-                {stepResultId && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={el => fileInputRefs.current[stepResultId] = el}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleScreenshotUpload(stepResultId, file);
-                        }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileInputRefs.current[stepResultId]?.click()}
-                    >
-                      <Camera className="h-4 w-4 mr-1" />
-                      Upload Screenshot
-                    </Button>
+              {/* Execute Tab */}
+              <TabsContent value="execute" className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Step Details */}
+                {stepDetails.details.length > 0 && (
+                  <div className="bg-gray-900/50 rounded-lg p-3 space-y-1">
+                    {stepDetails.details.map((detail, idx) => (
+                      <div key={idx} className="flex gap-2 text-sm">
+                        <span className="text-gray-500 min-w-[70px]">{detail.label}:</span>
+                        <span className="text-white font-mono bg-gray-800 px-2 py-0.5 rounded break-all">{detail.value}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-                
-                {/* Display Screenshots */}
-                {screenshots.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Screenshots:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {screenshots.map((screenshot: any, idx: number) => (
-                        <div key={idx} className="relative group">
+
+                {/* Expected Result */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <div className="text-blue-400 text-xs uppercase tracking-wide flex items-center gap-1 mb-1">
+                    <Check className="w-3 h-3" />
+                    Expected Result
+                  </div>
+                  <p className="text-white text-sm">{currentStep?.expectedResult || 'Step completes successfully'}</p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="bg-gray-900/80 rounded-lg p-4 border border-gray-700">
+                  <div className="text-gray-400 text-xs uppercase tracking-wide mb-3">Mark Step Result</div>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => markStep('passed')}
+                      className="flex-1 h-11 bg-green-600 hover:bg-green-500 text-white font-semibold"
+                      disabled={currentResult?.status !== 'pending'}
+                    >
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      PASS
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const error = prompt("Enter failure reason:");
+                        if (error !== null) markStep('failed', error || 'Step failed');
+                      }}
+                      className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white font-semibold"
+                      disabled={currentResult?.status !== 'pending'}
+                    >
+                      <XCircle className="h-5 w-5 mr-2" />
+                      FAIL
+                    </Button>
+                    <Button
+                      onClick={() => markStep('skipped')}
+                      variant="outline"
+                      className="h-11 border-gray-600 text-gray-300 px-4"
+                      disabled={currentResult?.status !== 'pending'}
+                    >
+                      <SkipForward className="h-4 w-4 mr-1" />
+                      Skip
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Error if failed */}
+                {currentResult?.errorMessage && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-red-400 text-sm font-medium mb-1">
+                      <AlertCircle className="w-4 h-4" />
+                      Failure Reason
+                    </div>
+                    <p className="text-gray-300 text-sm">{currentResult.errorMessage}</p>
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <Label className="text-gray-400 text-xs uppercase">Notes</Label>
+                  <Textarea
+                    value={stepNotes || currentResult?.notes || ''}
+                    onChange={(e) => setStepNotes(e.target.value)}
+                    placeholder="Add observations..."
+                    className="mt-1 bg-gray-900/50 border-gray-700 text-white h-20"
+                  />
+                </div>
+              </TabsContent>
+
+              {/* Evidence Tab */}
+              <TabsContent value="evidence" className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Screenshots Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <Label className="text-gray-300 text-sm flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-blue-400" />
+                      Screenshots ({currentResult?.screenshots?.length || 0})
+                    </Label>
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleScreenshotUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                      <Button size="sm" onClick={() => fileInputRef.current?.click()} className="bg-blue-600 hover:bg-blue-500">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Screenshot
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {currentResult?.screenshots?.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {currentResult.screenshots.map((img, idx) => (
+                        <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-700 bg-gray-900">
                           <img
-                            src={screenshot.url || screenshot.metadata?.url}
+                            src={img}
                             alt={`Screenshot ${idx + 1}`}
-                            className="rounded-lg border max-h-48 w-full object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => {
-                              const url = screenshot.url || screenshot.metadata?.url;
-                              if (url) {
-                                window.open(url, '_blank');
-                              }
-                            }}
+                            className="w-full h-40 object-cover cursor-pointer hover:opacity-90"
+                            onClick={() => setShowScreenshotPreview(img)}
                           />
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                const url = screenshot.url || screenshot.metadata?.url;
-                                if (url) {
-                                  window.open(url, '_blank');
-                                }
-                              }}
-                            >
-                              <ExternalLink className="h-3 w-3" />
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => setShowScreenshotPreview(img)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => removeScreenshot(idx)}>
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* Defect Linking */}
-                {stepResultId && (
-                  <div className="flex items-center gap-2">
-                    {isLinkingDefect === stepResultId ? (
-                      <Select onValueChange={(defectId) => {
-                        if (defectId) {
-                          linkDefect(defectId, stepResultId);
-                        }
-                      }}>
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue placeholder="Select defect" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {defects.filter(d => !stepDefects.some((sd: any) => sd.id === d.id)).map(defect => (
-                            <SelectItem key={defect.id} value={defect.id}>
-                              {defect.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsLinkingDefect(stepResultId)}
-                      >
-                        <Link className="h-4 w-4 mr-1" />
-                        Link Defect
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* Display Linked Defects */}
-                {stepDefects.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium flex items-center gap-1">
-                      <Bug className="h-4 w-4" />
-                      Linked Defects:
-                    </p>
-                    <div className="space-y-1">
-                      {stepDefects.map((defect: any) => (
-                        <div key={defect.id} className="flex items-center justify-between p-2 border rounded bg-background hover:bg-muted/50 transition-colors">
-                          <div className="flex items-center gap-2 flex-1">
-                            <Badge variant={defect.priority === "critical" || defect.priority === "high" ? "destructive" : "secondary"}>
-                              {defect.priority}
-                            </Badge>
-                            <span className="text-sm font-medium">{defect.title}</span>
-                            {defect.description && (
-                              <span className="text-xs text-muted-foreground ml-2 truncate">{defect.description}</span>
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate(`/defects/edit/${defect.id}`)}
-                            className="ml-2"
-                          >
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Comments Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium flex items-center gap-1">
-                      <MessageSquare className="h-4 w-4" />
-                      Comments ({comments[stepResultId || '']?.length || 0})
-                    </p>
-                    {stepResultId && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setShowCommentBox(prev => ({ ...prev, [stepResultId]: !prev[stepResultId] }));
-                          if (!comments[stepResultId]) {
-                            loadComments(stepResultId);
-                          }
-                        }}
-                      >
-                        <MessageSquare className="h-3 w-3 mr-1" />
-                        {showCommentBox[stepResultId] ? 'Cancel' : 'Add Comment'}
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {showCommentBox[stepResultId] && stepResultId && (
-                    <div className="space-y-2 p-3 border rounded bg-background">
-                      <Textarea
-                        placeholder="Add a comment about this step..."
-                        value={newComment[stepResultId] || ''}
-                        onChange={(e) => setNewComment(prev => ({ ...prev, [stepResultId]: e.target.value }))}
-                        className="min-h-[80px]"
-                      />
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setShowCommentBox(prev => ({ ...prev, [stepResultId]: false }));
-                            setNewComment(prev => ({ ...prev, [stepResultId]: '' }));
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            if (stepResultId) {
-                              addComment(newComment[stepResultId] || '', stepResultId);
-                            }
-                          }}
-                        >
-                          Post Comment
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Display Comments */}
-                  {comments[stepResultId || ''] && comments[stepResultId || ''].length > 0 && (
-                    <div className="space-y-2">
-                      {comments[stepResultId || ''].map((comment: any) => (
-                        <div key={comment.id} className="p-3 border rounded bg-background text-sm">
-                          <div className="flex items-center gap-2 mb-1">
-                            <User className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(comment.created_at).toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-sm">{comment.comment}</p>
-                        </div>
-                      ))}
+                  ) : (
+                    <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center">
+                      <ImageIcon className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">No screenshots attached</p>
+                      <p className="text-gray-600 text-xs">Click "Add Screenshot" to upload evidence</p>
                     </div>
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+
+                {/* Defects Section */}
+                <div className="border-t border-gray-700 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <Label className="text-gray-300 text-sm flex items-center gap-2">
+                      <Bug className="w-4 h-4 text-red-400" />
+                      Linked Defect
+                    </Label>
+                    {!currentResult?.defectId && (
+                      <Button size="sm" onClick={() => setShowDefectDialog(true)} className="bg-red-600 hover:bg-red-500">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create Defect
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {currentResult?.defectId ? (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Bug className="w-6 h-6 text-red-400" />
+                        <div>
+                          <span className="text-red-400 font-mono font-medium">{currentResult.defectId}</span>
+                          <p className="text-white text-sm">{currentResult.defectTitle}</p>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={removeDefect} className="text-gray-400 hover:text-red-400">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center">
+                      <Bug className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">No defect linked</p>
+                      <p className="text-gray-600 text-xs">Create a defect if this step reveals a bug</p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Navigation Footer */}
+          <div className="flex-none p-4 border-t border-gray-700 bg-gray-900/50 flex items-center justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))}
+              disabled={currentStepIndex === 0}
+              className="border-gray-700 text-gray-300"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            
+            {isTestComplete ? (
+              testIds.length > 1 && currentTestIndex < testIds.length - 1 ? (
+                <Button onClick={navigateToNextTest} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                  Next Test
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              ) : (
+                <Button onClick={() => navigate('/test-cases?tab=runs')} className="bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+                  <Save className="h-4 w-4 mr-2" />
+                  Complete Run
+                </Button>
+              )
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setCurrentStepIndex(Math.min(steps.length - 1, currentStepIndex + 1))}
+                disabled={currentStepIndex === steps.length - 1}
+                className="border-gray-700 text-gray-300"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Screenshot Preview */}
+      <Dialog open={!!showScreenshotPreview} onOpenChange={() => setShowScreenshotPreview(null)}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="text-white">Screenshot Preview</DialogTitle>
+          </DialogHeader>
+          {showScreenshotPreview && (
+            <img src={showScreenshotPreview} alt="Screenshot" className="w-full rounded-lg" />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Defect Dialog */}
+      <Dialog open={showDefectDialog} onOpenChange={setShowDefectDialog}>
+        <DialogContent className="bg-gray-800 border-gray-700">
+          <DialogHeader>
+            <DialogTitle className="text-white">Create Defect for Step {currentStepIndex + 1}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-gray-400">Title *</Label>
+              <Input
+                value={newDefect.title}
+                onChange={(e) => setNewDefect({ ...newDefect, title: e.target.value })}
+                placeholder="Brief description of the bug..."
+                className="mt-1 bg-gray-900 border-gray-700 text-white"
+              />
+            </div>
+            <div>
+              <Label className="text-gray-400">Severity</Label>
+              <select
+                value={newDefect.severity}
+                onChange={(e) => setNewDefect({ ...newDefect, severity: e.target.value })}
+                className="w-full mt-1 bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-white"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-gray-400">Description</Label>
+              <Textarea
+                value={newDefect.description}
+                onChange={(e) => setNewDefect({ ...newDefect, description: e.target.value })}
+                placeholder="Steps to reproduce, expected vs actual..."
+                className="mt-1 bg-gray-900 border-gray-700 text-white h-24"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDefectDialog(false)} className="border-gray-700">Cancel</Button>
+            <Button onClick={createDefect} className="bg-red-600 hover:bg-red-500">
+              <Bug className="h-4 w-4 mr-2" />
+              Create Defect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

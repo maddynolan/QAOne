@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:*; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://localhost:*;">
+  <title>Flowstral Desktop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #030712;
+      --text-primary: #f0f0f5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Minimal title bar drag region - just for window controls */
+    .title-bar {
+      height: 32px;
+      background: var(--bg-primary);
+      -webkit-app-region: drag;
+    }
+
+    /* View container - React webapp loads here via BrowserView */
+    .view-container {
+      flex: 1;
+      background: var(--bg-primary);
+      -webkit-app-region: no-drag;
+    }
+  </style>
+</head>
+<body>
+  <!-- Minimal title bar for window drag -->
+  <div class="title-bar"></div>
+
+  <!-- View container - BrowserView for webapp loads over this -->
+  <div class="view-container"></div>
+
+  <script>
+    // All navigation is now handled by the React webapp's StreamlinedLayout
+    // This shell only provides the window frame
+    
+    // Listen for recording status
+    window.flowstral?.on('recording-status', ({ recording }) => {
+      console.log('[Shell] Recording status:', recording);
+    });
+
+    // Listen for connection status
+    window.flowstral?.on('connection-status', (status) => {
+      console.log('[Shell] Connection status:', status);
+    });
+
+    console.log('[Shell] Minimal shell ready - Navigation handled by React');
+  </script>
+</body>
+</html>

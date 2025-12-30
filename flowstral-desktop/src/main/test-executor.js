@@ -14,6 +14,7 @@ class TestExecutor {
     this.viewport = options.viewport || { width: 1280, height: 720 };
     this.timeout = options.timeout || 30000;
     this.capturePassScreenshots = options.capturePassScreenshots || false; // Capture screenshots for passed steps
+    this.stepDelay = options.stepDelay || 300; // Delay between steps (ms) - prevents skipping fast clicks
     this.onStepStart = options.onStepStart || (() => {});
     this.onStepComplete = options.onStepComplete || (() => {});
     this.onTestComplete = options.onTestComplete || (() => {});
@@ -385,48 +386,143 @@ class TestExecutor {
           });
           break;
           
-        // Click text action (normalized)
-        case 'ClickText':
+        // Click text action (normalized) - ROBUST VERSION with retries and fallbacks
+        case 'ClickText': {
           const clickText = resolvedStep.args?.[0];
-          console.log(`[Executor] ClickText: "${clickText}"`);
-          // Try multiple strategies for clicking text
-          try {
-            await this.page.getByText(clickText, { exact: false }).first().click({ timeout: 10000 });
-          } catch (e1) {
-            // Fallback: try role-based selector
-            try {
-              await this.page.getByRole('button', { name: clickText }).first().click({ timeout: 5000 });
-            } catch (e2) {
-              // Fallback: try link
+          const selectorObj = resolvedStep.selectorObj || {};
+          // Element index for duplicate elements (0 = first, 1 = second, etc.)
+          const elementIndex = typeof resolvedStep.args?.[1] === 'number' ? resolvedStep.args[1] : 0;
+          console.log(`[Executor] ClickText: "${clickText}"${elementIndex > 0 ? ` (index: ${elementIndex})` : ''}`);
+          
+          // Helper to get locator at specific index
+          const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
+          
+          // Detect if this is likely a checkbox/radio by selectorObj data
+          const isCheckboxRadio = selectorObj.tag === 'input' && 
+            (selectorObj.name?.includes('__c') || // Salesforce custom field
+             selectorObj.id?.startsWith('checkbox') || 
+             selectorObj.id?.startsWith('radio'));
+          
+          let clickSuccess = false;
+          let clickLocator = null;
+          const maxRetries = 3;
+          
+          // STRATEGY 1: If checkbox/radio, use name attribute selector with .check()
+          if (isCheckboxRadio && selectorObj.name) {
+            console.log(`[Executor] Detected checkbox/radio, trying name selector: ${selectorObj.name}`);
+            for (let retry = 0; retry < maxRetries && !clickSuccess; retry++) {
               try {
-                await this.page.getByRole('link', { name: clickText }).first().click({ timeout: 5000 });
-              } catch (e3) {
-                // Fallback: try menuitem
-                try {
-                  await this.page.getByRole('menuitem', { name: clickText }).first().click({ timeout: 5000 });
-                } catch (e4) {
-                  // Last fallback: use aria-label or title
-                  await this.page.locator(`[aria-label*="${clickText}"], [title*="${clickText}"]`).first().click({ timeout: 5000 });
+                const checkboxLocator = this.page.locator(`input[name="${selectorObj.name}"]`).first();
+                await checkboxLocator.waitFor({ state: 'attached', timeout: 5000 });
+                // Use check() for checkboxes - more reliable than click()
+                const inputType = await checkboxLocator.getAttribute('type');
+                if (inputType === 'checkbox') {
+                  await checkboxLocator.check({ timeout: 5000, force: true });
+                } else {
+                  await checkboxLocator.click({ timeout: 5000, force: true });
+                }
+                clickSuccess = true;
+                clickLocator = checkboxLocator;
+                console.log(`[Executor] ✓ Checkbox/radio clicked via name selector`);
+              } catch (e) {
+                if (retry < maxRetries - 1) {
+                  console.log(`[Executor] Retry ${retry + 1}/${maxRetries} for checkbox...`);
+                  await this.page.waitForTimeout(500);
                 }
               }
             }
           }
           
-          // If this looks like a login button, wait for potential redirect
+          // STRATEGY 2: Text-based selectors with multiple fallbacks
+          const textStrategies = [
+            () => getAtIndex(this.page.getByText(clickText, { exact: false })),
+            () => getAtIndex(this.page.getByRole('button', { name: clickText })),
+            () => getAtIndex(this.page.getByRole('link', { name: clickText })),
+            () => getAtIndex(this.page.getByRole('checkbox', { name: clickText })),
+            () => getAtIndex(this.page.getByRole('radio', { name: clickText })),
+            () => getAtIndex(this.page.getByLabel(clickText)),
+            () => getAtIndex(this.page.locator(`label:has-text("${clickText}")`)),
+            () => getAtIndex(this.page.getByRole('menuitem', { name: clickText })),
+            () => getAtIndex(this.page.locator(`[aria-label*="${clickText}"], [title*="${clickText}"]`)),
+            // Salesforce-specific: span with text inside checkbox container
+            () => this.page.locator(`.slds-checkbox span:has-text("${clickText}"), .slds-radio span:has-text("${clickText}")`).first(),
+            // Click the actual input near text
+            () => this.page.locator(`text="${clickText}" >> xpath=../preceding-sibling::input | text="${clickText}" >> xpath=../input`).first(),
+          ];
+          
+          if (!clickSuccess) {
+            for (const getLocator of textStrategies) {
+              if (clickSuccess) break;
+              
+              for (let retry = 0; retry < 2 && !clickSuccess; retry++) {
+                try {
+                  clickLocator = getLocator();
+                  await clickLocator.waitFor({ state: 'visible', timeout: retry === 0 ? 3000 : 5000 });
+                  
+                  // For checkbox/radio roles, use check() method
+                  const role = await clickLocator.getAttribute('role').catch(() => null);
+                  const type = await clickLocator.getAttribute('type').catch(() => null);
+                  
+                  if (type === 'checkbox' || role === 'checkbox') {
+                    await clickLocator.check({ timeout: 3000 }).catch(async () => {
+                      await clickLocator.click({ timeout: 3000, force: true });
+                    });
+                  } else if (type === 'radio' || role === 'radio') {
+                    await clickLocator.click({ timeout: 3000, force: true });
+                  } else {
+                    await clickLocator.click({ timeout: 3000 });
+                  }
+                  
+                  clickSuccess = true;
+                  console.log(`[Executor] ✓ Click succeeded with strategy`);
+                } catch (e) {
+                  // Try next strategy
+                }
+              }
+            }
+          }
+          
+          // STRATEGY 3: Last resort - CSS selector from recording
+          if (!clickSuccess && selectorObj.id) {
+            console.log(`[Executor] Trying recorded ID selector: #${selectorObj.id}`);
+            try {
+              clickLocator = this.page.locator(`#${selectorObj.id}`);
+              await clickLocator.click({ timeout: 5000, force: true });
+              clickSuccess = true;
+              console.log(`[Executor] ✓ Click succeeded with ID selector`);
+            } catch (e) {
+              // Continue to throw
+            }
+          }
+          
+          if (!clickSuccess) {
+            throw new Error(`Could not click "${clickText}" after trying all strategies`);
+          }
+          
+          // Wait for UI to settle - longer for form elements
+          const isFormElement = isCheckboxRadio || 
+            (clickText && clickText.length < 30 && clickText.split(' ').length <= 3);
+          
+          if (isFormElement) {
+            console.log('[Executor] Form element click, waiting for state change...');
+            await this.page.waitForTimeout(500);
+          } else {
+            await this.page.waitForTimeout(300);
+          }
+          
+          // If this looks like a login/submit button, wait for page update
           const clickTextLower = (clickText || '').toLowerCase();
           if (clickTextLower.includes('log in') || clickTextLower.includes('login') || 
               clickTextLower.includes('sign in') || clickTextLower.includes('submit')) {
-            console.log('[Executor] Detected login/submit click, waiting for potential redirect...');
+            console.log('[Executor] Detected login/submit click, waiting for page update...');
             try {
-              // Wait for navigation to complete (Salesforce redirects after login)
               await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-              // Also wait for network to settle
-              await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
             } catch (e) {
               console.log('[Executor] Navigation wait timed out, continuing...');
             }
           }
           break;
+        }
           
         // Click element action (normalized)
         case 'ClickElement':
@@ -461,31 +557,31 @@ class TestExecutor {
           
         // Input actions
         case 'Fill':
-        case 'input':
+        case 'input': {
           const fieldName = resolvedStep.args?.[0];
           const inputValue = resolvedStep.args?.[1] || resolvedStep.value || '';
-          const selectorObj = resolvedStep.selectorObj || {};
+          const fillSelectorObj = resolvedStep.selectorObj || {};
           
           // Build list of selectors to try (in priority order)
           const selectorsToTry = [];
           
           // 1. Explicit selector from recording
           if (resolvedStep.selector) selectorsToTry.push(this.normalizeSelector(resolvedStep.selector));
-          if (selectorObj.selector) selectorsToTry.push(selectorObj.selector);
+          if (fillSelectorObj.selector) selectorsToTry.push(fillSelectorObj.selector);
           
           // 2. ID (most reliable)
-          if (selectorObj.id) selectorsToTry.push(`#${selectorObj.id}`);
+          if (fillSelectorObj.id) selectorsToTry.push(`#${fillSelectorObj.id}`);
           
           // 3. Name attribute
-          if (selectorObj.name) selectorsToTry.push(`[name="${selectorObj.name}"]`);
-          if (fieldName && fieldName !== selectorObj.name) selectorsToTry.push(`[name="${fieldName}"]`);
+          if (fillSelectorObj.name) selectorsToTry.push(`[name="${fillSelectorObj.name}"]`);
+          if (fieldName && fieldName !== fillSelectorObj.name) selectorsToTry.push(`[name="${fieldName}"]`);
           
           // 4. Placeholder (common for modern UIs)
-          if (selectorObj.placeholder) selectorsToTry.push(`[placeholder="${selectorObj.placeholder}"]`);
+          if (fillSelectorObj.placeholder) selectorsToTry.push(`[placeholder="${fillSelectorObj.placeholder}"]`);
           if (fieldName) selectorsToTry.push(`[placeholder*="${fieldName}"]`);
           
           // 5. Aria-label (accessibility)
-          if (selectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${selectorObj.ariaLabel}"]`);
+          if (fillSelectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${fillSelectorObj.ariaLabel}"]`);
           
           // 6. Label text (Playwright's label= selector)
           if (fieldName) selectorsToTry.push(`label=${fieldName}`);
@@ -500,14 +596,26 @@ class TestExecutor {
             try {
               console.log(`[Executor] Trying selector: ${selector}`);
               const locator = this.page.locator(selector).first();
-              // Quick check if element exists (500ms timeout)
-              await locator.waitFor({ state: 'visible', timeout: 2000 });
+              
+              // First scroll into view (element might be below the fold)
+              await locator.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+              
+              // Wait for element to be visible and editable
+              await locator.waitFor({ state: 'visible', timeout: 5000 });
+              
+              // Click to focus first (helps with some complex input components)
+              await locator.click({ timeout: 2000 }).catch(() => {});
+              
+              // Small delay for focus to register
+              await this.page.waitForTimeout(100);
+              
+              // Now fill
               await locator.fill(inputValue);
               console.log(`[Executor] ✅ Fill succeeded with selector: ${selector}`);
               fillSuccess = true;
               break;
             } catch (e) {
-              console.log(`[Executor] ❌ Selector failed: ${selector}`);
+              console.log(`[Executor] ❌ Selector failed: ${selector} - ${e.message}`);
               continue;
             }
           }
@@ -516,6 +624,7 @@ class TestExecutor {
             throw new Error(`Fill failed: Could not find input for "${fieldName}". Tried ${uniqueSelectors.length} selectors.`);
           }
           break;
+        }
           
         // Select dropdown
         case 'Select':
@@ -1186,15 +1295,15 @@ class TestExecutor {
           }
         }
         
-        // Capture screenshot for BOTH pass and fail (if enabled or on failure)
+        // Capture screenshot ONLY for failures (reduces flickering)
         try {
-          if (stepResult.status === 'failed' || this.capturePassScreenshots) {
+          if (stepResult.status === 'failed') {
             const screenshotBuffer = await this.page.screenshot({ type: 'png' });
             stepResult.screenshot = `data:image/png;base64,${screenshotBuffer.toString('base64')}`;
-            console.log(`[Executor] Screenshot captured for step ${i + 1} (${stepResult.status})`);
+            console.log(`[Executor] Screenshot captured for failed step ${i + 1}`);
           }
         } catch (e) {
-          console.warn(`[Executor] Failed to capture screenshot for step ${i + 1}:`, e.message);
+          // Silent - screenshot is optional
         }
         
         results.steps.push(stepResult);
@@ -1205,6 +1314,12 @@ class TestExecutor {
         }
 
         this.onStepComplete(i, step, stepResult);
+        
+        // Add delay between steps to prevent skipping fast clicks
+        // This gives the UI time to settle before the next action
+        if (i < testData.steps.length - 1 && this.stepDelay > 0) {
+          await this.page.waitForTimeout(this.stepDelay);
+        }
 
         // Stop on failure (unless soft assert)
         if (stepResult.status === 'failed' && !step.softAssert) {

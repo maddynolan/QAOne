@@ -28,8 +28,9 @@ from typing import Dict, Any
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def test_connection(username: str, password: str, token: str, domain: str = "login") -> bool:
-    """Test Salesforce connection"""
+def test_connection(username: str, password: str, token: str, domain: str = "login",
+                    client_id: str = None, client_secret: str = None) -> bool:
+    """Test Salesforce connection - supports both SOAP and OAuth"""
     print("\n" + "="*60)
     print("🔌 TEST 1: Salesforce Connection")
     print("="*60)
@@ -37,12 +38,36 @@ def test_connection(username: str, password: str, token: str, domain: str = "log
     try:
         from simple_salesforce import Salesforce
         
-        sf = Salesforce(
-            username=username,
-            password=password,
-            security_token=token,
-            domain=domain
-        )
+        # Try OAuth first if client credentials provided
+        if client_id and client_secret:
+            print("🔐 Using OAuth Connected App authentication...")
+            try:
+                sf = Salesforce(
+                    username=username,
+                    password=password + token,  # Password + token combined for OAuth
+                    consumer_key=client_id,
+                    consumer_secret=client_secret,
+                    domain=domain
+                )
+                print("✅ OAuth authentication successful!")
+            except Exception as oauth_err:
+                print(f"⚠️  OAuth failed: {oauth_err}")
+                print("🔄 Trying SOAP API fallback...")
+                sf = Salesforce(
+                    username=username,
+                    password=password,
+                    security_token=token,
+                    domain=domain
+                )
+        else:
+            # Standard SOAP authentication
+            print("🔐 Using SOAP API authentication...")
+            sf = Salesforce(
+                username=username,
+                password=password,
+                security_token=token,
+                domain=domain
+            )
         
         # Test query
         result = sf.query("SELECT Id, Name FROM Account LIMIT 1")
@@ -412,6 +437,8 @@ def main():
     parser.add_argument('--password', '-p', help='Salesforce password')
     parser.add_argument('--token', '-t', help='Salesforce security token')
     parser.add_argument('--domain', '-d', default='login', help='login or test (sandbox)')
+    parser.add_argument('--client-id', '-c', help='Connected App Consumer Key')
+    parser.add_argument('--client-secret', '-s', help='Connected App Consumer Secret')
     parser.add_argument('--skip-live', action='store_true', help='Skip live connection test')
     args = parser.parse_args()
     
@@ -420,6 +447,8 @@ def main():
     password = args.password or os.getenv('SF_PASSWORD')
     token = args.token or os.getenv('SF_SECURITY_TOKEN', '')
     domain = args.domain
+    client_id = args.client_id or os.getenv('SF_CLIENT_ID')
+    client_secret = args.client_secret or os.getenv('SF_CLIENT_SECRET')
     
     print("\n" + "="*60)
     print("🚀 FLOWSTRAL SALESFORCE INTEGRATION TEST SUITE")
@@ -429,7 +458,7 @@ def main():
     
     # Test 1: Live connection (if credentials provided)
     if not args.skip_live and username and password:
-        results['connection'] = test_connection(username, password, token, domain)
+        results['connection'] = test_connection(username, password, token, domain, client_id, client_secret)
     else:
         print("\n⏭️  Skipping live connection test (no credentials)")
         print("   Set SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN environment variables")

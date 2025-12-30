@@ -123,6 +123,22 @@
       gap: 4px;
     }
 
+    .tab-action {
+      padding: 10px 12px;
+      cursor: pointer;
+      color: rgba(255, 255, 255, 0.5);
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-left: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .tab-action:hover {
+      color: #8B5CF6;
+      background: rgba(139, 92, 246, 0.1);
+    }
+
     .tab:hover {
       color: rgba(255, 255, 255, 0.8);
       background: rgba(255, 255, 255, 0.03);
@@ -255,6 +271,32 @@
     .btn-success:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid rgba(139, 92, 246, 0.5);
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      background: rgba(139, 92, 246, 0.15);
+      border-color: #8B5CF6;
+      color: white;
+    }
+
+    .btn-icon {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: rgba(255, 255, 255, 0.6);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
     }
 
     .btn-ai {
@@ -1058,6 +1100,55 @@
     .modal-content {
       width: 100%;
       max-width: 350px;
+      background: linear-gradient(180deg, #1a1a24 0%, #0f0f14 100%);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(139, 92, 246, 0.1);
+      border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 14px;
+      color: white;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+    }
+
+    .modal-body {
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .constraint-section {
@@ -1114,7 +1205,7 @@
     </div>
   </div>
 
-  <!-- Tab Bar -->
+  <!-- Tab Bar - Optimized 3 Tabs -->
   <div class="tab-bar">
     <div class="tab active" data-tab="record">
       <span class="tab-icon">🎥</span> Record
@@ -1122,18 +1213,21 @@
     <div class="tab" data-tab="suggest">
       <span class="tab-icon">💡</span> Suggest
     </div>
-    <div class="tab" data-tab="script">
-      <span class="tab-icon">📝</span> Script
+    <div class="tab" data-tab="salesforce">
+      <span class="tab-icon">☁️</span> SF
     </div>
-    <div class="tab" data-tab="review">
-      <span class="tab-icon">✏️</span> Review
+    <!-- Settings as icon button -->
+    <div class="tab-action" id="settingsBtn" title="Settings">
+      <span>⚙️</span>
     </div>
-    <div class="tab" data-tab="run">
-      <span class="tab-icon">▶️</span> Run
-    </div>
-    <div class="tab" data-tab="settings">
-      <span class="tab-icon">⚙️</span> Settings
-    </div>
+  </div>
+  
+  <!-- Hidden tabs for backward compatibility - not shown in UI but functionality preserved -->
+  <div class="hidden-tabs" style="display: none;">
+    <div class="tab" data-tab="script"></div>
+    <div class="tab" data-tab="review"></div>
+    <div class="tab" data-tab="run"></div>
+    <div class="tab" data-tab="settings"></div>
   </div>
 
   <!-- ==================== RECORD TAB ==================== -->
@@ -1181,10 +1275,29 @@
       <button class="btn btn-danger hidden" id="stopBtn">⏹ Stop</button>
       <button class="btn btn-secondary" id="clearBtn">🗑️ Clear</button>
     </div>
+    
+    <!-- Main Action Buttons Row -->
     <div class="controls" style="margin-top: 8px;">
-      <button class="btn btn-success" id="saveTestCaseBtn" title="Save as Test Case for review" disabled>💾 Save Test Case</button>
-      <button class="btn btn-secondary" id="openWorkflowBtn" title="Open in Workflow Editor" disabled>🔗 Builder</button>
+      <button class="btn btn-success" id="runTestInlineBtn" title="Run the recorded test" disabled style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+        ▶️ Run Test
+      </button>
+      <button class="btn btn-secondary" id="saveTestCaseBtn" title="Save as Test Case" disabled>💾 Save</button>
+      <button class="btn btn-secondary" id="openWorkflowBtn" title="Open in Builder" disabled>🔗 Builder</button>
     </div>
+    
+    <!-- Quick Actions Bar -->
+    <div class="controls" style="margin-top: 8px; gap: 4px;">
+      <button class="btn btn-outline" id="copyScriptBtn" title="Copy Script" disabled style="flex: 1; padding: 6px;">
+        📋 Copy
+      </button>
+      <button class="btn btn-outline" id="toggleScriptPreviewBtn" title="Toggle Script Preview" style="flex: 1; padding: 6px;">
+        📝 Script
+      </button>
+      <button class="btn btn-outline" id="exportOptionsBtn" title="Export Options" disabled style="flex: 1; padding: 6px;">
+        📥 Export
+      </button>
+    </div>
+    
     <!-- Protocol/HAR Export - Only visible when protocol data is captured -->
     <div class="controls protocol-actions" id="protocolActions" style="margin-top: 8px; display: none;">
       <button class="btn" id="exportHarBtn" style="background: linear-gradient(135deg, #7c3aed, #8b5cf6); border-color: #7c3aed;" title="Export protocol data as HAR file">
@@ -1193,6 +1306,17 @@
       <button class="btn btn-secondary" id="loadTestBtn" title="Open load testing page with this protocol data">
         ⚡ Load Test
       </button>
+    </div>
+
+    <!-- Inline Script Preview (Collapsible) -->
+    <div class="script-preview-inline" id="scriptPreviewInline" style="display: none; margin-top: 12px;">
+      <div class="settings-section" style="padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; color: rgba(255,255,255,0.7);">📝 Generated Script</span>
+          <button class="btn-icon" id="closeScriptPreviewBtn" style="padding: 2px 6px; font-size: 10px;">✕</button>
+        </div>
+        <pre id="inlineScriptCode" style="font-size: 10px; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 6px; max-height: 150px; overflow: auto; white-space: pre-wrap; color: #22c55e; font-family: monospace;"></pre>
+      </div>
     </div>
 
     <div class="actions-container">
@@ -1418,6 +1542,140 @@
       <div class="controls" style="flex-wrap: wrap;">
         <button class="btn btn-ai" id="assertAllBtn" disabled>✅ Assert All Visible</button>
         <button class="btn btn-secondary" id="capturePageBtn" disabled>📸 Capture Page</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SALESFORCE TEMPLATES TAB ==================== -->
+  <div class="tab-content" id="tab-salesforce">
+    <!-- Salesforce Detection -->
+    <div id="sfDetectionBanner" class="status-bar" style="display: none; background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%); border: 1px solid rgba(34, 197, 94, 0.4);">
+      <div class="status-row">
+        <span class="status-label">☁️ Salesforce Detected</span>
+        <span class="status-value" style="color: #22c55e;" id="sfObjectDetected">-</span>
+      </div>
+    </div>
+    
+    <!-- Header -->
+    <div class="settings-section" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 10px; padding: 12px; margin-bottom: 12px;">
+      <div class="section-title" style="color: #38BDF8;">
+        ☁️ Salesforce Quick Create
+      </div>
+      <p style="font-size: 10px; color: rgba(255,255,255,0.7); margin-top: 4px;">
+        Pre-built templates with auto-generated test data for Salesforce standard objects.
+      </p>
+    </div>
+    
+    <!-- Search -->
+    <div class="form-group" style="margin-bottom: 8px;">
+      <input type="text" class="form-control" id="sfTemplateSearch" placeholder="🔍 Search templates...">
+    </div>
+    
+    <!-- Category Filter -->
+    <div style="display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap;">
+      <button class="btn btn-sm sf-category-btn active" data-category="all" style="font-size: 10px; padding: 4px 8px;">All</button>
+      <button class="btn btn-sm sf-category-btn" data-category="sales" style="font-size: 10px; padding: 4px 8px;">💰 Sales</button>
+      <button class="btn btn-sm sf-category-btn" data-category="service" style="font-size: 10px; padding: 4px 8px;">📋 Service</button>
+      <button class="btn btn-sm sf-category-btn" data-category="marketing" style="font-size: 10px; padding: 4px 8px;">📢 Marketing</button>
+      <button class="btn btn-sm sf-category-btn" data-category="common" style="font-size: 10px; padding: 4px 8px;">⚡ Common</button>
+    </div>
+    
+    <!-- Templates List -->
+    <div class="settings-section">
+      <div class="section-title" style="display: flex; justify-content: space-between;">
+        <span>📦 Object Templates</span>
+        <span id="sfTemplateCount" style="font-size: 10px; color: rgba(255,255,255,0.5);">8 templates</span>
+      </div>
+      <div id="sfTemplatesList" class="actions-container" style="max-height: 300px; overflow-y: auto;">
+        <!-- Templates will be rendered here -->
+        <div class="empty-state" style="padding: 20px;">
+          <div class="icon">☁️</div>
+          <p>Loading templates...</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Quick Create Buttons -->
+    <div class="settings-section">
+      <div class="section-title">⚡ Quick Create</div>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+        <button class="btn btn-secondary sf-quick-create" data-object="Account" style="font-size: 10px; padding: 8px;">
+          🏢 Account
+        </button>
+        <button class="btn btn-secondary sf-quick-create" data-object="Contact" style="font-size: 10px; padding: 8px;">
+          👤 Contact
+        </button>
+        <button class="btn btn-secondary sf-quick-create" data-object="Opportunity" style="font-size: 10px; padding: 8px;">
+          💰 Opportunity
+        </button>
+        <button class="btn btn-secondary sf-quick-create" data-object="Case" style="font-size: 10px; padding: 8px;">
+          📋 Case
+        </button>
+        <button class="btn btn-secondary sf-quick-create" data-object="Lead" style="font-size: 10px; padding: 8px;">
+          🎯 Lead
+        </button>
+        <button class="btn btn-secondary sf-quick-create" data-object="Task" style="font-size: 10px; padding: 8px;">
+          ✅ Task
+        </button>
+      </div>
+    </div>
+    
+    <!-- Selected Template Config -->
+    <div id="sfConfigSection" class="settings-section" style="display: none;">
+      <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="sfSelectedTemplateName">Configure Template</span>
+        <button id="sfRegenerateDataBtn" class="btn btn-sm" style="font-size: 10px; padding: 4px 8px;">
+          🔄 Regenerate
+        </button>
+      </div>
+      
+      <!-- Options -->
+      <div class="toggle-row" style="margin-bottom: 8px;">
+        <span class="toggle-label">📍 Include Navigation Steps</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="sfIncludeNavigation" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="toggle-row" style="margin-bottom: 8px;">
+        <span class="toggle-label">✅ Include Verification</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="sfIncludeVerification" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      
+      <!-- Fields List -->
+      <div id="sfFieldsList" style="max-height: 200px; overflow-y: auto; margin-bottom: 8px;">
+        <!-- Fields will be rendered here -->
+      </div>
+      
+      <!-- Actions -->
+      <div class="controls" style="margin-top: 8px; flex-wrap: wrap;">
+        <button id="sfInsertStepsBtn" class="btn btn-success" style="flex: 1;">
+          ▶️ Insert Steps
+        </button>
+        <button id="sfCreateTestCaseBtn" class="btn btn-primary" style="flex: 1;">
+          💾 Create Test Case
+        </button>
+      </div>
+      <div class="controls" style="margin-top: 4px;">
+        <button id="sfCopyJSONBtn" class="btn btn-secondary" style="flex: 1;">
+          📋 Copy JSON
+        </button>
+        <button id="sfCancelBtn" class="btn btn-secondary" style="flex: 1;">
+          ✕ Cancel
+        </button>
+      </div>
+    </div>
+    
+    <!-- Preview Section -->
+    <div id="sfPreviewSection" class="settings-section" style="display: none;">
+      <div class="section-title" style="display: flex; justify-content: space-between;">
+        <span>👁️ Steps Preview</span>
+        <span id="sfPreviewCount" style="font-size: 10px; color: rgba(255,255,255,0.5);">0 steps</span>
+      </div>
+      <div id="sfPreviewList" class="actions-container" style="max-height: 200px; overflow-y: auto;">
       </div>
     </div>
   </div>
@@ -1789,6 +2047,11 @@
     <div class="settings-section">
       <div class="section-title">🏗️ Advanced Features</div>
       <div class="toggle-group">
+        <label class="toggle-item" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+          <input type="checkbox" id="flowstralEngineToggle" checked>
+          <span class="toggle-label" style="color: white; font-weight: 600;">🚀 Flowstral Engine (Recommended)</span>
+          <span class="toggle-hint" style="color: rgba(255,255,255,0.8);">Smart element finding, MFA bypass, self-healing</span>
+        </label>
         <label class="toggle-item">
           <input type="checkbox" id="selfHealingToggle" checked>
           <span class="toggle-label">🔧 Self-Healing Locators</span>
@@ -1848,6 +2111,244 @@
     </div>
   </div>
 
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>⚙️ Settings</h3>
+        <button class="modal-close" id="closeSettingsModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Server Configuration -->
+        <div class="settings-section">
+          <div class="section-title">🌐 Server Configuration</div>
+          <div class="form-group">
+            <label class="form-label">Backend URL</label>
+            <input type="text" class="form-control" id="settingsBackendUrl" value="http://localhost:8000" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Frontend URL</label>
+            <input type="text" class="form-control" id="settingsFrontendUrl" value="http://localhost:8080" />
+          </div>
+        </div>
+        
+        <!-- Recording Options -->
+        <div class="settings-section">
+          <div class="section-title">🎥 Recording Options</div>
+          <div class="toggle-row">
+            <span class="toggle-label">Auto-scroll to elements</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingsAutoScroll" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Capture screenshots</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingsScreenshots">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Smart wait between actions</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingsSmartWait" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        
+        <!-- Script Options -->
+        <div class="settings-section">
+          <div class="section-title">📝 Script Options</div>
+          <div class="form-group">
+            <label class="form-label">Default Framework</label>
+            <select class="form-control" id="settingsFramework">
+              <option value="playwright">Playwright</option>
+              <option value="cypress">Cypress</option>
+              <option value="selenium">Selenium</option>
+              <option value="puppeteer">Puppeteer</option>
+            </select>
+          </div>
+          <div class="toggle-row">
+            <span class="toggle-label">Include comments</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingsComments" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="resetSettingsBtn">Reset</button>
+        <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Options Dropdown -->
+  <div id="exportDropdown" class="dropdown-menu" style="display: none; position: fixed; background: #1a1a24; border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 4px; z-index: 1000; min-width: 160px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <button class="dropdown-item" data-format="playwright" style="width: 100%; padding: 8px 12px; background: none; border: none; color: white; text-align: left; cursor: pointer; border-radius: 4px; font-size: 12px;">
+      🎭 Playwright
+    </button>
+    <button class="dropdown-item" data-format="cypress" style="width: 100%; padding: 8px 12px; background: none; border: none; color: white; text-align: left; cursor: pointer; border-radius: 4px; font-size: 12px;">
+      🌲 Cypress
+    </button>
+    <button class="dropdown-item" data-format="selenium" style="width: 100%; padding: 8px 12px; background: none; border: none; color: white; text-align: left; cursor: pointer; border-radius: 4px; font-size: 12px;">
+      🔧 Selenium
+    </button>
+    <button class="dropdown-item" data-format="gherkin" style="width: 100%; padding: 8px 12px; background: none; border: none; color: white; text-align: left; cursor: pointer; border-radius: 4px; font-size: 12px;">
+      🥒 Gherkin/BDD
+    </button>
+    <button class="dropdown-item" data-format="json" style="width: 100%; padding: 8px 12px; background: none; border: none; color: white; text-align: left; cursor: pointer; border-radius: 4px; font-size: 12px;">
+      📄 JSON
+    </button>
+  </div>
+
+  <!-- Salesforce Templates -->
+  <script src="../lib/salesforce-templates.js"></script>
   <script src="sidepanel.js"></script>
+  <!-- Flowstral Engine Integration - robust test generation -->
+  <script src="flowstral_engine_integration.js"></script>
+  <!-- Salesforce Templates UI Handler -->
+  <script src="salesforce-templates-ui.js"></script>
+  
+  <!-- New UI Handlers -->
+  <script>
+    // Settings Modal Handler
+    document.getElementById('settingsBtn')?.addEventListener('click', () => {
+      document.getElementById('settingsModal').style.display = 'flex';
+    });
+    
+    document.getElementById('closeSettingsModal')?.addEventListener('click', () => {
+      document.getElementById('settingsModal').style.display = 'none';
+    });
+    
+    document.getElementById('saveSettingsBtn')?.addEventListener('click', () => {
+      // Save settings to localStorage
+      const settings = {
+        backendUrl: document.getElementById('settingsBackendUrl').value,
+        frontendUrl: document.getElementById('settingsFrontendUrl').value,
+        autoScroll: document.getElementById('settingsAutoScroll').checked,
+        screenshots: document.getElementById('settingsScreenshots').checked,
+        smartWait: document.getElementById('settingsSmartWait').checked,
+        framework: document.getElementById('settingsFramework').value,
+        comments: document.getElementById('settingsComments').checked,
+      };
+      localStorage.setItem('qaai_settings', JSON.stringify(settings));
+      document.getElementById('settingsModal').style.display = 'none';
+      
+      // Update backend URL if available
+      if (window.updateBackendUrl) {
+        window.updateBackendUrl(settings.backendUrl);
+      }
+    });
+    
+    document.getElementById('resetSettingsBtn')?.addEventListener('click', () => {
+      document.getElementById('settingsBackendUrl').value = 'http://localhost:8000';
+      document.getElementById('settingsFrontendUrl').value = 'http://localhost:8080';
+      document.getElementById('settingsAutoScroll').checked = true;
+      document.getElementById('settingsScreenshots').checked = false;
+      document.getElementById('settingsSmartWait').checked = true;
+      document.getElementById('settingsFramework').value = 'playwright';
+      document.getElementById('settingsComments').checked = true;
+    });
+    
+    // Load saved settings
+    try {
+      const saved = localStorage.getItem('qaai_settings');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.backendUrl) document.getElementById('settingsBackendUrl').value = settings.backendUrl;
+        if (settings.frontendUrl) document.getElementById('settingsFrontendUrl').value = settings.frontendUrl;
+        if (settings.autoScroll !== undefined) document.getElementById('settingsAutoScroll').checked = settings.autoScroll;
+        if (settings.screenshots !== undefined) document.getElementById('settingsScreenshots').checked = settings.screenshots;
+        if (settings.smartWait !== undefined) document.getElementById('settingsSmartWait').checked = settings.smartWait;
+        if (settings.framework) document.getElementById('settingsFramework').value = settings.framework;
+        if (settings.comments !== undefined) document.getElementById('settingsComments').checked = settings.comments;
+      }
+    } catch (e) {}
+    
+    // Script Preview Toggle
+    document.getElementById('toggleScriptPreviewBtn')?.addEventListener('click', () => {
+      const preview = document.getElementById('scriptPreviewInline');
+      if (preview.style.display === 'none') {
+        preview.style.display = 'block';
+        // Generate script preview
+        if (window.generateScript) {
+          document.getElementById('inlineScriptCode').textContent = window.generateScript();
+        }
+      } else {
+        preview.style.display = 'none';
+      }
+    });
+    
+    document.getElementById('closeScriptPreviewBtn')?.addEventListener('click', () => {
+      document.getElementById('scriptPreviewInline').style.display = 'none';
+    });
+    
+    // Copy Script
+    document.getElementById('copyScriptBtn')?.addEventListener('click', () => {
+      if (window.generateScript) {
+        const script = window.generateScript();
+        navigator.clipboard.writeText(script).then(() => {
+          const btn = document.getElementById('copyScriptBtn');
+          btn.textContent = '✅ Copied!';
+          setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+        });
+      }
+    });
+    
+    // Export Options Dropdown
+    const exportBtn = document.getElementById('exportOptionsBtn');
+    const exportDropdown = document.getElementById('exportDropdown');
+    
+    exportBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = exportBtn.getBoundingClientRect();
+      exportDropdown.style.top = (rect.bottom + 4) + 'px';
+      exportDropdown.style.left = rect.left + 'px';
+      exportDropdown.style.display = exportDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    document.addEventListener('click', () => {
+      exportDropdown.style.display = 'none';
+    });
+    
+    exportDropdown?.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const format = item.dataset.format;
+        if (window.exportScript) {
+          window.exportScript(format);
+        }
+        exportDropdown.style.display = 'none';
+      });
+      
+      item.addEventListener('mouseenter', () => {
+        item.style.background = 'rgba(139, 92, 246, 0.2)';
+      });
+      item.addEventListener('mouseleave', () => {
+        item.style.background = 'none';
+      });
+    });
+    
+    // Run Test Inline
+    document.getElementById('runTestInlineBtn')?.addEventListener('click', () => {
+      if (window.runRecordedTest) {
+        window.runRecordedTest();
+      } else {
+        alert('Run test functionality requires the backend server');
+      }
+    });
+    
+    // Update button states when actions change
+    window.updateRecordButtonStates = function(hasActions) {
+      const btns = ['runTestInlineBtn', 'copyScriptBtn', 'exportOptionsBtn', 'saveTestCaseBtn', 'openWorkflowBtn'];
+      btns.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = !hasActions;
+      });
+    };
+  </script>
 </body>
 </html>

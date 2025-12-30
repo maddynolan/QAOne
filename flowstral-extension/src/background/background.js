@@ -39,20 +39,12 @@ class RecordingManager {
       return true; // Keep channel open for async response
     });
 
-    // Listen for tab updates (URL changes)
+    // Listen for tab updates - ONLY for content script injection, NOT navigation recording
+    // Navigation recording is handled by content.js to avoid duplicates
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (this.state.recording && this.state.trackedTabs.has(tabId)) {
-        if (changeInfo.url) {
-          this.state.actions.push({
-            type: 'navigate',
-            url: changeInfo.url,
-            timestamp: Date.now(),
-            description: `Navigate to ${new URL(changeInfo.url).pathname}`,
-            method: 'page-load',
-            tabId: tabId,
-          });
-        }
         // When tab finishes loading, inject content script
+        // (navigation events are recorded by content.js, not here - prevents duplicates)
         if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://')) {
           this.injectContentScript(tabId);
         }
@@ -200,18 +192,194 @@ class RecordingManager {
 
       case 'ACTION_RECORDED':
         console.log('[Background] Received ACTION_RECORDED:', message.action.type, message.action.description);
-        this.state.actions.push(message.action);
+
+        const newAction = message.action;
+        
+        // ENHANCED DEDUPLICATION: Multiple strategies
+        // 1. Exact timestamp match (original check)
+        const actionSignature = `${newAction.type}_${newAction.timestamp}_${newAction.url || newAction.value || newAction.description || ''}`;
+        const isExactDuplicate = this.state.actions.some(a => {
+          const existingSignature = `${a.type}_${a.timestamp}_${a.url || a.value || a.description || ''}`;
+          return existingSignature === actionSignature;
+        });
+        
+        if (isExactDuplicate) {
+          console.log('[Background] Skipping exact duplicate action:', newAction.type);
+          sendResponse({ count: this.state.actions.length, duplicate: true });
+          break;
+        }
+        
+        // 2. SEMANTIC DEDUPLICATION for fill actions - same selector within time window = update
+        if (newAction.type === 'fill' && newAction.selector) {
+          const newSelStr = this.normalizeSelector(this.getSelectorString(newAction.selector));
+          const now = newAction.timestamp;
+          
+          // Only look at recent actions (last 30 seconds) to avoid updating old fills
+          // Search backwards from end for efficiency
+          let existingFillIdx = -1;
+          for (let i = this.state.actions.length - 1; i >= 0; i--) {
+            const a = this.state.actions[i];
+            // Stop searching if action is too old (more than 30 seconds ago)
+            if (now - a.timestamp > 30000) break;
+            
+            if (a.type === 'fill' && a.selector) {
+              const existingSelStr = this.normalizeSelector(this.getSelectorString(a.selector));
+              if (existingSelStr === newSelStr) {
+                existingFillIdx = i;
+                break;
+              }
+            }
+          }
+          
+          if (existingFillIdx >= 0) {
+            // Update existing fill instead of adding duplicate
+            console.log('[Background] Updating existing fill action (within 30s window)');
+            this.state.actions[existingFillIdx].value = newAction.value;
+            this.state.actions[existingFillIdx].displayValue = newAction.displayValue;
+            this.state.actions[existingFillIdx].timestamp = newAction.timestamp;
+            this.saveState();
+            sendResponse({ count: this.state.actions.length, updated: true });
+            chrome.runtime.sendMessage({ type: 'ACTION_UPDATED', action: this.state.actions[existingFillIdx] }).catch(() => {});
+            break;
+          }
+        }
+        
+        // 3. Click/Hover deduplication - if we have hover then click on same element, keep only click
+        let skipClickHover = false;
+        if ((newAction.type === 'click' || newAction.type === 'hover') && newAction.selector) {
+          const newSelStr = this.normalizeSelector(this.getSelectorString(newAction.selector));
+          const now = newAction.timestamp;
+          
+          // Look for same-element click/hover within last 3 seconds
+          for (let i = this.state.actions.length - 1; i >= Math.max(0, this.state.actions.length - 10); i--) {
+            const a = this.state.actions[i];
+            if ((a.type === 'click' || a.type === 'hover') && a.selector) {
+              const existingSelStr = this.normalizeSelector(this.getSelectorString(a.selector));
+              const timeDiff = Math.abs(now - a.timestamp);
+              
+              if (existingSelStr === newSelStr && timeDiff < 3000) {
+                // Same element within 3 seconds
+                if (newAction.type === 'click' && a.type === 'hover') {
+                  // Click after hover - remove hover, add click
+                  console.log('[Background] Click after hover on same element - removing hover');
+                  this.state.actions.splice(i, 1);
+                  // Continue to add the click
+                } else if (newAction.type === 'hover' && a.type === 'click') {
+                  // Hover after click - skip hover entirely
+                  console.log('[Background] Hover after click on same element - skipping hover');
+                  sendResponse({ count: this.state.actions.length, duplicate: true });
+                  skipClickHover = true;
+                  break;
+                } else if (newAction.type === a.type) {
+                  // Same action type within 3 seconds - skip duplicate
+                  console.log('[Background] Same action type on same element within 3s - skipping');
+                  sendResponse({ count: this.state.actions.length, duplicate: true });
+                  skipClickHover = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        if (skipClickHover) break; // Exit switch case if we already handled it
+        
+        // 4. Time-window deduplication: Same type + SAME selector within 2 seconds = duplicate
+        // (Description-based was too broad - different actions can have similar descriptions)
+        let recentDupe = false;
+        const newSelStr = newAction.selector ? this.normalizeSelector(this.getSelectorString(newAction.selector)) : '';
+        
+        for (let i = this.state.actions.length - 1; i >= Math.max(0, this.state.actions.length - 20); i--) {
+          const a = this.state.actions[i];
+          if (a.type !== newAction.type) continue;
+          
+          const timeDiff = Math.abs(newAction.timestamp - a.timestamp);
+          if (timeDiff > 2000) continue;
+          
+          // For actions with selectors, require SAME selector (not just similar description)
+          if (newSelStr) {
+            const aSel = a.selector ? this.normalizeSelector(this.getSelectorString(a.selector)) : '';
+            if (aSel === newSelStr) {
+              recentDupe = true;
+              break;
+            }
+          } else {
+            // For actions without selectors (like navigate), check FULL description match
+            if (a.description === newAction.description) {
+              recentDupe = true;
+              break;
+            }
+          }
+        }
+        
+        if (recentDupe) {
+          console.log('[Background] Skipping recent duplicate (within 2s, same selector):', newAction.type);
+          sendResponse({ count: this.state.actions.length, duplicate: true });
+          break;
+        }
+
+        // Not a duplicate - add it
+        this.state.actions.push(newAction);
         this.saveState();
         console.log('[Background] Total actions now:', this.state.actions.length);
         sendResponse({ count: this.state.actions.length });
         // Broadcast to side panel for live updates
-        chrome.runtime.sendMessage({ type: 'ACTION_RECORDED', action: message.action }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'ACTION_RECORDED', action: newAction }).catch(() => {});
         break;
 
       case 'SAVE_ACTIONS':
-        // Merge actions from content script (on page unload)
-        if (message.actions) {
-          this.state.actions = [...this.state.actions, ...message.actions];
+        // CRITICAL FIX: Enhanced deduplication on page unload/navigation
+        if (message.actions && message.actions.length > 0) {
+          // Build maps for existing actions
+          const existingSignatures = new Set(
+            this.state.actions.map(a => `${a.type}_${a.timestamp}_${a.url || a.value || a.description || ''}`)
+          );
+          
+          // Build a map of existing fill action selectors for semantic dedup
+          const existingFillSelectors = new Map();
+          this.state.actions.forEach((a, idx) => {
+            if (a.type === 'fill' && a.selector) {
+              const selStr = this.normalizeSelector(this.getSelectorString(a.selector));
+              if (selStr) existingFillSelectors.set(selStr, idx);
+            }
+          });
+          
+          let newActionsAdded = 0;
+          let actionsUpdated = 0;
+          
+          for (const action of message.actions) {
+            const signature = `${action.type}_${action.timestamp}_${action.url || action.value || action.description || ''}`;
+            
+            // Check exact duplicate
+            if (existingSignatures.has(signature)) {
+              continue;
+            }
+            
+            // For fill actions, check semantic duplicate (same selector)
+            if (action.type === 'fill' && action.selector) {
+              const selStr = this.normalizeSelector(this.getSelectorString(action.selector));
+              if (existingFillSelectors.has(selStr)) {
+                // Update existing fill instead of adding new
+                const existingIdx = existingFillSelectors.get(selStr);
+                this.state.actions[existingIdx].value = action.value;
+                this.state.actions[existingIdx].displayValue = action.displayValue;
+                this.state.actions[existingIdx].timestamp = action.timestamp;
+                actionsUpdated++;
+                continue;
+              }
+            }
+            
+            // Not a duplicate - add it
+            this.state.actions.push(action);
+            existingSignatures.add(signature);
+            if (action.type === 'fill' && action.selector) {
+              const selStr = this.normalizeSelector(this.getSelectorString(action.selector));
+              if (selStr) existingFillSelectors.set(selStr, this.state.actions.length - 1);
+            }
+            newActionsAdded++;
+          }
+          
+          console.log(`[Background] SAVE_ACTIONS: ${newActionsAdded} new, ${actionsUpdated} updated, ${message.actions.length - newActionsAdded - actionsUpdated} skipped`);
           this.saveState();
         }
         sendResponse({ success: true });
@@ -430,17 +598,40 @@ class RecordingManager {
     chrome.action.setBadgeText({ text: 'REC', tabId });
     chrome.action.setBadgeBackgroundColor({ color: '#ff4757', tabId });
 
-    // Send message to content script (non-blocking - don't await)
-    chrome.tabs.sendMessage(tabId, { 
-      type: 'START_RECORDING',
-      sessionId: sessionId,
-      captureNetwork: this.state.captureNetwork 
-    }).then(() => {
+    // Send message to content script - inject if needed
+    try {
+      await chrome.tabs.sendMessage(tabId, { 
+        type: 'START_RECORDING',
+        sessionId: sessionId,
+        captureNetwork: this.state.captureNetwork 
+      });
       console.log('[Background] START_RECORDING sent to content script successfully');
-    }).catch((error) => {
-      console.error('[Background] Failed to send START_RECORDING to content script:', error);
-      // Content script might not be loaded yet - that's OK, it will start when loaded
-    });
+    } catch (error) {
+      console.warn('[Background] Content script not found, injecting now...');
+      
+      // Inject the content script
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['src/content/content.js']
+        });
+        console.log('[Background] Content script injected successfully');
+        
+        // Wait a moment for script to initialize
+        await new Promise(r => setTimeout(r, 300));
+        
+        // Try sending the message again
+        await chrome.tabs.sendMessage(tabId, { 
+          type: 'START_RECORDING',
+          sessionId: sessionId,
+          captureNetwork: this.state.captureNetwork 
+        });
+        console.log('[Background] START_RECORDING sent after injection');
+      } catch (injectError) {
+        console.error('[Background] Failed to inject content script:', injectError);
+        // Recording will still work via ACTION_RECORDED messages when content script eventually loads
+      }
+    }
 
     // Save state (non-blocking)
     this.saveState();
@@ -454,20 +645,48 @@ class RecordingManager {
     console.log('[Background] stopRecording called, current actions:', this.state.actions.length);
 
     // Try to get final actions from content script (may have actions not yet sent)
+    // CRITICAL FIX: Never replace background's deduplicated list with content's raw list
+    // Instead, MERGE any new actions from content that background might have missed
     try {
       const response = await chrome.tabs.sendMessage(
         this.state.activeTabId,
         { type: 'STOP_RECORDING' }
       );
       console.log('[Background] Content script returned', response?.actions?.length || 0, 'actions');
-      // Only use content script actions if they have MORE than what we already have
-      // This prevents losing actions if content script was reloaded
-      if (response.actions && response.actions.length > this.state.actions.length) {
-        console.log('[Background] Using content script actions (more than background)');
-        this.state.actions = response.actions;
-      } else {
-        console.log('[Background] Keeping background actions:', this.state.actions.length);
+      console.log('[Background] Background has', this.state.actions.length, 'deduplicated actions');
+      
+      // DON'T replace - background's list is already deduplicated!
+      // Only check if content has actions we might have missed (edge case: rapid actions not yet received)
+      if (response.actions && response.actions.length > 0) {
+        // Build set of existing action signatures
+        const existingSignatures = new Set(
+          this.state.actions.map(a => `${a.type}_${a.timestamp}`)
+        );
+        
+        // Only add truly new actions (not already in background)
+        let addedCount = 0;
+        for (const action of response.actions) {
+          const sig = `${action.type}_${action.timestamp}`;
+          if (!existingSignatures.has(sig)) {
+            // Run through deduplication before adding
+            const selStr = this.normalizeSelector(this.getSelectorString(action.selector) || '');
+            const isDupe = this.state.actions.some(a => {
+              const existingSel = this.normalizeSelector(this.getSelectorString(a.selector) || '');
+              return a.type === action.type && existingSel === selStr && 
+                     Math.abs(a.timestamp - action.timestamp) < 3000;
+            });
+            
+            if (!isDupe) {
+              this.state.actions.push(action);
+              existingSignatures.add(sig);
+              addedCount++;
+            }
+          }
+        }
+        console.log('[Background] Added', addedCount, 'new actions from content script');
       }
+      
+      console.log('[Background] Final deduplicated count:', this.state.actions.length);
     } catch (e) {
       console.log('[Background] Could not get actions from content script:', e);
       // Keep using the actions we already have from ACTION_RECORDED messages
@@ -847,32 +1066,29 @@ import time
 
 
 # ==================== Smart Helpers ====================
-def wait_for_page_ready(page, timeout: int = 30000):
-    """Wait for page to be fully loaded and interactive"""
+def wait_for_page_ready(page, timeout: int = 10000):
+    """Wait for page to be fully loaded and interactive - NON-BLOCKING"""
     try:
         page.wait_for_load_state("domcontentloaded", timeout=timeout)
     except:
-        pass
+        pass  # Continue even if page is still loading
     
-    # Wait for common loading indicators to disappear
+    # Wait for common loading indicators to disappear (with SHORT timeout)
     spinners = [
         ".slds-spinner",           # Salesforce
         ".loading-spinner",        # Generic
-        "[class*='spinner']",      # Generic
-        "[class*='loading']",      # Generic
-        "[aria-busy='true']",      # ARIA
     ]
     
     for spinner in spinners:
         try:
             spinner_el = page.locator(spinner).first
-            if spinner_el.is_visible(timeout=1000):
-                spinner_el.wait_for(state="hidden", timeout=10000)
+            if spinner_el.is_visible(timeout=500):
+                spinner_el.wait_for(state="hidden", timeout=5000)
         except:
-            pass  # Spinner not found or already hidden
+            pass  # Spinner not found or already hidden - continue
     
     # Small delay for JavaScript rendering
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(300)
 
 
 def safe_click(page, *selectors, timeout=10000):
@@ -883,7 +1099,7 @@ def safe_click(page, *selectors, timeout=10000):
             element = page.locator(selector).first
             element.wait_for(state="visible", timeout=timeout)
             element.scroll_into_view_if_needed()
-            element.click(force=True)
+            element.click(force=True, no_wait_after=True)
             return True
         except Exception as e:
             last_error = e
@@ -900,8 +1116,8 @@ def click_and_handle_new_tab(context, page, selector, force=True):
     # Get current page count
     initial_pages = len(context.pages)
     
-    # Click the element
-    page.locator(selector).click(force=force)
+    # Click the element (no_wait_after to avoid navigation timeout)
+    page.locator(selector).click(force=force, no_wait_after=True)
     
     # Wait briefly for potential new tab
     page.wait_for_timeout(1000)
@@ -934,13 +1150,56 @@ def test_${testName}(page: Page, context: BrowserContext):
 
     let previousAction = null;
 
-    // First pass: remove obvious duplicates
+    // First pass: remove obvious duplicates and useless actions
     const cleanedActions = [];
     const seenNavigateUrls = new Set(); // Track ALL navigate URLs, not just last one
+    const seenActionSignatures = new Set(); // Track action signatures to prevent duplicates
     
     for (let i = 0; i < actions.length; i++) {
       const action = actions[i];
       const prev = i > 0 ? cleanedActions[cleanedActions.length - 1] : null;
+      
+      // CRITICAL: Skip useless click/hover actions on generic elements with no real selector
+      // These are actions like "Click div", "Click span", "Click body" that are meaningless
+      if ((action.type === 'click' || action.type === 'hover') && action.tagName) {
+        const tag = action.tagName.toLowerCase();
+        const genericTags = ['div', 'span', 'body', 'html', 'section', 'article', 'main', 'header', 'footer', 'nav'];
+        
+        // Get the selector to check if it's meaningful
+        const selectorStr = action.selector?.playwright || action.selector?.selector || 
+                           action.selector?.primary?.playwright || action.selector?.primary?.selector || '';
+        
+        // Skip if it's a generic tag AND selector is too simple (just the tag name or empty)
+        const isTooSimple = !selectorStr || 
+                           selectorStr === tag ||
+                           selectorStr === `locator("${tag}")` ||
+                           selectorStr === `locator('${tag}')` ||
+                           selectorStr.match(/^locator\s*\(\s*['"]?(div|span|body|section)['"]?\s*\)$/i);
+        
+        if (genericTags.includes(tag) && isTooSimple) {
+          console.log(`[Flowstral] Skipping useless action: ${action.type} ${tag} (no meaningful selector)`);
+          continue;
+        }
+      }
+      
+      // CRITICAL: Create signature to detect duplicate action sequences
+      const actionSig = `${action.type}_${this.normalizeSelector(this.getSelectorString(action.selector) || action.description || '')}`;
+      
+      // Skip if we've seen this exact action recently (within last 20 actions)
+      let recentDuplicate = false;
+      const recentSigs = Array.from(seenActionSignatures).slice(-20);
+      if (recentSigs.includes(actionSig) && action.type !== 'navigate') {
+        // Check if this is part of a repeated sequence (same action appearing again)
+        console.log(`[Flowstral] Skipping repeated action: ${action.type} (seen before in sequence)`);
+        recentDuplicate = true;
+      }
+      seenActionSignatures.add(actionSig);
+      
+      if (recentDuplicate && cleanedActions.length > 10) {
+        // If we're seeing duplicates and have enough actions, we might be in a repeated flow
+        // Check if last 5 actions match a pattern from earlier
+        continue;
+      }
       
       // Skip duplicate navigations to the same URL (check all previous navigations)
       if (action.type === 'navigate') {
@@ -1147,8 +1406,8 @@ def test_${testName}(page: Page, context: BrowserContext):
 `;
         }
         
-        // Simple click for buttons
-        let clickCode = `  await page.${selector}.click({ force: true });\n`;
+        // Simple click for buttons (noWaitAfter to avoid navigation timeout)
+        let clickCode = `  await page.${selector}.click({ force: true, noWaitAfter: true });\n`;
         clickCode += `  await waitForPageReady(page);\n`;
         return clickCode;
       }
@@ -1224,6 +1483,13 @@ def test_${testName}(page: Page, context: BrowserContext):
 
   generatePythonAction(action) {
     const selector = this.formatPythonSelector(action.selector);
+    
+    // If selector is null/useless, skip this action entirely
+    if (!selector && action.type !== 'navigate' && action.type !== 'keyboard') {
+      console.log('[Flowstral] Skipping action with no valid selector:', action.type, action.description);
+      return ''; // Return empty to skip action
+    }
+    
     const isSalesforce = (action.app || '').includes('salesforce');
     const isRadioOrCheckbox = action.type === 'check' || action.type === 'uncheck';
 
@@ -1241,7 +1507,8 @@ def test_${testName}(page: Page, context: BrowserContext):
         }
         
         // Simple click for buttons and non-link elements
-        const opts = ['force=True'];  // Always use force for reliability
+        // CRITICAL: Use no_wait_after=True to avoid navigation timeout (e.g., after login button)
+        const opts = ['force=True', 'no_wait_after=True', 'timeout=10000'];
         if (action.button && action.button !== 'left') {
           opts.push(`button="${action.button}"`);
         }
@@ -1249,8 +1516,9 @@ def test_${testName}(page: Page, context: BrowserContext):
           opts.push(`modifiers=[${action.modifiers.map(m => `"${m}"`).join(', ')}]`);
         }
         const args = opts.join(', ');
+        // NOTE: Removed wait_for_page_ready() call - causes 30s timeout on slow SPAs like Salesforce
         return `    page.${selector}.click(${args})
-    wait_for_page_ready(page)
+    page.wait_for_timeout(500)  # Brief pause for UI update
 `;
       }
 
@@ -1274,15 +1542,80 @@ def test_${testName}(page: Page, context: BrowserContext):
         page.bring_to_front()
 `;
 
-      case 'fill':
+      case 'fill': {
         // Never fill radio/checkbox - skip this action
         if (action.tagName === 'input' && (action.inputType === 'radio' || action.inputType === 'checkbox')) {
           return ''; // Skip - should use check instead
         }
-        return `    page.${selector}.fill("${this.escapeStringDouble(action.value || '')}")\n`;
+        
+        const desc = (action.description || action.text || '').toLowerCase();
+        const placeholder = (action.placeholder || '').toLowerCase();
+        const isAppLauncherSearch = desc.includes('search apps') || placeholder.includes('search apps') || 
+                                    desc.includes('app launcher') || placeholder.includes('search items');
+        
+        // SALESFORCE: Special handling for App Launcher search and custom inputs
+        if (isAppLauncherSearch || isSalesforce) {
+          return `    # ROBUST: Wait for modal/input with fallback selectors + multiple fill strategies
+    _fill_done = False
+    _search_selectors = [
+        '${selector}',
+        'input[placeholder*="Search apps"]',
+        'input[placeholder*="Search Apps"]',
+        'one-app-launcher-menu input',
+        'input.slds-input[placeholder*="Search"]',
+        '[role="searchbox"]',
+        'input[type="search"]',
+    ]
+    for _attempt in range(3):
+        for _sel in _search_selectors:
+            try:
+                _el = page.locator(_sel)
+                if _el.count() > 0:
+                    _el.first.wait_for(state="visible", timeout=3000)
+                    # Strategy 1: Click to focus, then fill with short timeout
+                    try:
+                        _el.first.click(timeout=2000)
+                        page.wait_for_timeout(300)
+                        _el.first.fill("${this.escapeStringDouble(action.value || '')}", timeout=5000)
+                        _fill_done = True
+                    except:
+                        # Strategy 2: Use type() for custom Salesforce components
+                        try:
+                            _el.first.click(timeout=2000)
+                            page.wait_for_timeout(300)
+                            _el.first.type("${this.escapeStringDouble(action.value || '')}", delay=50)
+                            _fill_done = True
+                        except:
+                            # Strategy 3: Use keyboard directly
+                            _el.first.click(timeout=2000)
+                            page.keyboard.type("${this.escapeStringDouble(action.value || '')}")
+                            _fill_done = True
+                    break
+            except:
+                continue
+        if _fill_done:
+            break
+        page.wait_for_timeout(2000)  # Wait and retry
+    if not _fill_done:
+        raise Exception("Could not fill input after retries")\n`;
+        }
+        
+        // ROBUST: Wait for element to be visible before filling (handles modals, dynamic content)
+        return `    # Wait for input to be ready
+    try:
+        page.${selector}.wait_for(state="visible", timeout=10000)
+    except:
+        pass  # Continue even if wait times out
+    page.${selector}.fill("${this.escapeStringDouble(action.value || '')}")\n`;
+      }
 
       case 'type':
-        return `    page.${selector}.type("${this.escapeStringDouble(action.value || '')}")\n`;
+        return `    # Wait for input to be ready
+    try:
+        page.${selector}.wait_for(state="visible", timeout=10000)
+    except:
+        pass
+    page.${selector}.type("${this.escapeStringDouble(action.value || '')}")\n`;
 
       case 'select':
         if (action.label) {
@@ -1293,14 +1626,14 @@ def test_${testName}(page: Page, context: BrowserContext):
       case 'check': {
         // For Salesforce, prefer clicking the visible label/text instead of strict check on hidden inputs
         if (isSalesforce && this.isInteractiveSelector(action.selector)) {
-          return `    page.${selector}.click(force=True)\n`;
+          return `    page.${selector}.click(force=True, no_wait_after=True)\n`;
         }
         return `    page.${selector}.check()\n`;
       }
 
       case 'uncheck': {
         if (isSalesforce && this.isInteractiveSelector(action.selector)) {
-          return `    page.${selector}.click(force=True)\n`;
+          return `    page.${selector}.click(force=True, no_wait_after=True)\n`;
         }
         return `    page.${selector}.uncheck()\n`;
       }
@@ -1318,7 +1651,8 @@ def test_${testName}(page: Page, context: BrowserContext):
         return `    page.${selector}.set_input_files(["${this.escapeStringDouble(action.files)}"])\n`;
 
       case 'hover':
-        return `    page.${selector}.hover()\n`;
+        // Hovers are non-critical - wrap in try/except and skip on failure
+        return `    # HOVER (non-critical)\n    try:\n        page.${selector}.hover(timeout=2000)\n    except:\n        pass  # Hovers are non-critical\n`;
 
       // Agentic auto-assertions (Phase 2)
       case 'assert':
@@ -1365,9 +1699,12 @@ def test_${testName}(page: Page, context: BrowserContext):
   generatePythonWait(action, nextAction) {
     let code = '';
     
-    // Only add wait after navigation
+    // Only add wait after navigation - use domcontentloaded with timeout (networkidle fails on SPAs)
     if (action.type === 'navigate') {
-      code += `    page.wait_for_load_state("networkidle")\n`;
+      code += `    try:\n`;
+      code += `        page.wait_for_load_state("domcontentloaded", timeout=15000)\n`;
+      code += `    except:\n`;
+      code += `        pass  # Continue even if page is still loading\n`;
       return code;
     }
     
@@ -1383,14 +1720,53 @@ def test_${testName}(page: Page, context: BrowserContext):
     
     // Only wait after actions that might trigger navigation or major DOM changes
     if (action.triggersNavigation) {
-      code += `    page.wait_for_load_state("networkidle")\n`;
+      code += `    try:\n`;
+      code += `        page.wait_for_load_state("domcontentloaded", timeout=15000)\n`;
+      code += `    except:\n`;
+      code += `        pass  # Continue even if page is still loading\n`;
     } else if (action.type === 'click' && action.mightTriggerChange && nextAction) {
       // Only wait if next action is different (page might have changed)
       if (nextAction.type !== action.type || this.getSelectorString(nextAction.selector) !== this.getSelectorString(action.selector)) {
-        code += `    page.wait_for_load_state("domcontentloaded")\n`;
+        code += `    try:\n`;
+        code += `        page.wait_for_load_state("domcontentloaded", timeout=10000)\n`;
+        code += `    except:\n`;
+        code += `        pass\n`;
       }
     }
     
+    // CRITICAL: Add extra wait after login button clicks (Salesforce, etc.)
+    // Login triggers major page change - Lightning Experience needs time to load
+    const desc = (action.description || '').toLowerCase();
+    const text = (action.text || '').toLowerCase();
+    const selectorStr = JSON.stringify(action.selector || {}).toLowerCase();
+    
+    if (action.type === 'click' && (
+      desc.includes('log in') || desc.includes('login') || desc.includes('sign in') ||
+      text.includes('log in') || text.includes('login') || text.includes('sign in')
+    )) {
+      code += `    # Wait for post-login page load (Salesforce Lightning needs extra time)\n`;
+      code += `    try:\n`;
+      code += `        page.wait_for_load_state("domcontentloaded", timeout=15000)\n`;
+      code += `    except:\n`;
+      code += `        pass  # Continue - Salesforce makes continuous API calls\n`;
+      code += `    page.wait_for_timeout(5000)  # Extra wait for Lightning Experience\n`;
+    }
+    
+    // CRITICAL: Add wait for App Launcher modal after clicking waffle icon
+    if (action.type === 'click' && (
+      desc.includes('app launcher') || desc.includes('applauncher') ||
+      text.includes('app launcher') || text.includes('applauncher') ||
+      selectorStr.includes('waffle') || selectorStr.includes('app-launcher') ||
+      selectorStr.includes('slds-icon-waffle')
+    )) {
+      code += `    # Wait for App Launcher modal to open\n`;
+      code += `    try:\n`;
+      code += `        page.locator('div.slds-modal__content, div.appLauncherMenu, one-app-launcher-menu').wait_for(state="visible", timeout=10000)\n`;
+      code += `    except:\n`;
+      code += `        pass  # Modal might use different selector\n`;
+      code += `    page.wait_for_timeout(1500)  # Wait for search input to be interactive\n`;
+    }
+
     return code;
   }
 
@@ -1433,7 +1809,19 @@ def test_${testName}(page: Page, context: BrowserContext):
   }
 
   formatPythonSelector(selectorData) {
-    if (!selectorData) return 'locator("body")';
+    if (!selectorData) return null; // Return null to signal skip action
+    
+    // Helper to check if selector is useless (just a tag name)
+    const isUselessSelector = (str) => {
+      if (!str || typeof str !== 'string') return true;
+      const trimmed = str.trim().toLowerCase();
+      // Useless if it's just a tag name or locator("tagname")
+      const uselessPatterns = [
+        /^(div|span|body|html|section|article|main|header|footer|nav|aside|p|ul|li|table|tr|td)$/,
+        /^locator\s*\(\s*['"]?(div|span|body|section|article|main|header|footer|nav)['"]?\s*\)$/,
+      ];
+      return uselessPatterns.some(p => p.test(trimmed));
+    };
 
     // Helper to check if a string is a visual locator comment
     const isVisualLocator = (str) => {
@@ -1452,6 +1840,28 @@ def test_${testName}(page: Page, context: BrowserContext):
       }
       return false;
     };
+    
+    // Check if primary selector is useless
+    const primarySel = selectorData.playwright || selectorData.selector || '';
+    if (isUselessSelector(primarySel)) {
+      // Try fallbacks
+      if (selectorData.fallbacks && selectorData.fallbacks.length > 0) {
+        for (const fallback of selectorData.fallbacks) {
+          const fbSel = fallback.playwright || fallback.selector || '';
+          if (!isUselessSelector(fbSel) && !isVisualLocator(fbSel)) {
+            selectorData = fallback; // Use fallback instead
+            break;
+          }
+        }
+      }
+      
+      // If still useless, return null to skip this action
+      const newSel = selectorData.playwright || selectorData.selector || '';
+      if (isUselessSelector(newSel)) {
+        console.log('[Flowstral] Skipping useless selector:', primarySel);
+        return null;
+      }
+    }
 
     // Skip visual locator comments - they're not valid code
     if (selectorData.playwright) {
@@ -1567,9 +1977,15 @@ def test_${testName}(page: Page, context: BrowserContext):
     result = result.replace(/\{\s*name:\s*['"]([^'"]+)['"]\s*\}/g, "name='$1'");
     result = result.replace(/\{\s*hasText:\s*['"]([^'"]+)['"]\s*\}/g, "has_text='$1'");
     
-    // Convert single quotes to double quotes for strings (Python style)
-    // But preserve quotes in method calls
-    result = result.replace(/'/g, '"');
+    // CRITICAL FIX: Don't blindly replace quotes - handle nested quotes properly
+    // For selectors like locator('[data-testid="value"]'), keep single quotes on the outside
+    // Only convert single quotes to double quotes if there are no double quotes inside
+    if (!result.includes('"')) {
+      // Safe to convert single quotes to double quotes
+      result = result.replace(/'/g, '"');
+    }
+    // If there are already double quotes (like in attribute selectors), keep single quotes
+    // Python: locator('[data-testid="value"]') is valid
     
     // Fix filter syntax: .filter({ name: 'Next' }) -> .filter(name='Next')
     result = result.replace(/\.filter\(\s*\{\s*name:\s*['"]([^'"]+)['"]\s*\}\s*\)/g, ".filter(name='$1')");
@@ -1589,10 +2005,14 @@ def test_${testName}(page: Page, context: BrowserContext):
   escapeStringDouble(str) {
     if (!str) return '';
     return str
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r');
+      .replace(/\\/g, '\\\\')     // Escape backslashes first
+      .replace(/"/g, '\\"')       // Escape double quotes
+      .replace(/\n/g, '\\n')      // Escape newlines
+      .replace(/\r/g, '\\r')      // Escape carriage returns
+      .replace(/\t/g, '\\t')      // Escape tabs
+      .replace(/\f/g, '\\f')      // Escape form feeds
+      .replace(/\0/g, '')         // Remove null characters
+      .replace(/[\x00-\x1f\x7f-\x9f]/g, ''); // Remove other control characters
   }
 
   isRedundant(action, prev) {
@@ -1709,6 +2129,49 @@ def test_${testName}(page: Page, context: BrowserContext):
     // Clear from storage too (including cached scripts)
     chrome.storage.local.remove('recorderState');
     chrome.storage.local.remove('flowstral_script'); // Clear any cached script
+  }
+
+  // Helper: Get selector string from selector object
+  getSelectorString(selector) {
+    if (!selector) return '';
+    if (typeof selector === 'string') return selector;
+    
+    // Try to extract actual selector string in order of preference
+    // Priority: playwright > selector > css > primary (nested)
+    if (selector.playwright) return selector.playwright;
+    if (selector.selector) return selector.selector;
+    if (selector.css) return selector.css;
+    
+    // Check nested primary object
+    if (selector.primary) {
+      if (typeof selector.primary === 'string') return selector.primary;
+      if (selector.primary.playwright) return selector.primary.playwright;
+      if (selector.primary.selector) return selector.primary.selector;
+    }
+    
+    // Try other properties
+    if (selector.testId) return `[data-testid="${selector.testId}"]`;
+    if (selector.role) return `role=${selector.role}`;
+    if (selector.text) return `text=${selector.text}`;
+    if (selector.label) return `label=${selector.label}`;
+    if (selector.id) return `#${selector.id}`;
+    if (selector.name) return `[name="${selector.name}"]`;
+    
+    // Last resort: return empty string (not JSON) to avoid false matches
+    return '';
+  }
+  
+  // Helper: Normalize selector for comparison
+  // CRITICAL: Must match content.js normalizeSelector exactly!
+  normalizeSelector(selectorStr) {
+    if (!selectorStr) return '';
+    return selectorStr
+      .replace(/'/g, '"')                     // Normalize quotes
+      .replace(/\s+/g, ' ')                   // Normalize whitespace
+      .replace(/locator\s*\(\s*/g, 'locator(') // Normalize spacing in locator()
+      .replace(/get_by_\s*/g, 'get_by_')      // Normalize get_by methods (MUST MATCH content.js)
+      .trim()
+      .toLowerCase();
   }
 
   async saveState() {
@@ -1890,6 +2353,7 @@ Feature: ${featureName}
 
   generateSelectorFromActionData(action) {
     // Try to generate a Playwright selector from available action data
+    // CRITICAL: Generate Python snake_case syntax, not JavaScript camelCase
     if (!action) return null;
     
     // Extract text from description (e.g., "Click 'Get involved'" -> "Get involved")
@@ -1897,7 +2361,7 @@ Feature: ${featureName}
     const textMatch = description.match(/['"]([^'"]+)['"]/);
     const text = textMatch ? textMatch[1] : (action.text || '');
     
-    // For click actions, try getByRole or getByText
+    // For click actions, try get_by_role or get_by_text (Python syntax)
     if (action.type === 'click' && text) {
       // Try to determine role from description or tagName
       let role = 'button';
@@ -1908,22 +2372,22 @@ Feature: ${featureName}
       }
       
       if (text.length > 0 && text.length < 50) {
-        return `getByRole('${role}', { name: '${this.escapeString(text)}' })`;
+        return `get_by_role('${role}', name='${this.escapeString(text)}')`;
       }
     }
     
-    // For fill actions, try getByLabel or getByPlaceholder
+    // For fill actions, try get_by_label or get_by_placeholder (Python syntax)
     if (action.type === 'fill') {
       const label = action.label || action.placeholder || text;
       if (label && label.length > 0 && label.length < 50) {
-        return `getByLabel('${this.escapeString(label)}')`;
+        return `get_by_label('${this.escapeString(label)}')`;
       }
     }
     
-    // For check/uncheck, try getByRole with text
+    // For check/uncheck, try get_by_role with text (Python syntax)
     if ((action.type === 'check' || action.type === 'uncheck') && text) {
       if (text.length > 0 && text.length < 50) {
-        return `getByRole('checkbox', { name: '${this.escapeString(text)}' })`;
+        return `get_by_role('checkbox', name='${this.escapeString(text)}')`;
       }
     }
     

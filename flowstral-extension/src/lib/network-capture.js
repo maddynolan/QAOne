@@ -501,3 +501,6 @@ if (typeof module !== 'undefined' && module.exports) {
 } else if (typeof window !== 'undefined') {
   window.NetworkCapture = NetworkCapture;
 }
+
+
+

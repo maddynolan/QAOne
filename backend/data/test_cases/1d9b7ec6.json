@@ -1,0 +1,705 @@
+{
+  "id": "1d9b7ec6",
+  "name": "Store Perf Test1",
+  "status": "approved",
+  "tags": [
+    "smoke",
+    "automated",
+    "generic"
+  ],
+  "created_at": "2025-12-11T15:49:27.941923",
+  "updated_at": "2025-12-11T15:49:27.941923",
+  "metadata": {
+    "start_url": "chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html",
+    "app_type": "generic",
+    "recorded_at": "2025-12-11T20:49:27.623Z",
+    "action_count": 32,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "smoke",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "Store Perf Test1",
+    "actionCount": 32,
+    "script": null
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "description": "Navigate to /register",
+      "url": "http://localhost:3000/register",
+      "timestamp": 1765486080945
+    },
+    {
+      "type": "click",
+      "description": "Click \"Login\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Login' })",
+          "confidence": 80,
+          "description": "Role: link \"Login\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Login' })",
+            "confidence": 60,
+            "description": "Text: \"Login\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Login' })",
+        "confidence": 80,
+        "description": "Role: link \"Login\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765486082631,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Login",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "text-blue-600 hover:underline",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /login",
+      "url": "http://localhost:3000/login",
+      "timestamp": 1765486082641
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /login",
+      "url": "http://localhost:3000/login",
+      "timestamp": 1765486082644
+    },
+    {
+      "type": "click",
+      "description": "Click \"User: testuser / TestUser@2024...\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+          "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+        "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486085249,
+      "tagName": "p",
+      "innerText": "User: testuser / TestUser@2024!Secure#Pass",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "text-xs text-gray-600",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click \"User: testuser / TestUser@2024...\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+          "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+        "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486085404,
+      "tagName": "p",
+      "innerText": "User: testuser / TestUser@2024!Secure#Pass",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "text-xs text-gray-600",
+      "triggersNavigation": false
+    },
+    {
+      "type": "dblclick",
+      "description": "Double-click \"User: testuser / TestUser@2024...\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+          "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+        "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "timestamp": 1765486085406
+    },
+    {
+      "type": "keyboard",
+      "description": "Press Control+c",
+      "timestamp": 1765486086105
+    },
+    {
+      "type": "click",
+      "description": "Click input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"text\"]",
+          "playwright": "locator('input[type=\"text\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"text\"]",
+        "playwright": "locator('input[type=\"text\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486087030,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500",
+      "triggersNavigation": false
+    },
+    {
+      "type": "keyboard",
+      "description": "Press Control+v",
+      "timestamp": 1765486087745
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"text\"]",
+          "playwright": "locator('input[type=\"text\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"text\"]",
+        "playwright": "locator('input[type=\"text\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "testuser ",
+      "timestamp": 1765486087750,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"text\"]",
+          "playwright": "locator('input[type=\"text\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"text\"]",
+        "playwright": "locator('input[type=\"text\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "testuser",
+      "timestamp": 1765486089868,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"text\"]",
+          "playwright": "locator('input[type=\"text\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"text\"]",
+        "playwright": "locator('input[type=\"text\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "testuser",
+      "timestamp": 1765486092433,
+      "tagName": "input",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "click",
+      "description": "Click \"User: testuser / TestUser@2024...\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+          "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"User: testuser / TestUser@2024!Secure#Pass\"",
+        "playwright": "locator('text=\"User: testuser / TestUser@2024!Secure#Pass\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486093490,
+      "tagName": "p",
+      "innerText": "User: testuser / TestUser@2024!Secure#Pass",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "text-xs text-gray-600",
+      "triggersNavigation": false
+    },
+    {
+      "type": "keyboard",
+      "description": "Press Control+c",
+      "timestamp": 1765486094192
+    },
+    {
+      "type": "click",
+      "description": "Click input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"password\"]",
+          "playwright": "locator('input[type=\"password\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"password\"]",
+        "playwright": "locator('input[type=\"password\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486095433,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500",
+      "triggersNavigation": false
+    },
+    {
+      "type": "keyboard",
+      "description": "Press Control+v",
+      "timestamp": 1765486096158
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"password\"]",
+          "playwright": "locator('input[type=\"password\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"password\"]",
+        "playwright": "locator('input[type=\"password\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure#Pass",
+      "timestamp": 1765486096164,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input[type=\"password\"]",
+          "playwright": "locator('input[type=\"password\"]')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input[type=\"password\"]",
+        "playwright": "locator('input[type=\"password\"]')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure#Pass",
+      "timestamp": 1765486097260,
+      "tagName": "input",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Login\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Login' })",
+          "confidence": 80,
+          "description": "Role: button \"Login\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Login' })",
+            "confidence": 60,
+            "description": "Text: \"Login\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "css",
+            "selector": "button.w-full.px-4",
+            "playwright": "locator('button.w-full.px-4')",
+            "confidence": 45,
+            "description": "CSS: button.w-full.px-4",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Login' })",
+        "confidence": 80,
+        "description": "Role: button \"Login\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765486097380,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Login",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /dashboard",
+      "url": "http://localhost:3000/dashboard",
+      "timestamp": 1765486097730
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /dashboard",
+      "url": "http://localhost:3000/dashboard",
+      "timestamp": 1765486097752
+    },
+    {
+      "type": "click",
+      "description": "Click \"Products\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Products' })",
+          "confidence": 80,
+          "description": "Role: link \"Products\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Products' })",
+            "confidence": 60,
+            "description": "Text: \"Products\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Products' })",
+        "confidence": 80,
+        "description": "Role: link \"Products\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765486100550,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Products",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 hover:text-blue-600",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /products",
+      "url": "http://localhost:3000/products",
+      "timestamp": 1765486100559
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /products",
+      "url": "http://localhost:3000/products",
+      "timestamp": 1765486100590
+    },
+    {
+      "type": "click",
+      "description": "Click \"Product 10\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"Product 10\"",
+          "playwright": "locator('text=\"Product 10\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"Product 10\"",
+        "playwright": "locator('text=\"Product 10\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765486102022,
+      "tagName": "h3",
+      "innerText": "Product 10",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "font-semibold mb-2 line-clamp-2",
+      "triggersNavigation": false
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /products/10",
+      "url": "http://localhost:3000/products/10",
+      "timestamp": 1765486102027
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /products/10",
+      "url": "http://localhost:3000/products/10",
+      "timestamp": 1765486102037
+    },
+    {
+      "type": "click",
+      "description": "Click \"Add to Cart\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Add to Cart' })",
+          "confidence": 80,
+          "description": "Role: button \"Add to Cart\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Add to Cart' })",
+            "confidence": 60,
+            "description": "Text: \"Add to Cart\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "css",
+            "selector": "button.w-full.px-6",
+            "playwright": "locator('button.w-full.px-6')",
+            "confidence": 45,
+            "description": "CSS: button.w-full.px-6",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Add to Cart' })",
+        "confidence": 80,
+        "description": "Role: button \"Add to Cart\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765486103639,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Add to Cart",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click \"Logout\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Logout' })",
+          "confidence": 80,
+          "description": "Role: button \"Logout\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Logout' })",
+            "confidence": 60,
+            "description": "Text: \"Logout\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "css",
+            "selector": "button.inline-flex.items-center",
+            "playwright": "locator('button.inline-flex.items-center')",
+            "confidence": 45,
+            "description": "CSS: button.inline-flex.items-center",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Logout' })",
+        "confidence": 80,
+        "description": "Role: button \"Logout\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765486104756,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Logout",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-red-600",
+      "triggersNavigation": false
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /",
+      "url": "http://localhost:3000/",
+      "timestamp": 1765486104766
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /",
+      "url": "http://localhost:3000/",
+      "timestamp": 1765486104771
+    }
+  ],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

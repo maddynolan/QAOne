@@ -614,6 +614,21 @@ class TestExecutionService:
             code_to_write = self._sanitize_python_code(code_to_write)
         
         if language == "python":
+            # CRITICAL FIX: Fix """" (4 quotes) -> """ (3 quotes) for docstrings
+            # This handles the common issue where 4 quotes appear instead of 3
+            # Pattern 1: Fix 4+ consecutive double quotes to 3
+            code_to_write = re.sub(r'"{4,}', '"""', code_to_write)
+            
+            # Pattern 2: Fix specific case of def with 4-quote docstring
+            # Match: def ...(...):\n    """"  -> def ...(...):\n    """
+            code_to_write = re.sub(r'(def\s+\w+\([^)]*\):\s*\n\s*)""""+', r'\1"""', code_to_write)
+            
+            # Pattern 3: Fix closing 4+ quotes
+            code_to_write = re.sub(r'""""+\s*\n', '"""\n', code_to_write)
+            
+            # Also fix standalone triple-quote issues
+            code_to_write = re.sub(r'^\s*"""[^"]*"""\s*$', '', code_to_write, flags=re.MULTILINE)
+            
             # For Python, check if it has proper structure
             has_test_structure = (
                 "from playwright.sync_api" in code_to_write and 
@@ -622,6 +637,8 @@ class TestExecutionService:
             
             if not has_test_structure:
                 logger.warning("Python test code doesn't appear to have test structure, wrapping it")
+                # Strip leading/trailing whitespace and empty lines
+                code_to_write = code_to_write.strip()
                 # Wrap in basic Python test structure
                 code_to_write = f"""from playwright.sync_api import Page, expect
 
@@ -648,6 +665,35 @@ test('{test_name}', async ({{ page }}) => {{
 }});
 """
         
+        # FINAL VALIDATION: Check for common syntax errors before writing
+        # Fix any remaining """" patterns (4+ consecutive quotes)
+        code_to_write = re.sub(r'"{4,}', '"""', code_to_write)
+        code_to_write = re.sub(r"'{4,}", "'''", code_to_write)
+        
+        # Fix unclosed strings at end of lines
+        code_to_write = self._fix_unclosed_strings(code_to_write)
+        
+        # For Python, do a syntax check
+        if language == "python":
+            try:
+                import ast
+                ast.parse(code_to_write)
+                logger.info("Python syntax validation passed")
+            except SyntaxError as e:
+                logger.warning(f"Python syntax error detected (line {e.lineno}): {e.msg}")
+                # Try to fix common issues
+                lines = code_to_write.split('\n')
+                if e.lineno and e.lineno <= len(lines):
+                    problem_line = lines[e.lineno - 1]
+                    logger.warning(f"Problem line: {problem_line}")
+                    # If the problem is unclosed string, try to close it
+                    if 'EOL while scanning string literal' in str(e.msg):
+                        if problem_line.count('"') % 2 != 0:
+                            lines[e.lineno - 1] = problem_line.rstrip() + '"'
+                        elif problem_line.count("'") % 2 != 0:
+                            lines[e.lineno - 1] = problem_line.rstrip() + "'"
+                        code_to_write = '\n'.join(lines)
+        
         # Write test code to file
         with open(test_file, 'w', encoding='utf-8') as f:
             f.write(code_to_write)
@@ -665,25 +711,103 @@ test('{test_name}', async ({{ page }}) => {{
     
     def _sanitize_python_code(self, code: str) -> str:
         """Remove visual locators and fix syntax errors in Python Playwright code."""
+        # CRITICAL FIX FIRST: Fix """" (4 quotes) -> """ (3 quotes) for docstrings
+        # This is a common issue from template string processing
+        code = re.sub(r'"{4,}', '"""', code)  # Any 4+ quotes -> 3 quotes
+
+        # CRITICAL FIX: Convert JavaScript camelCase Playwright methods to Python snake_case
+        # The extension generates JavaScript syntax, but we need Python syntax
+        code = re.sub(r'\.getByRole\(', '.get_by_role(', code)
+        code = re.sub(r'\.getByText\(', '.get_by_text(', code)
+        code = re.sub(r'\.getByLabel\(', '.get_by_label(', code)
+        code = re.sub(r'\.getByPlaceholder\(', '.get_by_placeholder(', code)
+        code = re.sub(r'\.getByTestId\(', '.get_by_test_id(', code)
+        code = re.sub(r'\.getByAltText\(', '.get_by_alt_text(', code)
+        code = re.sub(r'\.getByTitle\(', '.get_by_title(', code)
+        
+        # Also fix JavaScript object syntax { name: 'value' } to Python name='value'
+        code = re.sub(r'\{\s*name:\s*[\'"]([^\'"]+)[\'"]\s*\}', r"name='\1'", code)
+        code = re.sub(r'\{\s*exact:\s*true\s*\}', r'exact=True', code)
+        code = re.sub(r'\{\s*exact:\s*false\s*\}', r'exact=False', code)
+        code = re.sub(r'\{\s*hasText:\s*[\'"]([^\'"]+)[\'"]\s*\}', r"has_text='\1'", code)
+
         # Pattern 1: Remove page.// Visual locator: ... lines
         code = re.sub(r'^\s*page\.\s*//\s*Visual\s+locator[^\n]*$', '', code, flags=re.MULTILINE | re.IGNORECASE)
-        
+
         # Pattern 2: Fix page.// Visual locator: ... .click() syntax
         code = re.sub(r'page\.\s*//\s*Visual\s+locator[^.]*\.(click|fill|check|uncheck|select|press|dblclick|hover|wait_for_load_state)\(', r'page.locator("body").\1(', code, flags=re.IGNORECASE)
-        
+
         # Pattern 3: Remove any line containing "Visual locator"
         code = re.sub(r'^\s*.*Visual\s+locator.*$', '', code, flags=re.MULTILINE | re.IGNORECASE)
-        
+
         # Pattern 4: Remove page.// comments
         code = re.sub(r'^\s*page\.\s*//[^\n]*$', '', code, flags=re.MULTILINE)
-        
+
         # Pattern 5: Fix cases where visual locator is in the middle
         code = re.sub(r'page\.\s*//[^.]*\.([a-zA-Z_]+)\(', r'page.locator("body").\1(', code)
-        
+
         # Pattern 6: Remove any remaining // Visual locator comments
         code = re.sub(r'//\s*Visual\s+locator[^\n]*', '', code, flags=re.IGNORECASE)
-        
+
+        # CRITICAL FIX: Fix unclosed string literals caused by special characters
+        # This is a common issue when selectors contain newlines, unescaped quotes, or other special chars
+        code = self._fix_unclosed_strings(code)
+
         return code
+    
+    def _fix_unclosed_strings(self, code: str) -> str:
+        """Fix unclosed string literals in generated code by properly escaping or truncating problematic strings."""
+        lines = code.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # Skip empty lines and pure comments
+            if not line.strip() or line.strip().startswith('#'):
+                fixed_lines.append(line)
+                continue
+            
+            # Count opening/closing quotes
+            double_quote_count = line.count('"') - line.count('\\"')
+            single_quote_count = line.count("'") - line.count("\\'")
+            
+            # Check for unclosed double quotes (odd number = unclosed)
+            if double_quote_count % 2 != 0:
+                # Try to fix by closing the string at end of line
+                # First, try to find the pattern: page.get_by_text("... or page.locator("...
+                match = re.search(r'(page\.[a-zA-Z_]+\(["\'])([^"\']*$)', line)
+                if match:
+                    # String is unclosed - truncate problematic text and close properly
+                    prefix = match.group(1)
+                    broken_text = match.group(2)
+                    # Escape the broken text and close properly
+                    fixed_text = broken_text.replace('"', '\\"').replace('\n', '\\n')[:100]  # Limit length
+                    quote_char = '"' if '"' in prefix else "'"
+                    closing = f'{quote_char})' if '(' in line and ')' not in line[match.start():] else f'{quote_char}'
+                    line = line[:match.start()] + prefix + fixed_text + closing
+                    logger.warning(f"Fixed unclosed string: {line[:80]}...")
+                else:
+                    # Just close with a double quote
+                    line = line + '"'
+                    logger.warning(f"Added closing quote to line: {line[:80]}...")
+            
+            # Similar check for single quotes
+            elif single_quote_count % 2 != 0:
+                match = re.search(r"(page\.[a-zA-Z_]+\(['\"])([^'\"]*$)", line)
+                if match:
+                    prefix = match.group(1)
+                    broken_text = match.group(2)
+                    fixed_text = broken_text.replace("'", "\\'").replace('\n', '\\n')[:100]
+                    quote_char = "'" if "'" in prefix else '"'
+                    closing = f"{quote_char})" if '(' in line and ')' not in line[match.start():] else f"{quote_char}"
+                    line = line[:match.start()] + prefix + fixed_text + closing
+                    logger.warning(f"Fixed unclosed string: {line[:80]}...")
+                else:
+                    line = line + "'"
+                    logger.warning(f"Added closing quote to line: {line[:80]}...")
+            
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
     
     def _sanitize_playwright_code(self, code: str) -> str:
         """Fix common syntax errors in generated Playwright code."""
@@ -696,7 +820,7 @@ test('{test_name}', async ({{ page }}) => {{
         def fix_pattern1(match):
             quote = match.group(1)
             text = match.group(2)
-            return f'page.getByText({quote}{text}{quote}).click()'
+            return f'page.get_by_text({quote}{text}{quote}).click()'
         code = re.sub(pattern1, fix_pattern1, code)
         
         # Pattern 2: More specific - handles the exact error case
@@ -708,7 +832,7 @@ test('{test_name}', async ({{ page }}) => {{
         def fix_pattern2(match):
             quote = match.group(1)
             text = match.group(2)
-            return f'page.getByText({quote}{text}{quote}).first().click()'
+            return f'page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern2, fix_pattern2, code)
         
         # Pattern 2b: Handle case where there are TWO closing quotes: "text="text""
@@ -716,7 +840,7 @@ test('{test_name}', async ({{ page }}) => {{
         def fix_pattern2b(match):
             quote = match.group(1)
             text = match.group(2)
-            return f'page.getByText({quote}{text}{quote}).first().click()'
+            return f'page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern2b, fix_pattern2b, code)
         
         # Pattern 3: Handle with await prefix
@@ -724,7 +848,7 @@ test('{test_name}', async ({{ page }}) => {{
         def fix_pattern3(match):
             quote = match.group(1)
             text = match.group(2)
-            return f'await page.getByText({quote}{text}{quote}).first().click()'
+            return f'await page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern3, fix_pattern3, code)
         
         # Pattern 3b: Handle with await prefix and double closing quotes
@@ -732,7 +856,7 @@ test('{test_name}', async ({{ page }}) => {{
         def fix_pattern3b(match):
             quote = match.group(1)
             text = match.group(2)
-            return f'await page.getByText({quote}{text}{quote}).first().click()'
+            return f'await page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern3b, fix_pattern3b, code)
         
         # Pattern 4: General case - any nested quotes with text=
@@ -743,12 +867,12 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(2)
             text = match.group(3)
             if method == 'click':
-                return f'page.getByText({quote}{text}{quote}).first().click()'
+                return f'page.get_by_text({quote}{text}{quote}).first().click()'
             elif method == 'fill':
                 # For fill, we'll need to handle the value parameter separately
-                return f'page.getByText({quote}{text}{quote}).fill('
+                return f'page.get_by_text({quote}{text}{quote}).fill('
             else:
-                return f'page.getByText({quote}{text}{quote}).{method}()'
+                return f'page.get_by_text({quote}{text}{quote}).{method}()'
         code = re.sub(pattern4, fix_pattern4, code)
         
         # Pattern 4b: Handle double closing quotes
@@ -758,11 +882,11 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(2)
             text = match.group(3)
             if method == 'click':
-                return f'page.getByText({quote}{text}{quote}).first().click()'
+                return f'page.get_by_text({quote}{text}{quote}).first().click()'
             elif method == 'fill':
-                return f'page.getByText({quote}{text}{quote}).fill('
+                return f'page.get_by_text({quote}{text}{quote}).fill('
             else:
-                return f'page.getByText({quote}{text}{quote}).{method}()'
+                return f'page.get_by_text({quote}{text}{quote}).{method}()'
         code = re.sub(pattern4b, fix_pattern4b, code)
         
         # Pattern 5: Handle with await prefix for all methods
@@ -772,11 +896,11 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(2)
             text = match.group(3)
             if method == 'click':
-                return f'await page.getByText({quote}{text}{quote}).first().click()'
+                return f'await page.get_by_text({quote}{text}{quote}).first().click()'
             elif method == 'fill':
-                return f'await page.getByText({quote}{text}{quote}).fill('
+                return f'await page.get_by_text({quote}{text}{quote}).fill('
             else:
-                return f'await page.getByText({quote}{text}{quote}).{method}()'
+                return f'await page.get_by_text({quote}{text}{quote}).{method}()'
         code = re.sub(pattern5, fix_pattern5, code)
         
         # Pattern 5b: Handle with await prefix and double closing quotes
@@ -786,11 +910,11 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(2)
             text = match.group(3)
             if method == 'click':
-                return f'await page.getByText({quote}{text}{quote}).first().click()'
+                return f'await page.get_by_text({quote}{text}{quote}).first().click()'
             elif method == 'fill':
-                return f'await page.getByText({quote}{text}{quote}).fill('
+                return f'await page.get_by_text({quote}{text}{quote}).fill('
             else:
-                return f'await page.getByText({quote}{text}{quote}).{method}()'
+                return f'await page.get_by_text({quote}{text}{quote}).{method}()'
         code = re.sub(pattern5b, fix_pattern5b, code)
         
         # Pattern 6: Catch any remaining text= patterns (most general)
@@ -800,7 +924,7 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(1)
             text = match.group(2)
             logger.warning(f"Fixing text= locator pattern: text={text}")
-            return f'page.getByText({quote}{text}{quote}).first().click()'
+            return f'page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern6, fix_pattern6, code)
         
         # Pattern 6b: With await
@@ -809,7 +933,7 @@ test('{test_name}', async ({{ page }}) => {{
             quote = match.group(1)
             text = match.group(2)
             logger.warning(f"Fixing text= locator pattern (with await): text={text}")
-            return f'await page.getByText({quote}{text}{quote}).first().click()'
+            return f'await page.get_by_text({quote}{text}{quote}).first().click()'
         code = re.sub(pattern6b, fix_pattern6b, code)
         
         # CRITICAL: Filter out internal browser URLs from page.goto() calls
@@ -1291,7 +1415,7 @@ export default defineConfig({
                         cwd=str(project_dir),
                         capture_output=True,
                         text=True,
-                        timeout=300,  # 5 minutes max
+                        timeout=600,  # 10 minutes max (Salesforce can be slow)
                         env={**os.environ, "CI": "false"},  # Ensure CI mode is off
                         shell=True  # Use shell on Windows
                     )
@@ -1301,7 +1425,7 @@ export default defineConfig({
                         cwd=str(project_dir),
                         capture_output=True,
                         text=True,
-                        timeout=300,  # 5 minutes max
+                        timeout=600,  # 10 minutes max (Salesforce can be slow)
                         env={**os.environ, "CI": "false"}  # Ensure CI mode is off
                     )
                 return {
@@ -1310,11 +1434,11 @@ export default defineConfig({
                     "stderr": result.stderr
                 }
             except subprocess.TimeoutExpired:
-                logger.error("Test execution timed out after 5 minutes")
+                logger.error("Test execution timed out after 10 minutes")
                 return {
                     "exit_code": -1,
                     "stdout": "",
-                    "stderr": "Test execution timed out after 5 minutes"
+                    "stderr": "Test execution timed out after 10 minutes"
                 }
             except Exception as e:
                 logger.error(f"Error running test: {e}", exc_info=True)
@@ -1328,14 +1452,14 @@ export default defineConfig({
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(run_test_sync),
-                timeout=310.0  # Slightly longer than subprocess timeout
+                timeout=620.0  # Slightly longer than subprocess timeout (600s for Salesforce)
             )
         except asyncio.TimeoutError:
             logger.error("Test execution timed out at asyncio level")
             result = {
                 "exit_code": -1,
                 "stdout": "",
-                "stderr": "Test execution timed out after 5 minutes"
+                "stderr": "Test execution timed out after 10 minutes"
             }
         
         exit_code = result["exit_code"]
@@ -1492,7 +1616,10 @@ export default defineConfig({
         
         if pytest_cmd:
             # Use explicit file path to avoid import issues
-            cmd = pytest_cmd + [str(test_file.name), "-v", "--tb=short", "--no-header"]
+            # Add -u for unbuffered output to ensure we capture stdout in real-time
+            if pytest_cmd[0] == "python":
+                pytest_cmd.insert(1, "-u")  # python -u -m pytest ...
+            cmd = pytest_cmd + [str(test_file.name), "-v", "--tb=short", "--no-header", "-s"]  # -s to disable output capture
             
             # Add --headed flag if not running headless
             if not headless:
@@ -1567,7 +1694,7 @@ export default defineConfig({
                         cwd=str(project_dir),
                         capture_output=True,
                         text=True,
-                        timeout=300,  # 5 minutes max
+                        timeout=600,  # 10 minutes max (Salesforce can be slow)
                         env=env,
                         shell=True  # Use shell on Windows
                     )
@@ -1577,7 +1704,7 @@ export default defineConfig({
                         cwd=str(project_dir),
                         capture_output=True,
                         text=True,
-                        timeout=300,  # 5 minutes max
+                        timeout=600,  # 10 minutes max (Salesforce can be slow)
                         env=env
                     )
                 return {
@@ -1586,11 +1713,11 @@ export default defineConfig({
                     "stderr": result.stderr
                 }
             except subprocess.TimeoutExpired:
-                logger.error("Test execution timed out after 5 minutes")
+                logger.error("Test execution timed out after 10 minutes")
                 return {
                     "exit_code": -1,
                     "stdout": "",
-                    "stderr": "Test execution timed out after 5 minutes"
+                    "stderr": "Test execution timed out after 10 minutes"
                 }
             except Exception as e:
                 logger.error(f"Error running test: {e}", exc_info=True)
@@ -1604,14 +1731,14 @@ export default defineConfig({
         try:
             result = await asyncio.wait_for(
                 asyncio.to_thread(run_test_sync),
-                timeout=310.0  # Slightly longer than subprocess timeout
+                timeout=620.0  # Slightly longer than subprocess timeout (600s for Salesforce)
             )
         except asyncio.TimeoutError:
             logger.error("Test execution timed out at asyncio level")
             result = {
                 "exit_code": -1,
                 "stdout": "",
-                "stderr": "Test execution timed out after 5 minutes"
+                "stderr": "Test execution timed out after 10 minutes"
             }
         
         exit_code = result["exit_code"]

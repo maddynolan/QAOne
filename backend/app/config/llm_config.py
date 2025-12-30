@@ -1,6 +1,16 @@
 """
 LLM Configuration
 Handles LLM provider configuration including air-gapped/offline mode.
+
+=============================================================================
+CURRENT ACTIVE PROVIDERS:
+- OpenAI (gpt-4o-mini) - Active for test case formatting ✅
+- Anthropic (Claude) - Active for development use only ✅
+
+DISABLED PROVIDERS (DGX not ready):
+- local_ollama - Set ENABLE_OLLAMA_SERVICE=true when ready
+- local_vllm - Set ENABLE_VLLM_SERVICE=true when ready
+=============================================================================
 """
 
 import os
@@ -11,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 # Air-gapped mode - blocks all external LLM calls
 AIR_GAPPED_MODE = os.getenv("AIR_GAPPED_MODE", "false").lower() == "true"
+
+# Local services disabled by default (DGX not ready)
+LOCAL_OLLAMA_ENABLED = os.getenv("ENABLE_OLLAMA_SERVICE", "false").lower() == "true"
+LOCAL_VLLM_ENABLED = os.getenv("ENABLE_VLLM_SERVICE", "false").lower() == "true"
 
 # Allowed LLM providers based on mode
 if AIR_GAPPED_MODE:
@@ -28,9 +42,13 @@ else:
 
 # Provider-specific configuration
 LLM_CONFIG = {
+    # ============================================================================
+    # LOCAL SERVICES - DISABLED (DGX not ready)
+    # Set ENABLE_OLLAMA_SERVICE=true or ENABLE_VLLM_SERVICE=true when ready
+    # ============================================================================
     "local_ollama": {
         "url": os.getenv("OLLAMA_URL", "http://localhost:11434"),
-        "enabled": True,
+        "enabled": LOCAL_OLLAMA_ENABLED,  # DISABLED by default
         "models": {
             "7b": "qwen2.5-coder:7b",
             "14b": "qwen2.5-coder:14b",
@@ -39,7 +57,7 @@ LLM_CONFIG = {
     },
     "local_vllm": {
         "url": os.getenv("VLLM_URL", "http://localhost:8000"),
-        "enabled": os.getenv("VLLM_ENABLED", "false").lower() == "true",
+        "enabled": LOCAL_VLLM_ENABLED,  # DISABLED by default
         "models": {
             "30b": "qwen3-coder-30b"
         }

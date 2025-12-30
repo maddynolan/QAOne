@@ -1,0 +1,2106 @@
+/**
+ * Flowstral Desktop v2.0 - Full On-Prem Platform
+ * 
+ * Architecture:
+ * - Main window loads embedded React web app
+ * - Navigation between Dashboard, Test Builder, Recorder, etc.
+ * - Recorder view has docked BrowserView for recording
+ * - Local SQLite storage with optional server sync
+ * - Auto-start backend service option
+ */
+
+const { app, BrowserWindow, BrowserView, ipcMain, dialog, shell, Tray, Menu, nativeImage, session, globalShortcut } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const Store = require('electron-store');
+const { autoUpdater } = require('electron-updater');
+const { v4: uuidv4 } = require('uuid');
+
+// Local modules
+const LicenseManager = require('./license');
+const BrowserController = require('./browser-controller');
+const CloudConnector = require('./cloud-connector');
+const RecorderEngine = require('./recorder');
+const EmbeddedBrowser = require('./embedded-browser');
+const PlaywrightRecorder = require('./playwright-recorder');
+const LocalStorage = require('./local-storage');
+const TestExecutor = require('./test-executor');
+
+// Playwright recorder instance (standalone browser)
+let playwrightRecorder = null;
+
+// Configuration store
+const store = new Store({
+  name: 'flowstral-config',
+  encryptionKey: 'flowstral-secure-key-2024',
+  defaults: {
+    serverUrl: 'http://localhost:8000',
+    licenseKey: '',
+    deviceId: '',
+    mode: 'personal', // personal, team, enterprise
+    preferences: {
+      launchOnStartup: true,
+      minimizeToTray: true,
+      browserType: 'chromium',
+      headless: false,
+      viewport: { width: 1280, height: 720 }
+    }
+  }
+});
+
+// Global references
+let mainWindow = null;
+let webappView = null;  // BrowserView for React webapp
+let tray = null;
+let browserController = null;
+let cloudConnector = null;
+let localStorage = null; // Local data storage
+let recorderEngine = null;
+let licenseManager = null;
+let embeddedBrowser = null;
+let currentView = 'webapp'; // 'webapp' or 'recorder'
+let lastNavigationTime = 0; // Debounce navigation
+const NAVIGATION_DEBOUNCE_MS = 1000; // 1 second debounce
+
+// Device ID for licensing
+function getDeviceId() {
+  let deviceId = store.get('deviceId');
+  if (!deviceId) {
+    deviceId = `FD-${uuidv4()}`;
+    store.set('deviceId', deviceId);
+  }
+  return deviceId;
+}
+
+// Get webapp path (bundled or dev server)
+function getWebappUrl() {
+  const isDev = process.argv.includes('--dev');
+  
+  if (isDev) {
+    // In dev mode, load from Vite dev server
+    return 'http://localhost:8080';
+  }
+  
+  // In production, load from bundled webapp
+  const webappPath = path.join(__dirname, '../../webapp/index.html');
+  if (fs.existsSync(webappPath)) {
+    return `file://${webappPath}`;
+  }
+  
+  // Fallback to dev server if no bundled webapp
+  console.log('[App] No bundled webapp found, trying dev server...');
+  return 'http://localhost:8080';
+}
+
+// Create main window with navigation shell
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 700,
+    title: 'Flowstral Desktop',
+    icon: path.join(__dirname, '../../assets/icon.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#0a0a0f',
+      symbolColor: '#ffffff',
+      height: 40
+    },
+    backgroundColor: '#0a0a0f'
+  });
+
+  // Load the navigation shell
+  mainWindow.loadFile(path.join(__dirname, '../renderer/shell.html'));
+
+  // Create webapp BrowserView (the React app)
+  createWebappView();
+
+  // Handle close to tray
+  mainWindow.on('close', (event) => {
+    if (store.get('preferences.minimizeToTray') && !app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    webappView = null;
+  });
+
+  // Handle window resize
+  mainWindow.on('resize', () => {
+    updateViewBounds();
+  });
+}
+
+// Create the webapp BrowserView
+function createWebappView() {
+  if (!mainWindow) return;
+
+  // Create persistent session for webapp
+  const persistentSession = session.fromPartition('persist:flowstral-webapp');
+
+  webappView = new BrowserView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'webapp-preload.js'),
+      session: persistentSession
+    }
+  });
+
+  mainWindow.addBrowserView(webappView);
+  
+  // Set initial bounds (below navigation bar)
+  updateViewBounds();
+
+  // Load webapp
+  const webappUrl = getWebappUrl();
+  console.log('[App] Loading webapp from:', webappUrl);
+  webappView.webContents.loadURL(webappUrl);
+
+  // Handle webapp navigation
+  webappView.webContents.on('did-navigate', (event, url) => {
+    console.log('[Webapp] Navigated to:', url);
+    // Update navigation time to prevent immediate re-navigation
+    lastNavigationTime = Date.now();
+    mainWindow?.webContents.send('webapp-url-changed', url);
+  });
+
+  // Handle new window requests (open links in same view)
+  webappView.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://localhost') || url.includes('flowstral')) {
+      webappView.webContents.loadURL(url);
+    } else {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // Focus webapp when it finishes loading
+  webappView.webContents.on('did-finish-load', () => {
+    webappView?.webContents.focus();
+  });
+  
+  // Enable opening DevTools for webapp with Ctrl+Shift+I when focused on webapp
+  webappView.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      webappView?.webContents.openDevTools({ mode: 'detach' });
+      event.preventDefault();
+    }
+  });
+}
+
+// Update view bounds based on current view mode
+function updateViewBounds() {
+  if (!mainWindow) return;
+  
+  const [width, height] = mainWindow.getContentSize();
+  const navHeight = 32; // Height of minimal title bar (for window drag)
+  
+  if (currentView === 'webapp' && webappView) {
+    webappView.setBounds({
+      x: 0,
+      y: navHeight,
+      width: width,
+      height: height - navHeight
+    });
+    webappView.setAutoResize({ width: true, height: true });
+  } else if (currentView === 'recorder') {
+    // Recorder mode: webapp (recorder controls) on left, embedded browser on right
+    // Use narrower panel (320px) to give browser more space for proper Salesforce rendering
+    const leftPanelWidth = 320;
+    const browserWidth = width - leftPanelWidth;
+    
+    // Ensure browser has minimum width for Salesforce Lightning (900px ideal)
+    // If window is too narrow, browser takes priority
+    const minBrowserWidth = 900;
+    const actualLeftPanel = browserWidth >= minBrowserWidth ? leftPanelWidth : Math.max(0, width - minBrowserWidth);
+    const actualBrowserWidth = width - actualLeftPanel;
+    
+    if (webappView) {
+      webappView.setBounds({
+        x: 0,
+        y: navHeight,
+        width: actualLeftPanel,
+        height: height - navHeight
+      });
+      webappView.setAutoResize({ width: false, height: true });
+    }
+    
+    if (embeddedBrowser?.view) {
+      embeddedBrowser.setBounds({
+        x: actualLeftPanel,
+        y: navHeight,
+        width: actualBrowserWidth,
+        height: height - navHeight
+      });
+      // Log the browser dimensions for debugging
+      console.log('[Recorder] Browser bounds:', actualBrowserWidth, 'x', height - navHeight);
+    }
+  }
+}
+
+// Switch to webapp view
+function showWebappView() {
+  currentView = 'webapp';
+  
+  // Hide embedded browser if visible
+  if (embeddedBrowser?.view) {
+    mainWindow?.removeBrowserView(embeddedBrowser.view);
+  }
+  
+  // Show webapp full width
+  updateViewBounds();
+  
+  mainWindow?.webContents.send('view-changed', 'webapp');
+}
+
+// Switch to recorder view (Playwright - standalone browser, webapp takes full width)
+function showRecorderView() {
+  console.log('[App] showRecorderView called - stack trace:', new Error().stack);
+  
+  // Don't navigate if we're already at a different page (user may have navigated away)
+  if (webappView) {
+    const currentUrl = webappView.webContents.getURL();
+    // Only navigate to recorder if we're not already there or at another valid page
+    if (currentUrl.includes('/builder') || currentUrl.includes('/test-cases') || currentUrl.includes('/settings')) {
+      console.log('[App] User is on a different page, not redirecting to recorder:', currentUrl);
+      return;
+    }
+  }
+  
+  // Since we use Playwright (standalone browser), webapp takes full width
+  // No embedded BrowserView needed
+  currentView = 'webapp'; // Keep webapp full width since browser is standalone
+  
+  // Remove any embedded browser if it exists
+  if (embeddedBrowser?.view) {
+    mainWindow?.removeBrowserView(embeddedBrowser.view);
+  }
+  
+  // Give webapp full width (no split view - Playwright opens in separate window)
+  updateViewBounds();
+  
+  // Navigate to Playwright recorder page
+  navigateWebapp('/playwright-recorder');
+  
+  // Focus the webapp view so inputs are interactive
+  setTimeout(() => {
+    webappView?.webContents.focus();
+  }, 100);
+  
+  mainWindow?.webContents.send('view-changed', 'recorder');
+}
+
+// Navigate webapp to a specific route
+function navigateWebapp(route) {
+  if (!webappView) return;
+  
+  // Debounce navigation to prevent rapid multiple navigations
+  const now = Date.now();
+  if (now - lastNavigationTime < NAVIGATION_DEBOUNCE_MS) {
+    console.log('[App] Navigation debounced for', route, '- too soon after last navigation');
+    return;
+  }
+  
+  const baseUrl = getWebappUrl().replace('/index.html', '');
+  const fullUrl = baseUrl.startsWith('file://') 
+    ? `${baseUrl}/index.html#${route}`
+    : `${baseUrl}${route}`;
+  
+  // Prevent unnecessary navigation if already at this route
+  const currentUrl = webappView.webContents.getURL();
+  if (currentUrl.includes(route)) {
+    console.log('[App] Already at', route, '- skipping navigation');
+    return;
+  }
+  
+  lastNavigationTime = now;
+  console.log('[App] Navigating webapp to:', fullUrl);
+  webappView.webContents.loadURL(fullUrl);
+}
+
+// Create system tray
+function createTray() {
+  try {
+    const iconPath = path.join(__dirname, '../../assets/tray-icon.png');
+    if (!fs.existsSync(iconPath)) {
+      console.log('[Tray] Icon not found, skipping tray');
+      return;
+    }
+    tray = new Tray(iconPath);
+  } catch (error) {
+    console.log('[Tray] Failed to create:', error.message);
+    return;
+  }
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { 
+      label: 'Open Flowstral', 
+      click: () => {
+        mainWindow?.show();
+        mainWindow?.focus();
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Dashboard',
+      click: () => {
+        mainWindow?.show();
+        showWebappView();
+        navigateWebapp('/');
+      }
+    },
+    {
+      label: 'Test Builder',
+      click: () => {
+        mainWindow?.show();
+        showWebappView();
+        navigateWebapp('/test-cases/builder');
+      }
+    },
+    {
+      label: 'Recorder',
+      click: () => {
+        mainWindow?.show();
+        showRecorderView();
+      }
+    },
+    { type: 'separator' },
+    { 
+      label: 'Quit', 
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setToolTip('Flowstral Desktop');
+  tray.setContextMenu(contextMenu);
+  
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+    }
+  });
+}
+
+// Initialize services
+async function initializeServices() {
+  const deviceId = getDeviceId();
+  const serverUrl = store.get('serverUrl');
+  const licenseKey = store.get('licenseKey');
+
+  // Initialize local storage
+  localStorage = new LocalStorage();
+  console.log('[Init] Local storage initialized');
+
+  // Initialize license manager
+  licenseManager = new LicenseManager({
+    serverUrl,
+    deviceId,
+    store
+  });
+
+  // Initialize browser controller
+  browserController = new BrowserController({
+    browserType: store.get('preferences.browserType') || 'chromium',
+    headless: false,
+    viewport: store.get('preferences.viewport') || { width: 1280, height: 720 }
+  });
+
+  // Initialize cloud connector
+  cloudConnector = new CloudConnector({
+    serverUrl,
+    deviceId,
+    licenseKey,
+    onMessage: handleCloudMessage,
+    onStatusChange: (status) => {
+      mainWindow?.webContents.send('connection-status', status);
+    }
+  });
+
+  // Initialize recorder engine
+  recorderEngine = new RecorderEngine({
+    browserController,
+    onAction: (action) => {
+      mainWindow?.webContents.send('action-recorded', action);
+    },
+    onScreenshot: (screenshot) => {
+      mainWindow?.webContents.send('screenshot', screenshot);
+    }
+  });
+
+  console.log('[Init] Services initialized');
+
+  // Validate license
+  if (licenseKey) {
+    const isValid = await licenseManager.validate(licenseKey);
+    mainWindow?.webContents.send('license-status', { valid: isValid, key: licenseKey });
+  }
+}
+
+// Handle messages from cloud
+function handleCloudMessage(message) {
+  switch (message.type) {
+    case 'start-recording':
+      showRecorderView();
+      break;
+    case 'stop-recording':
+      embeddedBrowser?.stopRecording();
+      break;
+    case 'execute-test':
+      executeTest(message.data);
+      break;
+  }
+}
+
+// Execute a test
+async function executeTest(testData) {
+  try {
+    mainWindow?.webContents.send('execution-status', { status: 'running', test: testData.name });
+    
+    for (let i = 0; i < testData.steps.length; i++) {
+      const step = testData.steps[i];
+      mainWindow?.webContents.send('step-status', { index: i, status: 'running', step });
+      
+      await recorderEngine.executeStep(step);
+      
+      mainWindow?.webContents.send('step-status', { index: i, status: 'passed', step });
+    }
+    
+    mainWindow?.webContents.send('execution-status', { status: 'passed', test: testData.name });
+  } catch (error) {
+    mainWindow?.webContents.send('execution-status', { status: 'failed', error: error.message });
+  }
+}
+
+// ============================================================================
+// IPC Handlers
+// ============================================================================
+
+// Navigation handlers
+ipcMain.handle('navigate-to', (event, route) => {
+  navigateWebapp(route);
+  return true;
+});
+
+ipcMain.handle('show-webapp', () => {
+  showWebappView();
+  return true;
+});
+
+ipcMain.handle('show-recorder', () => {
+  showRecorderView();
+  return true;
+});
+
+ipcMain.handle('get-current-view', () => {
+  return currentView;
+});
+
+ipcMain.handle('focus-webapp', () => {
+  if (webappView) {
+    webappView.webContents.focus();
+    return true;
+  }
+  return false;
+});
+
+// Open webapp DevTools (for debugging the React app)
+ipcMain.handle('open-webapp-devtools', () => {
+  if (webappView) {
+    webappView.webContents.openDevTools({ mode: 'detach' });
+    return true;
+  }
+  return false;
+});
+
+// Configuration handlers
+ipcMain.handle('get-config', () => {
+  return {
+    serverUrl: store.get('serverUrl'),
+    deviceId: getDeviceId(),
+    mode: store.get('mode'),
+    preferences: store.get('preferences'),
+    version: app.getVersion()
+  };
+});
+
+ipcMain.handle('set-config', (event, config) => {
+  if (config.serverUrl) store.set('serverUrl', config.serverUrl);
+  if (config.mode) store.set('mode', config.mode);
+  if (config.preferences) store.set('preferences', { ...store.get('preferences'), ...config.preferences });
+  return true;
+});
+
+// License handlers
+ipcMain.handle('activate-license', async (event, licenseKey) => {
+  store.set('licenseKey', licenseKey);
+  const result = await licenseManager.validate(licenseKey);
+  if (result.valid) {
+    await licenseManager.activate(licenseKey);
+  }
+  return result;
+});
+
+ipcMain.handle('deactivate-license', async () => {
+  await licenseManager.deactivate();
+  store.set('licenseKey', '');
+  return true;
+});
+
+ipcMain.handle('get-license-info', async () => {
+  return licenseManager?.getInfo() || null;
+});
+
+// Server connection handlers
+ipcMain.handle('connect-server', async () => {
+  try {
+    await cloudConnector.connect();
+    return cloudConnector.isConnected();
+  } catch (error) {
+    console.log('[Server] Connection failed:', error.message);
+    return false;
+  }
+});
+
+ipcMain.handle('disconnect-server', async () => {
+  await cloudConnector.disconnect();
+  return true;
+});
+
+// Embedded Browser handlers
+ipcMain.handle('embedded-browser-show', async (event, bounds) => {
+  try {
+    if (!embeddedBrowser) {
+      embeddedBrowser = new EmbeddedBrowser({
+        mainWindow,
+        onAction: (action) => {
+          mainWindow?.webContents.send('action-recorded', action);
+          webappView?.webContents.send('action-recorded', action);
+        },
+        onUrlChange: (url) => {
+          mainWindow?.webContents.send('browser-url-changed', url);
+        }
+      });
+    }
+    
+    if (!embeddedBrowser.mainWindow && mainWindow) {
+      embeddedBrowser.setMainWindow(mainWindow);
+    }
+    
+    embeddedBrowser.create();
+    const success = embeddedBrowser.attach(bounds);
+    
+    return success;
+  } catch (error) {
+    console.error('[EmbeddedBrowser] Show failed:', error.message);
+    return false;
+  }
+});
+
+ipcMain.handle('embedded-browser-hide', async () => {
+  try {
+    embeddedBrowser?.detach();
+    return true;
+  } catch (error) {
+    return false;
+  }
+});
+
+ipcMain.handle('embedded-browser-navigate', async (event, url) => {
+  try {
+    return await embeddedBrowser?.navigate(url);
+  } catch (error) {
+    return null;
+  }
+});
+
+ipcMain.handle('embedded-browser-start-recording', async () => {
+  try {
+    embeddedBrowser?.startRecording();
+    mainWindow?.webContents.send('recording-status', { recording: true });
+    return true;
+  } catch (error) {
+    return false;
+  }
+});
+
+ipcMain.handle('embedded-browser-stop-recording', async () => {
+  try {
+    const actions = embeddedBrowser?.stopRecording() || [];
+    mainWindow?.webContents.send('recording-status', { recording: false, actions });
+    return actions;
+  } catch (error) {
+    return [];
+  }
+});
+
+ipcMain.handle('embedded-browser-get-actions', () => {
+  return embeddedBrowser?.getActions() || [];
+});
+
+ipcMain.handle('embedded-browser-clear-actions', () => {
+  embeddedBrowser?.clearActions();
+  return true;
+});
+
+ipcMain.handle('embedded-browser-back', () => {
+  embeddedBrowser?.goBack();
+  return true;
+});
+
+ipcMain.handle('embedded-browser-forward', () => {
+  embeddedBrowser?.goForward();
+  return true;
+});
+
+ipcMain.handle('embedded-browser-refresh', () => {
+  embeddedBrowser?.refresh();
+  return true;
+});
+
+ipcMain.handle('embedded-browser-zoom', (event, factor) => {
+  embeddedBrowser?.setZoom(factor);
+  return true;
+});
+
+ipcMain.handle('embedded-browser-get-zoom', () => {
+  return embeddedBrowser?.view?.webContents?.getZoomFactor() || 1.0;
+});
+
+// ============================================================================
+// PLAYWRIGHT RECORDER (Standalone Browser - NO DOCKING)
+// Opens a separate Playwright browser window for recording
+// Uses EXACT SAME recorder-engine.js as browser extension
+// ============================================================================
+
+ipcMain.handle('playwright-recorder-start', async (event, url) => {
+  try {
+    console.log('[PlaywrightRecorder] Starting with URL:', url);
+    
+    if (!playwrightRecorder) {
+      playwrightRecorder = new PlaywrightRecorder();
+      
+      // Forward events to webappView (where the React app runs), NOT mainWindow
+      playwrightRecorder.on('action', (action) => {
+        console.log('[PlaywrightRecorder] Forwarding action to webapp:', action.description);
+        webappView?.webContents.send('playwright-recorder-action', action);
+      });
+      
+      playwrightRecorder.on('stopped', ({ actions }) => {
+        console.log('[PlaywrightRecorder] Forwarding stopped event, actions:', actions?.length);
+        webappView?.webContents.send('playwright-recorder-stopped', { actions });
+      });
+      
+      playwrightRecorder.on('paused', () => {
+        console.log('[PlaywrightRecorder] Forwarding paused event');
+        webappView?.webContents.send('playwright-recorder-paused');
+      });
+      
+      playwrightRecorder.on('resumed', () => {
+        console.log('[PlaywrightRecorder] Forwarding resumed event');
+        webappView?.webContents.send('playwright-recorder-resumed');
+      });
+      
+      playwrightRecorder.on('suggestions', ({ suggestions }) => {
+        console.log('[PlaywrightRecorder] Auto-refresh suggestions:', suggestions?.length);
+        webappView?.webContents.send('playwright-recorder-suggestions', { suggestions });
+      });
+      
+      playwrightRecorder.on('navigation', ({ url }) => {
+        console.log('[PlaywrightRecorder] Navigation detected:', url);
+        webappView?.webContents.send('playwright-recorder-navigation', { url });
+      });
+    }
+    
+    await playwrightRecorder.start(url);
+    webappView?.webContents.send('recording-status', { recording: true, mode: 'playwright' });
+    return { success: true };
+  } catch (error) {
+    console.error('[PlaywrightRecorder] Start failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('playwright-recorder-stop', async () => {
+  try {
+    if (!playwrightRecorder) return { success: false, actions: [] };
+    
+    const result = await playwrightRecorder.stop();
+    webappView?.webContents.send('recording-status', { recording: false, mode: 'playwright' });
+    return { success: true, actions: result.actions };
+  } catch (error) {
+    console.error('[PlaywrightRecorder] Stop failed:', error.message);
+    return { success: false, error: error.message, actions: [] };
+  }
+});
+
+ipcMain.handle('playwright-recorder-get-actions', () => {
+  return playwrightRecorder?.getActions() || [];
+});
+
+ipcMain.handle('playwright-recorder-clear-actions', () => {
+  playwrightRecorder?.clearActions();
+  return true;
+});
+
+ipcMain.handle('playwright-recorder-is-recording', () => {
+  return playwrightRecorder?.isRecording() || false;
+});
+
+ipcMain.handle('playwright-recorder-pause', () => {
+  if (!playwrightRecorder) return { success: false, error: 'Recorder not started' };
+  return playwrightRecorder.pause();
+});
+
+ipcMain.handle('playwright-recorder-resume', () => {
+  if (!playwrightRecorder) return { success: false, error: 'Recorder not started' };
+  return playwrightRecorder.resume();
+});
+
+ipcMain.handle('playwright-recorder-is-paused', () => {
+  return playwrightRecorder?.isPaused() || false;
+});
+
+ipcMain.handle('playwright-recorder-add-manual-action', async (event, action) => {
+  if (!playwrightRecorder) {
+    return { success: false, error: 'Recorder not started' };
+  }
+  return playwrightRecorder.addManualAction(action);
+});
+
+// Analyze page and return suggestions (Playwright recorder)
+ipcMain.handle('playwright-recorder-analyze', async () => {
+  if (!playwrightRecorder) {
+    return { success: false, suggestions: [], error: 'Recorder not started' };
+  }
+  return await playwrightRecorder.analyzePage();
+});
+
+// Execute a suggestion action (Playwright recorder)
+ipcMain.handle('playwright-recorder-execute-action', async (event, action) => {
+  if (!playwrightRecorder) {
+    return { success: false, error: 'Recorder not started' };
+  }
+  return await playwrightRecorder.executeAction(action);
+});
+
+// Run test with steps (Playwright recorder) - uses existing browser if available
+ipcMain.handle('playwright-recorder-run-test', async (event, options) => {
+  try {
+    if (!playwrightRecorder) {
+      playwrightRecorder = new PlaywrightRecorder();
+      
+      // Set up events for test execution feedback
+      playwrightRecorder.on('test-step-start', ({ stepIndex, step }) => {
+        webappView?.webContents.send('playwright-test-step-start', { stepIndex, step });
+      });
+      
+      playwrightRecorder.on('test-step-complete', ({ stepIndex, success, error }) => {
+        webappView?.webContents.send('playwright-test-step-complete', { stepIndex, success, error });
+      });
+      
+      playwrightRecorder.on('test-complete', ({ success, passedSteps, failedStep, error }) => {
+        webappView?.webContents.send('playwright-test-complete', { success, passedSteps, failedStep, error });
+      });
+    }
+    
+    return await playwrightRecorder.runTest(options);
+  } catch (error) {
+    console.error('[IPC] Run test error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Execute a suggestion action in the browser (click, fill, etc.)
+ipcMain.handle('embedded-browser-execute-action', async (event, action) => {
+  if (!embeddedBrowser?.view) return { success: false, error: 'No browser' };
+  
+  try {
+    const result = await embeddedBrowser.view.webContents.executeJavaScript(`
+      (function() {
+        const action = ${JSON.stringify(action)};
+        console.log('[Flowstral] Executing action:', action.qword, action.args);
+        
+        // Deep query for Shadow DOM support (like web extension)
+        function deepQuery(selector) {
+          const results = [];
+          
+          function traverse(root) {
+            try {
+              const elements = root.querySelectorAll(selector);
+              for (let i = 0; i < elements.length; i++) {
+                results.push(elements[i]);
+              }
+            } catch(e) {}
+            
+            // Traverse shadow roots
+            const allElements = root.querySelectorAll('*');
+            for (let j = 0; j < allElements.length; j++) {
+              if (allElements[j].shadowRoot) {
+                traverse(allElements[j].shadowRoot);
+              }
+            }
+          }
+          
+          traverse(document);
+          return results;
+        }
+        
+        // SALESFORCE-SPECIFIC ELEMENT FINDER
+        function findSalesforceElement(text) {
+          // App Launcher (waffle icon)
+          if (text === 'App Launcher' || text.toLowerCase().includes('app launcher')) {
+            const selectors = [
+              'button[title="App Launcher"]',
+              '[aria-label="App Launcher"]',
+              '.appLauncher button',
+              '.slds-icon-waffle_container button',
+              '[data-aura-class*="appLauncher"]',
+              'one-app-launcher-header button',
+              '.oneAppLauncherHeader button'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel) || deepQuery(sel)[0];
+              if (el) return el;
+            }
+          }
+          
+          // Setup (gear icon)
+          if (text === 'Setup' || text.toLowerCase() === 'setup') {
+            const selectors = [
+              'button[title="Setup"]',
+              'a[title="Setup"]',
+              '[aria-label="Setup"]',
+              'a[href*="/lightning/setup"]',
+              '.setupGear button',
+              '[data-aura-class*="setup"] button'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel) || deepQuery(sel)[0];
+              if (el) return el;
+            }
+          }
+          
+          // User Profile / View Profile
+          if (text.includes('Profile') || text.includes('Avatar') || text.includes('User')) {
+            const selectors = [
+              'button[class*="avatar"]',
+              '[class*="profileTrigger"] button',
+              '.uiImage[class*="photo"]',
+              'a[href*="/profilephoto/"]',
+              '[data-aura-class*="profile"]'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel) || deepQuery(sel)[0];
+              if (el) return el;
+            }
+          }
+          
+          // Notifications
+          if (text === 'Notifications' || text.toLowerCase().includes('notification')) {
+            const selectors = [
+              'button[title*="notification" i]',
+              '[aria-label*="notification" i]',
+              '.notification button'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel) || deepQuery(sel)[0];
+              if (el) return el;
+            }
+          }
+          
+          // Help
+          if (text === 'Help') {
+            const selectors = [
+              'button[title="Help"]',
+              '[aria-label="Help"]'
+            ];
+            for (const sel of selectors) {
+              const el = document.querySelector(sel) || deepQuery(sel)[0];
+              if (el) return el;
+            }
+          }
+          
+          return null;
+        }
+        
+        function findElement(selector, text) {
+          // FIRST: Try Salesforce-specific elements
+          const sfEl = findSalesforceElement(text);
+          if (sfEl) return sfEl;
+          
+          // Normalize selector - could be string or object
+          const selectorStr = typeof selector === 'string' 
+            ? selector 
+            : (selector?.selector || '');
+          
+          // Try selector first
+          if (selectorStr && selectorStr !== 'element' && !selectorStr.includes('undefined')) {
+            try {
+              const el = document.querySelector(selectorStr) || deepQuery(selectorStr)[0];
+              if (el) return el;
+            } catch(e) {}
+          }
+          
+          // Find by text content
+          if (text) {
+            // Try title attribute (critical for Salesforce icons)
+            const byTitle = document.querySelector('[title="' + text + '"]') || 
+                           document.querySelector('button[title="' + text + '"]') ||
+                           document.querySelector('a[title="' + text + '"]');
+            if (byTitle) return byTitle;
+            
+            // Try aria-label
+            const byAria = document.querySelector('[aria-label="' + text + '"]') ||
+                          document.querySelector('button[aria-label="' + text + '"]');
+            if (byAria) return byAria;
+            
+            // Buttons and links
+            const clickables = document.querySelectorAll('button, a, [role="button"], [role="menuitem"], [role="tab"], [role="link"], input[type="submit"], input[type="button"], .slds-button, lightning-button');
+            for (const el of clickables) {
+              const elText = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+              if (elText === text) {
+                if (el.offsetParent !== null || el.offsetWidth > 0) return el;
+              }
+            }
+            
+            // Partial match
+            for (const el of clickables) {
+              const elText = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+              if (elText.includes(text) || text.includes(elText)) {
+                if (el.offsetParent !== null || el.offsetWidth > 0) return el;
+              }
+            }
+            
+            // Shadow DOM traversal
+            const shadowElements = deepQuery('button, a, [role="button"]');
+            for (const el of shadowElements) {
+              const elText = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+              if (elText === text || elText.includes(text)) return el;
+            }
+            
+            // Any element with matching text
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+              if (walker.currentNode.textContent.trim() === text) {
+                const parent = walker.currentNode.parentElement;
+                if (parent && (parent.offsetParent !== null || parent.offsetWidth > 0)) return parent;
+              }
+            }
+          }
+          
+          return null;
+        }
+        
+        function findInput(label) {
+          // By placeholder
+          let el = document.querySelector('input[placeholder*="' + label + '" i], textarea[placeholder*="' + label + '" i]');
+          if (el) return el;
+          
+          // By name
+          el = document.querySelector('input[name*="' + label + '" i], textarea[name*="' + label + '" i]');
+          if (el) return el;
+          
+          // By aria-label
+          el = document.querySelector('input[aria-label*="' + label + '" i], textarea[aria-label*="' + label + '" i]');
+          if (el) return el;
+          
+          // By id
+          el = document.querySelector('input[id*="' + label + '" i], textarea[id*="' + label + '" i]');
+          if (el) return el;
+          
+          // Salesforce Lightning inputs
+          const lightningInputs = deepQuery('lightning-input input, lightning-textarea textarea, lightning-input-field input');
+          for (const inp of lightningInputs) {
+            const lblAttr = inp.closest('lightning-input')?.getAttribute('label') ||
+                           inp.closest('lightning-input-field')?.getAttribute('label') ||
+                           inp.placeholder || inp.name;
+            if (lblAttr && lblAttr.toLowerCase().includes(label.toLowerCase())) {
+              return inp;
+            }
+          }
+          
+          // By associated label
+          const labels = document.querySelectorAll('label');
+          for (const lbl of labels) {
+            if (lbl.innerText.toLowerCase().includes(label.toLowerCase())) {
+              if (lbl.htmlFor) {
+                el = document.getElementById(lbl.htmlFor);
+                if (el) return el;
+              }
+              el = lbl.querySelector('input, textarea');
+              if (el) return el;
+            }
+          }
+          
+          return null;
+        }
+        
+        try {
+          if (action.qword === 'ClickText' || action.qword === 'ClickElement') {
+            const text = action.args[0];
+            const selector = action.selector;
+            const el = findElement(selector, text);
+            
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return new Promise((resolve) => {
+                setTimeout(() => {
+                  el.click();
+                  // Highlight briefly
+                  const oldOutline = el.style.outline;
+                  el.style.outline = '3px solid #00D9FF';
+                  setTimeout(() => { el.style.outline = oldOutline; }, 500);
+                  resolve({ success: true, element: el.tagName, text: text });
+                }, 150);
+              });
+            }
+            return { success: false, error: 'Element not found: ' + text };
+          }
+          
+          if (action.qword === 'Fill') {
+            const label = action.args[0];
+            const value = action.args[1] || '';
+            const el = findInput(label);
+            
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.focus();
+              el.value = value;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              // Highlight briefly
+              const oldOutline = el.style.outline;
+              el.style.outline = '3px solid #00D9FF';
+              setTimeout(() => { el.style.outline = oldOutline; }, 500);
+              return { success: true, element: el.tagName };
+            }
+            return { success: false, error: 'Input not found: ' + label };
+          }
+          
+          if (action.qword === 'AssertText') {
+            const text = action.args[0];
+            const found = document.body.innerText.includes(text);
+            return { success: found, found: found };
+          }
+          
+          return { success: false, error: 'Unknown action: ' + action.qword };
+        } catch (err) {
+          return { success: false, error: err.message };
+        }
+      })();
+    `);
+    
+    // If successful, also record the action
+    if (result.success && embeddedBrowser.recording) {
+      embeddedBrowser.recordAction({
+        type: action.qword === 'Fill' ? 'fill' : 'click',
+        element: {
+          text: action.args[0],
+          selectors: action.selector ? [{ type: 'custom', value: action.selector, confidence: 0.9 }] : []
+        },
+        value: action.args[1],
+        timestamp: Date.now()
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Add a recorded action manually (from suggestions)
+ipcMain.handle('embedded-browser-add-action', (event, action) => {
+  if (!embeddedBrowser) return false;
+  
+  const enrichedAction = {
+    id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    qword: action.qword,
+    args: action.args,
+    selector: action.selector ? { value: action.selector, type: 'custom', confidence: 0.9 } : null,
+    description: action.description,
+    timestamp: Date.now()
+  };
+  
+  embeddedBrowser.actions.push(enrichedAction);
+  return enrichedAction;
+});
+
+ipcMain.handle('embedded-browser-resize', (event, bounds) => {
+  embeddedBrowser?.setBounds(bounds);
+  return true;
+});
+
+ipcMain.handle('embedded-browser-suggest', async () => {
+  if (!embeddedBrowser?.view) return { suggestions: [], categories: {}, timing: '0ms', counts: {} };
+  
+  const startTime = Date.now();
+  
+  try {
+    const result = await embeddedBrowser.view.webContents.executeJavaScript(`
+      (function() {
+        const startTime = performance.now();
+        const suggestions = [];
+        const seen = new Set();
+        const counts = { buttons: 0, links: 0, inputs: 0, dropdowns: 0, navigation: 0, menus: 0, checkboxes: 0, assertions: 0 };
+        
+        function addSuggestion(type, qword, args, description, element, selector, category) {
+          const key = qword + ':' + args.join('|');
+          if (seen.has(key)) return;
+          if (!args[0] || args[0].length === 0) return;
+          seen.add(key);
+          
+          const cat = category || type;
+          if (counts[cat] !== undefined) counts[cat]++;
+          
+          suggestions.push({ 
+            type, 
+            qword, 
+            args, 
+            description, 
+            element, 
+            selector, 
+            category: cat,
+            // Add selectorObj for robust execution
+            selectorObj: {
+              primary: selector,
+              type: selector ? (selector.startsWith('#') ? 'id' : 
+                              selector.startsWith('[name=') ? 'name' :
+                              selector.startsWith('[data-testid=') ? 'testid' : 'css') : 'text',
+              value: selector || args[0],
+              text: args[0]
+            }
+          });
+        }
+        
+        function getLabel(el) {
+          // Try multiple strategies to find a good label
+          if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+          if (el.placeholder) return el.placeholder;
+          if (el.title) return el.title;
+          if (el.name) return el.name;
+          if (el.id) return el.id;
+          
+          // Check for associated label
+          const label = document.querySelector('label[for="' + el.id + '"]');
+          if (label) return label.innerText.trim();
+          
+          // Check parent label
+          const parentLabel = el.closest('label');
+          if (parentLabel) {
+            const labelText = parentLabel.innerText.replace(el.value || '', '').trim();
+            if (labelText) return labelText;
+          }
+          
+          return null;
+        }
+        
+        // ============ CLICKABLE ELEMENTS ============
+        
+        // 1. BUTTONS (highest priority)
+        document.querySelectorAll('button:not([disabled]), [role="button"]:not([aria-disabled="true"]), input[type="submit"], input[type="button"]').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0) return;
+          const text = (el.innerText || el.value || el.title || el.getAttribute('aria-label') || '').trim();
+          if (text && text.length > 0 && text.length < 60 && !text.includes('\\n\\n')) {
+            const selector = el.id ? '#' + el.id : (el.getAttribute('data-testid') ? '[data-testid="' + el.getAttribute('data-testid') + '"]' : null);
+            addSuggestion('click', 'ClickText', [text], 'Click "' + text + '"', 'button', selector, 'buttons');
+          }
+        });
+        
+        // 2. LINKS
+        document.querySelectorAll('a[href]').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0) return;
+          const text = (el.innerText || el.title || el.getAttribute('aria-label') || '').trim();
+          if (text && text.length > 1 && text.length < 50 && !text.includes('\\n')) {
+            addSuggestion('click', 'ClickText', [text], 'Click "' + text + '"', 'link', null, 'links');
+          }
+        });
+        
+        // 3. SALESFORCE-SPECIFIC BUTTONS
+        document.querySelectorAll('.slds-button, .uiButton, lightning-button, [data-aura-class*="uiButton"]').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0) return;
+          const text = (el.innerText || el.value || el.title || '').trim();
+          if (text && text.length > 0 && text.length < 50 && !seen.has('ClickText:' + text)) {
+            addSuggestion('click', 'ClickText', [text], 'Click "' + text + '"', 'slds-button', null, 'buttons');
+          }
+        });
+        
+        // ============ SALESFORCE LIGHTNING HEADER (critical elements) ============
+        // Note: Salesforce header elements are fixed positioned, so offsetParent checks don't work
+        // Instead we check offsetWidth/offsetHeight to verify visibility
+        
+        function isElementVisible(el) {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          // Check if element has any size and is within viewport
+          return rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight;
+        }
+        
+        // App Launcher (waffle icon) - PRIORITY - Multiple selectors to find it
+        const appLauncherSelectors = [
+          'button[title="App Launcher"]',
+          '[aria-label="App Launcher"]',
+          '[class*="appLauncher"] button',
+          '.slds-icon-waffle_container button',
+          'one-app-launcher-header button',
+          '.oneAppLauncherHeader button',
+          '[data-aura-class*="appLauncher"]'
+        ];
+        let foundAppLauncher = false;
+        for (const sel of appLauncherSelectors) {
+          if (foundAppLauncher) break;
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              addSuggestion('click', 'ClickElement', ['App Launcher'], 'Open App Launcher', 'appLauncher', sel, 'navigation');
+              foundAppLauncher = true;
+            }
+          } catch(e) {}
+        }
+        
+        // Setup (gear icon) - PRIORITY
+        const setupSelectors = [
+          'button[title="Setup"]',
+          'a[title="Setup"]',
+          '[aria-label="Setup"]',
+          'a[href*="/lightning/setup"]',
+          '.setupGear button',
+          '[class*="setup"] button'
+        ];
+        let foundSetup = false;
+        for (const sel of setupSelectors) {
+          if (foundSetup) break;
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              addSuggestion('click', 'ClickElement', ['Setup'], 'Open Setup', 'setup', sel, 'navigation');
+              foundSetup = true;
+            }
+          } catch(e) {}
+        }
+        
+        // User Profile / View Profile - PRIORITY
+        const profileSelectors = [
+          'button[class*="avatar"]',
+          'button[class*="profile"]',
+          '[class*="profileTrigger"] button',
+          'img[class*="photo"]',
+          '.userProfile button',
+          '.uiImage[class*="photo"]'
+        ];
+        let foundProfile = false;
+        for (const sel of profileSelectors) {
+          if (foundProfile) break;
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              const parent = el.closest('button, a, [role="button"]') || el;
+              const label = parent.getAttribute('aria-label') || parent.title || 'User Profile';
+              addSuggestion('click', 'ClickElement', [label || 'User Profile'], 'Open User Menu', 'profile', sel, 'navigation');
+              foundProfile = true;
+            }
+          } catch(e) {}
+        }
+        
+        // Global Search - PRIORITY
+        const searchSelectors = [
+          'input[placeholder*="Search" i]',
+          '.slds-global-header__item_search input',
+          '[class*="globalSearch"] input',
+          '[aria-label*="Search" i]'
+        ];
+        let foundSearch = false;
+        for (const sel of searchSelectors) {
+          if (foundSearch) break;
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              const placeholder = el.placeholder || el.getAttribute('aria-label') || 'Search';
+              addSuggestion('fill', 'Fill', [placeholder, ''], 'Search in Salesforce', 'search', sel, 'navigation');
+              foundSearch = true;
+            }
+          } catch(e) {}
+        }
+        
+        // Notifications bell
+        const notificationSelectors = [
+          'button[title*="notification" i]',
+          '[aria-label*="notification" i]',
+          '.notification button'
+        ];
+        for (const sel of notificationSelectors) {
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              addSuggestion('click', 'ClickElement', ['Notifications'], 'Open Notifications', 'notifications', sel, 'navigation');
+              break;
+            }
+          } catch(e) {}
+        }
+        
+        // Help icon
+        const helpSelectors = [
+          'button[title="Help"]',
+          '[aria-label="Help"]',
+          '.help button'
+        ];
+        for (const sel of helpSelectors) {
+          try {
+            const el = document.querySelector(sel);
+            if (el && isElementVisible(el)) {
+              addSuggestion('click', 'ClickElement', ['Help'], 'Open Help', 'help', sel, 'navigation');
+              break;
+            }
+          } catch(e) {}
+        }
+        
+        // ============ INPUT ELEMENTS ============
+        
+        // 4. TEXT INPUTS
+        document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="search"], input[type="number"], input:not([type]), textarea').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0 || el.disabled || el.readOnly) return;
+          const label = getLabel(el);
+          if (label) {
+            const selector = el.id ? '#' + el.id : (el.name ? '[name="' + el.name + '"]' : null);
+            addSuggestion('fill', 'Fill', [label, ''], 'Type into "' + label + '"', 'input', selector, 'inputs');
+          }
+        });
+        
+        // 5. PASSWORD INPUTS
+        document.querySelectorAll('input[type="password"]').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0 || el.disabled) return;
+          const label = getLabel(el) || 'password';
+          const selector = el.id ? '#' + el.id : (el.name ? '[name="' + el.name + '"]' : null);
+          addSuggestion('fill', 'Fill', [label, ''], 'Enter password in "' + label + '"', 'password', selector, 'inputs');
+        });
+        
+        // 6. SALESFORCE INPUTS
+        document.querySelectorAll('lightning-input input, lightning-textarea textarea, [data-aura-class*="uiInput"] input').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0 || el.disabled) return;
+          const label = getLabel(el);
+          if (label && !seen.has('Fill:' + label + '|')) {
+            addSuggestion('fill', 'Fill', [label, ''], 'Type into "' + label + '"', 'lightning-input', null, 'inputs');
+          }
+        });
+        
+        // ============ SELECT/DROPDOWN ============
+        
+        // 7. STANDARD SELECTS
+        document.querySelectorAll('select:not([disabled])').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0) return;
+          const label = getLabel(el) || 'dropdown';
+          const selector = el.id ? '#' + el.id : (el.name ? '[name="' + el.name + '"]' : null);
+          addSuggestion('select', 'Select', [label, ''], 'Select from "' + label + '"', 'select', selector, 'dropdowns');
+        });
+        
+        // 8. COMBOBOXES
+        document.querySelectorAll('[role="combobox"], [role="listbox"], lightning-combobox, lightning-picklist').forEach(el => {
+          if (!el.offsetParent || el.offsetWidth === 0) return;
+          const label = el.getAttribute('aria-label') || el.getAttribute('label') || 'dropdown';
+          addSuggestion('click', 'ClickText', [label], 'Open "' + label + '"', 'combobox', null, 'dropdowns');
+        });
+        
+        // ============ NAVIGATION ============
+        
+        // 9. TABS
+        document.querySelectorAll('[role="tab"], .slds-tabs_default__item a, .slds-tabs__nav-link').forEach(el => {
+          if (!el.offsetParent) return;
+          const text = (el.innerText || el.getAttribute('aria-label') || '').trim();
+          if (text && text.length > 0 && text.length < 40) {
+            addSuggestion('click', 'ClickText', [text], 'Click tab "' + text + '"', 'tab', null, 'navigation');
+          }
+        });
+        
+        // 10. MENU ITEMS
+        document.querySelectorAll('[role="menuitem"], [role="option"], .slds-dropdown__item a, .slds-listbox__option').forEach(el => {
+          if (!el.offsetParent) return;
+          const text = (el.innerText || '').trim();
+          if (text && text.length > 0 && text.length < 50) {
+            addSuggestion('click', 'ClickText', [text], 'Select "' + text + '"', 'menuitem', null, 'menus');
+          }
+        });
+        
+        // ============ CHECKBOXES & TOGGLES ============
+        
+        // 11. CHECKBOXES
+        document.querySelectorAll('input[type="checkbox"]:not([disabled]), [role="checkbox"]:not([aria-disabled="true"])').forEach(el => {
+          if (!el.offsetParent) return;
+          const label = getLabel(el) || el.closest('label')?.innerText?.trim() || 'checkbox';
+          if (label && label.length < 50) {
+            addSuggestion('click', 'ClickText', [label], 'Toggle "' + label + '"', 'checkbox', null, 'checkboxes');
+          }
+        });
+        
+        // ============ ASSERTIONS ============
+        
+        // 12. PAGE HEADERS
+        document.querySelectorAll('h1, h2, .slds-page-header__title, .slds-card__header-title').forEach(el => {
+          if (!el.offsetParent) return;
+          const text = (el.innerText || '').trim().substring(0, 60);
+          if (text && text.length > 2) {
+            addSuggestion('assert', 'AssertText', [text], 'Verify "' + text + '"', 'header', null, 'assertions');
+          }
+        });
+        
+        // 13. RECORD NAMES (Salesforce)
+        document.querySelectorAll('.slds-page-header__name-title h1, .entityNameTitle, lightning-formatted-name').forEach(el => {
+          if (!el.offsetParent) return;
+          const text = (el.innerText || '').trim();
+          if (text && text.length > 0) {
+            addSuggestion('assert', 'AssertText', [text], 'Verify record "' + text + '"', 'record', null, 'assertions');
+          }
+        });
+        
+        // 14. SUCCESS/ERROR MESSAGES
+        document.querySelectorAll('.slds-notify, .toastMessage, [role="alert"], .slds-theme_success, .slds-theme_error').forEach(el => {
+          if (!el.offsetParent) return;
+          const text = (el.innerText || '').trim().substring(0, 60);
+          if (text && text.length > 0) {
+            addSuggestion('assert', 'AssertText', [text], 'Verify message "' + text + '"', 'toast', null, 'assertions');
+          }
+        });
+        
+        const duration = (performance.now() - startTime).toFixed(1);
+        console.log('[Flowstral Suggest] Found ' + suggestions.length + ' suggestions in ' + duration + 'ms');
+        
+        // Group by category
+        const categories = {};
+        suggestions.forEach(s => {
+          if (!categories[s.category]) categories[s.category] = [];
+          categories[s.category].push(s);
+        });
+        
+        return { 
+          suggestions, 
+          categories, 
+          counts, 
+          timing: duration + 'ms',
+          total: suggestions.length 
+        };
+      })();
+    `);
+    
+    const duration = Date.now() - startTime;
+    console.log('[EmbeddedBrowser] Found', result?.total || 0, 'suggestions in', duration + 'ms');
+    
+    return result || { suggestions: [], categories: {}, counts: {}, timing: duration + 'ms', total: 0 };
+  } catch (error) {
+    console.error('[EmbeddedBrowser] Suggest failed:', error.message);
+    return { suggestions: [], categories: {}, counts: {}, timing: '0ms', total: 0, error: error.message };
+  }
+});
+
+// Export handlers
+ipcMain.handle('export-flowstral-test', (event, testName) => {
+  return embeddedBrowser?.exportAsFlowstralTest(testName);
+});
+
+ipcMain.handle('export-robot-framework', (event, testName) => {
+  return embeddedBrowser?.exportAsRobotFramework(testName);
+});
+
+ipcMain.handle('export-playwright', () => {
+  return embeddedBrowser?.exportAsPlaywright();
+});
+
+// Export test case to builder - accepts either testName (for embeddedBrowser) or full testCase object
+ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
+  try {
+    let testCase;
+    
+    // Check if we received a full test case object (from PlaywrightRecorderPage)
+    if (typeof testNameOrData === 'object' && testNameOrData.steps) {
+      console.log('[Export] Received test case object with', testNameOrData.steps.length, 'steps');
+      testCase = testNameOrData;
+    } else {
+      // Legacy: Get data from embeddedBrowser using testName
+      const testName = testNameOrData;
+      const testData = embeddedBrowser?.exportAsFlowstralTest(testName);
+      if (!testData || testData.steps.length === 0) {
+        // Try playwrightRecorder as fallback
+        const pwActions = playwrightRecorder?.getActions() || [];
+        if (pwActions.length === 0) {
+          return { success: false, error: 'No steps to export' };
+        }
+        // Convert playwright actions to test case
+        testCase = {
+          id: `tc_${Date.now()}`,
+          name: testName || 'Recorded Test',
+          description: `Recorded on ${new Date().toISOString()}`,
+          steps: pwActions.map((action, idx) => ({
+            id: action.id || `step_${Date.now()}_${idx}`,
+            type: action.qword === 'GoTo' ? 'navigate' : action.qword === 'Fill' ? 'input' : 'click',
+            name: action.description || `Step ${idx + 1}`,
+            url: action.qword === 'GoTo' ? action.args?.[0] : '',
+            selector: action.selectorObj?.selector || '',
+            selectorObj: action.selectorObj,
+            value: action.qword === 'Fill' ? action.args?.[1] : '',
+            qword: action.qword,
+            args: action.args,
+            enabled: true,
+          })),
+          metadata: { source: 'playwright-recorder' }
+        };
+      } else {
+        testCase = testData;
+      }
+    }
+    
+    console.log('[Export] Exporting', testCase.steps?.length, 'steps to Test Builder');
+    
+    // Navigate to Test Builder with the test data
+    showWebappView();
+    
+    // If we already have a properly formatted test case (from PlaywrightRecorderPage), use it directly
+    if (testCase.steps && testCase.steps.length > 0 && testCase.steps[0].type) {
+      console.log('[Export] Using pre-formatted test case, skipping conversion');
+      
+      // Encode the test case as base64 URL parameter for reliable transfer
+      const dataToInject = JSON.stringify(testCase);
+      const encodedData = Buffer.from(dataToInject).toString('base64');
+      
+      const baseUrl = getWebappUrl().replace('/index.html', '');
+      const builderUrl = `${baseUrl}/test-cases/builder?data=${encodeURIComponent(encodedData)}`;
+      
+      console.log('[Export] Navigating to builder with encoded data');
+      
+      // Navigate with data in URL
+      await webappView?.webContents.loadURL(builderUrl);
+      
+      console.log('[Export] Successfully exported test case:', testCase.name);
+      return { success: true, testCase };
+    }
+    
+    // Legacy path: Build test case from raw step data (embeddedBrowser format)
+    // This only runs if testCase doesn't have properly typed steps
+    console.log('[Export] Converting raw step data to test case format');
+    const testData = testCase; // Save original data for conversion
+    
+    // Helper: Extract best CSS selector from recorded selectors (MATCHES WEB EXTENSION)
+    // Web extension stores selectors with 'selector' property (CSS) and 'playwright' property
+    function getBestCssSelector(step) {
+      const selectorObj = step.selectorObj || {};
+      const strategies = selectorObj.strategies || [];
+      
+      // First check if selectorObj already has selector from _buildSelectorObject
+      if (selectorObj.selector && (selectorObj.selector.startsWith('[') || selectorObj.selector.startsWith('#'))) {
+        return selectorObj.selector;
+      }
+      
+      // Priority order: id > testid > name > placeholder > aria > css
+      const priorityTypes = ['id', 'testid', 'name', 'placeholder', 'aria'];
+      
+      for (const type of priorityTypes) {
+        // Try 'selector' property first (new format), then 'value' (old format)
+        const sel = strategies.find(s => s.type === type && (s.selector || s.value));
+        if (sel) {
+          const cssVal = sel.selector || sel.value;
+          if (cssVal && (cssVal.startsWith('[') || cssVal.startsWith('#'))) {
+            return cssVal;
+          }
+        }
+      }
+      
+      // Also check primary
+      const primary = selectorObj.primary;
+      if (typeof primary === 'string' && (primary.startsWith('[') || primary.startsWith('#'))) {
+        return primary;
+      } else if (primary?.selector) {
+        return primary.selector;
+      }
+      
+      // Fall back to any CSS-like selector from strategies
+      const cssSelector = strategies.find(s => {
+        const val = s.selector || s.value;
+        return val && (val.startsWith('[') || val.startsWith('#') || val.startsWith('.'));
+      });
+      if (cssSelector) return cssSelector.selector || cssSelector.value;
+      
+      return '';
+    }
+    
+    // Helper: Build proper selectorObj for Test Builder (MATCHES WEB EXTENSION FORMAT)
+    function buildSelectorObj(step) {
+      const raw = step.selectorObj || {};
+      const strategies = raw.strategies || [];
+      const element = step.raw?.element || {};
+      
+      // Find best CSS selector
+      const cssSelector = getBestCssSelector(step);
+      
+      // Get playwright string from selectorObj if available, otherwise build it
+      let playwright = raw.playwright || '';
+      if (!playwright && cssSelector) {
+        playwright = `locator('${cssSelector}')`;
+      } else if (!playwright && element.name) {
+        playwright = `locator('[name="${element.name}"]')`;
+      } else if (!playwright && element.id) {
+        playwright = `locator('#${element.id}')`;
+      } else if (!playwright && element.placeholder) {
+        playwright = `get_by_placeholder('${element.placeholder}')`;
+      }
+      
+      // Build text selector for ClickText
+      const textSelector = strategies.find(s => s.type === 'text');
+      
+      return {
+        // Match web extension format
+        selector: cssSelector || raw.selector || '',
+        playwright: playwright,
+        primary: typeof raw.primary === 'string' ? raw.primary : (raw.primary?.selector || cssSelector || ''),
+        confidence: raw.confidence || 0,
+        type: raw.type || 'css',
+        // Text content
+        text: textSelector?.value || raw.text || element.text || '',
+        // Element attributes for fallback
+        name: raw.name || element.name || '',
+        id: raw.id || element.id || '',
+        placeholder: raw.placeholder || element.placeholder || '',
+        ariaLabel: raw.ariaLabel || element.ariaLabel || '',
+        // Fallbacks with both selector and playwright
+        fallbacks: (raw.fallbacks || []).map(f => {
+          if (typeof f === 'string') {
+            return { selector: f, playwright: `locator('${f}')` };
+          }
+          return { 
+            selector: f.selector || f.value || '',
+            playwright: f.playwright || (f.selector ? `locator('${f.selector}')` : ''),
+            type: f.type,
+            confidence: f.confidence 
+          };
+        }),
+        strategies: strategies.map(s => ({
+          type: s.type,
+          selector: s.selector || s.value || '',
+          playwright: s.playwright || '',
+          confidence: s.confidence
+        }))
+      };
+    }
+    
+    // Build the test case in the format Test Builder expects
+    const formattedTestCase = {
+      id: `tc_${Date.now()}`,
+      name: testData.name || 'Recorded Test',
+      description: testData.description || `Recorded on ${new Date().toISOString()}`,
+      tags: ['recorded', 'desktop'],
+      steps: testData.steps.map((step, idx) => {
+        const enrichedSelectorObj = buildSelectorObj(step);
+        const cssSelector = getBestCssSelector(step);
+        
+        // For Fill steps, ensure we have a proper CSS selector
+        let finalSelector = cssSelector;
+        if (step.qword === 'Fill' && !finalSelector) {
+          // Build selector from element attributes - check multiple sources
+          const el = step.raw?.element || {};
+          const selectorObj = step.selectorObj || {};
+          const name = el.name || selectorObj.name || '';
+          const id = el.id || selectorObj.id || '';
+          const placeholder = el.placeholder || selectorObj.placeholder || '';
+          
+          // Also try to extract from args[0] if it looks like a field name
+          const argName = step.args?.[0] || '';
+          
+          if (name) {
+            finalSelector = `[name="${name}"]`;
+          } else if (id) {
+            finalSelector = `#${id}`;
+          } else if (placeholder) {
+            finalSelector = `[placeholder="${placeholder}"]`;
+          } else if (argName && !argName.includes(' ')) {
+            // If args[0] is a simple name like "username" or "pw", use it as name selector
+            finalSelector = `[name="${argName}"]`;
+          }
+          
+          console.log('[Export] Fill step selector:', { name, id, placeholder, argName, finalSelector });
+        }
+        
+        return {
+          id: step.id || `step_${Date.now()}_${idx}`,
+          type: mapQWordToStepType(step.qword),
+          name: step.name || step.description || `Step ${idx + 1}`,
+          // Handle different step types
+          url: step.qword === 'GoTo' ? step.args[0] : '',
+          // CRITICAL: Use CSS selector for Fill steps
+          selector: finalSelector || cssSelector,
+          selectorObj: enrichedSelectorObj,
+          // For Fill: target should also be the CSS selector for the test runner
+          target: step.qword === 'Fill' ? (finalSelector || step.args[0]) : '',
+          value: step.qword === 'Fill' ? step.args[1] : (step.args?.[0] || ''),
+          qword: step.qword,
+          args: step.args,
+          displayArgs: step.displayArgs,
+          enabled: true,
+          expectedResult: step.qword === 'GoTo' ? 'Page loads successfully' : 
+                          step.qword === 'Fill' ? 'Value entered successfully' :
+                          step.qword === 'ClickText' ? 'Element clicked successfully' : '',
+        };
+      }),
+      variables: [],
+      settings: { timeout: 30000, retries: 0 },
+      metadata: { 
+        createdAt: new Date().toISOString(), 
+        source: 'flowstral-desktop',
+        recordedSteps: testData.steps.length
+      },
+    };
+    
+    // Inject into webapp's localStorage
+    const timestamp2 = Date.now().toString();
+    await webappView?.webContents.executeJavaScript(`
+      localStorage.setItem('unified_test_case', ${JSON.stringify(JSON.stringify(formattedTestCase))});
+      localStorage.setItem('unified_test_case_timestamp', '${timestamp2}');
+      console.log('[Flowstral Desktop] Exported test case:', ${JSON.stringify(formattedTestCase.name)}, 'with', ${formattedTestCase.steps.length}, 'steps');
+    `);
+    
+    // Navigate to builder
+    navigateWebapp('/test-cases/builder');
+    
+    console.log('[Export] Successfully exported test case:', formattedTestCase.name);
+    return { success: true, testCase: formattedTestCase };
+  } catch (error) {
+    console.error('[Export] Failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+function mapQWordToStepType(qword) {
+  const map = {
+    'GoTo': 'navigate',
+    'ClickText': 'click',
+    'ClickElement': 'click',
+    'Fill': 'input',
+    'Select': 'select',
+    'Check': 'click',
+    'Uncheck': 'click',
+    'AssertText': 'assert',
+    'Wait': 'wait'
+  };
+  return map[qword] || 'click';
+}
+
+// Utility handlers
+ipcMain.handle('check-updates', async () => {
+  return await autoUpdater.checkForUpdates();
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('open-external', (event, url) => {
+  shell.openExternal(url);
+});
+
+ipcMain.handle('open-devtools', () => {
+  webappView?.webContents.openDevTools({ mode: 'detach' });
+});
+
+// ============================================================================
+// Local Storage IPC Handlers
+// ============================================================================
+
+// Test Cases
+ipcMain.handle('local-storage-get-test-cases', () => {
+  return localStorage?.getTestCases() || [];
+});
+
+ipcMain.handle('local-storage-save-test-case', (event, testCase) => {
+  return localStorage?.saveTestCase(testCase);
+});
+
+ipcMain.handle('local-storage-delete-test-case', (event, id) => {
+  return localStorage?.deleteTestCase(id);
+});
+
+// Test Runs
+ipcMain.handle('local-storage-get-test-runs', () => {
+  return localStorage?.getTestRuns() || [];
+});
+
+ipcMain.handle('local-storage-save-test-run', (event, testRun) => {
+  return localStorage?.saveTestRun(testRun);
+});
+
+// Recording Sessions
+ipcMain.handle('local-storage-get-recording-sessions', () => {
+  return localStorage?.getRecordingSessions() || [];
+});
+
+ipcMain.handle('local-storage-save-recording-session', (event, session) => {
+  return localStorage?.saveRecordingSession(session);
+});
+
+// Elements
+ipcMain.handle('local-storage-get-elements', () => {
+  return localStorage?.getElements() || [];
+});
+
+ipcMain.handle('local-storage-save-element', (event, element) => {
+  return localStorage?.saveElement(element);
+});
+
+// Test Results
+ipcMain.handle('local-storage-get-test-results', () => {
+  return localStorage?.getTestResults() || [];
+});
+
+ipcMain.handle('local-storage-save-test-result', (event, result) => {
+  return localStorage?.saveTestResult(result);
+});
+
+// Sync
+ipcMain.handle('local-storage-get-pending-sync', () => {
+  return localStorage?.getAllPendingSync() || {};
+});
+
+ipcMain.handle('local-storage-mark-synced', (event, { collection, ids }) => {
+  return localStorage?.markAsSynced(collection, ids);
+});
+
+// Import/Export
+ipcMain.handle('local-storage-export-all', () => {
+  return localStorage?.exportAll();
+});
+
+ipcMain.handle('local-storage-import-all', async (event, data) => {
+  return localStorage?.importAll(data);
+});
+
+ipcMain.handle('local-storage-import-file', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import Test Data',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile']
+  });
+  
+  if (result.canceled || !result.filePaths.length) {
+    return { success: false, canceled: true };
+  }
+  
+  try {
+    const filePath = result.filePaths[0];
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    localStorage?.importAll(data);
+    return { success: true, filePath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('local-storage-export-file', async () => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Test Data',
+    defaultPath: `flowstral-export-${new Date().toISOString().split('T')[0]}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  });
+  
+  if (result.canceled || !result.filePath) {
+    return { success: false, canceled: true };
+  }
+  
+  try {
+    const data = localStorage?.exportAll();
+    fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), 'utf8');
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// Test Execution IPC Handlers
+// ============================================================================
+
+let currentTestExecutor = null;
+
+ipcMain.handle('execute-test', async (event, testData) => {
+  try {
+    // Clean up any existing executor
+    if (currentTestExecutor) {
+      await currentTestExecutor.cleanup();
+    }
+    
+    const preferences = store.get('preferences') || {};
+    
+    currentTestExecutor = new TestExecutor({
+      browserType: preferences.browserType || 'chromium',
+      headless: preferences.headless ?? false,
+      viewport: preferences.viewport || { width: 1280, height: 720 },
+      timeout: testData.settings?.timeout || 30000,
+      capturePassScreenshots: preferences.capturePassScreenshots ?? false, // Disabled by default to reduce flickering
+      onStepStart: (index, step) => {
+        // Send to both old channel (index) and new channel (stepIndex) for compatibility
+        mainWindow?.webContents.send('test-step-start', { index, step });
+        webappView?.webContents.send('test-step-start', { index, step });
+        // Also send to playwright-specific channels with stepIndex
+        mainWindow?.webContents.send('playwright-test-step-start', { stepIndex: index, step });
+        webappView?.webContents.send('playwright-test-step-start', { stepIndex: index, step });
+      },
+      onStepComplete: (index, step, result) => {
+        const success = result?.status === 'passed';
+        // Send to both old and new channels
+        mainWindow?.webContents.send('test-step-complete', { index, step, result });
+        webappView?.webContents.send('test-step-complete', { index, step, result });
+        // Also send to playwright-specific channels
+        mainWindow?.webContents.send('playwright-test-step-complete', { 
+          stepIndex: index, 
+          success, 
+          error: result?.error,
+          screenshot: result?.screenshot 
+        });
+        webappView?.webContents.send('playwright-test-step-complete', { 
+          stepIndex: index, 
+          success, 
+          error: result?.error,
+          screenshot: result?.screenshot 
+        });
+      },
+      onTestComplete: (results) => {
+        mainWindow?.webContents.send('test-complete', results);
+        webappView?.webContents.send('test-complete', results);
+        // Also send to playwright-specific channel
+        mainWindow?.webContents.send('playwright-test-complete', { 
+          success: results.status === 'passed',
+          steps: results.steps 
+        });
+        webappView?.webContents.send('playwright-test-complete', { 
+          success: results.status === 'passed',
+          steps: results.steps 
+        });
+        
+        // Save results to local storage
+        localStorage?.saveTestResult({
+          testId: testData.id,
+          testName: testData.name,
+          ...results
+        });
+      }
+    });
+    
+    const results = await currentTestExecutor.executeTest(testData);
+    return results;
+    
+  } catch (error) {
+    console.error('[Execute] Error:', error);
+    return { status: 'error', error: error.message };
+  }
+});
+
+ipcMain.handle('cancel-test', async () => {
+  try {
+    if (currentTestExecutor) {
+      await currentTestExecutor.cleanup();
+      currentTestExecutor = null;
+    }
+    return true;
+  } catch (error) {
+    return false;
+  }
+});
+
+ipcMain.handle('execute-test-headless', async (event, testData) => {
+  try {
+    const executor = new TestExecutor({
+      browserType: 'chromium',
+      headless: true,
+      timeout: testData.settings?.timeout || 30000,
+    });
+    
+    const results = await executor.executeTest(testData);
+    
+    // Save results
+    localStorage?.saveTestResult({
+      testId: testData.id,
+      testName: testData.name,
+      headless: true,
+      ...results
+    });
+    
+    return results;
+  } catch (error) {
+    return { status: 'error', error: error.message };
+  }
+});
+
+// Auto-updater events
+autoUpdater.on('update-available', (info) => {
+  mainWindow?.webContents.send('update-available', info);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  mainWindow?.webContents.send('update-downloaded', info);
+});
+
+// ============================================================================
+// App Lifecycle
+// ============================================================================
+
+app.whenReady().then(async () => {
+  createWindow();
+  await initializeServices();
+  createTray();
+  
+  // Register global shortcut to open webapp DevTools (F12)
+  globalShortcut.register('F12', () => {
+    if (webappView) {
+      webappView.webContents.openDevTools({ mode: 'detach' });
+    } else {
+      mainWindow?.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
+  
+  // Also register Ctrl+Shift+D for webapp DevTools specifically
+  globalShortcut.register('CommandOrControl+Shift+D', () => {
+    if (webappView) {
+      webappView.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
+  
+  // Check for updates in production
+  if (!process.argv.includes('--dev')) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
+  
+  console.log('[App] Flowstral Desktop v2.0 ready');
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    if (!store.get('preferences.minimizeToTray')) {
+      app.quit();
+    }
+  }
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
+
+app.on('before-quit', async () => {
+  app.isQuitting = true;
+  await browserController?.close();
+  await cloudConnector?.disconnect();
+  embeddedBrowser?.destroy();
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+module.exports = { app };

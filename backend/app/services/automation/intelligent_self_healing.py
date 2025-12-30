@@ -21,15 +21,17 @@ logger = logging.getLogger(__name__)
 
 
 class HealingStrategy(Enum):
-    """Self-healing strategies"""
-    LOCATOR_FALLBACK = 1
-    TEXT_SIMILARITY = 2
-    ROLE_BASED = 3
-    CONTEXT_NAVIGATION = 4
-    VISUAL_MATCHING = 5
-    POSITION_RELATIVE = 6
-    DOM_PATTERN = 7
-    FORCE_ACTION = 8
+    """Self-healing strategies in priority order"""
+    LOCATOR_FALLBACK = 1      # Try next locator in chain
+    TEXT_SIMILARITY = 2        # Find by similar text
+    ROLE_BASED = 3             # Find by ARIA role
+    CONTEXT_NAVIGATION = 4     # Find via parent/child context
+    VISUAL_MATCHING = 5        # Infer from visual pattern
+    POSITION_RELATIVE = 6      # Find by relative position
+    DOM_PATTERN = 7            # Find by stable DOM patterns
+    FORCE_ACTION = 8           # Force click (ignore visibility)
+    JS_CLICK = 9               # JavaScript click (bypass Playwright)
+    OCR_COORDINATE_CLICK = 10  # OCR fallback - LAST RESORT
 
 
 @dataclass
@@ -184,12 +186,58 @@ async function {action}WithIntelligentHealing(page, elementContext) {{
       throw new Error('No context available');
     },
     
-    // Strategy: Force action (last resort)
+    // Strategy: Force action
     async () => {
       const element = page.locator(elementContext.originalSelector);
       await element.waitFor({ state: 'attached', timeout: 5000 });
       await element.click({ force: true, timeout: 5000 });
       return { success: true, strategy: 'force_action', locator: elementContext.originalSelector };
+    },
+    
+    // Strategy: JavaScript click (bypasses Playwright checks)
+    async () => {
+      const element = page.locator(elementContext.originalSelector);
+      await element.evaluate(el => el.click());
+      return { success: true, strategy: 'js_click', locator: elementContext.originalSelector };
+    },
+    
+    // LAST RESORT: OCR-based coordinate click
+    // Uses screenshot + OCR to find text and click at coordinates
+    async () => {
+      if (!elementContext.text) {
+        throw new Error('No text available for OCR fallback');
+      }
+      
+      console.log('[OCR FALLBACK] All DOM strategies failed, using OCR...');
+      
+      // Take screenshot
+      const screenshot = await page.screenshot({ type: 'png' });
+      const screenshotBase64 = screenshot.toString('base64');
+      
+      // Call OCR API to find text coordinates
+      const response = await fetch('http://localhost:8000/api/ocr/find-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenshot: screenshotBase64,
+          target_text: elementContext.text
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.found && result.center_x && result.center_y) {
+        console.log(`[OCR FALLBACK] Found "${elementContext.text}" at (${result.center_x}, ${result.center_y})`);
+        await page.mouse.click(result.center_x, result.center_y);
+        return { 
+          success: true, 
+          strategy: 'ocr_coordinate_click',
+          coordinates: { x: result.center_x, y: result.center_y },
+          confidence: result.confidence
+        };
+      }
+      
+      throw new Error(`OCR could not find text: "${elementContext.text}"`);
     },
   ];
   
@@ -207,7 +255,7 @@ async function {action}WithIntelligentHealing(page, elementContext) {{
     }
   }
   
-  throw new Error(`All healing strategies failed. Last error: ${lastError?.message}`);
+  throw new Error(`All healing strategies (including OCR fallback) failed. Last error: ${lastError?.message}`);
 }}"""
         
         return code

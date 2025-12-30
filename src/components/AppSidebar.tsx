@@ -3,10 +3,11 @@ import {
   BookOpen, Sparkles, Plug, Code, FileCode, Map, Zap, Scan, BarChart3, 
   TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight, 
   Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database,
-  Video, Target, Gauge, Rocket, Wrench
+  Video, Target, Gauge, Rocket, Wrench, Circle, Cloud
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
+import { isElectron, showRecorder } from "@/lib/electron-bridge";
 import {
   Sidebar,
   SidebarContent,
@@ -48,8 +49,11 @@ const navigationGroups = [
   {
     label: "Create & Build",
     items: [
-      { title: "Trace (Record)", url: "/flowstral", icon: Video, highlight: true, description: "Record browser actions" },
-      { title: "Test Builder", url: "/builder", icon: Layers, highlight: true, description: "Unified test builder" },
+      { title: "Test Builder", url: "/builder", icon: Layers, highlight: true, description: "Build & record tests" },
+      // Recorder is only shown when running in Electron Desktop
+      ...(typeof window !== 'undefined' && (window as any).electronAPI?.isElectron 
+        ? [{ title: "Recorder", url: "#recorder", icon: Circle, highlight: true, description: "Record in docked browser", isElectronOnly: true }]
+        : []),
       { title: "Elements", url: "/elements", icon: MousePointerClick, description: "Element repository" },
     ],
   },
@@ -101,6 +105,7 @@ const navigationGroups = [
     collapsible: true,
     defaultOpen: false,
     items: [
+      { title: "Salesforce Tools", url: "/salesforce-tools", icon: Cloud, highlight: true, description: "SF API, Data, Schema" },
       { title: "API Testing", url: "/enhanced-api-testing", icon: Code },
       { title: "Performance & Load", url: "/load-testing", icon: Gauge, description: "Load testing & performance" },
       { title: "Accessibility", url: "/accessibility", icon: Scan },
@@ -220,6 +225,25 @@ export function AppSidebar() {
                     <SidebarMenu>
                       {group.items.map((item) => {
                         const isActive = isItemActive(item.url);
+                        const isElectronOnly = (item as any).isElectronOnly;
+                        
+                        if (isElectronOnly) {
+                          return (
+                            <SidebarMenuItem key={item.title}>
+                              <SidebarMenuButton asChild>
+                                <button
+                                  onClick={() => showRecorder()}
+                                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground hover:bg-cyan-100 hover:text-cyan-700 border border-cyan-200 bg-cyan-50/50"
+                                >
+                                  <item.icon className="h-4 w-4 text-cyan-600 fill-cyan-600" />
+                                  <span>{item.title}</span>
+                                  <span className="ml-auto text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
+                                </button>
+                              </SidebarMenuButton>
+                            </SidebarMenuItem>
+                          );
+                        }
+                        
                         return (
                           <SidebarMenuItem key={item.title}>
                             <SidebarMenuButton asChild>
@@ -255,6 +279,26 @@ export function AppSidebar() {
                     {group.items.map((item) => {
                       const isActive = isItemActive(item.url);
                       const itemHighlight = (item as any).highlight;
+                      const isElectronOnly = (item as any).isElectronOnly;
+                      
+                      // Handle Electron-only items (like Recorder)
+                      if (isElectronOnly) {
+                        return (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton asChild>
+                              <button
+                                onClick={() => showRecorder()}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground hover:bg-cyan-100 hover:text-cyan-700 border border-cyan-200 bg-cyan-50/50"
+                              >
+                                <item.icon className="h-4 w-4 text-cyan-600 fill-cyan-600" />
+                                <span>{item.title}</span>
+                                <span className="ml-auto text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
+                              </button>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      }
+                      
                       return (
                         <SidebarMenuItem key={item.title}>
                           <SidebarMenuButton asChild>

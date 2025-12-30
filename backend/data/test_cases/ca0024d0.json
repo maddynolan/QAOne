@@ -1,0 +1,666 @@
+{
+  "id": "ca0024d0",
+  "name": "Login Peformance Test",
+  "status": "approved",
+  "tags": [
+    "smoke",
+    "automated",
+    "salesforce-lwc"
+  ],
+  "created_at": "2025-12-11T12:38:47.708301",
+  "updated_at": "2025-12-11T12:38:47.708301",
+  "metadata": {
+    "start_url": "chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html",
+    "app_type": "salesforce-lwc",
+    "recorded_at": "2025-12-11T17:38:47.702Z",
+    "action_count": 26,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "smoke",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "Login Peformance Test",
+    "actionCount": 26,
+    "script": "from playwright.sync_api import expect\n\ndef test_login_peformance_test(page):\n    \"\"\"\n    Login Peformance Test\n    Recorded on: 2025-12-11T12:38:39.222862\n    Starting URL: chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\n    \"\"\"\n    page.goto(\"chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Get Started\"\n    page.get_by_role(\"link\", name=\"Get Started\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"link\", name=\"Get Started\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /register\n    # Navigate to /register\n    page.goto(\"http://localhost:3000/register\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Login\"\n    page.get_by_role(\"link\", name=\"Login\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"link\", name=\"Login\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /login\n    # Navigate to /login\n    page.goto(\"http://localhost:3000/login\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /login\n    # Navigate to /login\n    page.goto(\"http://localhost:3000/login\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Click input\n    # Click input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").click()\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"test\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"testuser\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"testuser\")\n\n    # Fallback selector used; could not determine robust selector for: Click input\n    # Click input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").click()\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"Test\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Se\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#Pass\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#Pass\")\n\n    # Click \"Login\"\n    page.get_by_role(\"button\", name=\"Login\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"button\", name=\"Login\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /dashboard\n    # Navigate to /dashboard\n    page.goto(\"http://localhost:3000/dashboard\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /dashboard\n    # Navigate to /dashboard\n    page.goto(\"http://localhost:3000/dashboard\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Order #412/5/2025$12.50pending...\"\n    page.get_by_text(\"Order #412/5/2025$12.50pending\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_text(\"Order #412/5/2025$12.50pending\").click()\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /orders/4\n    # Navigate to /orders/4\n    page.goto(\"http://localhost:3000/orders/4\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /orders/4\n    # Navigate to /orders/4\n    page.goto(\"http://localhost:3000/orders/4\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n"
+  },
+  "actions": [
+    {
+      "type": "click",
+      "description": "Click \"Get Started\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Get Started' })",
+          "confidence": 80,
+          "description": "Role: link \"Get Started\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Get Started' })",
+            "confidence": 60,
+            "description": "Text: \"Get Started\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Get Started' })",
+        "confidence": 80,
+        "description": "Role: link \"Get Started\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765474641575,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Get Started",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "px-6 py-3 bg-blue-700 text-white rounded-md font-semibold hover:bg-blue-600",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /register",
+      "url": "http://localhost:3000/register",
+      "timestamp": 1765474641581
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /register",
+      "url": "http://localhost:3000/register",
+      "timestamp": 1765474641595
+    },
+    {
+      "type": "click",
+      "description": "Click \"Login\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Login' })",
+          "confidence": 80,
+          "description": "Role: link \"Login\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Login' })",
+            "confidence": 60,
+            "description": "Text: \"Login\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Login' })",
+        "confidence": 80,
+        "description": "Role: link \"Login\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765474644287,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Login",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "text-blue-600 hover:underline",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /login",
+      "url": "http://localhost:3000/login",
+      "timestamp": 1765474644302
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /login",
+      "url": "http://localhost:3000/login",
+      "timestamp": 1765474644311
+    },
+    {
+      "type": "click",
+      "description": "Click input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765474645839,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500",
+      "triggersNavigation": false
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "test",
+      "timestamp": 1765474651810,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "testuser",
+      "timestamp": 1765474652927,
+      "tagName": "input",
+      "inputType": "text",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "testuser",
+      "timestamp": 1765474654539,
+      "tagName": "input",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "click",
+      "description": "Click input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765474654667,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500",
+      "triggersNavigation": false
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "Test",
+      "timestamp": 1765474657536,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser",
+      "timestamp": 1765474659504,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024",
+      "timestamp": 1765474661827,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!",
+      "timestamp": 1765474664359,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Se",
+      "timestamp": 1765474665308,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure",
+      "timestamp": 1765474666954,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure#",
+      "timestamp": 1765474671084,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure#Pass",
+      "timestamp": 1765474672074,
+      "tagName": "input",
+      "inputType": "password",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "selector": "input",
+          "playwright": "locator('input')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "input",
+        "playwright": "locator('input')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": "TestUser@2024!Secure#Pass",
+      "timestamp": 1765474674342,
+      "tagName": "input",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 border-gray-300 focus:ring-blue-500"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Login\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Login' })",
+          "confidence": 80,
+          "description": "Role: button \"Login\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Login' })",
+            "confidence": 60,
+            "description": "Text: \"Login\"",
+            "uniqueMatch": true
+          },
+          {
+            "type": "css",
+            "selector": "button.w-full.px-4",
+            "playwright": "locator('button.w-full.px-4')",
+            "confidence": 45,
+            "description": "CSS: button.w-full.px-4",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Login' })",
+        "confidence": 80,
+        "description": "Role: button \"Login\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765474674435,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Login",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /dashboard",
+      "url": "http://localhost:3000/dashboard",
+      "timestamp": 1765474674838
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /dashboard",
+      "url": "http://localhost:3000/dashboard",
+      "timestamp": 1765474674857
+    },
+    {
+      "type": "click",
+      "description": "Click \"Order #412/5/2025$12.50pending...\"",
+      "selector": {
+        "primary": {
+          "selector": "text=\"Order #412/5/2025$12.50pending\"",
+          "playwright": "locator('text=\"Order #412/5/2025$12.50pending\"')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "text=\"Order #412/5/2025$12.50pending\"",
+        "playwright": "locator('text=\"Order #412/5/2025$12.50pending\"')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765474681656,
+      "tagName": "div",
+      "innerText": "Order #4\n\n12/5/2025\n\n$12.50\n\npending",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "flex items-center justify-between",
+      "triggersNavigation": false
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /orders/4",
+      "url": "http://localhost:3000/orders/4",
+      "timestamp": 1765474681660
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /orders/4",
+      "url": "http://localhost:3000/orders/4",
+      "timestamp": 1765474681666
+    }
+  ],
+  "script": "from playwright.sync_api import expect\n\ndef test_login_peformance_test(page):\n    \"\"\"\n    Login Peformance Test\n    Recorded on: 2025-12-11T12:38:39.222862\n    Starting URL: chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\n    \"\"\"\n    page.goto(\"chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Get Started\"\n    page.get_by_role(\"link\", name=\"Get Started\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"link\", name=\"Get Started\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /register\n    # Navigate to /register\n    page.goto(\"http://localhost:3000/register\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Login\"\n    page.get_by_role(\"link\", name=\"Login\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"link\", name=\"Login\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /login\n    # Navigate to /login\n    page.goto(\"http://localhost:3000/login\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /login\n    # Navigate to /login\n    page.goto(\"http://localhost:3000/login\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Click input\n    # Click input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").click()\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"test\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"testuser\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"testuser\")\n\n    # Fallback selector used; could not determine robust selector for: Click input\n    # Click input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").click()\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"Test\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Se\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#Pass\")\n\n    # Fallback selector used; could not determine robust selector for: Fill input\n    # Fill input\n    page.locator(\"body\").wait_for(state=\"visible\", timeout=10000)\n    page.locator(\"body\").fill(\"TestUser@2024!Secure#Pass\")\n\n    # Click \"Login\"\n    page.get_by_role(\"button\", name=\"Login\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_role(\"button\", name=\"Login\").click()\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /dashboard\n    # Navigate to /dashboard\n    page.goto(\"http://localhost:3000/dashboard\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /dashboard\n    # Navigate to /dashboard\n    page.goto(\"http://localhost:3000/dashboard\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Click \"Order #412/5/2025$12.50pending...\"\n    page.get_by_text(\"Order #412/5/2025$12.50pending\").wait_for(state=\"visible\", timeout=10000)\n    page.get_by_text(\"Order #412/5/2025$12.50pending\").click()\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /orders/4\n    # Navigate to /orders/4\n    page.goto(\"http://localhost:3000/orders/4\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n    # Fallback selector used; could not determine robust selector for: Navigate to /orders/4\n    # Navigate to /orders/4\n    page.goto(\"http://localhost:3000/orders/4\")\n    page.wait_for_load_state(\"domcontentloaded\")\n\n",
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

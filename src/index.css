@@ -2,138 +2,189 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ═══════════════════════════════════════════════════════════════════════════
+ * FLOWSTRAL DESIGN SYSTEM
+ * 
+ * Color Philosophy:
+ * - Primary: Amber (#F59E0B) - Warm, energetic, distinctive
+ * - Background: Deep charcoal for reduced eye strain
+ * - Accent: Orange gradient for CTAs and highlights
+ * - All colors use HSL for consistency
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer base {
   :root {
+    /* Flowstral Amber Theme - Light Mode (rarely used) */
     --background: 220 17% 97%;
     --foreground: 220 15% 15%;
-
     --card: 0 0% 100%;
     --card-foreground: 220 15% 15%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 220 15% 15%;
-
-    --primary: 262 83% 58%;
+    
+    /* Primary: Amber */
+    --primary: 38 92% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 262 83% 68%;
-
+    --primary-glow: 38 92% 60%;
+    
     --secondary: 220 14% 96%;
     --secondary-foreground: 220 15% 20%;
-
     --muted: 220 14% 96%;
     --muted-foreground: 220 13% 46%;
-
-    --accent: 198 93% 60%;
+    
+    /* Accent: Orange */
+    --accent: 25 95% 53%;
     --accent-foreground: 0 0% 100%;
-
+    
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
-
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-
+    
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 262 83% 58%;
-
+    --ring: 38 92% 50%;
     --radius: 0.75rem;
     
-    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(198 93% 60%));
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
     --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 76% 50%));
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 17% 99%));
     
+    /* Shadows */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-glow: 0 0 40px hsl(262 83% 58% / 0.3);
-
+    --shadow-glow: 0 0 40px hsl(38 92% 50% / 0.3);
+    --shadow-amber: 0 4px 20px hsl(38 92% 50% / 0.25);
+    
+    /* Sidebar */
     --sidebar-background: 0 0% 100%;
-
     --sidebar-foreground: 220 15% 20%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 220 14% 96%;
-
     --sidebar-accent-foreground: 220 15% 20%;
-
     --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 262 83% 58%;
+    --sidebar-ring: 38 92% 50%;
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════════
+   * DARK MODE - Primary theme for Flowstral
+   * ═══════════════════════════════════════════════════════════════════════════ */
   .dark {
-    --background: 220 15% 8%;
+    /* Deep charcoal background */
+    --background: 220 20% 4%;
     --foreground: 220 10% 95%;
-
-    --card: 220 15% 10%;
+    
+    /* Card: Slightly elevated surface */
+    --card: 220 18% 8%;
     --card-foreground: 220 10% 95%;
-
-    --popover: 220 15% 10%;
+    
+    --popover: 220 18% 8%;
     --popover-foreground: 220 10% 95%;
-
-    --primary: 262 83% 58%;
+    
+    /* Primary: Amber - The signature Flowstral color */
+    --primary: 38 92% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 262 83% 68%;
-
-    --secondary: 220 15% 15%;
+    --primary-glow: 38 92% 60%;
+    
+    --secondary: 220 18% 12%;
     --secondary-foreground: 220 10% 95%;
-
-    --muted: 220 15% 15%;
-    --muted-foreground: 220 10% 65%;
-
-    --accent: 198 93% 60%;
+    
+    --muted: 220 18% 12%;
+    --muted-foreground: 220 10% 55%;
+    
+    /* Accent: Orange for gradients */
+    --accent: 25 95% 53%;
     --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 84% 60%;
+    
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-
-    --success: 142 76% 36%;
+    
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-
+    
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-
-    --border: 220 15% 20%;
-    --input: 220 15% 20%;
-    --ring: 262 83% 58%;
     
-    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(198 93% 60%));
-    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 76% 50%));
-    --gradient-card: linear-gradient(180deg, hsl(220 15% 10%), hsl(220 15% 12%));
+    --border: 220 18% 15%;
+    --input: 220 18% 15%;
+    --ring: 38 92% 50%;
     
-    --shadow-glow: 0 0 40px hsl(262 83% 58% / 0.4);
-    --sidebar-background: 220 15% 12%;
+    /* Dark mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
+    --gradient-success: linear-gradient(135deg, hsl(142 71% 45%), hsl(142 76% 55%));
+    --gradient-card: linear-gradient(180deg, hsl(220 18% 8%), hsl(220 18% 10%));
+    
+    /* Enhanced dark shadows */
+    --shadow-glow: 0 0 50px hsl(38 92% 50% / 0.35);
+    --shadow-amber: 0 4px 25px hsl(38 92% 50% / 0.3);
+    
+    /* Sidebar dark */
+    --sidebar-background: 220 20% 6%;
     --sidebar-foreground: 220 10% 90%;
-    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary: 38 92% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 18%;
+    --sidebar-accent: 220 18% 12%;
     --sidebar-accent-foreground: 220 10% 90%;
-    --sidebar-border: 220 15% 20%;
-    --sidebar-ring: 262 83% 58%;
+    --sidebar-border: 220 18% 15%;
+    --sidebar-ring: 38 92% 50%;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * BASE STYLES
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    /* Force dark mode */
+    @apply dark;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
+  }
+
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+
+  /* Selection color */
+  ::selection {
+    @apply bg-amber-500/30 text-amber-100;
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * UTILITIES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 @layer utilities {
+  /* Flowstral gradients */
   .gradient-primary {
     background: var(--gradient-primary);
   }
@@ -146,10 +197,45 @@ All colors MUST be HSL.
     background: var(--gradient-card);
   }
   
+  /* Amber glow effects */
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
   
+  .shadow-amber {
+    box-shadow: var(--shadow-amber);
+  }
+  
+  .glow-amber {
+    box-shadow: 0 0 20px hsl(38 92% 50% / 0.4), 0 0 40px hsl(38 92% 50% / 0.2);
+  }
+  
+  .glow-amber-sm {
+    box-shadow: 0 0 10px hsl(38 92% 50% / 0.3);
+  }
+  
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500;
+  }
+  
+  /* Border gradient */
+  .border-gradient {
+    border: 1px solid transparent;
+    background: linear-gradient(var(--card), var(--card)) padding-box,
+                linear-gradient(135deg, hsl(38 92% 50% / 0.5), hsl(25 95% 53% / 0.5)) border-box;
+  }
+  
+  /* Glass effect */
+  .glass {
+    @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800/50;
+  }
+  
+  .glass-light {
+    @apply bg-gray-800/40 backdrop-blur-lg border border-gray-700/30;
+  }
+  
+  /* Animations */
   .animate-slide-up {
     animation: slide-up 0.5s ease-out;
   }
@@ -157,7 +243,29 @@ All colors MUST be HSL.
   .animate-fade-in {
     animation: fade-in 0.6s ease-out;
   }
+  
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out;
+  }
+  
+  .animate-glow-pulse {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+  
+  /* Hover lift effect */
+  .hover-lift {
+    @apply transition-all duration-200;
+  }
+  
+  .hover-lift:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 8px 25px hsl(38 92% 50% / 0.15);
+  }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * KEYFRAMES
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
 @keyframes slide-up {
   from {
@@ -177,4 +285,448 @@ All colors MUST be HSL.
   to {
     opacity: 1;
   }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px hsl(38 92% 50% / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px hsl(38 92% 50% / 0.5);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * COMPONENT OVERRIDES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Buttons with amber accent */
+.btn-primary {
+  @apply bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium;
+  @apply hover:from-amber-400 hover:to-orange-400;
+  @apply shadow-amber transition-all duration-200;
+}
+
+.btn-primary:hover {
+  @apply shadow-glow;
+}
+
+/* Cards with subtle amber border on hover */
+.card-hover {
+  @apply transition-all duration-200 border border-gray-800;
+}
+
+.card-hover:hover {
+  @apply border-amber-500/30;
+  box-shadow: 0 0 20px hsl(38 92% 50% / 0.1);
+}
+
+/* Input focus states */
+input:focus, textarea:focus, select:focus {
+  @apply ring-2 ring-amber-500/50 border-amber-500/50;
+}
+
+/* Badge variants */
+.badge-amber {
+  @apply bg-amber-500/10 text-amber-400 border border-amber-500/20;
+}
+
+.badge-success {
+  @apply bg-green-500/10 text-green-400 border border-green-500/20;
+}
+
+.badge-error {
+  @apply bg-red-500/10 text-red-400 border border-red-500/20;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * GLOBAL DARK MODE OVERRIDES
+ * Force dark styling on all components for consistency
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Force dark backgrounds on cards */
+.dark [data-slot="card"],
+.dark .card,
+[class*="CardContent"],
+[class*="CardHeader"] {
+  --tw-bg-opacity: 1;
+}
+
+/* Dark card styling */
+.dark .bg-card,
+.dark [class*="bg-card"] {
+  background-color: rgb(17 24 39) !important; /* gray-900 */
+}
+
+.dark .bg-muted,
+.dark [class*="bg-muted"] {
+  background-color: rgb(31 41 55) !important; /* gray-800 */
+}
+
+/* Text colors */
+.dark .text-muted-foreground,
+.dark [class*="text-muted-foreground"] {
+  color: rgb(156 163 175) !important; /* gray-400 */
+}
+
+/* Border colors */
+.dark .border-border,
+.dark [class*="border-border"],
+.dark .border {
+  border-color: rgb(55 65 81) !important; /* gray-700 */
+}
+
+/* Input styling - CRITICAL for dark theme */
+.dark input,
+.dark textarea,
+.dark select,
+.dark [type="text"],
+.dark [type="email"],
+.dark [type="password"],
+.dark [type="number"],
+.dark [type="url"] {
+  background-color: rgb(17 24 39) !important; /* gray-900 */
+  border-color: rgb(55 65 81) !important; /* gray-700 */
+  color: white !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgb(107 114 128) !important; /* gray-500 */
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: rgb(245 158 11) !important; /* amber-500 */
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(245 158 11 / 0.2) !important;
+}
+
+/* Select/Dropdown styling */
+.dark [data-radix-select-trigger],
+.dark [role="combobox"] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark [data-radix-select-content],
+.dark [role="listbox"] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Dialog/Modal dark styling */
+.dark [role="dialog"],
+.dark [data-radix-dialog-content] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Dropdown menu dark styling */
+.dark [role="menu"],
+.dark [data-radix-menu-content] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark [role="menuitem"]:hover,
+.dark [role="menuitem"]:focus {
+  background-color: rgb(31 41 55) !important;
+}
+
+/* Tab styling */
+.dark [role="tablist"] {
+  background-color: rgb(31 41 55) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark [role="tab"] {
+  color: rgb(156 163 175) !important;
+}
+
+.dark [role="tab"][data-state="active"],
+.dark [role="tab"]:hover {
+  color: white !important;
+}
+
+.dark [role="tab"][data-state="active"] {
+  background-color: rgb(55 65 81) !important;
+}
+
+/* Alert styling */
+.dark [role="alert"] {
+  background-color: rgb(31 41 55) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Table styling */
+.dark table {
+  background-color: rgb(17 24 39) !important;
+}
+
+.dark th {
+  background-color: rgb(31 41 55) !important;
+  color: rgb(156 163 175) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark td {
+  border-color: rgb(55 65 81) !important;
+}
+
+.dark tr:hover {
+  background-color: rgb(31 41 55) !important;
+}
+
+/* Progress bar */
+.dark [role="progressbar"] {
+  background-color: rgb(55 65 81) !important;
+}
+
+/* Button outline variant */
+.dark .btn-outline,
+.dark button[class*="outline"] {
+  border-color: rgb(55 65 81) !important;
+  color: rgb(156 163 175) !important;
+}
+
+.dark .btn-outline:hover,
+.dark button[class*="outline"]:hover {
+  background-color: rgb(31 41 55) !important;
+  color: white !important;
+}
+
+/* Fix violet/purple sections to use amber */
+.dark .from-violet-50,
+.dark .from-violet-950\/30,
+.dark .to-purple-50,
+.dark .to-purple-950\/30 {
+  --tw-gradient-from: rgb(245 158 11 / 0.1) !important;
+  --tw-gradient-to: rgb(234 88 12 / 0.1) !important;
+}
+
+.dark .text-violet-700,
+.dark .text-violet-300,
+.dark .text-violet-600 {
+  color: rgb(251 191 36) !important; /* amber-400 */
+}
+
+.dark .border-violet-200,
+.dark .border-violet-800 {
+  border-color: rgb(245 158 11 / 0.3) !important;
+}
+
+/* Fix any remaining white backgrounds */
+.dark .bg-white {
+  background-color: rgb(17 24 39) !important;
+}
+
+.dark .bg-gray-50,
+.dark .bg-slate-50 {
+  background-color: rgb(31 41 55) !important;
+}
+
+/* Scrollbar for dialogs and panels */
+.dark ::-webkit-scrollbar-track {
+  background: rgb(17 24 39);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(55 65 81);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * COMPONENT-SPECIFIC DARK OVERRIDES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Fix any Card components that might use light defaults */
+[class*="rounded-lg"][class*="shadow"],
+[class*="rounded-xl"][class*="shadow"],
+[class*="rounded-md"][class*="shadow"] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Ensure all form elements are dark */
+.dark .form-input,
+.dark .form-select,
+.dark .form-textarea,
+.dark .form-multiselect {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+  color: white !important;
+}
+
+/* ShadCN UI Component Fixes */
+.dark [data-radix-popper-content-wrapper] {
+  --background: rgb(17 24 39);
+}
+
+/* Combobox/Command palette fixes */
+.dark [cmdk-root],
+.dark [cmdk-input-wrapper],
+.dark [cmdk-list] {
+  background-color: rgb(17 24 39) !important;
+}
+
+.dark [cmdk-input] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+  color: white !important;
+}
+
+.dark [cmdk-item] {
+  color: rgb(209 213 219) !important;
+}
+
+.dark [cmdk-item][data-selected="true"],
+.dark [cmdk-item]:hover {
+  background-color: rgb(31 41 55) !important;
+  color: white !important;
+}
+
+/* Tooltip fixes */
+.dark [role="tooltip"],
+.dark [data-radix-popper-content-wrapper] [role="tooltip"] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+  color: white !important;
+}
+
+/* Popover fixes */
+.dark [data-radix-popover-content] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Accordion fixes */
+.dark [data-radix-accordion-content] {
+  background-color: rgb(17 24 39) !important;
+}
+
+.dark [data-radix-accordion-trigger] {
+  color: white !important;
+}
+
+/* Label styling */
+.dark label {
+  color: rgb(209 213 219) !important;
+}
+
+/* Code/Pre blocks */
+.dark pre,
+.dark code {
+  background-color: rgb(17 24 39) !important;
+  color: rgb(209 213 219) !important;
+}
+
+.dark code {
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Sheet/Drawer fixes */
+.dark [data-radix-dialog-content] {
+  background-color: rgb(17 24 39) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* Separator styling */
+.dark [data-radix-separator-root],
+.dark hr {
+  background-color: rgb(55 65 81) !important;
+  border-color: rgb(55 65 81) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * UTILITY CLASSES FOR CONSISTENT DARK UI
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dark card variant */
+.card-dark {
+  @apply bg-gray-900 border border-gray-700 rounded-lg;
+}
+
+.card-dark-hover {
+  @apply bg-gray-900 border border-gray-700 rounded-lg hover:border-amber-500/50 transition-all;
+}
+
+/* Dark input variant */
+.input-dark {
+  @apply bg-gray-900 border border-gray-700 text-white placeholder:text-gray-500 focus:border-amber-500 focus:ring-amber-500/20;
+}
+
+/* Dark button variants */
+.btn-primary {
+  @apply bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white;
+}
+
+.btn-success {
+  @apply bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white;
+}
+
+.btn-outline-dark {
+  @apply border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white;
+}
+
+/* Tab styling */
+.tab-dark {
+  @apply text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white;
+}
+
+/* Badge variants */
+.badge-dark {
+  @apply border border-gray-600 text-gray-300 bg-gray-800;
+}
+
+/* Panel/Container styling */
+.panel-dark {
+  @apply bg-gray-900 border border-gray-800 rounded-lg;
+}
+
+.panel-dark-inset {
+  @apply bg-gray-800/50 rounded-lg border border-gray-700;
+}
+
+/* Tab styles */
+.tab-active {
+  @apply bg-amber-500/10 text-amber-500 border-b-2 border-amber-500;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-dot-success {
+  @apply bg-green-500 shadow-[0_0_8px_hsl(142_71%_45%/0.5)];
+}
+
+.status-dot-warning {
+  @apply bg-amber-500 shadow-[0_0_8px_hsl(38_92%_50%/0.5)];
+}
+
+.status-dot-error {
+  @apply bg-red-500 shadow-[0_0_8px_hsl(0_72%_51%/0.5)];
+}
+
+/* Recording indicator */
+.recording-pulse {
+  @apply relative;
+}
+
+.recording-pulse::after {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75;
 }

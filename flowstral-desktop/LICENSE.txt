@@ -1,0 +1,70 @@
+FLOWSTRAL DESKTOP AGENT LICENSE AGREEMENT
+
+Copyright (c) 2024 Flowstral Inc. All Rights Reserved.
+
+NOTICE: This software is licensed, not sold. By installing or using this 
+software, you agree to be bound by the terms of this license agreement.
+
+1. GRANT OF LICENSE
+   Subject to the terms and conditions of this Agreement and payment of 
+   applicable license fees, Flowstral Inc. grants you a non-exclusive, 
+   non-transferable license to use the Flowstral Desktop Agent software 
+   ("Software") for your internal business purposes.
+
+2. LICENSE TYPES
+   a. Trial License: 14-day evaluation, limited features
+   b. Professional License: Single user, standard features
+   c. Enterprise License: Multi-user, full features
+   d. Unlimited License: Organization-wide, all features + support
+
+3. RESTRICTIONS
+   You may NOT:
+   - Copy, modify, or distribute the Software
+   - Reverse engineer, decompile, or disassemble the Software
+   - Rent, lease, or lend the Software to third parties
+   - Remove any proprietary notices or labels
+   - Use the Software for competing products
+
+4. ACTIVATION
+   The Software requires activation with a valid license key. Each license 
+   key has a maximum number of device activations. You may deactivate a 
+   device to free up an activation slot.
+
+5. UPDATES
+   Licensed users receive software updates for the duration of their 
+   license period. Updates may include bug fixes, feature improvements, 
+   and security patches.
+
+6. SUPPORT
+   - Professional: Email support, 48-hour response time
+   - Enterprise: Priority support, 24-hour response time
+   - Unlimited: Dedicated support, 4-hour response time
+
+7. DATA PRIVACY
+   The Software collects minimal usage data for license validation and 
+   product improvement. Test data remains on your systems and is not 
+   transmitted to Flowstral servers unless explicitly configured for 
+   cloud execution.
+
+8. WARRANTY DISCLAIMER
+   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+9. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL FLOWSTRAL INC. BE LIABLE FOR ANY SPECIAL, INCIDENTAL, 
+   INDIRECT, OR CONSEQUENTIAL DAMAGES WHATSOEVER ARISING OUT OF THE USE OF 
+   OR INABILITY TO USE THE SOFTWARE.
+
+10. TERMINATION
+    This license is effective until terminated. It will terminate 
+    automatically without notice if you fail to comply with any term of 
+    this Agreement. Upon termination, you must destroy all copies of the 
+    Software.
+
+For licensing inquiries: licensing@flowstral.com
+For support: support@flowstral.com
+Website: https://flowstral.com
+
+Last Updated: December 2024
+

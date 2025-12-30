@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QAAI/Flowstral Deployment Plan</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background: #ffffff;
+            padding: 40px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        
+        @media print {
+            body { padding: 20px; }
+            .page-break { page-break-before: always; }
+            .no-print { display: none; }
+        }
+        
+        .header {
+            text-align: center;
+            padding: 40px 0;
+            border-bottom: 3px solid #4F46E5;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2rem;
+            color: #64748b;
+        }
+        
+        .header .version {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+        
+        .badge-recommended {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .badge-enterprise {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+        
+        h2 {
+            font-size: 1.8rem;
+            color: #1a1a2e;
+            margin: 40px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        h3 {
+            font-size: 1.3rem;
+            color: #334155;
+            margin: 30px 0 15px;
+        }
+        
+        h4 {
+            font-size: 1.1rem;
+            color: #475569;
+            margin: 20px 0 10px;
+        }
+        
+        p {
+            margin: 15px 0;
+            color: #475569;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.9rem;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #334155;
+        }
+        
+        tr:hover {
+            background: #f8fafc;
+        }
+        
+        .highlight-row {
+            background: #f0fdf4 !important;
+        }
+        
+        .summary-box {
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+        }
+        
+        .summary-box h3 {
+            color: white;
+            margin-top: 0;
+        }
+        
+        .summary-box ul {
+            margin-left: 20px;
+        }
+        
+        .summary-box li {
+            margin: 8px 0;
+        }
+        
+        .architecture-diagram {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 20px 0;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .pros-cons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .pros, .cons {
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .pros {
+            background: #f0fdf4;
+            border-left: 4px solid #22c55e;
+        }
+        
+        .cons {
+            background: #fef2f2;
+            border-left: 4px solid #ef4444;
+        }
+        
+        .pros h4, .cons h4 {
+            margin-top: 0;
+        }
+        
+        .pros ul, .cons ul {
+            margin-left: 20px;
+        }
+        
+        .pros li { color: #166534; }
+        .cons li { color: #991b1b; }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .pricing-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .pricing-card.featured {
+            border-color: #4F46E5;
+            transform: scale(1.02);
+            box-shadow: 0 10px 40px rgba(79, 70, 229, 0.15);
+        }
+        
+        .pricing-card h4 {
+            color: #1a1a2e;
+            margin: 0;
+        }
+        
+        .pricing-card .price {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #4F46E5;
+            margin: 15px 0;
+        }
+        
+        .pricing-card .price span {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #64748b;
+        }
+        
+        .pricing-card ul {
+            list-style: none;
+            text-align: left;
+            margin: 20px 0;
+        }
+        
+        .pricing-card li {
+            padding: 8px 0;
+            color: #475569;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        
+        .pricing-card li::before {
+            content: "✓ ";
+            color: #22c55e;
+            font-weight: bold;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 30px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, #4F46E5, #7C3AED);
+            border-radius: 3px;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding-left: 20px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -34px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            background: #4F46E5;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 0 3px #4F46E5;
+        }
+        
+        .timeline-item h4 {
+            color: #4F46E5;
+            margin: 0 0 10px;
+        }
+        
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .tech-item {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .tech-item .tech-name {
+            font-weight: 600;
+            color: #1a1a2e;
+        }
+        
+        .tech-item .tech-desc {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        
+        .cost-comparison {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        
+        .cost-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .cost-row:last-child {
+            border-bottom: none;
+            font-weight: 700;
+            color: #22c55e;
+        }
+        
+        .toc {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 30px 0;
+        }
+        
+        .toc h3 {
+            margin-top: 0;
+        }
+        
+        .toc ol {
+            columns: 2;
+            column-gap: 40px;
+        }
+        
+        .toc li {
+            padding: 5px 0;
+            color: #4F46E5;
+        }
+        
+        .recommendation-box {
+            background: #fffbeb;
+            border: 2px solid #fbbf24;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+        
+        .recommendation-box h3 {
+            color: #92400e;
+            margin-top: 0;
+        }
+        
+        footer {
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .print-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+        }
+        
+        .print-button:hover {
+            background: #4338ca;
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button no-print" onclick="window.print()">📄 Save as PDF</button>
+    
+    <div class="header">
+        <h1>QAAI/Flowstral Platform</h1>
+        <div class="subtitle">Enterprise Deployment Strategy</div>
+        <div class="version">Version 1.0 | December 2024 | Strategic Planning Document</div>
+    </div>
+    
+    <div class="summary-box">
+        <h3>🎯 Executive Summary</h3>
+        <p>After comprehensive analysis of the QAAI/Flowstral platform architecture, we recommend a <strong>Hybrid SaaS</strong> deployment model:</p>
+        <ul>
+            <li><strong>Core Platform Services</strong> → Managed SaaS (your infrastructure)</li>
+            <li><strong>Test Execution Workers</strong> → Customer's infrastructure or your cloud</li>
+            <li><strong>Sensitive Data</strong> → Customer's choice (their DB or encrypted in your SaaS)</li>
+        </ul>
+        <p style="margin-top: 20px;">This approach achieves: ✅ Lower customer friction | ✅ Data sovereignty | ✅ Scalable execution | ✅ Recurring revenue</p>
+    </div>
+    
+    <div class="toc">
+        <h3>📑 Table of Contents</h3>
+        <ol>
+            <li>Platform Components Overview</li>
+            <li>Deployment Models Comparison</li>
+            <li>Component Placement Strategy</li>
+            <li>Recommended Architecture</li>
+            <li>Security & Compliance</li>
+            <li>Infrastructure Requirements</li>
+            <li>Cost Analysis</li>
+            <li>Implementation Roadmap</li>
+            <li>Pricing Strategy</li>
+            <li>Technical Specifications</li>
+        </ol>
+    </div>
+    
+    <h2>1. Platform Components Overview</h2>
+    
+    <h3>Technology Stack</h3>
+    <div class="tech-stack">
+        <div class="tech-item">
+            <div class="tech-name">React 18 + TypeScript</div>
+            <div class="tech-desc">Frontend UI</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">FastAPI (Python)</div>
+            <div class="tech-desc">Backend API</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">Playwright 1.48+</div>
+            <div class="tech-desc">Test Execution</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">PostgreSQL 15+</div>
+            <div class="tech-desc">Database</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">Claude API + Ollama</div>
+            <div class="tech-desc">AI/LLM Services</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">Chrome Extension</div>
+            <div class="tech-desc">Recording</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">Redis</div>
+            <div class="tech-desc">Caching & Queues</div>
+        </div>
+        <div class="tech-item">
+            <div class="tech-name">WebSocket</div>
+            <div class="tech-desc">Real-time Updates</div>
+        </div>
+    </div>
+    
+    <h3>Platform Capabilities</h3>
+    <table>
+        <tr>
+            <th>Feature</th>
+            <th>Description</th>
+            <th>Competitive Advantage</th>
+        </tr>
+        <tr>
+            <td><strong>Visual Test Recording</strong></td>
+            <td>Browser extension records user interactions</td>
+            <td>No proxy configuration needed</td>
+        </tr>
+        <tr>
+            <td><strong>AI Test Generation</strong></td>
+            <td>Generate tests from requirements using LLM</td>
+            <td>80-95% cost reduction via caching</td>
+        </tr>
+        <tr>
+            <td><strong>Self-Healing Tests</strong></td>
+            <td>Automatically fix broken selectors</td>
+            <td>5 intelligent healing strategies</td>
+        </tr>
+        <tr>
+            <td><strong>Multi-Framework Export</strong></td>
+            <td>Playwright, Selenium, Cypress support</td>
+            <td>No vendor lock-in</td>
+        </tr>
+        <tr>
+            <td><strong>Enterprise App Support</strong></td>
+            <td>Salesforce, ServiceNow, Workday, SAP</td>
+            <td>Smart selectors for 25+ apps</td>
+        </tr>
+    </table>
+    
+    <div class="page-break"></div>
+    
+    <h2>2. Deployment Models Comparison</h2>
+    
+    <h3>Model 1: Full SaaS (Multi-Tenant Cloud)</h3>
+    <div class="pros-cons">
+        <div class="pros">
+            <h4>✅ Pros</h4>
+            <ul>
+                <li>Lowest customer friction</li>
+                <li>Easiest to maintain</li>
+                <li>Centralized updates</li>
+                <li>Predictable costs</li>
+                <li>Economies of scale</li>
+            </ul>
+        </div>
+        <div class="cons">
+            <h4>❌ Cons</h4>
+            <ul>
+                <li>Customer data leaves their network</li>
+                <li>Compliance concerns (SOC2, HIPAA)</li>
+                <li>Cannot test internal applications</li>
+                <li>Higher LLM costs</li>
+                <li>Network latency for execution</li>
+            </ul>
+        </div>
+    </div>
+    
+    <h3>Model 2: Full On-Premises</h3>
+    <div class="pros-cons">
+        <div class="pros">
+            <h4>✅ Pros</h4>
+            <ul>
+                <li>Data never leaves customer</li>
+                <li>Full compliance control</li>
+                <li>Test internal applications</li>
+                <li>Use customer's LLM keys</li>
+                <li>No network latency</li>
+            </ul>
+        </div>
+        <div class="cons">
+            <h4>❌ Cons</h4>
+            <ul>
+                <li>High deployment complexity</li>
+                <li>Customer needs DevOps expertise</li>
+                <li>Updates are painful</li>
+                <li>Higher support burden</li>
+                <li>One-time license model</li>
+            </ul>
+        </div>
+    </div>
+    
+    <h3>Model 3: Hybrid SaaS <span class="badge badge-recommended">⭐ RECOMMENDED</span></h3>
+    <div class="pros-cons">
+        <div class="pros">
+            <h4>✅ Pros</h4>
+            <ul>
+                <li>Best of both worlds</li>
+                <li>Sensitive data stays local</li>
+                <li>Test internal applications</li>
+                <li>Recurring SaaS revenue</li>
+                <li>Easy updates for core platform</li>
+                <li>Customer choice on data location</li>
+            </ul>
+        </div>
+        <div class="cons">
+            <h4>⚠️ Considerations</h4>
+            <ul>
+                <li>More complex than pure SaaS</li>
+                <li>Requires agent installation</li>
+                <li>Tunnel management needed</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="page-break"></div>
+    
+    <h2>3. Component Placement Strategy</h2>
+    
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Sensitivity</th>
+            <th>Compute Needs</th>
+            <th>Recommended Location</th>
+        </tr>
+        <tr>
+            <td>React Frontend</td>
+            <td>Low</td>
+            <td>Static</td>
+            <td>Your CDN</td>
+        </tr>
+        <tr>
+            <td>FastAPI Backend</td>
+            <td>Medium</td>
+            <td>Low-Medium</td>
+            <td>Your Cloud</td>
+        </tr>
+        <tr>
+            <td>LLM Gateway</td>
+            <td>Low</td>
+            <td>Medium</td>
+            <td>Your Cloud</td>
+        </tr>
+        <tr>
+            <td>PostgreSQL (metadata)</td>
+            <td>Medium</td>
+            <td>Medium</td>
+            <td>Your Cloud</td>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>PostgreSQL (test data)</strong></td>
+            <td><strong>HIGH</strong></td>
+            <td>Medium</td>
+            <td><strong>Customer Choice</strong></td>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>Test Workers</strong></td>
+            <td><strong>HIGH</strong></td>
+            <td><strong>HIGH</strong></td>
+            <td><strong>Customer Network</strong></td>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>Screenshots/Videos</strong></td>
+            <td><strong>HIGH</strong></td>
+            <td>Storage</td>
+            <td><strong>Customer Choice</strong></td>
+        </tr>
+        <tr>
+            <td>Redis Cache</td>
+            <td>Low</td>
+            <td>Low</td>
+            <td>Your Cloud</td>
+        </tr>
+        <tr>
+            <td>Browser Extension</td>
+            <td>Low</td>
+            <td>N/A</td>
+            <td>Chrome Web Store</td>
+        </tr>
+    </table>
+    
+    <h2>4. Recommended Architecture: Hybrid SaaS</h2>
+    
+    <div class="architecture-diagram">
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                        YOUR SAAS CLOUD (Control Plane)                             ║
+║                              AWS / GCP / Azure                                     ║
+╠═══════════════════════════════════════════════════════════════════════════════════╣
+║                                                                                    ║
+║    ┌─────────────┐     ┌──────────────────────────────────────────────────────┐  ║
+║    │     CDN     │     │                KUBERNETES CLUSTER                     │  ║
+║    │  CloudFront │     │  ┌─────────┐  ┌─────────┐  ┌─────────┐              │  ║
+║    │  React App  │     │  │ FastAPI │  │ FastAPI │  │ FastAPI │  (3+ pods)   │  ║
+║    └─────────────┘     │  └─────────┘  └─────────┘  └─────────┘              │  ║
+║           │            │  ┌─────────┐  ┌──────────┐                          │  ║
+║           │            │  │   LLM   │  │ WebSocket│                          │  ║
+║           │            │  │ Gateway │  │ Manager  │                          │  ║
+║           │            │  └─────────┘  └──────────┘                          │  ║
+║           │            └──────────────────────────────────────────────────────┘  ║
+║           │                              │                                        ║
+║           │            ┌─────────────────┴─────────────────┐                     ║
+║           │       ┌────▼────┐                        ┌────▼────┐                ║
+║           │       │  RDS    │                        │  Redis  │                ║
+║           │       │Metadata │                        │ Cache   │                ║
+║           │       │Accounts │                        │ Jobs    │                ║
+║           │       └─────────┘                        └─────────┘                ║
+╚═══════════╪═══════════════════════════════════════════════════════════════════════╝
+            │
+════════════╪════════════════════ SECURE TUNNEL ════════════════════════════════════
+            │               (WireGuard / Cloudflare Tunnel)
+            │
+╔═══════════╪═══════════════════════════════════════════════════════════════════════╗
+║           │            CUSTOMER'S NETWORK (Data Plane)                             ║
+╠═══════════╪═══════════════════════════════════════════════════════════════════════╣
+║           │                                                                        ║
+║           │      ┌────────────────────────────────────────────────────────────┐  ║
+║           │      │                  WORKER AGENT CLUSTER                       │  ║
+║           │      │  ┌───────────┐  ┌───────────┐  ┌───────────┐              │  ║
+║           └──────┼─▶│  Worker   │  │  Worker   │  │  Worker   │  (N agents)  │  ║
+║                  │  │ Playwright│  │ Playwright│  │ Playwright│              │  ║
+║                  │  └───────────┘  └───────────┘  └───────────┘              │  ║
+║                  └────────────────────────────────────────────────────────────┘  ║
+║                              │                                                    ║
+║            ┌─────────────────┴─────────────────┐                                 ║
+║       ┌────▼────┐                        ┌────▼────┐                            ║
+║       │Customer │                        │Customer │                            ║
+║       │Database │                        │ Storage │                            ║
+║       │Test Data│                        │Artifacts│                            ║
+║       └─────────┘                        └─────────┘                            ║
+║                                                                                   ║
+║       ┌──────────────────────────────────────────────────────────────────────┐  ║
+║       │                    INTERNAL APPLICATIONS                              │  ║
+║       │     Salesforce  │  SAP  │  Intranet  │  Custom Apps                  │  ║
+║       └──────────────────────────────────────────────────────────────────────┘  ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+    </div>
+    
+    <div class="page-break"></div>
+    
+    <h2>5. Security & Compliance</h2>
+    
+    <h3>Security Layers</h3>
+    <table>
+        <tr>
+            <th>Layer</th>
+            <th>Implementation</th>
+            <th>Technologies</th>
+        </tr>
+        <tr>
+            <td><strong>Network Security</strong></td>
+            <td>Encrypted transport, DDoS protection</td>
+            <td>TLS 1.3, WAF, VPC isolation</td>
+        </tr>
+        <tr>
+            <td><strong>Authentication</strong></td>
+            <td>Token-based auth, SSO support</td>
+            <td>JWT, OAuth 2.0, SAML 2.0</td>
+        </tr>
+        <tr>
+            <td><strong>Authorization</strong></td>
+            <td>Role-based access control</td>
+            <td>RBAC middleware, PostgreSQL RLS</td>
+        </tr>
+        <tr>
+            <td><strong>Data Encryption</strong></td>
+            <td>At rest and in transit</td>
+            <td>AES-256, customer-managed keys</td>
+        </tr>
+        <tr>
+            <td><strong>Multi-tenancy</strong></td>
+            <td>Complete isolation between orgs</td>
+            <td>Tenant middleware, RLS policies</td>
+        </tr>
+        <tr>
+            <td><strong>Audit & Compliance</strong></td>
+            <td>Immutable logging, data policies</td>
+            <td>Audit log table, GDPR tools</td>
+        </tr>
+    </table>
+    
+    <h3>Compliance Certification Path</h3>
+    <table>
+        <tr>
+            <th>Certification</th>
+            <th>Timeline</th>
+            <th>Effort</th>
+            <th>Business Impact</th>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>SOC 2 Type I</strong></td>
+            <td>3-6 months</td>
+            <td>Medium</td>
+            <td>Required for enterprise sales</td>
+        </tr>
+        <tr>
+            <td>SOC 2 Type II</td>
+            <td>+6 months</td>
+            <td>Medium</td>
+            <td>Enterprise deals $100K+</td>
+        </tr>
+        <tr>
+            <td>ISO 27001</td>
+            <td>6-12 months</td>
+            <td>High</td>
+            <td>European enterprises</td>
+        </tr>
+        <tr>
+            <td>HIPAA</td>
+            <td>6-9 months</td>
+            <td>High</td>
+            <td>Healthcare sector</td>
+        </tr>
+        <tr>
+            <td>FedRAMP</td>
+            <td>12-24 months</td>
+            <td>Very High</td>
+            <td>US Government</td>
+        </tr>
+    </table>
+    
+    <div class="page-break"></div>
+    
+    <h2>6. Infrastructure Requirements</h2>
+    
+    <h3>Your SaaS Infrastructure (Control Plane)</h3>
+    
+    <h4>Minimum Viable (0-100 customers)</h4>
+    <div class="cost-comparison">
+        <div class="cost-row">
+            <span>Kubernetes (3x t3.medium)</span>
+            <span>$200/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>RDS PostgreSQL (db.t3.medium)</span>
+            <span>$80/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>ElastiCache Redis</span>
+            <span>$25/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>S3 Storage (100GB)</span>
+            <span>$5/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>CDN + Load Balancer + DNS</span>
+            <span>$35/mo</span>
+        </div>
+        <div class="cost-row">
+            <span><strong>Total Monthly Cost</strong></span>
+            <span><strong>~$350/mo</strong></span>
+        </div>
+    </div>
+    
+    <h4>Production Scale (100-1000 customers)</h4>
+    <div class="cost-comparison">
+        <div class="cost-row">
+            <span>EKS Cluster (6x m5.large)</span>
+            <span>$600/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>RDS PostgreSQL + Replica</span>
+            <span>$500/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>ElastiCache Redis Cluster</span>
+            <span>$200/mo</span>
+        </div>
+        <div class="cost-row">
+            <span>Storage + CDN + Monitoring</span>
+            <span>$200/mo</span>
+        </div>
+        <div class="cost-row">
+            <span><strong>Total Monthly Cost</strong></span>
+            <span><strong>~$1,500/mo</strong></span>
+        </div>
+    </div>
+    
+    <h3>Customer Infrastructure (Data Plane)</h3>
+    <table>
+        <tr>
+            <th>Resource</th>
+            <th>Specification</th>
+            <th>Notes</th>
+        </tr>
+        <tr>
+            <td>Worker Machine</td>
+            <td>4 vCPU, 8GB RAM</td>
+            <td>Per worker</td>
+        </tr>
+        <tr>
+            <td>Docker</td>
+            <td>v20.10+</td>
+            <td>Required</td>
+        </tr>
+        <tr>
+            <td>Network</td>
+            <td>Outbound HTTPS</td>
+            <td>To your SaaS</td>
+        </tr>
+        <tr>
+            <td>Storage</td>
+            <td>50GB per worker</td>
+            <td>Screenshots/videos</td>
+        </tr>
+    </table>
+    
+    <div class="page-break"></div>
+    
+    <h2>7. Cost Analysis</h2>
+    
+    <h3>Competitor Comparison (3-Year TCO)</h3>
+    <table>
+        <tr>
+            <th>Solution</th>
+            <th>3-Year TCO (1000 VUsers)</th>
+            <th>Notes</th>
+        </tr>
+        <tr>
+            <td>HP LoadRunner</td>
+            <td>$116,000</td>
+            <td>License + SiteScope</td>
+        </tr>
+        <tr>
+            <td>NeoLoad</td>
+            <td>$107,000</td>
+            <td>License + cloud</td>
+        </tr>
+        <tr>
+            <td>Gatling Enterprise</td>
+            <td>$47,000</td>
+            <td>License only</td>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>QAAI/Flowstral SaaS</strong></td>
+            <td><strong>$18,000</strong></td>
+            <td>Subscription</td>
+        </tr>
+        <tr class="highlight-row">
+            <td><strong>QAAI/Flowstral On-Prem</strong></td>
+            <td><strong>$25,000</strong></td>
+            <td>License + support</td>
+        </tr>
+    </table>
+    
+    <h3>LLM Cost Optimization (Your Platform)</h3>
+    <p>Your platform implements 80-95% LLM cost reduction through:</p>
+    <table>
+        <tr>
+            <th>Optimization</th>
+            <th>Savings</th>
+            <th>Implementation</th>
+        </tr>
+        <tr>
+            <td>SQLite Persistent Cache</td>
+            <td>100% on hits</td>
+            <td>Exact/normalized/semantic matching</td>
+        </tr>
+        <tr>
+            <td>Anthropic Prompt Cache</td>
+            <td>90%</td>
+            <td>cache_control: ephemeral</td>
+        </tr>
+        <tr>
+            <td>Model Tiering</td>
+            <td>50-80%</td>
+            <td>Haiku for simple, Sonnet for complex</td>
+        </tr>
+        <tr>
+            <td>Per-Task TTL</td>
+            <td>Variable</td>
+            <td>7 days for selectors, 4 hours for debug</td>
+        </tr>
+    </table>
+    
+    <div class="page-break"></div>
+    
+    <h2>8. Implementation Roadmap</h2>
+    
+    <div class="timeline">
+        <div class="timeline-item">
+            <h4>Phase 1: SaaS Foundation (Months 1-3)</h4>
+            <ul>
+                <li>Set up cloud infrastructure (AWS/GCP/Azure)</li>
+                <li>Configure Kubernetes cluster</li>
+                <li>Deploy PostgreSQL + Redis</li>
+                <li>Containerize application</li>
+                <li>Implement CI/CD pipeline</li>
+                <li>Configure multi-tenancy & security</li>
+            </ul>
+        </div>
+        
+        <div class="timeline-item">
+            <h4>Phase 2: Worker Agent System (Months 4-5)</h4>
+            <ul>
+                <li>Create standalone worker Docker image</li>
+                <li>Implement secure tunnel connection</li>
+                <li>Build agent registration system</li>
+                <li>Create agent CLI installer</li>
+                <li>Add auto-update mechanism</li>
+            </ul>
+        </div>
+        
+        <div class="timeline-item">
+            <h4>Phase 3: Enterprise Features (Months 6-8)</h4>
+            <ul>
+                <li>Implement SAML/OIDC SSO</li>
+                <li>Begin SOC 2 Type I audit</li>
+                <li>Build Jira/Slack integrations</li>
+                <li>Create CI/CD connectors</li>
+                <li>Advanced analytics & reporting</li>
+            </ul>
+        </div>
+        
+        <div class="timeline-item">
+            <h4>Phase 4: On-Premises Option (Months 9-12)</h4>
+            <ul>
+                <li>All-in-one Docker Compose deployment</li>
+                <li>Kubernetes Helm charts for on-prem</li>
+                <li>License server implementation</li>
+                <li>Ollama support for air-gapped LLM</li>
+                <li>Complete documentation & support portal</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="page-break"></div>
+    
+    <h2>9. Pricing Strategy</h2>
+    
+    <div class="pricing-grid">
+        <div class="pricing-card">
+            <h4>Starter</h4>
+            <div class="price">$49<span>/mo</span></div>
+            <ul>
+                <li>5 users</li>
+                <li>1,000 test runs</li>
+                <li>10K LLM tokens</li>
+                <li>1 project</li>
+                <li>Email support</li>
+                <li>SaaS workers only</li>
+            </ul>
+        </div>
+        
+        <div class="pricing-card featured">
+            <h4>Professional <span class="badge badge-recommended">Popular</span></h4>
+            <div class="price">$199<span>/mo</span></div>
+            <ul>
+                <li>25 users</li>
+                <li>10,000 test runs</li>
+                <li>100K LLM tokens</li>
+                <li>10 projects</li>
+                <li>Chat support</li>
+                <li>Basic reports</li>
+                <li>SaaS workers</li>
+            </ul>
+        </div>
+        
+        <div class="pricing-card">
+            <h4>Business</h4>
+            <div class="price">$499<span>/mo</span></div>
+            <ul>
+                <li>100 users</li>
+                <li>50,000 test runs</li>
+                <li>500K LLM tokens</li>
+                <li>Unlimited projects</li>
+                <li>Priority support</li>
+                <li>Advanced analytics</li>
+                <li>Custom workers</li>
+                <li>SSO included</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="recommendation-box">
+        <h3>🏢 Enterprise Plan - Custom Pricing</h3>
+        <p>For organizations requiring:</p>
+        <ul style="margin-left: 20px;">
+            <li>Unlimited users & test runs</li>
+            <li>BYO LLM API keys (unlimited AI)</li>
+            <li>On-premises worker deployment</li>
+            <li>SAML/OIDC SSO integration</li>
+            <li>Dedicated support with SLA (99.9%)</li>
+            <li>Custom data residency options</li>
+            <li>Professional services & training</li>
+        </ul>
+    </div>
+    
+    <h3>Add-on Pricing</h3>
+    <table>
+        <tr>
+            <th>Add-on</th>
+            <th>Price</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>Extra LLM Tokens</td>
+            <td>$10/100K</td>
+            <td>For heavy AI usage</td>
+        </tr>
+        <tr>
+            <td>Extra Test Runs</td>
+            <td>$20/10K</td>
+            <td>Beyond tier limit</td>
+        </tr>
+        <tr>
+            <td>On-Prem Worker Pack</td>
+            <td>$100/month</td>
+            <td>5 worker licenses</td>
+        </tr>
+        <tr>
+            <td>Premium Support</td>
+            <td>$200/month</td>
+            <td>4-hour response SLA</td>
+        </tr>
+    </table>
+    
+    <div class="page-break"></div>
+    
+    <h2>10. Summary & Recommendations</h2>
+    
+    <div class="summary-box">
+        <h3>🎯 Final Recommendation: Hybrid SaaS Model</h3>
+        <p>Based on analysis of your platform's architecture, target market, and competitive landscape:</p>
+        <ul>
+            <li><strong>Primary offering:</strong> SaaS with on-premises worker agents</li>
+            <li><strong>Data sovereignty:</strong> Let customers choose where sensitive data lives</li>
+            <li><strong>Revenue model:</strong> Monthly subscription with usage-based add-ons</li>
+            <li><strong>Differentiation:</strong> 85% cheaper than LoadRunner/NeoLoad</li>
+        </ul>
+    </div>
+    
+    <h3>Immediate Actions (Next 30 Days)</h3>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Action</th>
+            <th>Owner</th>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>Choose cloud provider (AWS recommended)</td>
+            <td>CTO</td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td>Set up staging Kubernetes cluster</td>
+            <td>DevOps</td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td>Containerize current application</td>
+            <td>Backend Team</td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td>Implement tenant isolation</td>
+            <td>Backend Team</td>
+        </tr>
+        <tr>
+            <td>5</td>
+            <td>Begin SOC 2 documentation</td>
+            <td>Security</td>
+        </tr>
+    </table>
+    
+    <h3>Key Success Metrics</h3>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Timeline</th>
+        </tr>
+        <tr>
+            <td>Platform Uptime</td>
+            <td>99.9%</td>
+            <td>Month 3</td>
+        </tr>
+        <tr>
+            <td>API Response Time (p95)</td>
+            <td>&lt; 200ms</td>
+            <td>Month 2</td>
+        </tr>
+        <tr>
+            <td>Beta Customers</td>
+            <td>10</td>
+            <td>Month 3</td>
+        </tr>
+        <tr>
+            <td>SOC 2 Type I</td>
+            <td>Certified</td>
+            <td>Month 6</td>
+        </tr>
+        <tr>
+            <td>Paying Customers</td>
+            <td>50</td>
+            <td>Month 12</td>
+        </tr>
+    </table>
+    
+    <footer>
+        <p><strong>QAAI/Flowstral Platform Deployment Plan</strong></p>
+        <p>Version 1.0 | December 2024</p>
+        <p>This document is confidential and intended for internal planning purposes.</p>
+    </footer>
+</body>
+</html>
+

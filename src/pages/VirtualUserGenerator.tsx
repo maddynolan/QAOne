@@ -1100,37 +1100,41 @@ export default function VirtualUserGenerator() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Gauge className="w-8 h-8 text-primary" />
-            Performance & Load Testing
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            API performance testing, virtual user simulation, and browser flow load testing
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {isRunning ? (
-            <>
-              <Button variant="outline" onClick={togglePause}>
-                {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
-                {isPaused ? "Resume" : "Pause"}
+    <div className="h-full overflow-y-auto bg-gray-950">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
+              <Gauge className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Performance Testing</h1>
+              <p className="text-sm text-gray-400">
+                Load testing • Virtual users • Browser flow simulation
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {isRunning ? (
+              <>
+                <Button variant="outline" onClick={togglePause} className="border-gray-700 text-gray-300 hover:bg-gray-800">
+                  {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
+                  {isPaused ? "Resume" : "Pause"}
+                </Button>
+                <Button variant="destructive" onClick={stopLoadTest}>
+                  <Square className="w-4 h-4 mr-2" />
+                  Stop
+                </Button>
+              </>
+            ) : (
+              <Button onClick={startLoadTest} disabled={config.steps.length === 0} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400">
+                <Play className="w-4 h-4 mr-2" />
+                Start Load Test
               </Button>
-              <Button variant="destructive" onClick={stopLoadTest}>
-                <Square className="w-4 h-4 mr-2" />
-                Stop
-              </Button>
-            </>
-          ) : (
-            <Button onClick={startLoadTest} disabled={config.steps.length === 0}>
-              <Play className="w-4 h-4 mr-2" />
-              Start Load Test
-            </Button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
 
       {/* Status Bar */}
       {isRunning && (
@@ -1158,32 +1162,32 @@ export default function VirtualUserGenerator() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
-          <TabsTrigger value="quickstart">
+        <TabsList className="grid w-full grid-cols-7 bg-gray-900 border border-gray-700 p-1">
+          <TabsTrigger value="quickstart" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <Zap className="w-4 h-4 mr-2" />
             Quick Start
           </TabsTrigger>
-          <TabsTrigger value="protocol">
+          <TabsTrigger value="protocol" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <Activity className="w-4 h-4 mr-2" />
             Protocol
           </TabsTrigger>
-          <TabsTrigger value="configure">
+          <TabsTrigger value="configure" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <Settings className="w-4 h-4 mr-2" />
             Configure
           </TabsTrigger>
-          <TabsTrigger value="steps">
+          <TabsTrigger value="steps" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <FileCode className="w-4 h-4 mr-2" />
             Test Steps
           </TabsTrigger>
-          <TabsTrigger value="users">
+          <TabsTrigger value="users" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <Bot className="w-4 h-4 mr-2" />
             Virtual Users
           </TabsTrigger>
-          <TabsTrigger value="metrics">
+          <TabsTrigger value="metrics" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <BarChart3 className="w-4 h-4 mr-2" />
             Live Metrics
           </TabsTrigger>
-          <TabsTrigger value="results">
+          <TabsTrigger value="results" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
             <LineChart className="w-4 h-4 mr-2" />
             Results
           </TabsTrigger>
@@ -1223,13 +1227,13 @@ export default function VirtualUserGenerator() {
           </Card>
 
           {/* Quick Start Scenarios - API Testing */}
-          <Card>
+          <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Zap className="w-5 h-5 text-yellow-500" />
+              <CardTitle className="flex items-center gap-2 text-lg text-white">
+                <Zap className="w-5 h-5 text-amber-500" />
                 API Performance Tests
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-gray-400">
                 One-click scenarios to test your API. Each scenario runs against the Target URL above.
               </CardDescription>
             </CardHeader>
@@ -1238,26 +1242,26 @@ export default function VirtualUserGenerator() {
                 {QUICK_START_SCENARIOS.map((scenario) => (
                   <Card 
                     key={scenario.id}
-                    className="hover:border-primary hover:shadow-md transition-all"
+                    className="bg-gray-800 border-gray-700 hover:border-amber-500/50 transition-all"
                   >
                     <CardContent className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{scenario.icon}</span>
-                        <span className="font-medium text-sm">{scenario.name}</span>
+                        <span className="font-medium text-sm text-white">{scenario.name}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">{scenario.description}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">
+                      <p className="text-xs text-gray-400">{scenario.description}</p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
                           {scenario.virtualUsers} users
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
                           {scenario.duration}s
                         </Badge>
                       </div>
                       <Button 
                         size="sm"
                         onClick={() => runApiTest(scenario)}
-                        className="w-full mt-2"
+                        className="w-full mt-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white"
                         disabled={isRunning}
                       >
                         <Play className="w-3 h-3 mr-1" />
@@ -1271,29 +1275,29 @@ export default function VirtualUserGenerator() {
           </Card>
 
           {/* Browser Flow Testing - Separate Section */}
-          <Card className="border-dashed">
+          <Card className="bg-gray-900 border-gray-700 border-dashed">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Globe className="w-5 h-5 text-blue-500" />
+              <CardTitle className="flex items-center gap-2 text-lg text-white">
+                <Globe className="w-5 h-5 text-amber-500" />
                 Browser Flow Testing
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-gray-400">
                 Import a Flowstral recording to replay user journeys with multiple virtual users
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-gray-400">
                     Record a browser session using Flowstral, then import it here to run as a load test.
                     This tests actual user flows (clicks, typing, navigation) not just API endpoints.
                   </p>
                 </div>
-                <Button onClick={() => setShowImportDialog(true)} variant="outline">
+                <Button onClick={() => setShowImportDialog(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white">
                   <Upload className="w-4 h-4 mr-2" />
                   Import Recording
                 </Button>
-                <Button onClick={() => setActiveTab("steps")} variant="ghost">
+                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-gray-400 hover:text-white hover:bg-gray-800">
                   <FileCode className="w-4 h-4 mr-2" />
                   View Steps
                 </Button>
@@ -2415,6 +2419,7 @@ export default function VirtualUserGenerator() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

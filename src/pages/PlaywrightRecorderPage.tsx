@@ -52,6 +52,11 @@ import {
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
 import { SoqlEditor } from "@/components/SoqlEditor";
 import { salesforceApi } from "@/lib/salesforce-api";
+// New SF Components
+import { SFContextDashboard } from "@/components/salesforce/SFContextDashboard";
+import { SmartSOQLBuilder } from "@/components/salesforce/SmartSOQLBuilder";
+import { MetadataAssertions } from "@/components/salesforce/MetadataAssertions";
+import { StageTransitionTester } from "@/components/salesforce/StageTransitionTester";
 
 // Types
 interface RecordedAction {
@@ -217,6 +222,9 @@ export default function PlaywrightRecorderPage() {
   // Right panel tab state
   const [rightPanelTab, setRightPanelTab] = useState<string>('suggestions');
   
+  // SF Tools sub-tab state
+  const [sfToolsSubTab, setSfToolsSubTab] = useState<string>('soql');
+  
   // Mode state
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [showTestPicker, setShowTestPicker] = useState(false);
@@ -276,6 +284,12 @@ export default function PlaywrightRecorderPage() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   
+  // Selected action for keyboard shortcuts
+  const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
+  
+  // Clipboard for action copy/paste
+  const [actionClipboard, setActionClipboard] = useState<RecordedAction[] | null>(null);
+  
   // Timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const suggestIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -300,6 +314,96 @@ export default function PlaywrightRecorderPage() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRecording, isPaused]);
+
+  // Keyboard shortcuts for recorded actions (Delete, Ctrl+C, Ctrl+V)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Delete key - delete selected action
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedActionIndex !== null) {
+        e.preventDefault();
+        const actionName = actions[selectedActionIndex]?.description || 'action';
+        setActions(prev => prev.filter((_, i) => i !== selectedActionIndex));
+        setSelectedActionIndex(null);
+        toast.success(`Deleted: ${actionName}`);
+      }
+      
+      // Ctrl+C / Cmd+C - Copy selected action
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedActionIndex !== null) {
+        e.preventDefault();
+        const actionToCopy = actions[selectedActionIndex];
+        if (actionToCopy) {
+          setActionClipboard([actionToCopy]);
+          toast.success(`Copied: ${actionToCopy.description || actionToCopy.qword}`);
+        }
+      }
+      
+      // Ctrl+V / Cmd+V - Paste action(s)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && actionClipboard && actionClipboard.length > 0) {
+        e.preventDefault();
+        const timestamp = Date.now();
+        const newActions = actionClipboard.map((action, idx) => ({
+          ...action,
+          id: `action_${timestamp}_${idx}`,
+          description: `${action.description || action.qword} (Copy)`,
+          timestamp: timestamp + idx,
+        }));
+        
+        // Insert after selected action, or at end
+        setActions(prev => {
+          const insertIndex = selectedActionIndex !== null ? selectedActionIndex + 1 : prev.length;
+          const newList = [...prev];
+          newList.splice(insertIndex, 0, ...newActions);
+          return newList;
+        });
+        toast.success(`Pasted ${newActions.length} action(s)`);
+      }
+      
+      // Ctrl+D / Cmd+D - Duplicate selected action
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedActionIndex !== null) {
+        e.preventDefault();
+        const actionToDuplicate = actions[selectedActionIndex];
+        if (actionToDuplicate) {
+          const newAction = {
+            ...actionToDuplicate,
+            id: `action_${Date.now()}`,
+            description: `${actionToDuplicate.description || actionToDuplicate.qword} (Copy)`,
+            timestamp: Date.now(),
+          };
+          setActions(prev => {
+            const newList = [...prev];
+            newList.splice(selectedActionIndex + 1, 0, newAction);
+            return newList;
+          });
+          setSelectedActionIndex(selectedActionIndex + 1);
+          toast.success('Action duplicated');
+        }
+      }
+      
+      // Arrow keys to navigate actions
+      if (e.key === 'ArrowUp' && selectedActionIndex !== null && selectedActionIndex > 0) {
+        e.preventDefault();
+        setSelectedActionIndex(selectedActionIndex - 1);
+      }
+      if (e.key === 'ArrowDown' && selectedActionIndex !== null && selectedActionIndex < actions.length - 1) {
+        e.preventDefault();
+        setSelectedActionIndex(selectedActionIndex + 1);
+      }
+      
+      // Escape - Deselect action
+      if (e.key === 'Escape') {
+        setSelectedActionIndex(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedActionIndex, actionClipboard, actions]);
 
   // Auto-refresh suggestions during recording (with debounce to prevent blinking)
   const lastSuggestionsRef = useRef<string>('');
@@ -1884,6 +1988,7 @@ Recorded Test
                   // Apply masking for sensitive fields (passwords)
                   const displayAction = maskSensitiveAction(action);
                   const isPw = isPasswordField(action);
+                  const isSelected = selectedActionIndex === index;
                   
                   return (
                   <div
@@ -1892,11 +1997,13 @@ Recorded Test
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDragEnd={handleDragEnd}
+                    onClick={() => setSelectedActionIndex(isSelected ? null : index)}
                     className={cn(
-                      "flex items-center gap-2 p-2.5 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] border group cursor-grab active:cursor-grabbing transition-all",
+                      "flex items-center gap-2 p-2.5 rounded-lg bg-[#12121a] hover:bg-[#1a1a25] border group cursor-pointer active:cursor-grabbing transition-all",
+                      isSelected && "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30",
                       draggedIndex === index && "opacity-50 border-cyan-500/50",
                       dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
-                      draggedIndex === null && "border-transparent hover:border-white/5"
+                      !isSelected && draggedIndex === null && "border-transparent hover:border-white/5"
                     )}
                   >
                     {/* Drag handle */}
@@ -1968,32 +2075,32 @@ Recorded Test
 
         {/* ============ RIGHT PANEL - Suggestions ============ */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="flex-1 flex flex-col">
-            {/* Tab Headers */}
-            <div className="px-4 py-2 border-b border-white/10">
-              <TabsList className="h-9 bg-[#1a1a25] p-1">
-                <TabsTrigger value="suggestions" className="h-7 px-3 text-xs data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
-                  <Lightbulb className="h-3.5 w-3.5 mr-1.5" />
+          <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="h-full flex flex-col">
+            {/* Tab Headers - Compact */}
+            <div className="shrink-0 px-3 py-1.5 border-b border-white/10">
+              <TabsList className="h-8 bg-[#1a1a25] p-0.5">
+                <TabsTrigger value="suggestions" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+                  <Lightbulb className="h-3 w-3 mr-1" />
                   Suggestions
                   {totalSuggestions > 0 && (
-                    <Badge className="ml-1.5 h-4 bg-amber-500/30 text-amber-300 text-[10px] px-1.5">
+                    <Badge className="ml-1 h-4 bg-amber-500/30 text-amber-300 text-[9px] px-1">
                       {totalSuggestions}
                     </Badge>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="sftools" className="h-7 px-3 text-xs data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
-                  <Cloud className="h-3.5 w-3.5 mr-1.5" />
+                <TabsTrigger value="sftools" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
+                  <Cloud className="h-3 w-3 mr-1" />
                   SF Tools
                 </TabsTrigger>
-                <TabsTrigger value="sfcontext" className="h-7 px-3 text-xs data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
-                  <Target className="h-3.5 w-3.5 mr-1.5" />
+                <TabsTrigger value="sfcontext" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                  <Target className="h-3 w-3 mr-1" />
                   SF Context
                 </TabsTrigger>
               </TabsList>
             </div>
 
             {/* ========== SUGGESTIONS TAB ========== */}
-            <TabsContent value="suggestions" className="flex-1 m-0 flex flex-col" style={{ minHeight: 0 }}>
+            <TabsContent value="suggestions" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
               {/* Compact Header Row */}
               <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between sticky top-0 bg-[#0f0f15] z-10">
                 <div className="flex items-center gap-2">
@@ -2069,7 +2176,7 @@ Recorded Test
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1" />
                     Headings {categoryCounts.headings}
                   </Badge>
-            </div>
+                </div>
                 <div className="flex-1 relative min-w-[120px]">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-500" />
                   <Input
@@ -2190,25 +2297,145 @@ Recorded Test
                     <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-medium">No suggestions yet</p>
                     <p className="text-xs mt-1">Start recording to see page elements</p>
-                        <Button
+                    <Button
                       onClick={handleRefreshSuggestions}
                       variant="outline"
-                          size="sm"
+                      size="sm"
                       className="mt-4 text-xs border-amber-500/30 text-amber-400"
-                        >
+                    >
                       <RefreshCw className="h-3 w-3 mr-1.5" />
                       Analyze Page
-                        </Button>
+                    </Button>
                   </div>
-              )}
-            </div>
+                )}
+                </div>
               </div>
             </TabsContent>
 
-{/* ========== SF TOOLS TAB - COMPREHENSIVE ========== */}
-            <TabsContent value="sftools" className="m-0 flex-1 flex flex-col overflow-hidden">
-              <ScrollArea className="flex-1">
-              <div className="p-2 space-y-3">
+            {/* ========== SF TOOLS TAB ========== */}
+            <TabsContent value="sftools" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
+              {/* SF Tools Sub-tabs bar */}
+              <div className="shrink-0 bg-[#0d0d14] border-b border-white/10">
+                <div className="flex">
+                  <button
+                    onClick={() => setSfToolsSubTab('soql')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
+                      sfToolsSubTab === 'soql' 
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500" 
+                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                    )}
+                  >
+                    <Database className="h-3.5 w-3.5" />
+                    SOQL
+                  </button>
+                  <button
+                    onClick={() => setSfToolsSubTab('assertions')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
+                      sfToolsSubTab === 'assertions' 
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500" 
+                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                    )}
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                    Assert
+                  </button>
+                  <button
+                    onClick={() => setSfToolsSubTab('stages')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
+                      sfToolsSubTab === 'stages' 
+                        ? "bg-cyan-500/10 text-cyan-400 border-cyan-500" 
+                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                    )}
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    Stages
+                  </button>
+                  <button
+                    onClick={() => setSfToolsSubTab('quick')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
+                      sfToolsSubTab === 'quick' 
+                        ? "bg-purple-500/10 text-purple-400 border-purple-500" 
+                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                    )}
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    Quick
+                  </button>
+                </div>
+              </div>
+              
+              {/* SF Tools Sub-tab Content */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                
+                {/* SOQL Builder Sub-tab */}
+                {sfToolsSubTab === 'soql' && (
+                  <SmartSOQLBuilder
+                    onExecute={(query, results) => {
+                      setSoqlQuery(query);
+                      if (results?.records) {
+                        setSoqlResults(results.records);
+                        setSoqlColumns(results.records.length > 0 ? Object.keys(results.records[0]).filter(k => k !== 'attributes') : []);
+                      }
+                    }}
+                    onAddAsStep={(step) => {
+                      const action: RecordedAction = {
+                        id: `sf_${Date.now()}`,
+                        qword: step.action,
+                        args: Object.values(step.args).map(v => String(v)),
+                        description: step.args.description || step.action,
+                        timestamp: Date.now(),
+                        type: step.type
+                      };
+                      setActions(prev => [...prev, action]);
+                    }}
+                    className="h-full w-full"
+                  />
+                )}
+                
+                {/* Metadata Assertions Sub-tab */}
+                {sfToolsSubTab === 'assertions' && (
+                  <MetadataAssertions
+                    onAddAsStep={(step) => {
+                      const action: RecordedAction = {
+                        id: `sf_${Date.now()}`,
+                        qword: step.action,
+                        args: Object.values(step.args).map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)),
+                        description: step.args.description || step.action,
+                        timestamp: Date.now(),
+                        type: step.type
+                      };
+                      setActions(prev => [...prev, action]);
+                    }}
+                    className="h-full w-full"
+                  />
+                )}
+                
+                {/* Stage Transition Sub-tab */}
+                {sfToolsSubTab === 'stages' && (
+                  <StageTransitionTester
+                    onAddAsStep={(step) => {
+                      const action: RecordedAction = {
+                        id: `sf_${Date.now()}`,
+                        qword: step.action,
+                        args: Object.values(step.args).map(v => String(v)),
+                        description: step.args.description || step.action,
+                        timestamp: Date.now(),
+                        type: step.type
+                      };
+                      setActions(prev => [...prev, action]);
+                    }}
+                    className="h-full w-full"
+                  />
+                )}
+                
+                {/* Quick Tools Sub-tab - Original tools */}
+                {sfToolsSubTab === 'quick' && (
+              <ScrollArea className="h-full">
+                <div className="p-2 space-y-3">
                 
                 {/* ===== QUICK SOQL SECTION ===== */}
                 <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2">
@@ -2549,9 +2776,14 @@ Recorded Test
                 </div>
               </div>
               </ScrollArea>
+                )}
+                {/* End Quick Tools Sub-tab */}
+                
+              </div>
+              {/* End SF Tools Sub-tab Content */}
             </TabsContent>
 
-{/* ========== LEGACY SF TOOLS FOR REFERENCE (HIDDEN) ========== */}
+            {/* ========== LEGACY SF TOOLS FOR REFERENCE (HIDDEN) ========== */}
             <div style={{ display: 'none' }}>
                 {/* Data & Query Tools */}
                 <div>
@@ -2717,57 +2949,30 @@ Recorded Test
                     <ExternalLink className="h-3 w-3 mr-1" />Open Full SF Tools<ChevronRight className="h-3 w-3 ml-auto" />
                   </Button>
                 </div>
-              </div>
-            </TabsContent>
+            </div>
+            {/* End of LEGACY SF TOOLS hidden div */}
 
-{/* ========== SF CONTEXT TAB ========== */}
-            <TabsContent value="sfcontext" className="flex-1 m-0 overflow-hidden flex flex-col">
-              <ScrollArea className="flex-1">
-                {isSalesforceUrl ? (
-                  <SalesforceContextPanel
-                    currentUrl={currentUrl || url}
-                    isRecording={isRecording}
-                    onAddAssertion={(code) => {
-                      const action: RecordedAction = {
-                        id: `assert_${Date.now()}`,
-                        qword: 'AssertText',
-                        args: [code],
-                        description: `Assert: ${code.slice(0, 30)}...`,
-                        timestamp: Date.now()
-                      };
-                      setActions(prev => [...prev, action]);
-                      toast.success('Assertion added');
-                    }}
-                    onAddAction={(code) => {
-                      const action: RecordedAction = {
-                        id: `action_${Date.now()}`,
-                        qword: 'Custom',
-                        args: [code],
-                        description: code.slice(0, 50),
-                        timestamp: Date.now()
-                      };
-                      setActions(prev => [...prev, action]);
-                      toast.success('Action added');
-                    }}
-                    onGenerateTestData={(data) => {
-                      toast.success(`Generated ${data.length} test records`);
-                    }}
-                    className="h-full"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center p-8 h-full min-h-[300px]">
-                    <div className="text-center">
-                      <Target className="h-10 w-10 mx-auto mb-3 text-purple-400 opacity-50" />
-                      <h3 className="text-base font-semibold mb-1">SF Context</h3>
-                      <p className="text-xs text-gray-400 mb-4">Navigate to a Salesforce page to see context</p>
-                      <p className="text-[11px] text-gray-500">
-                        Shows fields, validation rules, flows, and related objects<br/>
-                        for the current Salesforce page
-                      </p>
-                    </div>
-              </div>
-            )}
-              </ScrollArea>
+            {/* ========== SF CONTEXT TAB - Enhanced Dashboard ========== */}
+            <TabsContent value="sfcontext" className="flex-1 m-0 p-0 overflow-hidden flex flex-col data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
+              <SFContextDashboard
+                currentUrl={currentUrl || url}
+                isRecording={isRecording}
+                onAddStep={(step) => {
+                  const action: RecordedAction = {
+                    id: `sf_${Date.now()}`,
+                    qword: step.action,
+                    args: Object.values(step.args).map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)),
+                    description: step.args.description || step.action,
+                    timestamp: Date.now(),
+                    type: step.type
+                  };
+                  setActions(prev => [...prev, action]);
+                }}
+                onVariableInsert={(variable) => {
+                  toast.success(`Variable ${variable} copied`);
+                }}
+                className="h-full"
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -2775,7 +2980,7 @@ Recorded Test
 
       {/* Test Picker Dialog - Enterprise Scale */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
-        <DialogContent className="max-w-4xl max-h-[85vh] bg-[#12121a] border-white/10 flex flex-col">
+        <DialogContent className="max-w-4xl h-[85vh] bg-[#12121a] border-white/10 flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center justify-between">
               <span>Select Test Case to Automate</span>
@@ -2879,20 +3084,21 @@ Recorded Test
             </div>
           </div>
           
-          {/* Test Cases List */}
-          <ScrollArea className="flex-1 min-h-[300px]">
-            {paginatedTestCases.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">
-                  {allTestCases.length === 0 ? 'No test cases found' : 'No tests match your filters'}
-                </p>
-                {testSearchQuery && (
-                  <p className="text-xs mt-1">Try adjusting your search or filters</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2 pr-2">
+          {/* Test Cases List - Scrollable */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              {paginatedTestCases.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">
+                    {allTestCases.length === 0 ? 'No test cases found' : 'No tests match your filters'}
+                  </p>
+                  {testSearchQuery && (
+                    <p className="text-xs mt-1">Try adjusting your search or filters</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 pr-4">
                 {paginatedTestCases.map(tc => {
                   const status = tc.automationStatus || 
                     (tc.steps?.some((s: any) => s.qword || s.selector) ? 
@@ -2963,8 +3169,9 @@ Recorded Test
                   );
                 })}
               </div>
-            )}
-          </ScrollArea>
+              )}
+            </ScrollArea>
+          </div>
           
           {/* Pagination */}
           {totalTestPages > 1 && (
@@ -2999,7 +3206,7 @@ Recorded Test
 
       {/* Test Execution Result Modal */}
       <Dialog open={showTestResultModal} onOpenChange={setShowTestResultModal}>
-        <DialogContent className="max-w-2xl bg-[#12121a] border-white/10">
+        <DialogContent className="max-w-2xl bg-[#12121a] border-white/10 overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               {testExecutionResult?.status === 'running' && (
@@ -3023,7 +3230,7 @@ Recorded Test
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-hidden max-w-full">
             {/* Progress */}
             {testExecutionResult?.status === 'running' && (
               <div className="space-y-2">
@@ -3041,9 +3248,9 @@ Recorded Test
             )}
             
             {/* Step Results */}
-            <div className="flex gap-4">
-              <ScrollArea className="h-[350px] flex-1">
-                <div className="space-y-1 pr-2">
+            <div className="flex gap-4 overflow-hidden max-w-full">
+              <ScrollArea className="h-[350px] flex-1 overflow-hidden">
+                <div className="space-y-1 pr-2 overflow-hidden max-w-full">
                   {actions.map((action, idx) => {
                     const stepResult = testExecutionResult?.stepResults.find(r => r.index === idx);
                     const isCurrent = testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx;
@@ -3053,7 +3260,7 @@ Recorded Test
                       <div 
                         key={action.id || idx}
                         className={cn(
-                          "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all",
+                          "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all overflow-clip relative",
                           isCurrent && "bg-blue-500/20 border border-blue-500/30",
                           stepResult?.status === 'passed' && "bg-emerald-500/10 hover:bg-emerald-500/20",
                           stepResult?.status === 'failed' && "bg-red-500/10 hover:bg-red-500/20",
@@ -3151,15 +3358,15 @@ Recorded Test
 
       {/* Merge Preview Dialog */}
       <Dialog open={showMergePreview} onOpenChange={setShowMergePreview}>
-        <DialogContent className="max-w-3xl max-h-[80vh] bg-[#12121a] border-white/10 flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl h-[80vh] bg-[#12121a] border-white/10 flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="text-white flex items-center gap-2">
               <Merge className="h-5 w-5 text-purple-400" />
               Merge Preview - {selectedTestCase?.name}
             </DialogTitle>
           </DialogHeader>
           
-          <div className="text-sm text-gray-400 pb-3 border-b border-white/10">
+          <div className="text-sm text-gray-400 pb-3 border-b border-white/10 shrink-0">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -3176,8 +3383,10 @@ Recorded Test
             </div>
           </div>
           
-          <ScrollArea className="flex-1 min-h-[300px]">
-            <div className="space-y-2 pr-2">
+          {/* Scrollable merged steps list */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="space-y-2 pr-4">
               {mergedSteps.map((step, idx) => (
                 <div
                   key={step.id || idx}
@@ -3223,10 +3432,11 @@ Recorded Test
                   </div>
                 </div>
               ))}
-            </div>
-          </ScrollArea>
+              </div>
+            </ScrollArea>
+          </div>
           
-          <DialogFooter className="border-t border-white/10 pt-4">
+          <DialogFooter className="border-t border-white/10 pt-4 shrink-0">
             <Button variant="outline" onClick={() => setShowMergePreview(false)} className="border-white/20">
               Cancel
             </Button>

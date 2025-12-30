@@ -2,13 +2,7 @@
  * Blackbox Locator Strategies Component
  * 
  * When standard selectors fail, provide alternative strategies for 
- * locating elements in blackbox/third-party applications:
- * 
- * 1. Visual/Image-based locators (OCR + Image matching)
- * 2. Coordinate-based clicking (X,Y positions)
- * 3. Relative positioning (to known elements)
- * 4. Text-based OCR detection
- * 5. AI-powered element detection
+ * locating elements in blackbox/third-party applications.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -16,15 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Image,
-  MousePointer,
   Type,
   Target,
   Sparkles,
@@ -32,9 +24,15 @@ import {
   Move,
   Eye,
   Crosshair,
-  AlertTriangle,
+  Check,
+  Copy,
+  Zap,
   Info,
-  Wand2
+  ChevronRight,
+  HelpCircle,
+  Trash2,
+  MousePointer,
+  X
 } from 'lucide-react';
 
 // Blackbox locator types
@@ -50,102 +48,171 @@ export type BlackboxLocatorType =
 
 export interface BlackboxLocator {
   type: BlackboxLocatorType;
-  // Image-based
-  imageTemplate?: string;  // Base64 or path
-  confidence?: number;     // 0-1 match confidence
-  // OCR
+  imageTemplate?: string;
+  confidence?: number;
   searchText?: string;
   caseSensitive?: boolean;
-  // Coordinates
+  occurrence?: number;      // Which occurrence to click (1st, 2nd, 3rd, etc.)
   x?: number;
   y?: number;
-  // Relative
   anchorSelector?: string;
   offsetX?: number;
   offsetY?: number;
   direction?: 'left' | 'right' | 'above' | 'below';
-  // Region
   regionX?: number;
   regionY?: number;
   regionWidth?: number;
   regionHeight?: number;
-  // AI
   aiPrompt?: string;
   elementDescription?: string;
-  // Color
   targetColor?: string;
   colorTolerance?: number;
 }
 
 interface BlackboxLocatorStrategiesProps {
   onLocatorSelected: (locator: BlackboxLocator, generatedCode: string) => void;
-  framework: string;  // playwright-python, etc.
-  currentScreenshot?: string;  // Base64 screenshot for reference
+  onClear?: () => void;  // Callback to remove/clear the fallback
+  framework: string;
+  currentScreenshot?: string;
+  hasAppliedFallback?: boolean;  // Whether a fallback is currently applied
 }
 
-const STRATEGY_INFO = {
-  image: {
-    label: 'Image Matching',
-    icon: Image,
-    description: 'Find element by matching a screenshot template',
-    reliability: 'Medium',
-    pros: ['Works with any UI', 'Visual accuracy'],
-    cons: ['Breaks with UI changes', 'Resolution dependent']
-  },
+interface StrategyConfig {
+  label: string;
+  shortLabel: string;
+  icon: React.ElementType;
+  description: string;
+  reliability: 'High' | 'Medium-High' | 'Medium' | 'Low';
+  color: string;
+  bgColor: string;
+  useCase: string;
+  howToFind: string[];  // Instructions on how to find the values
+}
+
+const STRATEGY_INFO: Record<BlackboxLocatorType, StrategyConfig> = {
   ocr_text: {
     label: 'OCR Text Detection',
+    shortLabel: 'OCR',
     icon: Type,
-    description: 'Find element by visible text using OCR',
+    description: 'Find element by visible text using optical character recognition',
     reliability: 'High',
-    pros: ['Language-based', 'Readable tests'],
-    cons: ['Requires clear text', 'Slow']
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20',
+    useCase: 'Best for buttons, labels, and any visible text',
+    howToFind: [
+      'Look at the screen and identify the exact text',
+      'If text appears multiple times, select which occurrence (1st, 2nd, etc.)',
+      'For "Cancer" checkbox, it\'s the 4th occurrence since "cancer" appears in header too'
+    ]
+  },
+  image: {
+    label: 'Image Template',
+    shortLabel: 'Image',
+    icon: Image,
+    description: 'Match a screenshot template to find the element',
+    reliability: 'Medium',
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20',
+    useCase: 'Good for icons, logos, or unique visual elements',
+    howToFind: [
+      'Use snipping tool (Win+Shift+S) to capture the element',
+      'Save as PNG and upload, or use Capture button',
+      'Keep image small - just the element, not surrounding area'
+    ]
   },
   coordinates: {
     label: 'Fixed Coordinates',
+    shortLabel: 'Fixed',
     icon: Crosshair,
-    description: 'Click at specific X,Y screen position',
+    description: 'Click at exact X,Y screen position',
     reliability: 'Low',
-    pros: ['Always works', 'Simple'],
-    cons: ['Breaks with layout changes', 'Not portable']
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20',
+    useCase: 'Last resort - breaks easily with layout changes',
+    howToFind: [
+      '1. Press F12 to open DevTools',
+      '2. Click the element selector (arrow icon)',
+      '3. Hover over element - coordinates show in tooltip',
+      'Or: Use Paint/Screenshot tool with ruler/coordinates'
+    ]
   },
   relative: {
     label: 'Relative Position',
+    shortLabel: 'Relative',
     icon: Move,
     description: 'Position relative to a known anchor element',
     reliability: 'Medium-High',
-    pros: ['More resilient', 'Adapts to layout'],
-    cons: ['Needs anchor element']
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20',
+    useCase: 'When target is always near a stable element',
+    howToFind: [
+      '1. Find a stable element near your target (logo, header, etc.)',
+      '2. Right-click > Inspect to get its CSS selector',
+      '3. Measure pixel distance: target position minus anchor position',
+      'Tip: Use DevTools "Elements" panel to see bounding boxes'
+    ]
   },
   ai_detect: {
     label: 'AI Detection',
+    shortLabel: 'AI',
     icon: Sparkles,
-    description: 'Use AI to find element by description',
+    description: 'Use AI vision to find element by description',
     reliability: 'High',
-    pros: ['Most flexible', 'Natural language'],
-    cons: ['Slower', 'API costs']
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20',
+    useCase: 'Complex elements that are hard to describe',
+    howToFind: [
+      'Describe the element as you would to a person',
+      'Include: color, size, position, nearby elements',
+      'Example: "The unchecked checkbox next to the word Cancer in the medical conditions list"'
+    ]
   },
   region_click: {
     label: 'Region Click',
+    shortLabel: 'Region',
     icon: Target,
     description: 'Click within a defined screen region',
     reliability: 'Medium',
-    pros: ['Flexible within region', 'Fault tolerant'],
-    cons: ['Less precise']
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20',
+    useCase: 'When element moves slightly within an area',
+    howToFind: [
+      '1. Take a screenshot and open in Paint/image editor',
+      '2. Note the X,Y of top-left corner of the region',
+      '3. Measure width and height of the region',
+      'Keep region small but large enough for element movement'
+    ]
   },
   color_match: {
-    label: 'Color Matching',
+    label: 'Color Match',
+    shortLabel: 'Color',
     icon: Eye,
-    description: 'Find element by its color',
-    reliability: 'Low-Medium',
-    pros: ['Works for colored buttons', 'No text needed'],
-    cons: ['Theme dependent', 'Color blind issues']
+    description: 'Find element by its unique color',
+    reliability: 'Low',
+    color: 'text-pink-400',
+    bgColor: 'bg-pink-500/10 border-pink-500/30 hover:bg-pink-500/20',
+    useCase: 'Colored buttons or indicators',
+    howToFind: [
+      '1. Take screenshot and open in Paint/image editor',
+      '2. Use color picker tool on the element',
+      '3. Note the hex color code (e.g., #FF5722)',
+      'Or: Use browser DevTools > Computed styles > background-color'
+    ]
   }
+};
+
+const RELIABILITY_STYLES = {
+  'High': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  'Medium-High': 'bg-lime-500/20 text-lime-400 border-lime-500/30',
+  'Medium': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  'Low': 'bg-red-500/20 text-red-400 border-red-500/30'
 };
 
 export function BlackboxLocatorStrategies({
   onLocatorSelected,
+  onClear,
   framework,
-  currentScreenshot
+  hasAppliedFallback
 }: BlackboxLocatorStrategiesProps) {
   const { toast } = useToast();
   
@@ -154,10 +221,12 @@ export function BlackboxLocatorStrategies({
     type: 'ocr_text',
     confidence: 0.8,
     caseSensitive: false,
-    colorTolerance: 10
+    colorTolerance: 10,
+    occurrence: 1  // Default to 1st occurrence
   });
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  // Generate Playwright code for the blackbox locator
   const generateCode = useCallback((loc: BlackboxLocator): string => {
     const isPython = framework.includes('python');
     
@@ -169,488 +238,595 @@ import pytesseract
 from PIL import Image
 import pyautogui
 
-# Take screenshot and find text
 screenshot = pyautogui.screenshot()
-text_locations = pytesseract.image_to_data(screenshot, output_type=pytesseract.Output.DICT)
+text_data = pytesseract.image_to_data(screenshot, output_type=pytesseract.Output.DICT)
 
-# Find the target text
-target_text = "${loc.searchText || 'Button Text'}"
-for i, text in enumerate(text_locations['text']):
-    if ${loc.caseSensitive ? 'text == target_text' : 'text.lower() == target_text.lower()'}:
-        x = text_locations['left'][i] + text_locations['width'][i] // 2
-        y = text_locations['top'][i] + text_locations['height'][i] // 2
-        pyautogui.click(x, y)
-        break`;
+# Find "${loc.searchText || 'Button Text'}" - ${loc.occurrence || 1}${loc.occurrence === 1 ? 'st' : loc.occurrence === 2 ? 'nd' : loc.occurrence === 3 ? 'rd' : 'th'} occurrence
+target = "${loc.searchText || 'Button Text'}"
+occurrence = ${loc.occurrence || 1}
+found_count = 0
+
+for i, text in enumerate(text_data['text']):
+    if ${loc.caseSensitive ? 'target in text' : 'target.lower() in text.lower()'}:
+        found_count += 1
+        if found_count == occurrence:
+            x = text_data['left'][i] + text_data['width'][i] // 2
+            y = text_data['top'][i] + text_data['height'][i] // 2
+            pyautogui.click(x, y)
+            break`;
         }
-        return `// OCR Text-based click (requires Tesseract.js)
-const Tesseract = require('tesseract.js');
-// ... implementation`;
+        return `// OCR Text-based click (requires Tesseract.js)`;
 
       case 'coordinates':
-        if (isPython) {
-          return `# Fixed coordinate click (use with caution - fragile)
+        return isPython 
+          ? `# Fixed coordinate click
 import pyautogui
 
-# Click at fixed coordinates
-pyautogui.click(${loc.x || 100}, ${loc.y || 100})
-
-# Alternative: Use Playwright's page.mouse
-# page.mouse.click(${loc.x || 100}, ${loc.y || 100})`;
-        }
-        return `// Fixed coordinate click
+# Click at (${loc.x || 100}, ${loc.y || 100})
+pyautogui.click(${loc.x || 100}, ${loc.y || 100})`
+          : `// Fixed coordinate click
 await page.mouse.click(${loc.x || 100}, ${loc.y || 100});`;
 
       case 'relative':
-        if (isPython) {
-          return `# Relative position click (relative to anchor element)
-# Find the anchor element first
-anchor = page.locator("${loc.anchorSelector || '#known-element'}")
-anchor_box = anchor.bounding_box()
+        return isPython
+          ? `# Relative position click
+# Anchor: "${loc.anchorSelector || '#anchor'}"
+# Direction: ${loc.direction || 'right'}, Offset: ${Math.abs(loc.offsetX || loc.offsetY || 50)}px
 
-# Calculate relative position
-target_x = anchor_box['x'] ${loc.direction === 'left' ? '-' : '+'} ${Math.abs(loc.offsetX || 50)}
-target_y = anchor_box['y'] ${loc.direction === 'above' ? '-' : '+'} ${Math.abs(loc.offsetY || 0)}
-
-# Click at calculated position
-page.mouse.click(target_x, target_y)`;
-        }
-        return `// Relative position click
-const anchor = page.locator("${loc.anchorSelector || '#known-element'}");
-const box = await anchor.boundingBox();
-await page.mouse.click(box.x ${loc.direction === 'left' ? '-' : '+'} ${Math.abs(loc.offsetX || 50)}, box.y ${loc.direction === 'above' ? '-' : '+'} ${Math.abs(loc.offsetY || 0)});`;
+anchor = page.locator("${loc.anchorSelector || '#anchor'}")
+box = anchor.bounding_box()
+target_x = box['x'] ${loc.direction === 'left' ? '-' : '+'} ${Math.abs(loc.offsetX || 50)}
+target_y = box['y'] ${loc.direction === 'above' ? '-' : '+'} ${Math.abs(loc.offsetY || 0)}
+page.mouse.click(target_x, target_y)`
+          : `// Relative position click
+const box = await page.locator("${loc.anchorSelector || '#anchor'}").boundingBox();
+await page.mouse.click(box.x ${loc.direction === 'left' ? '-' : '+'} ${Math.abs(loc.offsetX || 50)}, box.y);`;
 
       case 'image':
-        if (isPython) {
-          return `# Image template matching click (requires pyautogui + opencv)
+        return isPython
+          ? `# Image template matching
 import pyautogui
 
-# Find image on screen (save template as 'button_template.png')
-location = pyautogui.locateOnScreen('button_template.png', confidence=${loc.confidence || 0.8})
-
+# Confidence: ${((loc.confidence || 0.8) * 100).toFixed(0)}%
+location = pyautogui.locateOnScreen('template.png', confidence=${loc.confidence || 0.8})
 if location:
-    center = pyautogui.center(location)
-    pyautogui.click(center)
-else:
-    raise Exception("Image template not found on screen")`;
-        }
-        return `// Image template matching (requires additional setup)
-// Use a visual testing library like pixelmatch`;
+    pyautogui.click(pyautogui.center(location))`
+          : `// Image template matching`;
 
       case 'ai_detect':
-        if (isPython) {
-          return `# AI-powered element detection
-# Uses GPT-4 Vision or similar to find element by description
+        return isPython
+          ? `# AI-powered element detection
+# Description: "${loc.elementDescription || 'the submit button'}"
 
-import base64
 from openai import OpenAI
+import base64
 
-# Take screenshot
-page.screenshot(path='current_screen.png')
-
-# Ask AI to find element
+page.screenshot(path='screen.png')
 client = OpenAI()
-with open('current_screen.png', 'rb') as f:
-    image_data = base64.b64encode(f.read()).decode()
+
+with open('screen.png', 'rb') as f:
+    img = base64.b64encode(f.read()).decode()
 
 response = client.chat.completions.create(
     model="gpt-4-vision-preview",
     messages=[{
         "role": "user",
         "content": [
-            {"type": "text", "text": "Find the ${loc.elementDescription || 'submit button'} in this screenshot. Return the approximate x,y coordinates as JSON: {x: number, y: number}"},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}"}}
+            {"type": "text", "text": "Find '${loc.elementDescription || 'the submit button'}'. Return JSON: {x, y}"},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img}"}}
         ]
     }]
-)
-
-# Parse coordinates and click
-import json
-coords = json.loads(response.choices[0].message.content)
-page.mouse.click(coords['x'], coords['y'])`;
-        }
-        return `// AI-powered element detection
-// Implementation depends on AI service used`;
+)`
+          : `// AI-powered detection`;
 
       case 'region_click':
-        if (isPython) {
-          return `# Region-based click (click center of a defined region)
+        const cx = (loc.regionX || 100) + (loc.regionWidth || 200) / 2;
+        const cy = (loc.regionY || 100) + (loc.regionHeight || 50) / 2;
+        return isPython
+          ? `# Region center click
+# Region: (${loc.regionX || 100}, ${loc.regionY || 100}) size ${loc.regionWidth || 200}x${loc.regionHeight || 50}
 import pyautogui
-import random
-
-# Define the region where the element should be
-region_x = ${loc.regionX || 100}
-region_y = ${loc.regionY || 100}
-region_width = ${loc.regionWidth || 200}
-region_height = ${loc.regionHeight || 50}
-
-# Click center of region (or random point for variation)
-center_x = region_x + region_width // 2
-center_y = region_y + region_height // 2
-
-# Option: Add small random offset for more realistic clicks
-# center_x += random.randint(-10, 10)
-# center_y += random.randint(-5, 5)
-
-pyautogui.click(center_x, center_y)`;
-        }
-        return `// Region-based click
-await page.mouse.click(${(loc.regionX || 100) + (loc.regionWidth || 200) / 2}, ${(loc.regionY || 100) + (loc.regionHeight || 50) / 2});`;
+pyautogui.click(${cx.toFixed(0)}, ${cy.toFixed(0)})`
+          : `// Region center click
+await page.mouse.click(${cx.toFixed(0)}, ${cy.toFixed(0)});`;
 
       case 'color_match':
-        if (isPython) {
-          return `# Color-based element detection
+        return isPython
+          ? `# Color-based detection
+# Target: ${loc.targetColor || '#FF0000'}, Tolerance: ${loc.colorTolerance || 10}
 import pyautogui
 from PIL import Image
 
-# Take screenshot
 screenshot = pyautogui.screenshot()
-
-# Target color (RGB)
-target_color = (${parseInt((loc.targetColor || '#FF0000').slice(1, 3), 16)}, ${parseInt((loc.targetColor || '#FF0000').slice(3, 5), 16)}, ${parseInt((loc.targetColor || '#FF0000').slice(5, 7), 16)})
+target = (${parseInt((loc.targetColor || '#FF0000').slice(1, 3), 16)}, ${parseInt((loc.targetColor || '#FF0000').slice(3, 5), 16)}, ${parseInt((loc.targetColor || '#FF0000').slice(5, 7), 16)})
 tolerance = ${loc.colorTolerance || 10}
 
-# Find pixels matching the color
 pixels = screenshot.load()
-width, height = screenshot.size
-
-for y in range(height):
-    for x in range(width):
+for y in range(screenshot.height):
+    for x in range(screenshot.width):
         r, g, b = pixels[x, y][:3]
-        if (abs(r - target_color[0]) < tolerance and 
-            abs(g - target_color[1]) < tolerance and 
-            abs(b - target_color[2]) < tolerance):
+        if all(abs(a-b) < tolerance for a, b in zip((r,g,b), target)):
             pyautogui.click(x, y)
-            break
-    else:
-        continue
-    break`;
-        }
-        return `// Color-based detection
-// Requires image processing library`;
+            break`
+          : `// Color-based detection`;
 
       default:
         return '# Unknown locator type';
     }
   }, [framework]);
 
-  // Apply the current locator
   const applyLocator = () => {
     const code = generateCode(locator);
     onLocatorSelected(locator, code);
     toast({
-      title: 'Blackbox locator applied',
-      description: `Using ${STRATEGY_INFO[locator.type].label} strategy`
+      title: 'Fallback strategy applied',
+      description: `Using ${STRATEGY_INFO[locator.type].label}`
     });
+  };
+
+  const clearFallback = () => {
+    if (onClear) {
+      onClear();
+      toast({
+        title: 'Fallback removed',
+        description: 'Using standard selector strategy'
+      });
+    }
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(generateCode(locator));
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
   };
 
   const updateLocator = (updates: Partial<BlackboxLocator>) => {
     setLocator(prev => ({ ...prev, ...updates }));
   };
 
-  const strategyInfo = STRATEGY_INFO[selectedStrategy];
+  const info = STRATEGY_INFO[selectedStrategy];
+  const IconComponent = info.icon;
 
   return (
-    <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-white">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5 text-orange-600" />
-            <CardTitle className="text-lg">Blackbox Fallback Strategies</CardTitle>
-          </div>
-          <Badge variant="outline" className="bg-orange-100 text-orange-700">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Last Resort
-          </Badge>
+    <div className="flex flex-col h-full bg-[#0a0a0f]">
+      {/* Header with Clear button */}
+      {hasAppliedFallback && onClear && (
+        <div className="p-3 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
+          <span className="text-sm text-amber-400">
+            ⚡ Fallback strategy is active
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFallback}
+            className="h-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            Remove Fallback
+          </Button>
         </div>
-        <CardDescription>
-          When standard selectors fail, use these strategies for blackbox/third-party apps
-        </CardDescription>
-      </CardHeader>
+      )}
 
-      <CardContent className="space-y-4">
-        {/* Strategy Selection */}
+      {/* Strategy Selection */}
+      <div className="p-4 border-b border-white/10">
+        <h3 className="text-sm font-medium text-white/60 mb-3">Select Strategy</h3>
         <div className="grid grid-cols-4 gap-2">
           {(Object.keys(STRATEGY_INFO) as BlackboxLocatorType[]).map(type => {
-            const info = STRATEGY_INFO[type];
-            const IconComponent = info.icon;
+            const s = STRATEGY_INFO[type];
+            const Icon = s.icon;
+            const isSelected = selectedStrategy === type;
             return (
-              <Button
+              <button
                 key={type}
-                variant={selectedStrategy === type ? 'default' : 'outline'}
-                className="flex flex-col h-auto py-2 px-2"
                 onClick={() => {
                   setSelectedStrategy(type);
                   updateLocator({ type });
                 }}
+                className={`
+                  flex flex-col items-center justify-center p-3 rounded-lg border transition-all
+                  ${isSelected 
+                    ? `${s.bgColor} border-current ${s.color}` 
+                    : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'}
+                `}
               >
-                <IconComponent className="h-4 w-4 mb-1" />
-                <span className="text-xs text-center">{info.label.split(' ')[0]}</span>
-              </Button>
+                <Icon className="h-5 w-5 mb-1.5" />
+                <span className="text-xs font-medium">{s.shortLabel}</span>
+              </button>
             );
           })}
         </div>
+      </div>
 
-        {/* Strategy Info */}
-        <div className="p-3 bg-white rounded border">
-          <div className="flex items-center gap-2 mb-2">
-            <strategyInfo.icon className="h-5 w-5 text-orange-600" />
-            <span className="font-medium">{strategyInfo.label}</span>
-            <Badge variant="outline" className={
-              strategyInfo.reliability === 'High' ? 'bg-green-50 text-green-700' :
-              strategyInfo.reliability === 'Medium' ? 'bg-yellow-50 text-yellow-700' :
-              strategyInfo.reliability === 'Medium-High' ? 'bg-lime-50 text-lime-700' :
-              'bg-red-50 text-red-700'
-            }>
-              {strategyInfo.reliability} Reliability
-            </Badge>
+      {/* Selected Strategy Info */}
+      <div className="p-4 border-b border-white/10">
+        <div className="flex items-start gap-3">
+          <div className={`p-2.5 rounded-lg ${info.bgColor} ${info.color}`}>
+            <IconComponent className="h-5 w-5" />
           </div>
-          <p className="text-sm text-muted-foreground mb-2">{strategyInfo.description}</p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="text-green-700">
-              <strong>Pros:</strong>
-              <ul className="list-disc list-inside">
-                {strategyInfo.pros.map((pro, i) => <li key={i}>{pro}</li>)}
-              </ul>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-semibold text-white">{info.label}</h4>
+              <Badge className={`text-xs ${RELIABILITY_STYLES[info.reliability]}`}>
+                {info.reliability}
+              </Badge>
+              <button
+                onClick={() => setShowHelp(!showHelp)}
+                className="ml-auto text-white/40 hover:text-white/70"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
             </div>
-            <div className="text-red-700">
-              <strong>Cons:</strong>
-              <ul className="list-disc list-inside">
-                {strategyInfo.cons.map((con, i) => <li key={i}>{con}</li>)}
-              </ul>
-            </div>
+            <p className="text-sm text-white/60">{info.description}</p>
           </div>
         </div>
 
-        {/* Strategy-specific Configuration */}
-        <div className="space-y-3 p-3 bg-white rounded border">
+        {/* How to Find Values - Help Section */}
+        {showHelp && (
+          <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <MousePointer className="h-4 w-4 text-blue-400" />
+              <span className="text-sm font-medium text-blue-400">How to Find Values</span>
+            </div>
+            <ol className="text-xs text-blue-300/80 space-y-1.5">
+              {info.howToFind.map((step, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-blue-400 font-medium">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* Configuration Form */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
           {selectedStrategy === 'ocr_text' && (
-            <>
-              <div className="grid gap-2">
-                <Label>Text to Find</Label>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">Text to Find</Label>
                 <Input
                   value={locator.searchText || ''}
                   onChange={(e) => updateLocator({ searchText: e.target.value })}
-                  placeholder="e.g., Submit, Save, Continue"
+                  placeholder="e.g., Cancer, Submit, Save"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              
+              {/* NEW: Occurrence selector for multiple matches */}
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">
+                  Which occurrence? 
+                  <span className="text-white/40 ml-1">(if text appears multiple times)</span>
+                </Label>
+                <Select
+                  value={String(locator.occurrence || 1)}
+                  onValueChange={(v) => updateLocator({ occurrence: parseInt(v) })}
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1st occurrence (first match)</SelectItem>
+                    <SelectItem value="2">2nd occurrence</SelectItem>
+                    <SelectItem value="3">3rd occurrence</SelectItem>
+                    <SelectItem value="4">4th occurrence</SelectItem>
+                    <SelectItem value="5">5th occurrence</SelectItem>
+                    <SelectItem value="-1">Last occurrence</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/40 mt-1.5">
+                  💡 For "Cancer" checkbox: Try 2nd or 3rd occurrence if first one is in header text
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={locator.caseSensitive}
                   onChange={(e) => updateLocator({ caseSensitive: e.target.checked })}
-                  className="rounded"
+                  className="rounded border-white/20 bg-white/5"
                 />
-                <Label className="text-sm">Case sensitive</Label>
-              </div>
-            </>
+                <span className="text-sm text-white/70">Case sensitive matching</span>
+              </label>
+            </div>
           )}
 
           {selectedStrategy === 'coordinates' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>X Position</Label>
-                <Input
-                  type="number"
-                  value={locator.x || ''}
-                  onChange={(e) => updateLocator({ x: parseInt(e.target.value) })}
-                  placeholder="100"
-                />
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">📍 How to find coordinates:</p>
+                <ol className="text-xs text-blue-300/80 space-y-1">
+                  <li>1. Press <kbd className="px-1 py-0.5 bg-white/10 rounded text-white">F12</kbd> to open DevTools</li>
+                  <li>2. Click the element selector tool (⬆️ arrow icon)</li>
+                  <li>3. Hover over your element - see coordinates in tooltip</li>
+                  <li>4. Or right-click element → Copy → Copy element coordinates</li>
+                </ol>
               </div>
-              <div className="grid gap-2">
-                <Label>Y Position</Label>
-                <Input
-                  type="number"
-                  value={locator.y || ''}
-                  onChange={(e) => updateLocator({ y: parseInt(e.target.value) })}
-                  placeholder="200"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">X Position (pixels)</Label>
+                  <Input
+                    type="number"
+                    value={locator.x || ''}
+                    onChange={(e) => updateLocator({ x: parseInt(e.target.value) })}
+                    placeholder="100"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Y Position (pixels)</Label>
+                  <Input
+                    type="number"
+                    value={locator.y || ''}
+                    onChange={(e) => updateLocator({ y: parseInt(e.target.value) })}
+                    placeholder="200"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
               </div>
-              <p className="col-span-2 text-xs text-amber-600">
-                <AlertTriangle className="h-3 w-3 inline mr-1" />
-                Fixed coordinates are fragile - use only as last resort
-              </p>
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-xs text-red-400">
+                  ⚠️ Fixed coordinates break when window size or layout changes. Use only as last resort.
+                </p>
+              </div>
             </div>
           )}
 
           {selectedStrategy === 'relative' && (
-            <>
-              <div className="grid gap-2">
-                <Label>Anchor Element Selector</Label>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">🎯 How to find anchor & offset:</p>
+                <ol className="text-xs text-blue-300/80 space-y-1">
+                  <li>1. Find a stable element near your target (logo, header, label)</li>
+                  <li>2. Right-click → Inspect → Copy → Copy selector</li>
+                  <li>3. For offset: Count pixels from anchor to target</li>
+                  <li>4. Use DevTools ruler or screenshot with grid</li>
+                </ol>
+              </div>
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">Anchor Element (CSS Selector)</Label>
                 <Input
                   value={locator.anchorSelector || ''}
                   onChange={(e) => updateLocator({ anchorSelector: e.target.value })}
-                  placeholder="#logo, .header, [data-id='nav']"
+                  placeholder="#logo, .page-header, [data-testid='nav']"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Direction</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Direction from Anchor</Label>
                   <Select
                     value={locator.direction || 'right'}
                     onValueChange={(v) => updateLocator({ direction: v as any })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="left">Left of anchor</SelectItem>
-                      <SelectItem value="right">Right of anchor</SelectItem>
-                      <SelectItem value="above">Above anchor</SelectItem>
-                      <SelectItem value="below">Below anchor</SelectItem>
+                      <SelectItem value="right">→ Right of anchor</SelectItem>
+                      <SelectItem value="left">← Left of anchor</SelectItem>
+                      <SelectItem value="below">↓ Below anchor</SelectItem>
+                      <SelectItem value="above">↑ Above anchor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Offset (pixels)</Label>
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Distance (pixels)</Label>
                   <Input
                     type="number"
-                    value={locator.offsetX || locator.offsetY || ''}
+                    value={locator.offsetX || locator.offsetY || 50}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value) || 0;
                       if (locator.direction === 'left' || locator.direction === 'right') {
                         updateLocator({ offsetX: val, offsetY: 0 });
                       } else {
                         updateLocator({ offsetX: 0, offsetY: val });
                       }
                     }}
-                    placeholder="50"
+                    className="bg-white/5 border-white/10 text-white"
                   />
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {selectedStrategy === 'image' && (
-            <>
-              <div className="grid gap-2">
-                <Label>Confidence Threshold</Label>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">🖼️ How to capture image template:</p>
+                <ol className="text-xs text-blue-300/80 space-y-1">
+                  <li>1. Press <kbd className="px-1 py-0.5 bg-white/10 rounded text-white">Win+Shift+S</kbd> (Windows Snip)</li>
+                  <li>2. Select ONLY the element you want to match</li>
+                  <li>3. Save as PNG file</li>
+                  <li>4. Upload using the button below</li>
+                </ol>
+              </div>
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">
+                  Match Confidence: {((locator.confidence || 0.8) * 100).toFixed(0)}%
+                </Label>
                 <Slider
                   value={[locator.confidence || 0.8]}
                   onValueChange={([v]) => updateLocator({ confidence: v })}
                   min={0.5}
                   max={1}
                   step={0.05}
+                  className="py-2"
                 />
-                <span className="text-xs text-muted-foreground">
-                  {((locator.confidence || 0.8) * 100).toFixed(0)}% match required
-                </span>
+                <p className="text-xs text-white/40 mt-1">
+                  80% recommended. Lower = more flexible, Higher = stricter
+                </p>
               </div>
-              <div className="grid gap-2">
-                <Label>Image Template</Label>
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1">
-                    <Camera className="h-4 w-4 mr-2" />
-                    Capture from Screen
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Image className="h-4 w-4 mr-2" />
-                    Upload Image
-                  </Button>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                  <Camera className="h-4 w-4 mr-2" />
+                  Capture
+                </Button>
+                <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                  <Image className="h-4 w-4 mr-2" />
+                  Upload PNG
+                </Button>
               </div>
-            </>
+            </div>
           )}
 
           {selectedStrategy === 'ai_detect' && (
-            <div className="grid gap-2">
-              <Label>Describe the Element</Label>
-              <Textarea
-                value={locator.elementDescription || ''}
-                onChange={(e) => updateLocator({ elementDescription: e.target.value })}
-                placeholder="e.g., The blue 'Submit' button in the bottom right corner of the form"
-                rows={3}
-              />
-              <p className="text-xs text-muted-foreground">
-                <Info className="h-3 w-3 inline mr-1" />
-                AI will analyze the screenshot and find the element matching your description
-              </p>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">🤖 Tips for good AI descriptions:</p>
+                <ul className="text-xs text-blue-300/80 space-y-1 list-disc list-inside">
+                  <li>Be specific: "The checkbox next to 'Cancer' text"</li>
+                  <li>Include position: "in the medical conditions list"</li>
+                  <li>Mention visual cues: "unchecked square box"</li>
+                </ul>
+              </div>
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">Describe the Element</Label>
+                <Textarea
+                  value={locator.elementDescription || ''}
+                  onChange={(e) => updateLocator({ elementDescription: e.target.value })}
+                  placeholder="e.g., The unchecked checkbox next to the word 'Cancer' in the medical conditions list, below 'Brain injury'"
+                  rows={4}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 resize-none"
+                />
+              </div>
             </div>
           )}
 
           {selectedStrategy === 'region_click' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Region X</Label>
-                <Input
-                  type="number"
-                  value={locator.regionX || ''}
-                  onChange={(e) => updateLocator({ regionX: parseInt(e.target.value) })}
-                />
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">📐 How to define a region:</p>
+                <ol className="text-xs text-blue-300/80 space-y-1">
+                  <li>1. Take screenshot of the page</li>
+                  <li>2. Open in Paint or image editor</li>
+                  <li>3. Note X,Y of top-left corner where element could be</li>
+                  <li>4. Measure width and height that covers element</li>
+                </ol>
               </div>
-              <div className="grid gap-2">
-                <Label>Region Y</Label>
-                <Input
-                  type="number"
-                  value={locator.regionY || ''}
-                  onChange={(e) => updateLocator({ regionY: parseInt(e.target.value) })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Width</Label>
-                <Input
-                  type="number"
-                  value={locator.regionWidth || ''}
-                  onChange={(e) => updateLocator({ regionWidth: parseInt(e.target.value) })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Height</Label>
-                <Input
-                  type="number"
-                  value={locator.regionHeight || ''}
-                  onChange={(e) => updateLocator({ regionHeight: parseInt(e.target.value) })}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Start X</Label>
+                  <Input
+                    type="number"
+                    value={locator.regionX || ''}
+                    onChange={(e) => updateLocator({ regionX: parseInt(e.target.value) })}
+                    placeholder="100"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Start Y</Label>
+                  <Input
+                    type="number"
+                    value={locator.regionY || ''}
+                    onChange={(e) => updateLocator({ regionY: parseInt(e.target.value) })}
+                    placeholder="100"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Width</Label>
+                  <Input
+                    type="number"
+                    value={locator.regionWidth || ''}
+                    onChange={(e) => updateLocator({ regionWidth: parseInt(e.target.value) })}
+                    placeholder="200"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
+                <div>
+                  <Label className="text-white/70 text-sm mb-2 block">Height</Label>
+                  <Input
+                    type="number"
+                    value={locator.regionHeight || ''}
+                    onChange={(e) => updateLocator({ regionHeight: parseInt(e.target.value) })}
+                    placeholder="50"
+                    className="bg-white/5 border-white/10 text-white"
+                  />
+                </div>
               </div>
             </div>
           )}
 
           {selectedStrategy === 'color_match' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Target Color</Label>
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-xs text-blue-400 mb-2 font-medium">🎨 How to find a color:</p>
+                <ol className="text-xs text-blue-300/80 space-y-1">
+                  <li>1. Press F12 → Select element → Computed tab</li>
+                  <li>2. Find "background-color" or "color"</li>
+                  <li>3. Copy the hex value (e.g., #4CAF50)</li>
+                  <li>4. Or use browser extension like ColorZilla</li>
+                </ol>
+              </div>
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">Target Color</Label>
                 <div className="flex gap-2">
                   <input
                     type="color"
                     value={locator.targetColor || '#FF0000'}
                     onChange={(e) => updateLocator({ targetColor: e.target.value })}
-                    className="w-12 h-9 rounded border cursor-pointer"
+                    className="w-12 h-10 rounded border border-white/10 cursor-pointer bg-transparent"
                   />
                   <Input
                     value={locator.targetColor || '#FF0000'}
                     onChange={(e) => updateLocator({ targetColor: e.target.value })}
                     placeholder="#FF0000"
+                    className="bg-white/5 border-white/10 text-white flex-1"
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Tolerance (0-255)</Label>
-                <Input
-                  type="number"
-                  value={locator.colorTolerance || 10}
-                  onChange={(e) => updateLocator({ colorTolerance: parseInt(e.target.value) })}
+              <div>
+                <Label className="text-white/70 text-sm mb-2 block">
+                  Color Tolerance: {locator.colorTolerance || 10}
+                </Label>
+                <Slider
+                  value={[locator.colorTolerance || 10]}
+                  onValueChange={([v]) => updateLocator({ colorTolerance: v })}
                   min={0}
-                  max={255}
+                  max={50}
+                  step={1}
+                  className="py-2"
                 />
+                <p className="text-xs text-white/40 mt-1">
+                  Higher tolerance = matches similar colors too
+                </p>
               </div>
             </div>
           )}
         </div>
+      </ScrollArea>
 
-        {/* Generated Code Preview */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Generated Code Preview:</Label>
-          <pre className="p-3 bg-gray-900 text-green-400 rounded text-xs overflow-x-auto max-h-[150px]">
-            {generateCode(locator)}
-          </pre>
+      {/* Code Preview & Apply */}
+      <div className="border-t border-white/10 p-4 space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-white/50 font-medium">Generated Code</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={copyCode}
+            className="h-7 text-xs text-white/50 hover:text-white"
+          >
+            {codeCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+            {codeCopied ? 'Copied' : 'Copy'}
+          </Button>
         </div>
-
-        {/* Apply Button */}
-        <Button onClick={applyLocator} className="w-full">
-          <Wand2 className="h-4 w-4 mr-2" />
-          Apply {STRATEGY_INFO[selectedStrategy].label} Strategy
+        <pre className="p-3 bg-black/50 rounded-lg text-xs text-emerald-400 overflow-x-auto max-h-32 font-mono">
+          {generateCode(locator)}
+        </pre>
+        <Button 
+          onClick={applyLocator} 
+          className={`w-full ${info.bgColor} ${info.color} border hover:opacity-90`}
+        >
+          <Zap className="h-4 w-4 mr-2" />
+          Apply {info.label}
+          <ChevronRight className="h-4 w-4 ml-auto" />
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

@@ -1,0 +1,1298 @@
+{
+  "id": "481c9bec",
+  "name": "Test_2025-12-17_31steps",
+  "status": "pending",
+  "tags": [
+    "salesforce-lwc"
+  ],
+  "created_at": "2025-12-16T21:36:16.615574",
+  "updated_at": "2025-12-16T21:36:16.615574",
+  "metadata": {
+    "start_url": "chrome-extension://fkgbinijhehifiogjeaiiekabbognjoa/src/sidepanel/sidepanel.html",
+    "app_type": "salesforce-lwc",
+    "recorded_at": "2025-12-17T02:36:10.309Z",
+    "action_count": 31,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "functional",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "",
+    "actionCount": 31
+  },
+  "actions": [
+    {
+      "type": "click",
+      "description": "Click \"Desktops\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Desktops' })",
+          "confidence": 80,
+          "description": "Role: link \"Desktops\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Desktops' })",
+            "confidence": 60,
+            "description": "Text: \"Desktops\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Desktops' })",
+        "confidence": 80,
+        "description": "Role: link \"Desktops\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938892607,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Desktops",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "nav-link dropdown-toggle show",
+      "triggersNavigation": true
+    },
+    {
+      "type": "click",
+      "description": "Click \"Show All Desktops\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+          "confidence": 80,
+          "description": "Role: link \"Show All Desktops\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+            "confidence": 60,
+            "description": "Text: \"Show All Desktops\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+        "confidence": 80,
+        "description": "Role: link \"Show All Desktops\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938895440,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Show All Desktops",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "see-all",
+      "triggersNavigation": true
+    },
+    {
+      "type": "click",
+      "description": "Click \"Desktops\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Desktops' })",
+          "confidence": 80,
+          "description": "Role: link \"Desktops\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Desktops' })",
+            "confidence": 60,
+            "description": "Text: \"Desktops\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Desktops' })",
+        "confidence": 80,
+        "description": "Role: link \"Desktops\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938892607,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Desktops",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "nav-link dropdown-toggle show",
+      "triggersNavigation": true
+    },
+    {
+      "type": "click",
+      "description": "Click \"Show All Desktops\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+          "confidence": 80,
+          "description": "Role: link \"Show All Desktops\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+            "confidence": 60,
+            "description": "Text: \"Show All Desktops\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Show All Desktops' })",
+        "confidence": 80,
+        "description": "Role: link \"Show All Desktops\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938895440,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Show All Desktops",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "see-all",
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /en-gb/catalog/desktops",
+      "url": "https://demo.opencart.com/en-gb/catalog/desktops",
+      "timestamp": 1765938895837
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /en-gb/catalog/desktops",
+      "url": "https://demo.opencart.com/en-gb/catalog/desktops",
+      "timestamp": 1765938895908
+    },
+    {
+      "type": "hover",
+      "description": "Hover img",
+      "selector": {
+        "primary": {
+          "type": "alt",
+          "selector": "img[alt=\"Desktops\"]",
+          "playwright": "getByAltText('Desktops')",
+          "confidence": 60,
+          "description": "Alt: Desktops",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "css",
+            "selector": "img.img-thumbnail",
+            "playwright": "locator('img.img-thumbnail')",
+            "confidence": 45,
+            "description": "CSS: img.img-thumbnail",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "alt",
+        "selector": "img[alt=\"Desktops\"]",
+        "playwright": "getByAltText('Desktops')",
+        "confidence": 60,
+        "description": "Alt: Desktops",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938897541,
+      "tagName": "img",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Desktops",
+      "className": "img-thumbnail"
+    },
+    {
+      "type": "hover",
+      "description": "Hover img",
+      "selector": {
+        "primary": {
+          "type": "alt",
+          "selector": "img[alt=\"Apple Cinema 30\"\"]",
+          "playwright": "getByAltText('Apple Cinema 30\"')",
+          "confidence": 60,
+          "description": "Alt: Apple Cinema 30\"",
+          "uniqueMatch": false
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "alt",
+        "selector": "img[alt=\"Apple Cinema 30\"\"]",
+        "playwright": "getByAltText('Apple Cinema 30\"')",
+        "confidence": 60,
+        "description": "Alt: Apple Cinema 30\"",
+        "uniqueMatch": false
+      },
+      "value": null,
+      "timestamp": 1765938898418,
+      "tagName": "img",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Apple Cinema 30\"",
+      "className": "img-fluid"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Apple Cinema 30\"\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+          "confidence": 80,
+          "description": "Role: link \"Apple Cinema 30\"\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+            "confidence": 60,
+            "description": "Text: \"Apple Cinema 30\"\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+        "confidence": 80,
+        "description": "Role: link \"Apple Cinema 30\"\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938899442,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Apple Cinema 30\"",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null,
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /en-gb/catalog/desktops",
+      "url": "https://demo.opencart.com/en-gb/catalog/desktops",
+      "timestamp": 1765938895908
+    },
+    {
+      "type": "hover",
+      "description": "Hover img",
+      "selector": {
+        "primary": {
+          "type": "alt",
+          "selector": "img[alt=\"Desktops\"]",
+          "playwright": "getByAltText('Desktops')",
+          "confidence": 60,
+          "description": "Alt: Desktops",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "css",
+            "selector": "img.img-thumbnail",
+            "playwright": "locator('img.img-thumbnail')",
+            "confidence": 45,
+            "description": "CSS: img.img-thumbnail",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "alt",
+        "selector": "img[alt=\"Desktops\"]",
+        "playwright": "getByAltText('Desktops')",
+        "confidence": 60,
+        "description": "Alt: Desktops",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938897541,
+      "tagName": "img",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Desktops",
+      "className": "img-thumbnail"
+    },
+    {
+      "type": "hover",
+      "description": "Hover img",
+      "selector": {
+        "primary": {
+          "type": "alt",
+          "selector": "img[alt=\"Apple Cinema 30\"\"]",
+          "playwright": "getByAltText('Apple Cinema 30\"')",
+          "confidence": 60,
+          "description": "Alt: Apple Cinema 30\"",
+          "uniqueMatch": false
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "alt",
+        "selector": "img[alt=\"Apple Cinema 30\"\"]",
+        "playwright": "getByAltText('Apple Cinema 30\"')",
+        "confidence": 60,
+        "description": "Alt: Apple Cinema 30\"",
+        "uniqueMatch": false
+      },
+      "value": null,
+      "timestamp": 1765938898418,
+      "tagName": "img",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Apple Cinema 30\"",
+      "className": "img-fluid"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Apple Cinema 30\"\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+          "confidence": 80,
+          "description": "Role: link \"Apple Cinema 30\"\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "text",
+            "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+            "confidence": 60,
+            "description": "Text: \"Apple Cinema 30\"\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('link', { name: 'Apple Cinema 30\"' })",
+        "confidence": 80,
+        "description": "Role: link \"Apple Cinema 30\"\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938899442,
+      "tagName": "a",
+      "inputType": "",
+      "innerText": "Apple Cinema 30\"",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null,
+      "triggersNavigation": true
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /en-gb/product/desktops/apple-cinema",
+      "url": "https://demo.opencart.com/en-gb/product/desktops/apple-cinema",
+      "timestamp": 1765938899768
+    },
+    {
+      "type": "navigate",
+      "description": "Navigate to /en-gb/product/desktops/apple-cinema",
+      "url": "https://demo.opencart.com/en-gb/product/desktops/apple-cinema",
+      "timestamp": 1765938899819
+    },
+    {
+      "type": "hover",
+      "description": "Hover img",
+      "selector": {
+        "primary": {
+          "type": "css",
+          "selector": "img.img-thumbnail.mb-3",
+          "playwright": "locator('img.img-thumbnail.mb-3')",
+          "confidence": 45,
+          "description": "CSS: img.img-thumbnail.mb-3",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "css",
+            "selector": "img.img-thumbnail.mb-3",
+            "playwright": "locator('img.img-thumbnail.mb-3')",
+            "confidence": 45,
+            "description": "CSS: img.img-thumbnail.mb-3",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "css",
+        "selector": "img.img-thumbnail.mb-3",
+        "playwright": "locator('img.img-thumbnail.mb-3')",
+        "confidence": 45,
+        "description": "CSS: img.img-thumbnail.mb-3",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938900704,
+      "tagName": "img",
+      "innerText": "",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": "Apple Cinema 30\"",
+      "className": "img-thumbnail mb-3"
+    },
+    {
+      "type": "check",
+      "description": "Check input",
+      "selector": {
+        "primary": {
+          "type": "id",
+          "selector": "#input-option-value-10",
+          "playwright": "locator('#input-option-value-10')",
+          "confidence": 65,
+          "description": "ID: input-option-value-10",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "id",
+        "selector": "#input-option-value-10",
+        "playwright": "locator('#input-option-value-10')",
+        "confidence": 65,
+        "description": "ID: input-option-value-10",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "10",
+      "timestamp": 1765938902787,
+      "tagName": "input",
+      "inputType": "checkbox",
+      "innerText": "",
+      "name": "option[223][]",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "form-check-input"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Checkbox 4\n                   ...\"",
+      "selector": {
+        "primary": {
+          "selector": "#input-option-223 div",
+          "playwright": "locator('#input-option-223 div')",
+          "type": "fallback",
+          "confidence": 10
+        },
+        "fallbacks": [],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "selector": "#input-option-223 div",
+        "playwright": "locator('#input-option-223 div')",
+        "type": "fallback",
+        "confidence": 10
+      },
+      "value": null,
+      "timestamp": 1765938903955,
+      "tagName": "div",
+      "innerText": "Checkbox 4 (+$50.00)",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "form-check",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click \"--- Please Select --- \n       ...\"",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[217]\"]",
+          "playwright": "locator('[name=\"option[217]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"option[217]\"]",
+            "playwright": "locator('[name=\"option[217]\"]')",
+            "confidence": 70,
+            "description": "Name: option[217]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-217",
+            "playwright": "locator('#input-option-217')",
+            "confidence": 65,
+            "description": "ID: input-option-217",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "css",
+            "selector": "select.form-select",
+            "playwright": "locator('select.form-select')",
+            "confidence": 45,
+            "description": "CSS: select.form-select",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[217]\"]",
+        "playwright": "locator('[name=\"option[217]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938907529,
+      "tagName": "select",
+      "inputType": "select-one",
+      "innerText": "--- Please Select ---\nBlue (+$5.60)\nGreen (+$3.20)\nYellow (+$4.40)",
+      "name": "option[217]",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "form-select",
+      "triggersNavigation": false
+    },
+    {
+      "type": "select",
+      "description": "Select \"--- Please Select --- \n       ...\"",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[217]\"]",
+          "playwright": "locator('[name=\"option[217]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"option[217]\"]",
+            "playwright": "locator('[name=\"option[217]\"]')",
+            "confidence": 70,
+            "description": "Name: option[217]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-217",
+            "playwright": "locator('#input-option-217')",
+            "confidence": 65,
+            "description": "ID: input-option-217",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "css",
+            "selector": "select.form-select",
+            "playwright": "locator('select.form-select')",
+            "confidence": 45,
+            "description": "CSS: select.form-select",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[217]\"]",
+        "playwright": "locator('[name=\"option[217]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "3",
+      "timestamp": 1765938908482
+    },
+    {
+      "type": "fill",
+      "description": "Fill \"--- Please Select --- \n       ...\"",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[217]\"]",
+          "playwright": "locator('[name=\"option[217]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"option[217]\"]",
+            "playwright": "locator('[name=\"option[217]\"]')",
+            "confidence": 70,
+            "description": "Name: option[217]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-217",
+            "playwright": "locator('#input-option-217')",
+            "confidence": 65,
+            "description": "ID: input-option-217",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "css",
+            "selector": "select.form-select",
+            "playwright": "locator('select.form-select')",
+            "confidence": 45,
+            "description": "CSS: select.form-select",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[217]\"]",
+        "playwright": "locator('[name=\"option[217]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "3",
+      "timestamp": 1765938908481,
+      "tagName": "select",
+      "inputType": "select-one",
+      "innerText": "--- Please Select ---\nBlue (+$5.60)\nGreen (+$3.20)\nYellow (+$4.40)",
+      "name": "option[217]",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "form-select"
+    },
+    {
+      "type": "click",
+      "description": "Click \"--- Please Select --- \n       ...\"",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[217]\"]",
+          "playwright": "locator('[name=\"option[217]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"option[217]\"]",
+            "playwright": "locator('[name=\"option[217]\"]')",
+            "confidence": 70,
+            "description": "Name: option[217]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-217",
+            "playwright": "locator('#input-option-217')",
+            "confidence": 65,
+            "description": "ID: input-option-217",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "css",
+            "selector": "select.form-select",
+            "playwright": "locator('select.form-select')",
+            "confidence": 45,
+            "description": "CSS: select.form-select",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[217]\"]",
+        "playwright": "locator('[name=\"option[217]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "3",
+      "timestamp": 1765938908487,
+      "tagName": "select",
+      "inputType": "select-one",
+      "innerText": "--- Please Select ---\nBlue (+$5.60)\nGreen (+$3.20)\nYellow (+$4.40)",
+      "name": "option[217]",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "form-select",
+      "triggersNavigation": false
+    },
+    {
+      "type": "click",
+      "description": "Click Textarea",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[209]\"]",
+          "playwright": "locator('[name=\"option[209]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "placeholder",
+            "selector": "[placeholder=\"Textarea\"]",
+            "playwright": "getByPlaceholder('Textarea')",
+            "confidence": 75,
+            "description": "Placeholder: Textarea",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "name",
+            "selector": "[name=\"option[209]\"]",
+            "playwright": "locator('[name=\"option[209]\"]')",
+            "confidence": 70,
+            "description": "Name: option[209]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-209",
+            "playwright": "locator('#input-option-209')",
+            "confidence": 65,
+            "description": "ID: input-option-209",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[209]\"]",
+        "playwright": "locator('[name=\"option[209]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938909540,
+      "tagName": "textarea",
+      "inputType": "textarea",
+      "innerText": "",
+      "name": "option[209]",
+      "ariaLabel": null,
+      "placeholder": "Textarea",
+      "title": null,
+      "className": "form-control",
+      "triggersNavigation": false
+    },
+    {
+      "type": "fill",
+      "description": "Fill Textarea",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[209]\"]",
+          "playwright": "locator('[name=\"option[209]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "placeholder",
+            "selector": "[placeholder=\"Textarea\"]",
+            "playwright": "getByPlaceholder('Textarea')",
+            "confidence": 75,
+            "description": "Placeholder: Textarea",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "name",
+            "selector": "[name=\"option[209]\"]",
+            "playwright": "locator('[name=\"option[209]\"]')",
+            "confidence": 70,
+            "description": "Name: option[209]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-209",
+            "playwright": "locator('#input-option-209')",
+            "confidence": 65,
+            "description": "ID: input-option-209",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[209]\"]",
+        "playwright": "locator('[name=\"option[209]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "test",
+      "timestamp": 1765938910396,
+      "tagName": "textarea",
+      "inputType": "textarea",
+      "innerText": "",
+      "name": "option[209]",
+      "ariaLabel": null,
+      "placeholder": "Textarea",
+      "title": null,
+      "className": "form-control"
+    },
+    {
+      "type": "fill",
+      "description": "Fill Textarea",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"option[209]\"]",
+          "playwright": "locator('[name=\"option[209]\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "placeholder",
+            "selector": "[placeholder=\"Textarea\"]",
+            "playwright": "getByPlaceholder('Textarea')",
+            "confidence": 75,
+            "description": "Placeholder: Textarea",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "name",
+            "selector": "[name=\"option[209]\"]",
+            "playwright": "locator('[name=\"option[209]\"]')",
+            "confidence": 70,
+            "description": "Name: option[209]",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "id",
+            "selector": "#input-option-209",
+            "playwright": "locator('#input-option-209')",
+            "confidence": 65,
+            "description": "ID: input-option-209",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"option[209]\"]",
+        "playwright": "locator('[name=\"option[209]\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "test",
+      "timestamp": 1765938916888,
+      "tagName": "textarea",
+      "innerText": "",
+      "name": "option[209]",
+      "ariaLabel": null,
+      "placeholder": "Textarea",
+      "title": null,
+      "className": "form-control"
+    },
+    {
+      "type": "click",
+      "description": "Click \"Add to Cart\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Add to Cart' })",
+          "confidence": 80,
+          "description": "Role: button \"Add to Cart\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "id",
+            "selector": "#button-cart",
+            "playwright": "locator('#button-cart')",
+            "confidence": 65,
+            "description": "ID: button-cart",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Add to Cart' })",
+            "confidence": 60,
+            "description": "Text: \"Add to Cart\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Add to Cart' })",
+        "confidence": 80,
+        "description": "Role: button \"Add to Cart\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938917031,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Add to Cart",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "btn btn-primary btn-lg btn-block",
+      "triggersNavigation": true
+    },
+    {
+      "type": "click",
+      "description": "Click \"Upload File\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Upload File' })",
+          "confidence": 80,
+          "description": "Role: button \"Upload File\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "id",
+            "selector": "#button-upload-222",
+            "playwright": "locator('#button-upload-222')",
+            "confidence": 65,
+            "description": "ID: button-upload-222",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Upload File' })",
+            "confidence": 60,
+            "description": "Text: \"Upload File\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Upload File' })",
+        "confidence": 80,
+        "description": "Role: button \"Upload File\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938919709,
+      "tagName": "button",
+      "inputType": "button",
+      "innerText": "Upload File",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "btn btn-light btn-block",
+      "triggersNavigation": true
+    },
+    {
+      "type": "click",
+      "description": "Click input",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"file\"]",
+          "playwright": "locator('[name=\"file\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"file\"]",
+            "playwright": "locator('[name=\"file\"]')",
+            "confidence": 70,
+            "description": "Name: file",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"file\"]",
+        "playwright": "locator('[name=\"file\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": null,
+      "timestamp": 1765938919721,
+      "tagName": "input",
+      "inputType": "file",
+      "innerText": "",
+      "name": "file",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null,
+      "triggersNavigation": false
+    },
+    {
+      "type": "upload",
+      "description": "Upload files",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"file\"]",
+          "playwright": "locator('[name=\"file\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"file\"]",
+            "playwright": "locator('[name=\"file\"]')",
+            "confidence": 70,
+            "description": "Name: file",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"file\"]",
+        "playwright": "locator('[name=\"file\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "timestamp": 1765938943726
+    },
+    {
+      "type": "fill",
+      "description": "Fill input",
+      "selector": {
+        "primary": {
+          "type": "app-generic",
+          "selector": "[name=\"file\"]",
+          "playwright": "locator('[name=\"file\"]')",
+          "confidence": 80,
+          "description": "Generic: name",
+          "uniqueMatch": true,
+          "matchCount": 1
+        },
+        "fallbacks": [
+          {
+            "type": "name",
+            "selector": "[name=\"file\"]",
+            "playwright": "locator('[name=\"file\"]')",
+            "confidence": 70,
+            "description": "Name: file",
+            "uniqueMatch": true,
+            "matchCount": 1
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "app-generic",
+        "selector": "[name=\"file\"]",
+        "playwright": "locator('[name=\"file\"]')",
+        "confidence": 80,
+        "description": "Generic: name",
+        "uniqueMatch": true,
+        "matchCount": 1
+      },
+      "value": "C:\\fakepath\\quality-report-2025-12-12.txt",
+      "timestamp": 1765938943726,
+      "tagName": "input",
+      "inputType": "file",
+      "innerText": "",
+      "name": "file",
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": null
+    },
+    {
+      "type": "click",
+      "description": "Click \"Add to Cart\"",
+      "selector": {
+        "primary": {
+          "type": "role",
+          "playwright": "getByRole('button', { name: 'Add to Cart' })",
+          "confidence": 80,
+          "description": "Role: button \"Add to Cart\"",
+          "uniqueMatch": true
+        },
+        "fallbacks": [
+          {
+            "type": "id",
+            "selector": "#button-cart",
+            "playwright": "locator('#button-cart')",
+            "confidence": 65,
+            "description": "ID: button-cart",
+            "uniqueMatch": true,
+            "matchCount": 1
+          },
+          {
+            "type": "text",
+            "playwright": "getByRole('button', { name: 'Add to Cart' })",
+            "confidence": 60,
+            "description": "Text: \"Add to Cart\"",
+            "uniqueMatch": true
+          }
+        ],
+        "app": "generic",
+        "appName": "Generic",
+        "visualFingerprint": null,
+        "type": "role",
+        "playwright": "getByRole('button', { name: 'Add to Cart' })",
+        "confidence": 80,
+        "description": "Role: button \"Add to Cart\"",
+        "uniqueMatch": true
+      },
+      "value": null,
+      "timestamp": 1765938948607,
+      "tagName": "button",
+      "inputType": "submit",
+      "innerText": "Add to Cart",
+      "name": null,
+      "ariaLabel": null,
+      "placeholder": null,
+      "title": null,
+      "className": "btn btn-primary btn-lg btn-block",
+      "triggersNavigation": true
+    }
+  ],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

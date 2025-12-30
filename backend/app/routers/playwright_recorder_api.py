@@ -481,7 +481,8 @@ class PlaywrightScriptGenerator:
         
         if action_type == "click":
             # Wait for element to be visible before clicking
-            return f"  await page.{selector}.waitFor({{ state: 'visible', timeout: 10000 }});\n  await page.{selector}.click();\n"
+            # Use noWaitAfter to avoid navigation timeout issues (e.g., after login button click)
+            return f"  await page.{selector}.waitFor({{ state: 'visible', timeout: 10000 }});\n  await page.{selector}.click({{ noWaitAfter: true }});\n"
         elif action_type in ["fill", "type", "input"]:
             value = action.get("value", "")
             return f"  await page.{selector}.waitFor({{ state: 'visible', timeout: 10000 }});\n  await page.{selector}.fill('{self._escape_string(value)}');\n"
@@ -505,7 +506,8 @@ class PlaywrightScriptGenerator:
             key = action.get("key", "")
             return f"  await page.{selector}.press('{key}');\n"
         elif action_type == "hover":
-            return f"  await page.{selector}.hover();\n"
+            # Hover is non-blocking - skip if it fails
+            return f"  try {{ await page.{selector}.hover(); }} catch (e) {{ console.log('Hover skipped:', e.message); }}\n"
         else:
             return f"  // Unhandled action: {action_type}\n"
     
@@ -555,14 +557,15 @@ class PlaywrightScriptGenerator:
         )
         
         # Playwright Python locators auto-wait, but we add explicit wait for reliability
+        # CRITICAL: Use no_wait_after=True to avoid navigation timeout issues (e.g., after login button click)
         if action_type == "click":
             # For Salesforce, add small delay for async rendering
             if is_salesforce:
                 wait_code = f"    page.{selector}.wait_for(state=\"visible\", timeout=15000)\n"
                 if needs_force_click:
-                    return f"{wait_code}    page.{selector}.click(force=True)\n"
-                return f"{wait_code}    page.{selector}.click()\n"
-            return f"    page.{selector}.wait_for(state=\"visible\", timeout=10000)\n    page.{selector}.click()\n"
+                    return f"{wait_code}    page.{selector}.click(force=True, no_wait_after=True)\n"
+                return f"{wait_code}    page.{selector}.click(no_wait_after=True)\n"
+            return f"    page.{selector}.wait_for(state=\"visible\", timeout=10000)\n    page.{selector}.click(no_wait_after=True)\n"
         
         elif action_type in ["fill", "type", "input"]:
             value = action.get("value", "")
@@ -582,9 +585,9 @@ class PlaywrightScriptGenerator:
             if is_salesforce and ("lightning-combobox" in tag_name or "combobox" in selector_lower):
                 option_text = self._escape_string(label or value)
                 return f"""    # Salesforce Combobox Selection
-    page.{selector}.click()
+    page.{selector}.click(no_wait_after=True)
     page.wait_for_selector(".slds-listbox__option", timeout=10000)
-    page.get_by_role("option", name="{option_text}").click()
+    page.get_by_role("option", name="{option_text}").click(no_wait_after=True)
 """
             
             if label:
@@ -602,10 +605,10 @@ class PlaywrightScriptGenerator:
                 # Add .first to handle multiple matches (common with radio groups)
                 if '[name="' in selector and '.first' not in selector:
                     selector = selector.rstrip('")')  + '").first' if selector.endswith('")') else selector + '.first'
-                return f"    page.{selector}.click(force=True)\n"
+                return f"    page.{selector}.click(force=True, no_wait_after=True)\n"
             
             if needs_force_click:
-                return f"    page.{selector}.click(force=True)\n"
+                return f"    page.{selector}.click(force=True, no_wait_after=True)\n"
             
             # Standard checkbox check for non-Salesforce
             return f"    page.{selector}.check()\n"
@@ -644,7 +647,12 @@ class PlaywrightScriptGenerator:
             return f"    page.{selector}.press(\"{key}\")\n"
         
         elif action_type == "hover":
-            return f"    page.{selector}.hover()\n"
+            # Hover is non-blocking - skip if it fails (wrapped in try/except)
+            return f"""    try:
+        page.{selector}.hover()
+    except Exception as _hover_err:
+        print(f"[SKIP] Hover failed: {{str(_hover_err)[:50]}}")
+"""
         
         else:
             return f"    # Unhandled action: {action_type}\n"

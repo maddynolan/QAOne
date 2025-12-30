@@ -57,7 +57,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ADDITIONAL TYPES FOR SUITES, RELEASES, RUNS
+// ADDITIONAL TYPES FOR SUITES, RELEASES, RUNS, DEFECTS
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface TestSuite {
@@ -66,7 +66,13 @@ interface TestSuite {
   description?: string;
   testCaseIds: string[];
   folderId?: string;
+  type?: 'smoke' | 'regression' | 'functional' | 'integration' | 'e2e' | 'sanity';
   schedule?: 'daily' | 'weekly' | 'on-demand';
+  owner?: string;
+  tags?: string[];
+  executionOrder?: 'sequential' | 'parallel';
+  estimatedDuration?: number; // in minutes
+  status?: 'active' | 'inactive' | 'archived';
   lastRun?: {
     date: string;
     passed: number;
@@ -74,18 +80,55 @@ interface TestSuite {
     total: number;
   };
   createdAt: string;
+  updatedAt?: string;
 }
 
 interface Release {
   id: string;
   name: string;
+  version?: string;
   description?: string;
   startDate: string;
   endDate?: string;
+  releaseDate?: string;
   planIds?: string[]; // Link to test plans
-  status: 'planning' | 'active' | 'completed';
+  status: 'planning' | 'active' | 'testing' | 'completed' | 'released' | 'cancelled';
+  environment?: string;
   suiteIds: string[];
+  owner?: string;
+  notes?: string;
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
   createdAt: string;
+  updatedAt?: string;
+}
+
+// Standard Defect/Bug interface
+interface Defect {
+  id: string;
+  title: string;
+  description?: string;
+  severity: 'critical' | 'major' | 'minor' | 'trivial';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'new' | 'open' | 'in-progress' | 'fixed' | 'verified' | 'closed' | 'reopened' | 'deferred';
+  type?: 'bug' | 'enhancement' | 'regression' | 'performance' | 'security' | 'ui';
+  environment?: string;
+  stepsToReproduce?: string;
+  expectedResult?: string;
+  actualResult?: string;
+  assignedTo?: string;
+  reporter?: string;
+  linkedTestCaseIds?: string[];
+  linkedRunIds?: string[];
+  affectedVersion?: string;
+  fixVersion?: string;
+  resolution?: string;
+  rootCause?: string;
+  component?: string;
+  attachments?: Array<{ name: string; url: string; type: string }>;
+  tags?: string[];
+  createdAt: string;
+  updatedAt?: string;
+  resolvedAt?: string;
 }
 
 interface StepResult {
@@ -108,14 +151,24 @@ interface TestRun {
   planId?: string;
   mode: 'manual' | 'automated';
   executionMode?: 'sequential' | 'parallel';  // How to run multiple tests
-  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked';
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'aborted';
   startTime: string;
   endTime?: string;
+  duration?: number;
   executedBy?: string;
+  assignedTo?: string;
+  environment?: string;
+  buildVersion?: string;
+  browser?: string;
+  notes?: string;
+  defectIds?: string[];      // Linked defects
+  tags?: string[];
   results?: {
     passed: number;
     failed: number;
     skipped: number;
+    blocked?: number;
+    total?: number;
   };
   // Per-test results when running multiple tests
   testResults?: Array<{
@@ -140,9 +193,21 @@ interface TestPlan {
   releaseId?: string;
   suiteIds: string[];
   testCaseIds: string[];
-  status: 'draft' | 'ready' | 'in-progress' | 'completed';
+  status: 'draft' | 'ready' | 'in-progress' | 'completed' | 'archived';
   environment?: string;
   assignedTo?: string;
+  owner?: string;
+  startDate?: string;
+  endDate?: string;
+  scope?: string;
+  objectives?: string;
+  entryCriteria?: string;
+  exitCriteria?: string;
+  resources?: string[];
+  risks?: string;
+  type?: 'regression' | 'release' | 'sprint' | 'feature' | 'smoke';
+  priority?: 'critical' | 'high' | 'medium' | 'low';
+  tags?: string[];
   createdAt: string;
   updatedAt?: string;
   lastRun?: {
@@ -176,12 +241,32 @@ interface TestCase {
   folderId: string | null;
   priority?: 'critical' | 'high' | 'medium' | 'low';
   status?: 'draft' | 'ready' | 'approved' | 'deprecated';
-  automationStatus?: 'none' | 'partial' | 'full';
-  lastResult?: 'passed' | 'failed' | 'skipped';
+  type?: 'functional' | 'regression' | 'smoke' | 'integration' | 'e2e' | 'performance' | 'security' | 'accessibility' | 'usability';
+  automationStatus?: 'none' | 'partial' | 'full' | 'automated';
+  lastResult?: 'passed' | 'failed' | 'skipped' | 'blocked';
   lastRun?: string;
   tags?: string[];
   starred?: boolean;
   steps?: any[];
+  // Test metadata
+  preconditions?: string;
+  expectedResult?: string;
+  testData?: string;
+  environment?: string;
+  estimatedDuration?: number; // in minutes
+  // Assignment
+  assignedTo?: string;
+  createdBy?: string;
+  reviewedBy?: string;
+  // Linked items
+  linkedRequirementIds?: string[];
+  linkedDefectIds?: string[];
+  suiteIds?: string[];
+  // Execution tracking
+  executionCount?: number;
+  passCount?: number;
+  failCount?: number;
+  // Other data
   unified_data?: {
     steps?: any[];
     [key: string]: any;
@@ -1199,13 +1284,72 @@ export default function TestRepository() {
   const [newReleaseEndDate, setNewReleaseEndDate] = useState('');
 
   // Tab state and data (must be declared before useEffects that use them)
-  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs'>('repository');
+  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs' | 'defects'>('repository');
   const [suites, setSuites] = useState<TestSuite[]>([]);
   const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
   const [releases, setReleases] = useState<Release[]>([]);
   const [testRuns, setTestRuns] = useState<TestRun[]>([]);
+  const [defects, setDefects] = useState<Defect[]>([]);
   const [executingRunId, setExecutingRunId] = useState<string | null>(null);
   const [executingStepIndex, setExecutingStepIndex] = useState<number>(-1);
+  
+  // Defect dialogs
+  const [showCreateDefectDialog, setShowCreateDefectDialog] = useState(false);
+  const [editingDefect, setEditingDefect] = useState<Defect | null>(null);
+  const [showEditDefectDialog, setShowEditDefectDialog] = useState(false);
+
+  // Clipboard state for copy/paste
+  const [clipboard, setClipboard] = useState<{
+    type: 'test' | 'suite' | 'plan' | 'release' | null;
+    data: any;
+  }>({ type: null, data: null });
+  
+  // Track deleted IDs to prevent reloading from backend
+  const [deletedTestIds, setDeletedTestIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('deleted_test_ids');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Delete key - delete selected items
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleKeyboardDelete();
+      }
+      
+      // Ctrl+C / Cmd+C - Copy
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault();
+        handleKeyboardCopy();
+      }
+      
+      // Ctrl+V / Cmd+V - Paste
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        handleKeyboardPaste();
+      }
+      
+      // Escape - Clear selection
+      if (e.key === 'Escape') {
+        setSelectedTestIds(new Set());
+        setIsMultiSelectMode(false);
+        setSelectedNode(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, selectedTestIds, selectedNode, clipboard, suites, testPlans, releases, defects]);
 
   // Load data
   useEffect(() => {
@@ -1374,8 +1518,13 @@ export default function TestRepository() {
         } catch (e) {}
       }
       
-      console.log('[Repository] Total test cases loaded:', allCases.length);
-      setTestCases(allCases);
+      // Filter out deleted test cases
+      const deletedIds = JSON.parse(localStorage.getItem('deleted_test_ids') || '[]');
+      const deletedSet = new Set(deletedIds);
+      const filteredCases = allCases.filter(tc => !deletedSet.has(tc.id));
+      
+      console.log('[Repository] Total test cases loaded:', filteredCases.length, '(filtered out', allCases.length - filteredCases.length, 'deleted)');
+      setTestCases(filteredCases);
     };
     
     loadAllTestCases();
@@ -1889,6 +2038,12 @@ export default function TestRepository() {
         localStorage.setItem('test_cases', JSON.stringify(updated));
         return updated;
       });
+      // Track deleted ID to prevent reloading
+      setDeletedTestIds(prev => {
+        const updated = new Set([...prev, testId]);
+        localStorage.setItem('deleted_test_ids', JSON.stringify([...updated]));
+        return updated;
+      });
       toast.success('Test case deleted');
     }
     
@@ -1988,6 +2143,184 @@ export default function TestRepository() {
     setSelectedTestIds(new Set());
     setIsMultiSelectMode(false);
   }, []);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // KEYBOARD SHORTCUTS HANDLERS (Delete, Ctrl+C, Ctrl+V)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  const handleKeyboardDelete = useCallback(() => {
+    if (activeTab === 'repository') {
+      // Delete selected test cases
+      if (selectedTestIds.size > 0) {
+        if (!confirm(`Delete ${selectedTestIds.size} selected test case(s)?`)) return;
+        const idsToDelete = Array.from(selectedTestIds);
+        setTestCases(prev => {
+          const updated = prev.filter(tc => !selectedTestIds.has(tc.id));
+          localStorage.setItem('test_cases', JSON.stringify(updated));
+          return updated;
+        });
+        // Track deleted IDs to prevent reloading
+        setDeletedTestIds(prev => {
+          const updated = new Set([...prev, ...idsToDelete]);
+          localStorage.setItem('deleted_test_ids', JSON.stringify([...updated]));
+          return updated;
+        });
+        toast.success(`${idsToDelete.length} test case(s) deleted`);
+        setSelectedTestIds(new Set());
+        setIsMultiSelectMode(false);
+      } else if (selectedNode?.type === 'test') {
+        if (!confirm(`Delete test case "${selectedNode.name}"?`)) return;
+        const testId = selectedNode.id;
+        setTestCases(prev => {
+          const updated = prev.filter(tc => tc.id !== testId);
+          localStorage.setItem('test_cases', JSON.stringify(updated));
+          return updated;
+        });
+        setDeletedTestIds(prev => {
+          const updated = new Set([...prev, testId]);
+          localStorage.setItem('deleted_test_ids', JSON.stringify([...updated]));
+          return updated;
+        });
+        toast.success('Test case deleted');
+        setSelectedNode(null);
+      }
+    } else if (activeTab === 'suites' && selectedNode) {
+      handleDeleteSuite(selectedNode.id);
+    } else if (activeTab === 'releases' && selectedNode) {
+      handleDeleteRelease(selectedNode.id);
+    } else if (activeTab === 'runs' && selectedNode) {
+      handleDeleteRun(selectedNode.id);
+    } else if (activeTab === 'defects' && selectedNode) {
+      if (!confirm('Delete this defect?')) return;
+      setDefects(prev => {
+        const updated = prev.filter(d => d.id !== selectedNode.id);
+        localStorage.setItem('test_defects', JSON.stringify(updated));
+        return updated;
+      });
+      setSelectedNode(null);
+      toast.success('Defect deleted');
+    }
+  }, [activeTab, selectedTestIds, selectedNode, defects]);
+
+  const handleKeyboardCopy = useCallback(() => {
+    if (activeTab === 'repository') {
+      if (selectedTestIds.size > 0) {
+        // Copy multiple test cases
+        const testsToCopy = testCases.filter(tc => selectedTestIds.has(tc.id));
+        setClipboard({ type: 'test', data: testsToCopy });
+        toast.success(`${testsToCopy.length} test case(s) copied to clipboard`);
+      } else if (selectedNode?.type === 'test') {
+        setClipboard({ type: 'test', data: [selectedNode.data] });
+        toast.success('Test case copied to clipboard');
+      }
+    } else if (activeTab === 'suites') {
+      const selectedSuite = suites.find(s => s.id === selectedNode?.id);
+      if (selectedSuite) {
+        setClipboard({ type: 'suite', data: selectedSuite });
+        toast.success('Suite copied to clipboard');
+      }
+    } else if (activeTab === 'plans') {
+      const selectedPlan = testPlans.find(p => p.id === selectedNode?.id);
+      if (selectedPlan) {
+        setClipboard({ type: 'plan', data: selectedPlan });
+        toast.success('Plan copied to clipboard');
+      }
+    } else if (activeTab === 'releases') {
+      const selectedRelease = releases.find(r => r.id === selectedNode?.id);
+      if (selectedRelease) {
+        setClipboard({ type: 'release', data: selectedRelease });
+        toast.success('Release copied to clipboard');
+      }
+    } else if (activeTab === 'defects') {
+      const selectedDefect = defects.find(d => d.id === selectedNode?.id);
+      if (selectedDefect) {
+        setClipboard({ type: 'defect', data: selectedDefect });
+        toast.success('Defect copied to clipboard');
+      }
+    }
+  }, [activeTab, selectedTestIds, selectedNode, testCases, suites, testPlans, releases, defects]);
+
+  const handleKeyboardPaste = useCallback(() => {
+    if (!clipboard.type || !clipboard.data) {
+      toast.error('Nothing to paste');
+      return;
+    }
+
+    const timestamp = Date.now();
+    
+    if (clipboard.type === 'test' && activeTab === 'repository') {
+      const testsToCreate = Array.isArray(clipboard.data) ? clipboard.data : [clipboard.data];
+      const newTests = testsToCreate.map((tc: TestCase, idx: number) => ({
+        ...tc,
+        id: `tc_${timestamp}_${idx}`,
+        name: `${tc.name} (Copy)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        folderId: currentFolderId === 'root' ? null : currentFolderId,
+      }));
+      setTestCases(prev => {
+        const updated = [...prev, ...newTests];
+        localStorage.setItem('test_cases', JSON.stringify(updated));
+        return updated;
+      });
+      toast.success(`${newTests.length} test case(s) pasted`);
+    } else if (clipboard.type === 'suite' && activeTab === 'suites') {
+      const newSuite: TestSuite = {
+        ...clipboard.data,
+        id: `suite_${timestamp}`,
+        name: `${clipboard.data.name} (Copy)`,
+        createdAt: new Date().toISOString(),
+      };
+      setSuites(prev => {
+        const updated = [...prev, newSuite];
+        localStorage.setItem('test_suites', JSON.stringify(updated));
+        return updated;
+      });
+      toast.success('Suite pasted');
+    } else if (clipboard.type === 'plan' && activeTab === 'plans') {
+      const newPlan: TestPlan = {
+        ...clipboard.data,
+        id: `plan_${timestamp}`,
+        name: `${clipboard.data.name} (Copy)`,
+        createdAt: new Date().toISOString(),
+      };
+      setTestPlans(prev => {
+        const updated = [...prev, newPlan];
+        localStorage.setItem('test_plans', JSON.stringify(updated));
+        return updated;
+      });
+      toast.success('Plan pasted');
+    } else if (clipboard.type === 'release' && activeTab === 'releases') {
+      const newRelease: Release = {
+        ...clipboard.data,
+        id: `release_${timestamp}`,
+        name: `${clipboard.data.name} (Copy)`,
+        createdAt: new Date().toISOString(),
+      };
+      setReleases(prev => {
+        const updated = [...prev, newRelease];
+        localStorage.setItem('test_releases', JSON.stringify(updated));
+        return updated;
+      });
+      toast.success('Release pasted');
+    } else if (clipboard.type === 'defect' && activeTab === 'defects') {
+      const newDefect: Defect = {
+        ...clipboard.data,
+        id: `DEF-${timestamp.toString(36).toUpperCase()}`,
+        title: `${clipboard.data.title} (Copy)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setDefects(prev => {
+        const updated = [...prev, newDefect];
+        localStorage.setItem('test_defects', JSON.stringify(updated));
+        return updated;
+      });
+      toast.success('Defect pasted');
+    } else {
+      toast.info(`Cannot paste ${clipboard.type} in ${activeTab} tab`);
+    }
+  }, [clipboard, activeTab, currentFolderId]);
 
   // Suite handlers
   const handleEditSuite = useCallback((suite: TestSuite) => {
@@ -2740,6 +3073,15 @@ export default function TestRepository() {
       
       const savedRuns = localStorage.getItem('test_execution_history');
       if (savedRuns) setTestRuns(JSON.parse(savedRuns));
+      
+      const savedDefects = localStorage.getItem('test_defects');
+      if (savedDefects) {
+        try {
+          const parsed = JSON.parse(savedDefects);
+          console.log('[Repository] Loading defects from localStorage:', parsed.length);
+          setDefects(parsed);
+        } catch (e) {}
+      }
     };
     
     loadRelatedData();
@@ -2760,8 +3102,10 @@ export default function TestRepository() {
     starred: testCases.filter(tc => tc.starred).length,
     suites: suites.length,
     releases: releases.length,
-    runs: testRuns.length
-  }), [testCases, suites, releases, testRuns]);
+    runs: testRuns.length,
+    defects: defects.length,
+    openDefects: defects.filter(d => ['new', 'open', 'in-progress', 'reopened'].includes(d.status)).length
+  }), [testCases, suites, releases, testRuns, defects]);
 
   return (
     <div className="h-full flex flex-col bg-gray-950 text-white overflow-hidden">
@@ -2776,6 +3120,7 @@ export default function TestRepository() {
               <h1 className="text-lg font-semibold">Test Management</h1>
               <p className="text-xs text-gray-500">
                 {stats.totalTests} tests • {stats.suites} suites • {stats.releases} releases
+                {stats.openDefects > 0 && <span className="text-red-400"> • {stats.openDefects} open defects</span>}
               </p>
             </div>
           </div>
@@ -2790,6 +3135,8 @@ export default function TestRepository() {
                   activeTab === 'suites' ? 'Search suites...' :
                   activeTab === 'plans' ? 'Search plans...' :
                   activeTab === 'releases' ? 'Search releases...' :
+                  activeTab === 'defects' ? 'Search defects...' :
+                  activeTab === 'runs' ? 'Search runs...' :
                   'Search...'
                 }
                 value={searchTerm}
@@ -2901,6 +3248,16 @@ export default function TestRepository() {
                 New Release
               </Button>
             )}
+            {activeTab === 'defects' && (
+              <Button
+                size="sm"
+                onClick={() => setShowCreateDefectDialog(true)}
+                className="bg-gradient-to-r from-red-500 to-orange-500 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Report Defect
+              </Button>
+            )}
             {activeTab === 'runs' && (
               <Button
                 size="sm"
@@ -2922,6 +3279,7 @@ export default function TestRepository() {
             { id: 'plans', label: 'Plans', icon: Target, count: testPlans.length, desc: 'Execution plans' },
             { id: 'releases', label: 'Releases', icon: Rocket, count: stats.releases, desc: 'Sprint/version' },
             { id: 'runs', label: 'Runs', icon: PlayCircle, count: stats.runs, desc: 'Execution history' },
+            { id: 'defects', label: 'Defects', icon: Bug, count: stats.defects, desc: 'Bug tracking', highlight: stats.openDefects > 0 },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -2933,9 +3291,14 @@ export default function TestRepository() {
                   : "border-transparent text-gray-400 hover:text-white"
               )}
             >
-              <tab.icon className="w-4 h-4" />
+              <tab.icon className={cn("w-4 h-4", tab.id === 'defects' && (tab as any).highlight && "text-red-400")} />
               {tab.label}
-              <Badge className="h-5 px-1.5 text-xs bg-gray-800 text-gray-400">{tab.count}</Badge>
+              <Badge className={cn(
+                "h-5 px-1.5 text-xs",
+                tab.id === 'defects' && (tab as any).highlight
+                  ? "bg-red-500/20 text-red-400 border border-red-500/50"
+                  : "bg-gray-800 text-gray-400"
+              )}>{tab.count}</Badge>
             </button>
           ))}
         </div>
@@ -4197,6 +4560,194 @@ export default function TestRepository() {
                       </DropdownMenu>
                     </div>
                   </div>
+                ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* DEFECTS TAB */}
+      {activeTab === 'defects' && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-6xl mx-auto">
+            {defects.length === 0 ? (
+              <div className="text-center py-16">
+                <Bug className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                <h2 className="text-xl font-semibold mb-2">No Defects Found</h2>
+                <p className="text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
+                <Button 
+                  onClick={() => setShowCreateDefectDialog(true)}
+                  className="bg-gradient-to-r from-red-500 to-orange-500"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Report First Defect
+                </Button>
+              </div>
+            ) : (
+              <div>
+                {/* Defect Stats */}
+                <div className="grid grid-cols-5 gap-4 mb-6">
+                  {[
+                    { label: 'Total', count: defects.length, color: 'gray' },
+                    { label: 'Open', count: defects.filter(d => ['new', 'open', 'reopened'].includes(d.status)).length, color: 'red' },
+                    { label: 'In Progress', count: defects.filter(d => d.status === 'in-progress').length, color: 'amber' },
+                    { label: 'Fixed', count: defects.filter(d => ['fixed', 'verified'].includes(d.status)).length, color: 'blue' },
+                    { label: 'Closed', count: defects.filter(d => d.status === 'closed').length, color: 'green' },
+                  ].map(stat => (
+                    <Card key={stat.label} className={`bg-gray-900 border-${stat.color}-500/30`}>
+                      <CardContent className="p-4 text-center">
+                        <div className={`text-2xl font-bold text-${stat.color}-400`}>{stat.count}</div>
+                        <div className="text-xs text-gray-400">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Defect List */}
+                <div className="space-y-3">
+                {defects.map((defect) => (
+                  <Card key={defect.id} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={cn(
+                              "text-xs",
+                              defect.severity === 'critical' && "bg-red-500/20 text-red-400 border-red-500/50",
+                              defect.severity === 'major' && "bg-orange-500/20 text-orange-400 border-orange-500/50",
+                              defect.severity === 'minor' && "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
+                              defect.severity === 'trivial' && "bg-gray-500/20 text-gray-400 border-gray-500/50",
+                            )}>
+                              {defect.severity}
+                            </Badge>
+                            <Badge className={cn(
+                              "text-xs",
+                              defect.status === 'new' && "bg-purple-500/20 text-purple-400",
+                              defect.status === 'open' && "bg-red-500/20 text-red-400",
+                              defect.status === 'in-progress' && "bg-amber-500/20 text-amber-400",
+                              defect.status === 'fixed' && "bg-blue-500/20 text-blue-400",
+                              defect.status === 'verified' && "bg-cyan-500/20 text-cyan-400",
+                              defect.status === 'closed' && "bg-green-500/20 text-green-400",
+                              defect.status === 'reopened' && "bg-red-500/20 text-red-400",
+                              defect.status === 'deferred' && "bg-gray-500/20 text-gray-400",
+                            )}>
+                              {defect.status}
+                            </Badge>
+                            <span className="text-xs text-gray-500">{defect.id}</span>
+                          </div>
+                          <h3 className="font-medium text-white mb-1">{defect.title}</h3>
+                          {defect.description && (
+                            <p className="text-sm text-gray-400 line-clamp-2">{defect.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            {defect.assignedTo && (
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                {defect.assignedTo}
+                              </span>
+                            )}
+                            {defect.component && (
+                              <span className="flex items-center gap-1">
+                                <Layers className="w-3 h-3" />
+                                {defect.component}
+                              </span>
+                            )}
+                            {defect.affectedVersion && (
+                              <span>v{defect.affectedVersion}</span>
+                            )}
+                            <span>{new Date(defect.createdAt).toLocaleDateString()}</span>
+                            {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
+                              <span className="flex items-center gap-1 text-amber-400">
+                                <Link2 className="w-3 h-3" />
+                                {defect.linkedTestCaseIds.length} test(s)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <Badge className={cn(
+                            "text-xs",
+                            defect.priority === 'critical' && "bg-red-500/20 text-red-400",
+                            defect.priority === 'high' && "bg-orange-500/20 text-orange-400",
+                            defect.priority === 'medium' && "bg-yellow-500/20 text-yellow-400",
+                            defect.priority === 'low' && "bg-green-500/20 text-green-400",
+                          )}>
+                            P: {defect.priority}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                              <DropdownMenuItem 
+                                className="text-gray-300 focus:bg-gray-800"
+                                onClick={() => {
+                                  setEditingDefect(defect);
+                                  setShowEditDefectDialog(true);
+                                }}
+                              >
+                                <Edit className="w-4 h-4 mr-2" /> Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-gray-300 focus:bg-gray-800"
+                                onClick={() => {
+                                  // Change status
+                                  const nextStatus = {
+                                    'new': 'open',
+                                    'open': 'in-progress',
+                                    'in-progress': 'fixed',
+                                    'fixed': 'verified',
+                                    'verified': 'closed',
+                                    'closed': 'reopened',
+                                    'reopened': 'in-progress',
+                                    'deferred': 'open'
+                                  }[defect.status] || 'open';
+                                  setDefects(prev => {
+                                    const updated = prev.map(d => d.id === defect.id ? { ...d, status: nextStatus as any, updatedAt: new Date().toISOString() } : d);
+                                    localStorage.setItem('test_defects', JSON.stringify(updated));
+                                    return updated;
+                                  });
+                                  toast.success(`Status changed to ${nextStatus}`);
+                                }}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" /> Move to Next Status
+                              </DropdownMenuItem>
+                              {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
+                                <DropdownMenuItem 
+                                  className="text-gray-300 focus:bg-gray-800"
+                                  onClick={() => {
+                                    const tc = testCases.find(t => defect.linkedTestCaseIds?.includes(t.id));
+                                    if (tc) navigate(`/test-cases/builder?testCaseId=${tc.id}`);
+                                  }}
+                                >
+                                  <ExternalLink className="w-4 h-4 mr-2" /> View Linked Test
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator className="bg-gray-700" />
+                              <DropdownMenuItem 
+                                className="text-red-400 focus:bg-red-500/10"
+                                onClick={() => {
+                                  if (!confirm('Delete this defect?')) return;
+                                  setDefects(prev => {
+                                    const updated = prev.filter(d => d.id !== defect.id);
+                                    localStorage.setItem('test_defects', JSON.stringify(updated));
+                                    return updated;
+                                  });
+                                  toast.success('Defect deleted');
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
                 </div>
               </div>
@@ -5731,6 +6282,354 @@ export default function TestRepository() {
           }
         } : undefined}
       />
+
+      {/* Create Defect Dialog */}
+      <Dialog open={showCreateDefectDialog} onOpenChange={setShowCreateDefectDialog}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bug className="w-5 h-5 text-red-400" />
+              Report New Defect
+            </DialogTitle>
+          </DialogHeader>
+          <CreateDefectForm 
+            testCases={testCases}
+            testRuns={testRuns}
+            onSubmit={(defect) => {
+              setDefects(prev => {
+                const updated = [defect, ...prev];
+                localStorage.setItem('test_defects', JSON.stringify(updated));
+                return updated;
+              });
+              setShowCreateDefectDialog(false);
+              toast.success('Defect created');
+            }}
+            onCancel={() => setShowCreateDefectDialog(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Defect Dialog */}
+      <Dialog open={showEditDefectDialog} onOpenChange={setShowEditDefectDialog}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bug className="w-5 h-5 text-amber-400" />
+              Edit Defect - {editingDefect?.id}
+            </DialogTitle>
+          </DialogHeader>
+          {editingDefect && (
+            <CreateDefectForm 
+              testCases={testCases}
+              testRuns={testRuns}
+              initialDefect={editingDefect}
+              onSubmit={(defect) => {
+                setDefects(prev => {
+                  const updated = prev.map(d => d.id === defect.id ? defect : d);
+                  localStorage.setItem('test_defects', JSON.stringify(updated));
+                  return updated;
+                });
+                setShowEditDefectDialog(false);
+                setEditingDefect(null);
+                toast.success('Defect updated');
+              }}
+              onCancel={() => {
+                setShowEditDefectDialog(false);
+                setEditingDefect(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Create/Edit Defect Form Component
+function CreateDefectForm({ 
+  testCases, 
+  testRuns,
+  initialDefect,
+  onSubmit, 
+  onCancel 
+}: { 
+  testCases: any[];
+  testRuns: TestRun[];
+  initialDefect?: Defect;
+  onSubmit: (defect: Defect) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(initialDefect?.title || '');
+  const [description, setDescription] = useState(initialDefect?.description || '');
+  const [severity, setSeverity] = useState<Defect['severity']>(initialDefect?.severity || 'major');
+  const [priority, setPriority] = useState<Defect['priority']>(initialDefect?.priority || 'medium');
+  const [status, setStatus] = useState<Defect['status']>(initialDefect?.status || 'new');
+  const [type, setType] = useState<Defect['type']>(initialDefect?.type || 'bug');
+  const [environment, setEnvironment] = useState(initialDefect?.environment || '');
+  const [stepsToReproduce, setStepsToReproduce] = useState(initialDefect?.stepsToReproduce || '');
+  const [expectedResult, setExpectedResult] = useState(initialDefect?.expectedResult || '');
+  const [actualResult, setActualResult] = useState(initialDefect?.actualResult || '');
+  const [assignedTo, setAssignedTo] = useState(initialDefect?.assignedTo || '');
+  const [component, setComponent] = useState(initialDefect?.component || '');
+  const [affectedVersion, setAffectedVersion] = useState(initialDefect?.affectedVersion || '');
+  const [fixVersion, setFixVersion] = useState(initialDefect?.fixVersion || '');
+  const [linkedTestCaseIds, setLinkedTestCaseIds] = useState<string[]>(initialDefect?.linkedTestCaseIds || []);
+  const [linkedRunIds, setLinkedRunIds] = useState<string[]>(initialDefect?.linkedRunIds || []);
+  const [tags, setTags] = useState(initialDefect?.tags?.join(', ') || '');
+
+  const handleSubmit = () => {
+    if (!title.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    
+    const defect: Defect = {
+      id: initialDefect?.id || `DEF-${Date.now().toString(36).toUpperCase()}`,
+      title: title.trim(),
+      description,
+      severity,
+      priority,
+      status,
+      type,
+      environment,
+      stepsToReproduce,
+      expectedResult,
+      actualResult,
+      assignedTo,
+      component,
+      affectedVersion,
+      fixVersion,
+      linkedTestCaseIds,
+      linkedRunIds,
+      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      createdAt: initialDefect?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    onSubmit(defect);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Title */}
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Title *</label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Brief description of the defect"
+          className="bg-gray-800 border-gray-700"
+        />
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Description</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Detailed description of the issue..."
+          className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
+        />
+      </div>
+
+      {/* Row 1: Severity, Priority, Status, Type */}
+      <div className="grid grid-cols-4 gap-3">
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Severity</label>
+          <select
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value as any)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+          >
+            <option value="critical">Critical</option>
+            <option value="major">Major</option>
+            <option value="minor">Minor</option>
+            <option value="trivial">Trivial</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Priority</label>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as any)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+          >
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as any)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+          >
+            <option value="new">New</option>
+            <option value="open">Open</option>
+            <option value="in-progress">In Progress</option>
+            <option value="fixed">Fixed</option>
+            <option value="verified">Verified</option>
+            <option value="closed">Closed</option>
+            <option value="reopened">Reopened</option>
+            <option value="deferred">Deferred</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Type</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as any)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+          >
+            <option value="bug">Bug</option>
+            <option value="enhancement">Enhancement</option>
+            <option value="regression">Regression</option>
+            <option value="performance">Performance</option>
+            <option value="security">Security</option>
+            <option value="ui">UI Issue</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Row 2: Environment, Component, Assigned To */}
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Environment</label>
+          <Input
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value)}
+            placeholder="e.g., Production, Staging"
+            className="bg-gray-800 border-gray-700"
+          />
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Component</label>
+          <Input
+            value={component}
+            onChange={(e) => setComponent(e.target.value)}
+            placeholder="e.g., Login, Checkout"
+            className="bg-gray-800 border-gray-700"
+          />
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Assigned To</label>
+          <Input
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            placeholder="Developer name"
+            className="bg-gray-800 border-gray-700"
+          />
+        </div>
+      </div>
+
+      {/* Row 3: Versions */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Affected Version</label>
+          <Input
+            value={affectedVersion}
+            onChange={(e) => setAffectedVersion(e.target.value)}
+            placeholder="e.g., 1.2.3"
+            className="bg-gray-800 border-gray-700"
+          />
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Fix Version</label>
+          <Input
+            value={fixVersion}
+            onChange={(e) => setFixVersion(e.target.value)}
+            placeholder="e.g., 1.2.4"
+            className="bg-gray-800 border-gray-700"
+          />
+        </div>
+      </div>
+
+      {/* Steps to Reproduce */}
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Steps to Reproduce</label>
+        <textarea
+          value={stepsToReproduce}
+          onChange={(e) => setStepsToReproduce(e.target.value)}
+          placeholder="1. Go to...\n2. Click on...\n3. Observe..."
+          className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
+        />
+      </div>
+
+      {/* Expected vs Actual */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Expected Result</label>
+          <textarea
+            value={expectedResult}
+            onChange={(e) => setExpectedResult(e.target.value)}
+            placeholder="What should happen..."
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
+          />
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 mb-1 block">Actual Result</label>
+          <textarea
+            value={actualResult}
+            onChange={(e) => setActualResult(e.target.value)}
+            placeholder="What actually happens..."
+            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
+          />
+        </div>
+      </div>
+
+      {/* Linked Test Cases */}
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Linked Test Cases</label>
+        <div className="max-h-32 overflow-y-auto bg-gray-800 border border-gray-700 rounded-md p-2">
+          {testCases.slice(0, 20).map(tc => (
+            <label key={tc.id} className="flex items-center gap-2 p-1 hover:bg-gray-700 rounded cursor-pointer">
+              <input
+                type="checkbox"
+                checked={linkedTestCaseIds.includes(tc.id)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setLinkedTestCaseIds(prev => [...prev, tc.id]);
+                  } else {
+                    setLinkedTestCaseIds(prev => prev.filter(id => id !== tc.id));
+                  }
+                }}
+                className="rounded border-gray-600 text-amber-500"
+              />
+              <span className="text-sm truncate">{tc.name}</span>
+            </label>
+          ))}
+          {testCases.length > 20 && (
+            <p className="text-xs text-gray-500 mt-1">Showing first 20 test cases</p>
+          )}
+        </div>
+      </div>
+
+      {/* Tags */}
+      <div>
+        <label className="text-sm text-gray-400 mb-1 block">Tags (comma separated)</label>
+        <Input
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="e.g., regression, critical, sprint-5"
+          className="bg-gray-800 border-gray-700"
+        />
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel} className="border-gray-700">
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSubmit}
+          className="bg-gradient-to-r from-red-500 to-orange-500"
+        >
+          {initialDefect ? 'Update Defect' : 'Create Defect'}
+        </Button>
+      </DialogFooter>
     </div>
   );
 }

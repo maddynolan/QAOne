@@ -761,6 +761,188 @@ spec:
 
 ---
 
+## 8. Server Resource Monitoring (SRM)
+
+### 8.1 The Critical Question: Why Are Response Times Slow?
+
+LoadRunner and NeoLoad include Server Resource Monitoring (SRM) to correlate response times with **target server** CPU/memory. This answers the crucial question: **"Is the server the bottleneck, or something else?"**
+
+### 8.2 Traditional Tools: SiteScope / Built-in SRM
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    LOADRUNNER + SITESCOPE                                    │
+│                                                                              │
+│   ┌─────────────────┐                    ┌─────────────────────────────┐   │
+│   │  Load Controller │                    │    APPLICATION SERVER       │   │
+│   │  (LoadRunner)    │──── HTTP ─────────▶│                            │   │
+│   │                  │                    │    Target being tested      │   │
+│   └─────────────────┘                    └─────────────────────────────┘   │
+│           │                                           │                     │
+│           │ Response                                  │ SSH/WMI             │
+│           │ Times                                     │ Metrics             │
+│           ▼                                           ▼                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐  │
+│   │                         SITESCOPE ($$$$)                             │  │
+│   │                                                                      │  │
+│   │   Monitors:                          Answers:                        │  │
+│   │   • Server CPU                       • "Is CPU causing slowdown?"    │  │
+│   │   • Server Memory                    • "Is memory exhausted?"        │  │
+│   │   • Disk I/O                         • "Is it a DB bottleneck?"      │  │
+│   │   • Database connections                                             │  │
+│   │   • JVM heap                                                         │  │
+│   │                                                                      │  │
+│   │   Cost: $50,000+ per year additional license                         │  │
+│   └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**SiteScope Pricing:**
+- LoadRunner itself: ~$85,000/year
+- SiteScope addition: ~$30,000-50,000/year
+- Total for full monitoring: ~$120,000+/year
+
+### 8.3 Flowstral: Built-in Server Resource Monitoring
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    FLOWSTRAL (EVERYTHING INCLUDED)                           │
+│                                                                              │
+│   ┌─────────────────┐                    ┌─────────────────────────────┐   │
+│   │  Load Controller │                    │    APPLICATION SERVER       │   │
+│   │  (Flowstral)     │──── HTTP ─────────▶│                            │   │
+│   │                  │                    │    Target being tested      │   │
+│   └─────────────────┘                    └─────────────────────────────┘   │
+│           │                                           │                     │
+│           │ Response                                  │ SSH/WMI/            │
+│           │ Times                                     │ CloudWatch          │
+│           ▼                                           ▼                     │
+│   ┌─────────────────────────────────────────────────────────────────────┐  │
+│   │                    BUILT-IN SRM (FREE)                               │  │
+│   │                                                                      │  │
+│   │   Protocols:                          Correlates:                    │  │
+│   │   • SSH (Linux/Unix)                  • Response Time vs CPU         │  │
+│   │   • WMI/PowerShell (Windows)          • Response Time vs Memory      │  │
+│   │   • AWS CloudWatch                    • Throughput vs Disk I/O       │  │
+│   │   • Prometheus /metrics               • Error Rate vs Resources      │  │
+│   │   • Azure Monitor (coming)                                           │  │
+│   │                                                                      │  │
+│   │   Cost: $0 (included in Flowstral)                                   │  │
+│   └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.4 Feature Comparison: SRM Capabilities
+
+| Feature | Flowstral | LoadRunner + SiteScope | NeoLoad |
+|---------|-----------|------------------------|---------|
+| **Linux Server Monitoring (SSH)** | ✅ Built-in | ✅ Requires SiteScope | ✅ Built-in |
+| **Windows Server Monitoring (WMI)** | ✅ Built-in | ✅ Requires SiteScope | ✅ Built-in |
+| **AWS CloudWatch Integration** | ✅ Built-in | ⚠️ Extra config | ⚠️ Limited |
+| **Prometheus /metrics Scraping** | ✅ Native | ❌ Not supported | ⚠️ Plugin |
+| **Response Time Correlation** | ✅ Automatic | ✅ Yes | ✅ Yes |
+| **Bottleneck Analysis** | ✅ AI-powered | ⚠️ Manual | ⚠️ Manual |
+| **Top Process Identification** | ✅ Yes | ✅ Yes | ⚠️ Limited |
+| **Additional Cost** | **$0** | **$50,000+** | **Included** |
+
+### 8.5 When You STILL Need APM Tools
+
+Flowstral's SRM monitors at the **OS level** (CPU, memory, disk). For **application-level** visibility, you may still want APM tools:
+
+| Monitoring Level | Flowstral SRM | APM Tools (Dynatrace/DataDog) |
+|-----------------|---------------|-------------------------------|
+| OS CPU/Memory | ✅ | ✅ |
+| JVM Heap/GC | ❌ | ✅ |
+| Database Query Time | ❌ | ✅ |
+| Distributed Tracing | ❌ | ✅ |
+| Code Profiling | ❌ | ✅ |
+
+**Recommendation:**
+- **Testing YOUR application** → Flowstral SRM + APM agent on server
+- **Testing third-party (Salesforce, etc.)** → Flowstral SRM only (can't install agents)
+- **Quick validation** → Flowstral SRM is sufficient
+
+### 8.6 Flowstral SRM API Usage
+
+```python
+# 1. Add target server(s) to monitor
+POST /api/srm/servers
+{
+    "alias": "app-server",
+    "server_type": "linux_ssh",
+    "host": "app.example.com",
+    "username": "monitor",
+    "private_key_path": "/path/to/key"
+}
+
+# 2. Start monitoring BEFORE load test
+POST /api/srm/start
+{
+    "interval_seconds": 5
+}
+
+# 3. Run load test (response times automatically recorded)
+# ... load test runs ...
+
+# 4. Stop monitoring AFTER load test
+POST /api/srm/stop
+
+# 5. GET the correlation chart
+GET /api/srm/correlation
+
+# Response:
+{
+    "correlation": {
+        "timestamps": ["2024-12-16T10:00:00", ...],
+        "response_times": [150, 200, 450, 2000, ...],
+        "server_cpu": [30, 45, 75, 92, ...],
+        "server_memory": [60, 62, 65, 88, ...],
+        "analysis": {
+            "findings": [
+                {
+                    "type": "cpu_bottleneck",
+                    "severity": "high",
+                    "message": "High CPU (92%) correlates with slow response times",
+                    "recommendation": "Scale up CPU or optimize application code"
+                }
+            ],
+            "health_score": 45
+        }
+    }
+}
+```
+
+### 8.7 Correlation Visualization
+
+```
+Response Time vs Server CPU During Load Test
+─────────────────────────────────────────────
+
+Response Time (ms)    │    Server CPU (%)
+                      │
+2000 ┤              ╭──────╮           │ 100
+     │           ╭──╯      ╰──╮        │
+1500 ┤        ╭──╯            ╰──╮     │  80
+     │     ╭──╯                  ╰──╮  │
+1000 ┤  ╭──╯                       ╰─ │  60
+     │ ╭╯                              │
+ 500 ┤─╯                               │  40
+     │                                 │
+ 200 ┤                                 │  20
+     ┼────┬────┬────┬────┬────┬────┬──
+       0    5   10   15   20   25  30  minutes
+
+─── Response Time
+─── Server CPU
+
+FINDING: Response time spike at 15-20 min correlates with CPU hitting 92%
+         → Server is the bottleneck, not network
+```
+
+---
+
 ## Appendix B: Glossary
 
 | Term | Definition |

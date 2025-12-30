@@ -1165,11 +1165,30 @@ class SidebarController {
 
   async stopRecording() {
     try {
+      // IMPORTANT: Keep a backup of actions before stopping
+      const actionBackup = [...this.state.actions];
+      
       const response = await chrome.runtime.sendMessage({ type: 'STOP_RECORDING' });
+      console.log('[Sidebar] Stop recording response:', response);
 
       this.state.recording = false;
       this.state.paused = false;
-      this.state.actions = response?.recording?.actions || [];
+      
+      // Use response actions, but fallback to backup if response is empty
+      const responseActions = response?.recording?.actions || [];
+      if (responseActions.length > 0) {
+        this.state.actions = responseActions;
+        console.log('[Sidebar] Using response actions:', responseActions.length);
+      } else if (actionBackup.length > 0) {
+        // Response was empty but we had actions - keep the backup
+        this.state.actions = actionBackup;
+        console.log('[Sidebar] Response empty, keeping backup actions:', actionBackup.length);
+      } else {
+        // Both empty - try to sync from background
+        console.log('[Sidebar] No actions found, trying to sync from background...');
+        await this.syncActionsFromBackground();
+      }
+      
       this.state.script = '';
       
       // Preserve network request count if protocol data was captured
@@ -1195,6 +1214,16 @@ class SidebarController {
     } catch (error) {
       console.error('[Sidebar] Failed to stop recording:', error);
       this.state.recording = false;
+      
+      // Try to recover actions from background on error
+      console.log('[Sidebar] Attempting to recover actions from background...');
+      try {
+        await this.syncActionsFromBackground();
+        this.addLog('warning', `Recovery: Found ${this.state.actions.length} actions from background`);
+      } catch (syncError) {
+        console.error('[Sidebar] Recovery failed:', syncError);
+      }
+      
       this.updateUI();
     }
   }
@@ -1297,19 +1326,21 @@ class SidebarController {
             options: { pageObjectModel: this.options.pageObjectModel }
           };
         } else {
-          const useEnhanced = this.options.pageObjectModel || this.options.dataDriven || 
-                             this.options.crossBrowser || this.options.visualRegression;
-          endpoint = useEnhanced 
-            ? `${this.options.serverUrl}/api/flowstral/generate-enhanced-script`
-            : `${this.options.serverUrl}/api/flowstral/generate`;
+          // ALWAYS use Flowstral Engine for robust, self-healing tests
+          endpoint = `${this.options.serverUrl}/flowstral/build-from-recording`;
           requestBody = {
-            actions: this.state.actions,
-            metadata: { 
-              startUrl: baseUrl,  // Use user-specified base URL
-              appType: this.options.appType 
-            },
-            options: generateOptions
+            name: this.elements.testCaseName?.value || 'Recorded Test',
+            url: baseUrl,
+            actions: this.state.actions.map(a => ({
+              type: a.type,
+              selector: a.selectorObj?.playwright || a.selector?.playwright || a.selector || '',
+              value: a.value || '',
+              text: a.text || a.description || '',
+              timestamp: a.timestamp || Date.now()
+            })),
+            app_type: this.options.appType || 'auto'
           };
+          console.log('[Sidebar] Using Flowstral Engine endpoint:', endpoint);
         }
         
         const response = await fetch(endpoint, {
@@ -1323,35 +1354,49 @@ class SidebarController {
         }
         
         const result = await response.json();
-        this.state.script = result.script;
         
-        // Store additional generated content
-        if (result.page_objects && Object.keys(result.page_objects).length > 0) {
-          this.state.pageObjects = result.page_objects;
-          this.addLog('success', `Generated POM classes: ${Object.keys(result.page_objects).join(', ')}`);
+        // Handle Flowstral Engine response format
+        if (result.test_code) {
+          // Flowstral Engine response
+          this.state.script = result.test_code;
+          const appType = result.detected_app_type || 'auto';
+          const actionCount = result.action_count || this.state.actions.length;
+          this.addLog('success', `🚀 Flowstral Engine: Generated ${actionCount} steps (${appType})`);
+          console.log('[Sidebar] Flowstral Engine test generated:', result.test_name);
+        } else if (result.script) {
+          // Legacy response format
+          this.state.script = result.script;
+          
+          // Store additional generated content
+          if (result.page_objects && Object.keys(result.page_objects).length > 0) {
+            this.state.pageObjects = result.page_objects;
+            this.addLog('success', `Generated POM classes: ${Object.keys(result.page_objects).join(', ')}`);
+          }
+          if (result.test_data && result.test_data.length > 0) {
+            this.state.testData = result.test_data;
+            this.addLog('info', `Extracted ${result.test_data.length} data parameters`);
+          }
+          if (result.config) {
+            this.state.crossBrowserConfig = result.config;
+          }
+          
+          // Handle framework-specific response
+          const frameworkName = result.framework || this.options.language;
+          const features = result.metadata?.features || [];
+          let logMsg = `Script generated for ${frameworkName} (${result.action_count || this.state.actions.length} actions)`;
+          if (features.length > 0) {
+            logMsg += ` [${features.join(', ')}]`;
+          }
+          if (result.dependencies?.length > 0) {
+            this.addLog('info', `Dependencies: ${result.dependencies.join(', ')}`);
+          }
+          if (result.setup_instructions) {
+            this.addLog('info', `Setup: ${result.setup_instructions}`);
+          }
+          this.addLog('success', logMsg);
+        } else {
+          throw new Error('No script in response');
         }
-        if (result.test_data && result.test_data.length > 0) {
-          this.state.testData = result.test_data;
-          this.addLog('info', `Extracted ${result.test_data.length} data parameters`);
-        }
-        if (result.config) {
-          this.state.crossBrowserConfig = result.config;
-        }
-        
-        // Handle framework-specific response
-        const frameworkName = result.framework || this.options.language;
-        const features = result.metadata?.features || [];
-        let logMsg = `Script generated for ${frameworkName} (${result.action_count || this.state.actions.length} actions)`;
-        if (features.length > 0) {
-          logMsg += ` [${features.join(', ')}]`;
-        }
-        if (result.dependencies?.length > 0) {
-          this.addLog('info', `Dependencies: ${result.dependencies.join(', ')}`);
-        }
-        if (result.setup_instructions) {
-          this.addLog('info', `Setup: ${result.setup_instructions}`);
-        }
-        this.addLog('success', logMsg);
       }
       
       this.updateUI();
@@ -4229,7 +4274,9 @@ Date: ${new Date().toISOString()}
       'wait': 'wait',
       'waitForSelector': 'wait',
       'assert': 'assert',
-      'expect': 'assert'
+      'expect': 'assert',
+      'hover': 'hover',  // ADD: Map hover to hover (don't convert to click!)
+      'dblclick': 'click'  // Double-clicks can be treated as clicks
     };
     return typeMap[actionType] || 'click';
   }
@@ -5330,4 +5377,11 @@ let sidebar;
 document.addEventListener('DOMContentLoaded', () => {
   sidebar = new SidebarController();
   window.sidebar = sidebar; // Make accessible for inline onclick
+  
+  // Notify that sidebar is ready for Flowstral Engine integration
+  console.log('[Sidepanel] SidebarController initialized');
+  console.log('[Sidepanel] generateScript exists:', typeof sidebar.generateScript);
+  
+  // Dispatch event for integration script
+  window.dispatchEvent(new CustomEvent('sidebarReady', { detail: { sidebar } }));
 });

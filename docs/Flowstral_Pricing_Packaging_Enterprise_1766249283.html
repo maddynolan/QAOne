@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset='utf-8'/>
+<meta name='viewport' content='width=device-width, initial-scale=1'/>
+<title>Flowstral Pricing & Packaging (Enterprise / High Tier)</title>
+
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; margin:32px; line-height:1.35;}
+h1{font-size:28px; margin:0 0 10px 0;}
+h2{font-size:18px; margin:24px 0 10px 0;}
+p{margin:6px 0;}
+small{color:#444;}
+table{border-collapse:collapse; width:100%; font-size:12.5px; margin-top:8px;}
+th,td{border:1px solid #111; padding:8px; vertical-align:top;}
+th{background:#f3f3f3; font-weight:700;}
+tr:nth-child(even) td{background:#fafafa;}
+.badge{display:inline-block; padding:2px 8px; border:1px solid #111; border-radius:999px; font-size:12px; margin-left:8px;}
+.note{background:#fff7cc; border:1px solid #e6d37a; padding:10px; border-radius:10px; margin:12px 0;}
+</style>
+</head><body>
+
+<h1>Flowstral Pricing &amp; Packaging <span class='badge'>Enterprise / High Tier</span></h1>
+<p><small>Sizing reference used for examples: ~3 min avg test duration, 50 parallel runs, video + HAR enabled by default.</small></p>
+<h2>Deployment options</h2><ul>
+<li><b>Hybrid SaaS (recommended):</b> Customer runs Worker Agent(s). We host UI/API/DB. Evidence can stay customer-side (BYO storage).</li>
+<li><b>Full SaaS (dedicated):</b> We host UI/API/DB + runner fleet + evidence storage.</li>
+<li><b>Private SaaS in Customer Cloud:</b> Runs in customer AWS/Azure account; we deploy/operate; customer pays infra.</li>
+<li><b>Full On-Prem:</b> Customer runs everything; we sell license + support packages.</li>
+</ul>
+<h2>Enterprise pricing menu (high tier)</h2>
+<table><tr><th>Option</th><th>Price</th><th>Included parallel runs</th><th>Evidence (video+HAR)</th><th>Retention included</th><th>Best for</th></tr>
+<tr><td>Hybrid SaaS — Dedicated Control Plane</td><td>$6,500 / month</td><td>50 (customer workers)</td><td>Default ON; BYO storage recommended</td><td>30 days evidence pointers + 12 months metadata</td><td>Most enterprises; internal apps</td></tr>
+<tr><td>Full SaaS — Dedicated + Managed Runners</td><td>$15,000 / month</td><td>50 (we host runners)</td><td>Default ON; stored in our S3</td><td>30 days evidence + 12 months metadata</td><td>Customers who want zero infra</td></tr>
+<tr><td>Private SaaS in Customer Cloud — Managed</td><td>$20,000 / month + infra</td><td>50 (in customer cloud)</td><td>Default ON; stored in customer account</td><td>Customer-defined</td><td>Strict data residency / regulated</td></tr>
+<tr><td>On-Prem License (annual)</td><td>$240,000 / year</td><td>Customer-defined</td><td>Default ON; stored locally</td><td>Customer-defined</td><td>Air-gapped / regulated</td></tr>
+<tr><td>On-Prem Premium Support (annual add-on)</td><td>+$60,000 / year</td><td>—</td><td>—</td><td>—</td><td>SLA + upgrades + priority support</td></tr>
+</table>
+<h2>Add-ons (simple knobs)</h2><ul>
+<li><b>Extra concurrency:</b> +$2,500 / month per +10 parallel runs (Full SaaS).</li>
+<li><b>Extra evidence retention:</b> +$400 / TB-month (SaaS storage) OR BYO storage (no storage charges).</li>
+<li><b>SSO/SAML + Audit pack:</b> +$1,000 / month (if not already included).</li>
+<li><b>Premium support SLA:</b> +$2,500–$5,000 / month depending on response time.</li>
+<li><b>Managed customer workers:</b> +$3,000 / month per 10 workers (operate in customer network).</li>
+</ul>
+<h2>Unit economics cheat-sheet (keep ROI high)</h2><ul>
+<li>Default enterprise deployment: Hybrid SaaS + BYO evidence storage (customer S3/MinIO).</li>
+<li>Separate pricing for (a) control plane features and (b) execution capacity (parallel runs).</li>
+<li>Cap included evidence retention; charge for longer retention and large storage footprints.</li>
+<li>Use evidence lifecycle policies (expire/move to cold storage) and 'video on failure' on lower tiers.</li>
+<li>Offer BYO LLM key for cost-sensitive clients; keep managed LLM for premium tier.</li>
+<li>Autoscale workers and use Reserved/Spot where policy allows (for Full SaaS).</li>
+</ul>
+<h2>Appendix: Hybrid Architecture Diagram</h2>
+<img src='Flowstral_Hybrid_Architecture_Diagram.png' style='max-width:100%; border:1px solid #111; border-radius:12px;'/>
+</body></html>

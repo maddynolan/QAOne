@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
+  <title>Flowstral Desktop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Title Bar (draggable) -->
+    <div class="title-bar">
+      <div class="title-bar-drag">
+        <div class="logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="url(#grad1)"/>
+            <path d="M2 17L12 22L22 17" stroke="url(#grad1)" stroke-width="2"/>
+            <path d="M2 12L12 17L22 12" stroke="url(#grad1)" stroke-width="2"/>
+            <defs>
+              <linearGradient id="grad1" x1="2" y1="2" x2="22" y2="22">
+                <stop offset="0%" stop-color="#00D9FF"/>
+                <stop offset="100%" stop-color="#7C3AED"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span>Flowstral</span>
+        </div>
+      </div>
+      <div class="status-indicators">
+        <div class="status-badge" id="connection-status">
+          <span class="status-dot offline"></span>
+          <span class="status-text">Disconnected</span>
+        </div>
+        <div class="status-badge" id="license-status">
+          <span class="status-dot warning"></span>
+          <span class="status-text">Not Licensed</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+      <!-- Sidebar Navigation -->
+      <nav class="sidebar">
+        <div class="nav-section">
+          <button class="nav-item active" data-view="studio">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span>Studio</span>
+          </button>
+          <button class="nav-item" data-view="tests">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            <span>Tests</span>
+          </button>
+          <button class="nav-item" data-view="runs">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Runs</span>
+          </button>
+        </div>
+        
+        <div class="nav-section nav-bottom">
+          <button class="nav-item" data-view="settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Content Area -->
+      <main class="content">
+        <!-- Studio View -->
+          <div class="view active" id="view-studio">
+          <!-- Docked Studio Layout (like Copado CRT) -->
+          <div class="studio-docked-layout">
+            
+            <!-- Left Panel: Controls & Steps -->
+            <div class="studio-left-panel">
+              <div class="panel-section">
+                <div class="section-header">
+                  <h3>Test Studio</h3>
+                </div>
+                
+                <!-- URL Bar -->
+                <div class="url-bar">
+                  <button class="icon-btn" id="btn-back" title="Back">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" id="btn-forward" title="Forward">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" id="btn-refresh" title="Refresh">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="23 4 23 10 17 10"/>
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                  </button>
+                  <div class="url-input-wrapper">
+                    <input type="url" id="url-input" placeholder="Enter URL..." value="https://login.salesforce.com">
+                  </div>
+                  <button class="icon-btn" id="btn-go" title="Go">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                      <polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                  </button>
+                </div>
+                
+                <!-- Recording Controls -->
+                <div class="recording-controls">
+                  <button class="btn btn-record" id="btn-record">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="12" r="6"/>
+                    </svg>
+                    Record
+                  </button>
+                  <button class="btn btn-suggest" id="btn-suggest">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    Suggest
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Recorded Steps -->
+              <div class="panel-section steps-section">
+                <div class="section-header">
+                  <span>Recorded Steps</span>
+                  <span class="step-count" id="step-count">0</span>
+                </div>
+                <div class="steps-list" id="steps-list">
+                  <div class="empty-steps">
+                    <p>No steps recorded</p>
+                    <span>Click Record and interact with the browser</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Actions Footer -->
+              <div class="panel-footer">
+                <button class="btn btn-ghost btn-sm" id="btn-clear">Clear</button>
+                <button class="btn btn-accent btn-sm" id="btn-generate">Generate Test</button>
+              </div>
+            </div>
+            
+            <!-- Right Panel: Embedded Browser (BrowserView will be attached here) -->
+            <div class="studio-right-panel" id="browser-panel">
+              <div class="browser-placeholder" id="browser-placeholder">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                <p>Browser will appear here</p>
+                <span>Enter a URL and click Go to start</span>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+
+        <!-- OLD Actions Panel - keeping for reference -->
+        <div style="display: none;">
+              <div class="actions-panel">
+                <div class="panel-header">
+                  <span>Recorded Steps</span>
+                  <span class="step-count" id="step-count">0 steps</span>
+                </div>
+                <div class="actions-list" id="actions-list">
+                  <div class="empty-state">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                      <path d="M2 2l7.586 7.586"/>
+                      <circle cx="11" cy="11" r="2"/>
+                    </svg>
+                    <p>No steps recorded yet</p>
+                    <span>Interact with the browser to record actions</span>
+                  </div>
+                </div>
+                
+                <!-- Actions Footer -->
+                <div class="actions-footer">
+                  <button class="btn btn-ghost" id="btn-clear" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Clear All
+                  </button>
+                  <button class="btn btn-accent" id="btn-generate" disabled>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                    Generate Test
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tests View -->
+        <div class="view" id="view-tests">
+          <div class="view-header">
+            <h1>Test Library</h1>
+            <p>Manage and organize your automated tests</p>
+          </div>
+          <div class="empty-view">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <h3>No tests yet</h3>
+            <p>Create your first test by recording in the Studio</p>
+          </div>
+        </div>
+
+        <!-- Runs View -->
+        <div class="view" id="view-runs">
+          <div class="view-header">
+            <h1>Test Runs</h1>
+            <p>View execution history and results</p>
+          </div>
+          <div class="empty-view">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <h3>No runs yet</h3>
+            <p>Execute a test to see results here</p>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div class="view" id="view-settings">
+          <div class="view-header">
+            <h1>Settings</h1>
+            <p>Configure your Flowstral Desktop agent</p>
+          </div>
+          
+          <div class="settings-content">
+            <!-- License Section -->
+            <section class="settings-section">
+              <h2>License</h2>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>License Key</label>
+                  <span>Enter your Flowstral license key to unlock all features</span>
+                </div>
+                <div class="setting-control license-input">
+                  <input type="text" id="license-key-input" placeholder="FLOWSTRAL-XXXXX-XXXXX-XXXXX-XXXXX">
+                  <button class="btn btn-primary" id="btn-activate">Activate</button>
+                </div>
+              </div>
+              <div class="license-info-card" id="license-info-card" style="display: none;">
+                <div class="license-type">
+                  <span class="label">Type</span>
+                  <span class="value" id="license-type">-</span>
+                </div>
+                <div class="license-expiry">
+                  <span class="label">Expires</span>
+                  <span class="value" id="license-expiry">-</span>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btn-deactivate">Deactivate</button>
+              </div>
+            </section>
+
+            <!-- Server Section -->
+            <section class="settings-section">
+              <h2>Server Connection</h2>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Server URL</label>
+                  <span>Flowstral Cloud or On-Premise server address</span>
+                </div>
+                <div class="setting-control">
+                  <input type="url" id="server-url-input" placeholder="https://app.flowstral.com">
+                  <button class="btn btn-secondary" id="btn-connect">Connect</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Browser Section -->
+            <section class="settings-section">
+              <h2>Browser</h2>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Browser Type</label>
+                  <span>Select the browser engine for test execution</span>
+                </div>
+                <div class="setting-control">
+                  <select id="browser-type-select">
+                    <option value="chromium">Chromium (Chrome)</option>
+                    <option value="firefox">Firefox</option>
+                    <option value="webkit">WebKit (Safari)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Headless Mode</label>
+                  <span>Run browser without visible window</span>
+                </div>
+                <div class="setting-control">
+                  <label class="switch">
+                    <input type="checkbox" id="headless-toggle">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- App Section -->
+            <section class="settings-section">
+              <h2>Application</h2>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Launch on Startup</label>
+                  <span>Automatically start Flowstral when you log in</span>
+                </div>
+                <div class="setting-control">
+                  <label class="switch">
+                    <input type="checkbox" id="startup-toggle" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Minimize to Tray</label>
+                  <span>Keep running in system tray when closed</span>
+                </div>
+                <div class="setting-control">
+                  <label class="switch">
+                    <input type="checkbox" id="tray-toggle" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Version</label>
+                  <span id="app-version">1.0.0</span>
+                </div>
+                <div class="setting-control">
+                  <button class="btn btn-ghost" id="btn-check-updates">Check for Updates</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+    
+    <!-- Text Input Modal -->
+    <div class="modal" id="text-input-modal" style="display: none;">
+      <div class="modal-content">
+        <h3>Enter Text</h3>
+        <input type="text" id="modal-text-input" placeholder="Type text to enter..." autofocus>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+          <button class="btn btn-primary" id="modal-submit">Type</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

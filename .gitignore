@@ -166,6 +166,10 @@ backend/logs/
 .env.*.local
 backend/.env
 
+# Salesforce credentials (sensitive)
+backend/config/salesforce_credentials.json
+**/salesforce_credentials.json
+
 # Node
 node_modules/
 npm-debug.log*

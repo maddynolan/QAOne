@@ -36,7 +36,7 @@ import {
   Home, Briefcase, Gamepad2, BarChart3,
   Activity, FileJson, Link2, Key, Timer,
   ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
-  Pencil, Flag
+  Pencil, Flag, FileDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1243,6 +1243,109 @@ export default function UnifiedWorkflowEditor() {
   const [showValidationPanel, setShowValidationPanel] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<'details' | 'validations'>('details');
   const [rightPanelMode, setRightPanelMode] = useState<'step' | 'protocol'>('step');
+  
+  // Clipboard for step copy/paste
+  const [stepClipboard, setStepClipboard] = useState<TestStep[] | null>(null);
+  
+  // Keyboard shortcuts for steps (Delete, Ctrl+C, Ctrl+V)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Delete key - delete selected step
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedStepId) {
+        e.preventDefault();
+        const stepName = testCase.steps.find(s => s.id === selectedStepId)?.name || 'step';
+        setTestCase(prev => ({
+          ...prev,
+          steps: prev.steps.filter(s => s.id !== selectedStepId),
+        }));
+        setSelectedStepId(null);
+        toast.success(`Deleted step: ${stepName}`);
+      }
+      
+      // Ctrl+C / Cmd+C - Copy selected step
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedStepId) {
+        e.preventDefault();
+        const stepToCopy = testCase.steps.find(s => s.id === selectedStepId);
+        if (stepToCopy) {
+          setStepClipboard([stepToCopy]);
+          toast.success(`Copied step: ${stepToCopy.name}`);
+        }
+      }
+      
+      // Ctrl+V / Cmd+V - Paste step(s)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && stepClipboard && stepClipboard.length > 0) {
+        e.preventDefault();
+        const timestamp = Date.now();
+        const newSteps = stepClipboard.map((step, idx) => ({
+          ...step,
+          id: `step_${timestamp}_${idx}`,
+          name: `${step.name} (Copy)`,
+        }));
+        
+        // Insert after selected step, or at end
+        setTestCase(prev => {
+          const selectedIndex = selectedStepId 
+            ? prev.steps.findIndex(s => s.id === selectedStepId) + 1
+            : prev.steps.length;
+          const newStepList = [...prev.steps];
+          newStepList.splice(selectedIndex, 0, ...newSteps);
+          return { ...prev, steps: newStepList };
+        });
+        toast.success(`Pasted ${newSteps.length} step(s)`);
+      }
+      
+      // Ctrl+D / Cmd+D - Duplicate selected step
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedStepId) {
+        e.preventDefault();
+        const stepToDuplicate = testCase.steps.find(s => s.id === selectedStepId);
+        if (stepToDuplicate) {
+          const newStep = { 
+            ...stepToDuplicate, 
+            id: `step_${Date.now()}`, 
+            name: `${stepToDuplicate.name} (Copy)` 
+          };
+          setTestCase(prev => {
+            const index = prev.steps.findIndex(s => s.id === selectedStepId);
+            const newSteps = [...prev.steps];
+            newSteps.splice(index + 1, 0, newStep);
+            return { ...prev, steps: newSteps };
+          });
+          setSelectedStepId(newStep.id);
+          toast.success('Step duplicated');
+        }
+      }
+      
+      // Arrow keys to navigate steps
+      if (e.key === 'ArrowUp' && selectedStepId) {
+        e.preventDefault();
+        const currentIndex = testCase.steps.findIndex(s => s.id === selectedStepId);
+        if (currentIndex > 0) {
+          setSelectedStepId(testCase.steps[currentIndex - 1].id);
+        }
+      }
+      if (e.key === 'ArrowDown' && selectedStepId) {
+        e.preventDefault();
+        const currentIndex = testCase.steps.findIndex(s => s.id === selectedStepId);
+        if (currentIndex < testCase.steps.length - 1) {
+          setSelectedStepId(testCase.steps[currentIndex + 1].id);
+        }
+      }
+      
+      // Escape - Deselect step
+      if (e.key === 'Escape') {
+        setSelectedStepId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedStepId, stepClipboard, testCase.steps]);
   
   // Protocol/Network data for load testing
   const [protocolData, setProtocolData] = useState<{
@@ -3260,22 +3363,39 @@ export default function UnifiedWorkflowEditor() {
         {/* Header */}
         <header className="flex-none border-b border-gray-800 bg-gray-900 px-4 py-3">
           <div className="flex items-center justify-between">
-            {/* Left: Title */}
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25">
+            {/* Left: Title - Expanded to show full name */}
+            <div className="flex items-start gap-3 max-w-[400px]">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 shrink-0 mt-1">
                 <Layers className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <Input
+              <div className="flex-1 min-w-0">
+                <Textarea
                   value={testCase.name}
                   onChange={(e) => setTestCase(prev => ({ ...prev, name: e.target.value }))}
-                  className="text-lg font-semibold border-none p-0 h-auto bg-transparent focus-visible:ring-0 text-white"
+                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[56px] bg-transparent focus-visible:ring-0 text-white resize-none overflow-hidden leading-7"
                   placeholder="Test Case Name"
+                  rows={1}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, 56) + 'px';
+                  }}
                 />
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
                   <span>{testCase.steps.length} steps</span>
                   <span>•</span>
                   <span>v{testCase.metadata.version}</span>
+                  {testCase.priority && (
+                    <>
+                      <span>•</span>
+                      <span className={cn(
+                        testCase.priority === 'critical' && 'text-red-400',
+                        testCase.priority === 'high' && 'text-orange-400',
+                        testCase.priority === 'medium' && 'text-yellow-400',
+                        testCase.priority === 'low' && 'text-green-400',
+                      )}>{testCase.priority}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -3349,37 +3469,45 @@ export default function UnifiedWorkflowEditor() {
                   {isElectron() && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-xs text-muted-foreground">Desktop Export</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={async () => {
-                        try {
-                          const api = (window as any).electronAPI;
-                          const result = await api?.localStorage?.exportToFile();
-                          if (result?.success) {
-                            toast.success(`Exported to ${result.filePath}`);
-                          } else if (!result?.canceled) {
+                      <DropdownMenuLabel className="text-xs text-amber-400/70">Desktop Export</DropdownMenuLabel>
+                      <DropdownMenuItem 
+                        onClick={async () => {
+                          try {
+                            const api = (window as any).electronAPI;
+                            const result = await api?.localStorage?.exportToFile();
+                            if (result?.success) {
+                              toast.success(`Exported to ${result.filePath}`);
+                            } else if (!result?.canceled) {
+                              toast.error('Export failed');
+                            }
+                          } catch (e) {
                             toast.error('Export failed');
                           }
-                        } catch (e) {
-                          toast.error('Export failed');
-                        }
-                      }}>
-                        💾 Export All to File
+                        }}
+                        className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                      >
+                        <Save className="h-4 w-4 mr-2 text-green-400" />
+                        Export All to File
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={async () => {
-                        try {
-                          const api = (window as any).electronAPI;
-                          const result = await api?.localStorage?.importFromFile();
-                          if (result?.success) {
-                            toast.success('Imported successfully');
-                            window.location.reload();
-                          } else if (!result?.canceled) {
-                            toast.error(result?.error || 'Import failed');
+                      <DropdownMenuItem 
+                        onClick={async () => {
+                          try {
+                            const api = (window as any).electronAPI;
+                            const result = await api?.localStorage?.importFromFile();
+                            if (result?.success) {
+                              toast.success('Imported successfully');
+                              window.location.reload();
+                            } else if (!result?.canceled) {
+                              toast.error(result?.error || 'Import failed');
+                            }
+                          } catch (e) {
+                            toast.error('Import failed');
                           }
-                        } catch (e) {
-                          toast.error('Import failed');
-                        }
-                      }}>
-                        📥 Import from File
+                        }}
+                        className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                      >
+                        <FileDown className="h-4 w-4 mr-2 text-blue-400" />
+                        Import from File
                       </DropdownMenuItem>
                     </>
                   )}
@@ -3397,23 +3525,11 @@ export default function UnifiedWorkflowEditor() {
                 {savedTestCaseId ? 'Save' : 'Save New'}
               </Button>
               
-              {/* Manual Execution Button */}
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={startManualExecution}
-                disabled={isRunning || isManualExecution || testCase.steps.length === 0}
-                className="border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 disabled:opacity-50 px-4"
-              >
-                <ClipboardList className="h-4 w-4 mr-1.5" />
-                Manual
-              </Button>
-              
               {/* Automated Run Button - Prominent green with clear text */}
               <Button 
                 size="sm" 
                 onClick={runTest}
-                disabled={isRunning || isManualExecution || testCase.steps.length === 0}
+                disabled={isRunning || testCase.steps.length === 0}
                 className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-500/25 disabled:opacity-50 px-5"
               >
                 {isRunning ? (
@@ -4940,16 +5056,29 @@ function StepCard({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={onDuplicate}>
-              <Copy className="h-4 w-4 mr-2" />
+          <DropdownMenuContent className="bg-gray-900 border-gray-700">
+            <DropdownMenuItem 
+              onClick={onDuplicate}
+              className="text-gray-200 hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white cursor-pointer"
+            >
+              <Copy className="h-4 w-4 mr-2 text-blue-400" />
               Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onUpdate({ enabled: !step.enabled })}>
-              {step.enabled ? <><EyeOff className="h-4 w-4 mr-2" />Disable</> : <><Eye className="h-4 w-4 mr-2" />Enable</>}
+            <DropdownMenuItem 
+              onClick={() => onUpdate({ enabled: !step.enabled })}
+              className="text-gray-200 hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white cursor-pointer"
+            >
+              {step.enabled ? (
+                <><EyeOff className="h-4 w-4 mr-2 text-amber-400" />Disable</>
+              ) : (
+                <><Eye className="h-4 w-4 mr-2 text-green-400" />Enable</>
+              )}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDelete} className="text-destructive">
+            <DropdownMenuSeparator className="bg-gray-700" />
+            <DropdownMenuItem 
+              onClick={onDelete} 
+              className="text-red-400 hover:bg-red-500/20 hover:text-red-300 focus:bg-red-500/20 focus:text-red-300 cursor-pointer"
+            >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
             </DropdownMenuItem>

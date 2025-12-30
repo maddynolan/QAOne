@@ -162,12 +162,12 @@ export default function Accessibility() {
               <Label htmlFor="scanType">Scan Type</Label>
               <select
                 id="scanType"
-                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                className="w-full rounded-md border border-gray-700 bg-gray-800 text-gray-100 px-3 py-2 focus:border-amber-500 focus:outline-none"
                 value={scanType}
                 onChange={(e) => setScanType(e.target.value as "full_page" | "component")}
               >
-                <option value="full_page">Full Page</option>
-                <option value="component">Component</option>
+                <option value="full_page" className="bg-gray-800 text-gray-100">Full Page</option>
+                <option value="component" className="bg-gray-800 text-gray-100">Component</option>
               </select>
             </div>
 
@@ -175,13 +175,13 @@ export default function Accessibility() {
               <Label htmlFor="wcagLevel">WCAG Level</Label>
               <select
                 id="wcagLevel"
-                className="w-full rounded-md border border-input bg-background px-3 py-2"
+                className="w-full rounded-md border border-gray-700 bg-gray-800 text-gray-100 px-3 py-2 focus:border-amber-500 focus:outline-none"
                 value={wcagLevel}
                 onChange={(e) => setWcagLevel(e.target.value as "A" | "AA" | "AAA")}
               >
-                <option value="A">WCAG A</option>
-                <option value="AA">WCAG AA</option>
-                <option value="AAA">WCAG AAA</option>
+                <option value="A" className="bg-gray-800 text-gray-100">WCAG A</option>
+                <option value="AA" className="bg-gray-800 text-gray-100">WCAG AA</option>
+                <option value="AAA" className="bg-gray-800 text-gray-100">WCAG AAA</option>
               </select>
             </div>
           </div>

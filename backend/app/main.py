@@ -6994,6 +6994,22 @@ app.include_router(app_first_flow_router)
 from app.routers.playwright_recorder_api import router as flowstral_router
 app.include_router(flowstral_router)
 
+# Flowstral Engine API - Robust Automation Engine for Enterprise Apps
+from app.routers.flowstral_engine_api import router as flowstral_engine_router
+app.include_router(flowstral_engine_router)
+
+# CDP Recorder API - Browser Recording WITHOUT Extension (like Testim/Tosca)
+from app.routers.cdp_recorder_api import router as cdp_recorder_router
+app.include_router(cdp_recorder_router)
+
+# License Management API - Desktop Agent Licensing
+from app.routers.license_api import router as license_router
+app.include_router(license_router)
+
+# Agent WebSocket API - Real-time Desktop Agent Communication
+from app.routers.agent_websocket import router as agent_ws_router
+app.include_router(agent_ws_router)
+
 # COMMENTED OUT: Flowstral endpoints (old recording system)
 # from app.routers.flowstral_api import router as flowstral_router
 # from app.routers.flowstral_config_api import router as flowstral_config_router
@@ -7135,6 +7151,10 @@ app.include_router(traceability_router)
 # Sample Data (for testing/demos)
 from app.routers.sample_data_api import router as sample_data_router
 app.include_router(sample_data_router)
+
+# Enterprise Scale API (v2) - Production-ready paginated endpoints
+from app.routers.scale_api import router as scale_api_router
+app.include_router(scale_api_router)
 
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
