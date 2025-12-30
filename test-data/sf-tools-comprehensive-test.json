@@ -1,0 +1,538 @@
+{
+  "id": "tc_sf_tools_comprehensive_test",
+  "name": "SF Tools - Comprehensive Feature Test",
+  "description": "Test ALL Salesforce Tools features: SOQL Builder, Assertions, Stage Transitions, Login As, Variables",
+  "priority": "high",
+  "automationStatus": "automated",
+  "tags": ["salesforce", "sf-tools", "regression", "comprehensive"],
+  "preconditions": [
+    "User is logged into Salesforce org as System Administrator",
+    "Account records exist in the org",
+    "Contact records exist in the org",
+    "At least one validation rule exists on Account or Contact"
+  ],
+  "unified_data": {
+    "steps": [
+      {
+        "id": "step_1",
+        "order": 1,
+        "qword": "goto",
+        "type": "navigate",
+        "action": "Navigate to Salesforce",
+        "description": "Navigate to Salesforce Home",
+        "args": {
+          "url": "https://YOUR_ORG.lightning.force.com"
+        },
+        "expectedResult": "Salesforce home page loads"
+      },
+      
+      {
+        "id": "step_2",
+        "order": 2,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Query Accounts",
+        "description": "SOQL: Query all Account records",
+        "args": {
+          "query": "SELECT Id, Name, Industry, Type, BillingCity FROM Account LIMIT 10",
+          "storeAs": "{{accountRecords}}",
+          "description": "Get Account records for testing"
+        },
+        "expectedResult": "Returns Account records"
+      },
+      
+      {
+        "id": "step_3",
+        "order": 3,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Assert Accounts Exist",
+        "description": "Assert: Account records exist",
+        "args": {
+          "query": "SELECT COUNT() FROM Account",
+          "assertion": "count > 0",
+          "description": "Verify Account records exist in org"
+        },
+        "expectedResult": "Assertion passes - accounts exist"
+      },
+      
+      {
+        "id": "step_4",
+        "order": 4,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Query Single Account",
+        "description": "SOQL: Query specific Account by name pattern",
+        "args": {
+          "query": "SELECT Id, Name, Industry FROM Account WHERE Name LIKE '%Test%' LIMIT 1",
+          "storeAs": "{{testAccount}}",
+          "description": "Find a test account"
+        },
+        "expectedResult": "Returns matching Account"
+      },
+      
+      {
+        "id": "step_5",
+        "order": 5,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Query Contacts",
+        "description": "SOQL: Query Contact records",
+        "args": {
+          "query": "SELECT Id, FirstName, LastName, Email, AccountId FROM Contact LIMIT 10",
+          "storeAs": "{{contactRecords}}",
+          "description": "Get Contact records"
+        },
+        "expectedResult": "Returns Contact records"
+      },
+      
+      {
+        "id": "step_6",
+        "order": 6,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Assert Contacts with Accounts",
+        "description": "Assert: Contacts linked to Accounts",
+        "args": {
+          "query": "SELECT COUNT() FROM Contact WHERE AccountId != null",
+          "assertion": "count > 0",
+          "description": "Verify Contacts are linked to Accounts"
+        },
+        "expectedResult": "Assertion passes"
+      },
+      
+      {
+        "id": "step_7",
+        "order": 7,
+        "qword": "AssertFieldExists",
+        "type": "sf_assert_field_exists",
+        "action": "Assert Account.Industry Exists",
+        "description": "Metadata Assert: Industry field exists on Account",
+        "args": {
+          "object": "Account",
+          "field": "Industry",
+          "description": "Verify Industry field exists"
+        },
+        "expectedResult": "Field exists"
+      },
+      
+      {
+        "id": "step_8",
+        "order": 8,
+        "qword": "AssertFieldType",
+        "type": "sf_assert_field_type",
+        "action": "Assert Account.Name is Text",
+        "description": "Metadata Assert: Name field is text type",
+        "args": {
+          "object": "Account",
+          "field": "Name",
+          "expectedType": "string",
+          "description": "Verify Name is text field"
+        },
+        "expectedResult": "Field type matches"
+      },
+      
+      {
+        "id": "step_9",
+        "order": 9,
+        "qword": "AssertFieldRequired",
+        "type": "sf_assert_field_required",
+        "action": "Assert Account.Name is Required",
+        "description": "Metadata Assert: Name field is required",
+        "args": {
+          "object": "Account",
+          "field": "Name",
+          "required": true,
+          "description": "Verify Name is required"
+        },
+        "expectedResult": "Field is required"
+      },
+      
+      {
+        "id": "step_10",
+        "order": 10,
+        "qword": "AssertPicklistValues",
+        "type": "sf_assert_picklist",
+        "action": "Assert Account Industry Picklist",
+        "description": "Metadata Assert: Industry has expected values",
+        "args": {
+          "object": "Account",
+          "field": "Industry",
+          "expectedValues": ["Technology", "Finance", "Healthcare"],
+          "description": "Verify Industry picklist values"
+        },
+        "expectedResult": "Picklist contains expected values"
+      },
+      
+      {
+        "id": "step_11",
+        "order": 11,
+        "qword": "AssertValidationRule",
+        "type": "sf_assert_validation_rule",
+        "action": "Assert Validation Rule Active",
+        "description": "Metadata Assert: Check validation rule is active",
+        "args": {
+          "object": "Account",
+          "ruleName": "YOUR_VALIDATION_RULE_NAME",
+          "isActive": true,
+          "description": "Verify validation rule is active"
+        },
+        "expectedResult": "Validation rule is active"
+      },
+      
+      {
+        "id": "step_12",
+        "order": 12,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Test Account",
+        "description": "API: Create a new Account record",
+        "args": {
+          "objectType": "Account",
+          "data": {
+            "Name": "SF Tools Test Account {{timestamp}}",
+            "Industry": "Technology",
+            "Type": "Prospect",
+            "Description": "Created by SF Tools comprehensive test"
+          },
+          "storeAs": "{{newAccountId}}",
+          "description": "Create test Account via API"
+        },
+        "expectedResult": "Account created successfully"
+      },
+      
+      {
+        "id": "step_13",
+        "order": 13,
+        "qword": "AssertFieldValue",
+        "type": "sf_assert_field_value",
+        "action": "Assert Account Industry Value",
+        "description": "Assert: Verify Industry field value",
+        "args": {
+          "recordId": "{{newAccountId}}",
+          "objectType": "Account",
+          "field": "Industry",
+          "expectedValue": "Technology",
+          "description": "Verify Industry = Technology"
+        },
+        "expectedResult": "Industry value matches"
+      },
+      
+      {
+        "id": "step_14",
+        "order": 14,
+        "qword": "UpdateRecord",
+        "type": "sf_update_record",
+        "action": "Update Account Industry",
+        "description": "API: Update Account Industry field",
+        "args": {
+          "objectType": "Account",
+          "recordId": "{{newAccountId}}",
+          "data": {
+            "Industry": "Finance"
+          },
+          "description": "Change Industry to Finance"
+        },
+        "expectedResult": "Account updated"
+      },
+      
+      {
+        "id": "step_15",
+        "order": 15,
+        "qword": "AssertFieldValue",
+        "type": "sf_assert_field_value",
+        "action": "Assert Updated Industry",
+        "description": "Assert: Verify Industry updated",
+        "args": {
+          "recordId": "{{newAccountId}}",
+          "objectType": "Account",
+          "field": "Industry",
+          "expectedValue": "Finance",
+          "description": "Verify Industry = Finance after update"
+        },
+        "expectedResult": "Industry value updated correctly"
+      },
+      
+      {
+        "id": "step_16",
+        "order": 16,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Test Contact",
+        "description": "API: Create Contact linked to Account",
+        "args": {
+          "objectType": "Contact",
+          "data": {
+            "FirstName": "Test",
+            "LastName": "Contact {{timestamp}}",
+            "Email": "test.contact@example.com",
+            "AccountId": "{{newAccountId}}"
+          },
+          "storeAs": "{{newContactId}}",
+          "description": "Create Contact linked to test Account"
+        },
+        "expectedResult": "Contact created and linked"
+      },
+      
+      {
+        "id": "step_17",
+        "order": 17,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Verify Contact-Account Link",
+        "description": "SOQL: Query Contact with Account",
+        "args": {
+          "query": "SELECT Id, Name, Account.Name FROM Contact WHERE Id = '{{newContactId}}'",
+          "storeAs": "{{linkedContact}}",
+          "description": "Verify Contact is linked to Account"
+        },
+        "expectedResult": "Contact shows Account relationship"
+      },
+      
+      {
+        "id": "step_18",
+        "order": 18,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Test Opportunity",
+        "description": "API: Create Opportunity for stage testing",
+        "args": {
+          "objectType": "Opportunity",
+          "data": {
+            "Name": "SF Tools Test Opportunity {{timestamp}}",
+            "StageName": "Prospecting",
+            "CloseDate": "2025-12-31",
+            "Amount": 50000,
+            "AccountId": "{{newAccountId}}"
+          },
+          "storeAs": "{{newOppId}}",
+          "description": "Create Opportunity at Prospecting stage"
+        },
+        "expectedResult": "Opportunity created at Prospecting"
+      },
+      
+      {
+        "id": "step_19",
+        "order": 19,
+        "qword": "UpdateStage",
+        "type": "sf_update_stage",
+        "action": "Move to Qualification",
+        "description": "Stage Transition: Prospecting → Qualification",
+        "args": {
+          "recordId": "{{newOppId}}",
+          "objectType": "Opportunity",
+          "stageField": "StageName",
+          "fromStage": "Prospecting",
+          "toStage": "Qualification",
+          "description": "Move Opp from Prospecting to Qualification"
+        },
+        "expectedResult": "Stage changed to Qualification"
+      },
+      
+      {
+        "id": "step_20",
+        "order": 20,
+        "qword": "AssertFieldValue",
+        "type": "sf_assert_field_value",
+        "action": "Assert Qualification Stage",
+        "description": "Assert: Stage is Qualification",
+        "args": {
+          "recordId": "{{newOppId}}",
+          "objectType": "Opportunity",
+          "field": "StageName",
+          "expectedValue": "Qualification",
+          "description": "Verify Stage = Qualification"
+        },
+        "expectedResult": "Stage is Qualification"
+      },
+      
+      {
+        "id": "step_21",
+        "order": 21,
+        "qword": "UpdateStage",
+        "type": "sf_update_stage",
+        "action": "Move to Needs Analysis",
+        "description": "Stage Transition: Qualification → Needs Analysis",
+        "args": {
+          "recordId": "{{newOppId}}",
+          "objectType": "Opportunity",
+          "stageField": "StageName",
+          "fromStage": "Qualification",
+          "toStage": "Needs Analysis",
+          "description": "Continue stage progression"
+        },
+        "expectedResult": "Stage changed to Needs Analysis"
+      },
+      
+      {
+        "id": "step_22",
+        "order": 22,
+        "qword": "UpdateStage",
+        "type": "sf_update_stage",
+        "action": "Move to Closed Won",
+        "description": "Stage Transition: Skip to Closed Won",
+        "args": {
+          "recordId": "{{newOppId}}",
+          "objectType": "Opportunity",
+          "stageField": "StageName",
+          "fromStage": "Needs Analysis",
+          "toStage": "Closed Won",
+          "description": "Close the Opportunity as Won"
+        },
+        "expectedResult": "Opportunity Closed Won"
+      },
+      
+      {
+        "id": "step_23",
+        "order": 23,
+        "qword": "AssertFieldValue",
+        "type": "sf_assert_field_value",
+        "action": "Assert Closed Won",
+        "description": "Assert: Stage is Closed Won",
+        "args": {
+          "recordId": "{{newOppId}}",
+          "objectType": "Opportunity",
+          "field": "StageName",
+          "expectedValue": "Closed Won",
+          "description": "Verify final stage"
+        },
+        "expectedResult": "Opportunity is Closed Won"
+      },
+      
+      {
+        "id": "step_24",
+        "order": 24,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Execute Anonymous Apex",
+        "description": "API: Run Anonymous Apex code",
+        "args": {
+          "code": "System.debug('SF Tools Test - Apex executed successfully at ' + DateTime.now());",
+          "description": "Execute simple Apex code"
+        },
+        "expectedResult": "Apex executes without errors"
+      },
+      
+      {
+        "id": "step_25",
+        "order": 25,
+        "qword": "RestApiCall",
+        "type": "sf_rest_api",
+        "action": "REST API - Get Org Limits",
+        "description": "API: Call REST API endpoint",
+        "args": {
+          "method": "GET",
+          "endpoint": "/limits",
+          "storeAs": "{{orgLimits}}",
+          "description": "Get org limits via REST API"
+        },
+        "expectedResult": "Returns org limits"
+      },
+      
+      {
+        "id": "step_26",
+        "order": 26,
+        "qword": "DeleteRecord",
+        "type": "sf_delete_record",
+        "action": "Cleanup - Delete Test Contact",
+        "description": "Cleanup: Delete test Contact",
+        "args": {
+          "objectType": "Contact",
+          "recordId": "{{newContactId}}",
+          "description": "Delete test Contact"
+        },
+        "expectedResult": "Contact deleted"
+      },
+      
+      {
+        "id": "step_27",
+        "order": 27,
+        "qword": "DeleteRecord",
+        "type": "sf_delete_record",
+        "action": "Cleanup - Delete Test Opportunity",
+        "description": "Cleanup: Delete test Opportunity",
+        "args": {
+          "objectType": "Opportunity",
+          "recordId": "{{newOppId}}",
+          "description": "Delete test Opportunity"
+        },
+        "expectedResult": "Opportunity deleted"
+      },
+      
+      {
+        "id": "step_28",
+        "order": 28,
+        "qword": "DeleteRecord",
+        "type": "sf_delete_record",
+        "action": "Cleanup - Delete Test Account",
+        "description": "Cleanup: Delete test Account",
+        "args": {
+          "objectType": "Account",
+          "recordId": "{{newAccountId}}",
+          "description": "Delete test Account"
+        },
+        "expectedResult": "Account deleted"
+      },
+      
+      {
+        "id": "step_29",
+        "order": 29,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Cleanup Complete",
+        "description": "Assert: Test Account deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM Account WHERE Id = '{{newAccountId}}'",
+          "assertion": "count == 0",
+          "description": "Verify test Account was deleted"
+        },
+        "expectedResult": "Account no longer exists"
+      }
+    ],
+    "variables": {
+      "accountRecords": { "type": "array", "description": "List of Account records" },
+      "testAccount": { "type": "object", "description": "Single test Account" },
+      "contactRecords": { "type": "array", "description": "List of Contact records" },
+      "newAccountId": { "type": "id", "description": "ID of created Account" },
+      "newContactId": { "type": "id", "description": "ID of created Contact" },
+      "newOppId": { "type": "id", "description": "ID of created Opportunity" },
+      "linkedContact": { "type": "object", "description": "Contact with Account info" },
+      "orgLimits": { "type": "object", "description": "Org limits from REST API" },
+      "timestamp": { "type": "string", "description": "Auto-generated timestamp", "value": "{{Date.now()}}" }
+    }
+  },
+  "steps": [
+    { "stepNumber": 1, "action": "Navigate to Salesforce Home", "expectedResult": "Home page loads" },
+    { "stepNumber": 2, "action": "SOQL: Query Account records", "expectedResult": "Returns accounts" },
+    { "stepNumber": 3, "action": "Assert: Accounts exist", "expectedResult": "Count > 0" },
+    { "stepNumber": 4, "action": "SOQL: Find test Account", "expectedResult": "Returns matching account" },
+    { "stepNumber": 5, "action": "SOQL: Query Contacts", "expectedResult": "Returns contacts" },
+    { "stepNumber": 6, "action": "Assert: Contacts linked to Accounts", "expectedResult": "Count > 0" },
+    { "stepNumber": 7, "action": "Metadata: Assert Industry field exists", "expectedResult": "Field exists" },
+    { "stepNumber": 8, "action": "Metadata: Assert Name field type", "expectedResult": "Type is string" },
+    { "stepNumber": 9, "action": "Metadata: Assert Name is required", "expectedResult": "Field is required" },
+    { "stepNumber": 10, "action": "Metadata: Assert Industry picklist values", "expectedResult": "Values exist" },
+    { "stepNumber": 11, "action": "Metadata: Assert validation rule active", "expectedResult": "Rule is active" },
+    { "stepNumber": 12, "action": "API: Create test Account", "expectedResult": "Account created" },
+    { "stepNumber": 13, "action": "Assert: Industry = Technology", "expectedResult": "Value matches" },
+    { "stepNumber": 14, "action": "API: Update Industry to Finance", "expectedResult": "Account updated" },
+    { "stepNumber": 15, "action": "Assert: Industry = Finance", "expectedResult": "Value updated" },
+    { "stepNumber": 16, "action": "API: Create Contact linked to Account", "expectedResult": "Contact created" },
+    { "stepNumber": 17, "action": "SOQL: Verify Contact-Account link", "expectedResult": "Relationship exists" },
+    { "stepNumber": 18, "action": "API: Create Opportunity", "expectedResult": "Opp at Prospecting" },
+    { "stepNumber": 19, "action": "Stage: Move to Qualification", "expectedResult": "Stage updated" },
+    { "stepNumber": 20, "action": "Assert: Stage = Qualification", "expectedResult": "Stage correct" },
+    { "stepNumber": 21, "action": "Stage: Move to Needs Analysis", "expectedResult": "Stage updated" },
+    { "stepNumber": 22, "action": "Stage: Move to Closed Won", "expectedResult": "Stage updated" },
+    { "stepNumber": 23, "action": "Assert: Stage = Closed Won", "expectedResult": "Final stage correct" },
+    { "stepNumber": 24, "action": "Execute Anonymous Apex", "expectedResult": "Apex runs" },
+    { "stepNumber": 25, "action": "REST API: Get org limits", "expectedResult": "Returns limits" },
+    { "stepNumber": 26, "action": "Cleanup: Delete Contact", "expectedResult": "Contact deleted" },
+    { "stepNumber": 27, "action": "Cleanup: Delete Opportunity", "expectedResult": "Opp deleted" },
+    { "stepNumber": 28, "action": "Cleanup: Delete Account", "expectedResult": "Account deleted" },
+    { "stepNumber": 29, "action": "Assert: Cleanup complete", "expectedResult": "Records deleted" }
+  ],
+  "createdAt": "2024-12-30T00:00:00.000Z",
+  "updatedAt": "2024-12-30T00:00:00.000Z"
+}
+
