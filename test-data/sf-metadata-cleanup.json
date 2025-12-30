@@ -1,0 +1,209 @@
+{
+  "id": "tc_sf_metadata_cleanup",
+  "name": "SF Tools - Metadata Cleanup (Run Last)",
+  "description": "Removes all test metadata: Deactivates users, deletes permission sets, roles, validation rules, custom fields. Run LAST after testing.",
+  "priority": "medium",
+  "automationStatus": "automated",
+  "tags": ["salesforce", "metadata", "cleanup"],
+  "preconditions": [
+    "User is logged into Salesforce org as System Administrator"
+  ],
+  "unified_data": {
+    "steps": [
+      {
+        "id": "step_1",
+        "order": 1,
+        "qword": "goto",
+        "type": "navigate",
+        "action": "Navigate to Salesforce",
+        "description": "Navigate to Salesforce Home",
+        "args": ["https://YOUR_ORG.lightning.force.com"],
+        "expectedResult": "Salesforce home page loads"
+      },
+      
+      {
+        "id": "step_2",
+        "order": 2,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Deactivate Test Users",
+        "description": "Deactivate all test users (can't delete users in SF)",
+        "args": {
+          "code": "// Deactivate Test Users\nList<User> testUsers = [SELECT Id, IsActive FROM User WHERE Username LIKE '%flowstral.test%' AND IsActive = true];\nif(!testUsers.isEmpty()) {\n    for(User u : testUsers) {\n        u.IsActive = false;\n    }\n    update testUsers;\n    System.debug('Deactivated ' + testUsers.size() + ' test users');\n} else {\n    System.debug('No active test users to deactivate');\n}"
+        },
+        "expectedResult": "Test users deactivated"
+      },
+      
+      {
+        "id": "step_3",
+        "order": 3,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Permission Set Assignments",
+        "description": "Remove permission set assignments before deleting sets",
+        "args": {
+          "code": "// Delete Permission Set Assignments\nList<PermissionSet> testPS = [SELECT Id FROM PermissionSet WHERE Name LIKE 'Flowstral_Test%'];\nif(!testPS.isEmpty()) {\n    List<PermissionSetAssignment> assignments = [SELECT Id FROM PermissionSetAssignment WHERE PermissionSetId IN :testPS];\n    if(!assignments.isEmpty()) {\n        delete assignments;\n        System.debug('Deleted ' + assignments.size() + ' permission set assignments');\n    }\n}"
+        },
+        "expectedResult": "Assignments deleted"
+      },
+      
+      {
+        "id": "step_4",
+        "order": 4,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Permission Set Group Components",
+        "description": "Remove components from permission set group",
+        "args": {
+          "code": "// Delete Permission Set Group Components\nList<PermissionSetGroup> testPSG = [SELECT Id FROM PermissionSetGroup WHERE DeveloperName = 'Flowstral_Test_Full_Access'];\nif(!testPSG.isEmpty()) {\n    List<PermissionSetGroupComponent> components = [SELECT Id FROM PermissionSetGroupComponent WHERE PermissionSetGroupId IN :testPSG];\n    if(!components.isEmpty()) {\n        delete components;\n        System.debug('Deleted ' + components.size() + ' group components');\n    }\n}"
+        },
+        "expectedResult": "Group components deleted"
+      },
+      
+      {
+        "id": "step_5",
+        "order": 5,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Permission Set Group",
+        "description": "Delete the permission set group",
+        "args": {
+          "code": "// Delete Permission Set Group\nList<PermissionSetGroup> testPSG = [SELECT Id FROM PermissionSetGroup WHERE DeveloperName = 'Flowstral_Test_Full_Access'];\nif(!testPSG.isEmpty()) {\n    delete testPSG;\n    System.debug('Deleted permission set group');\n}"
+        },
+        "expectedResult": "Group deleted"
+      },
+      
+      {
+        "id": "step_6",
+        "order": 6,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Permission Sets",
+        "description": "Delete all test permission sets",
+        "args": {
+          "code": "// Delete Permission Sets\nList<PermissionSet> testPS = [SELECT Id FROM PermissionSet WHERE Name LIKE 'Flowstral_Test%'];\nif(!testPS.isEmpty()) {\n    delete testPS;\n    System.debug('Deleted ' + testPS.size() + ' permission sets');\n}"
+        },
+        "expectedResult": "Permission sets deleted"
+      },
+      
+      {
+        "id": "step_7",
+        "order": 7,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Reassign Users Before Role Delete",
+        "description": "Remove role assignments from users before deleting roles",
+        "args": {
+          "code": "// Remove role assignments\nList<UserRole> testRoles = [SELECT Id FROM UserRole WHERE DeveloperName LIKE 'Flowstral_Test%'];\nif(!testRoles.isEmpty()) {\n    List<User> usersWithRoles = [SELECT Id, UserRoleId FROM User WHERE UserRoleId IN :testRoles];\n    for(User u : usersWithRoles) {\n        u.UserRoleId = null;\n    }\n    if(!usersWithRoles.isEmpty()) {\n        update usersWithRoles;\n        System.debug('Removed role from ' + usersWithRoles.size() + ' users');\n    }\n}"
+        },
+        "expectedResult": "Role assignments removed"
+      },
+      
+      {
+        "id": "step_8",
+        "order": 8,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Roles (Bottom Up)",
+        "description": "Delete roles starting from bottom of hierarchy",
+        "args": {
+          "code": "// Delete Roles - bottom up (children first)\nList<String> roleOrder = new List<String>{\n    'Flowstral_Test_Sales_Rep',\n    'Flowstral_Test_Sales_Manager',\n    'Flowstral_Test_VP_Sales',\n    'Flowstral_Test_CEO'\n};\n\nfor(String roleName : roleOrder) {\n    List<UserRole> role = [SELECT Id FROM UserRole WHERE DeveloperName = :roleName];\n    if(!role.isEmpty()) {\n        try {\n            delete role;\n            System.debug('Deleted role: ' + roleName);\n        } catch(Exception e) {\n            System.debug('Could not delete ' + roleName + ': ' + e.getMessage());\n        }\n    }\n}"
+        },
+        "expectedResult": "Roles deleted"
+      },
+      
+      {
+        "id": "step_9",
+        "order": 9,
+        "qword": "RestApiCall",
+        "type": "sf_rest_api",
+        "action": "Delete Validation Rule - Website",
+        "description": "Delete validation rule via Tooling API",
+        "args": {
+          "method": "DELETE",
+          "endpoint": "/tooling/sobjects/ValidationRule/{{websiteValidationRuleId}}"
+        },
+        "expectedResult": "Validation rule deleted",
+        "skipOnError": true
+      },
+      
+      {
+        "id": "step_10",
+        "order": 10,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Deactivate Validation Rules",
+        "description": "Deactivate test validation rules (manual deletion required for rules)",
+        "args": {
+          "code": "// Note: Validation rules cannot be deleted via Apex\n// They must be deactivated and manually deleted in Setup\n// This step just documents what needs manual cleanup\nSystem.debug('MANUAL CLEANUP REQUIRED:');\nSystem.debug('1. Go to Setup > Object Manager > Account > Validation Rules');\nSystem.debug('2. Delete rules starting with Flowstral_');\nSystem.debug('3. Repeat for Contact and Opportunity');"
+        },
+        "expectedResult": "Manual cleanup instructions logged"
+      },
+      
+      {
+        "id": "step_11",
+        "order": 11,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Permission Sets Deleted",
+        "description": "Verify all test permission sets were deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM PermissionSet WHERE Name LIKE 'Flowstral_Test%'",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No test permission sets remain"
+      },
+      
+      {
+        "id": "step_12",
+        "order": 12,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Roles Deleted",
+        "description": "Verify all test roles were deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM UserRole WHERE DeveloperName LIKE 'Flowstral_Test%'",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No test roles remain"
+      },
+      
+      {
+        "id": "step_13",
+        "order": 13,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Users Deactivated",
+        "description": "Verify all test users were deactivated",
+        "args": {
+          "query": "SELECT COUNT() FROM User WHERE Username LIKE '%flowstral.test%' AND IsActive = true",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No active test users remain"
+      }
+    ]
+  },
+  "steps": [
+    { "stepNumber": 1, "action": "Navigate to SF", "expectedResult": "Home loads" },
+    { "stepNumber": 2, "action": "Deactivate Test Users", "expectedResult": "Users deactivated" },
+    { "stepNumber": 3, "action": "Delete Permission Set Assignments", "expectedResult": "Deleted" },
+    { "stepNumber": 4, "action": "Delete PSG Components", "expectedResult": "Deleted" },
+    { "stepNumber": 5, "action": "Delete Permission Set Group", "expectedResult": "Deleted" },
+    { "stepNumber": 6, "action": "Delete Permission Sets", "expectedResult": "Deleted" },
+    { "stepNumber": 7, "action": "Remove Role Assignments", "expectedResult": "Removed" },
+    { "stepNumber": 8, "action": "Delete Roles (hierarchy)", "expectedResult": "Deleted" },
+    { "stepNumber": 9, "action": "Delete Validation Rule", "expectedResult": "Deleted or skip" },
+    { "stepNumber": 10, "action": "Log Manual Cleanup", "expectedResult": "Instructions logged" },
+    { "stepNumber": 11, "action": "Verify Permission Sets Gone", "expectedResult": "Count = 0" },
+    { "stepNumber": 12, "action": "Verify Roles Gone", "expectedResult": "Count = 0" },
+    { "stepNumber": 13, "action": "Verify Users Deactivated", "expectedResult": "Count = 0" }
+  ],
+  "notes": [
+    "Custom fields and validation rules require manual deletion in Setup",
+    "Users cannot be deleted in Salesforce, only deactivated",
+    "Roles must be deleted bottom-up (children before parents)"
+  ],
+  "createdAt": "2024-12-30T00:00:00.000Z",
+  "updatedAt": "2024-12-30T00:00:00.000Z"
+}
+
