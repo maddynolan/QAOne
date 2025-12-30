@@ -1,0 +1,153 @@
+{
+  "id": "tc_sf_data_cleanup",
+  "name": "SF Tools - Data Cleanup (Run Last)",
+  "description": "Deletes all test data created by the Data Loader. Run this AFTER testing to clean up your org.",
+  "priority": "medium",
+  "automationStatus": "automated",
+  "tags": ["salesforce", "cleanup", "data-management"],
+  "preconditions": [
+    "User is logged into Salesforce org as System Administrator",
+    "Test data was previously created by running sf-data-loader"
+  ],
+  "unified_data": {
+    "steps": [
+      {
+        "id": "step_1",
+        "order": 1,
+        "qword": "goto",
+        "type": "navigate",
+        "action": "Navigate to Salesforce",
+        "description": "Navigate to Salesforce Home",
+        "args": ["https://YOUR_ORG.lightning.force.com"],
+        "expectedResult": "Salesforce home page loads"
+      },
+      {
+        "id": "step_2",
+        "order": 2,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Find Test Cases",
+        "description": "Query all test Cases to delete",
+        "args": {
+          "query": "SELECT Id FROM Case WHERE Subject LIKE 'Flowstral Test%'",
+          "storeAs": "{{casesToDelete}}"
+        },
+        "expectedResult": "Returns test case IDs"
+      },
+      {
+        "id": "step_3",
+        "order": 3,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Test Cases",
+        "description": "Delete all test Cases via Apex",
+        "args": {
+          "code": "List<Case> cases = [SELECT Id FROM Case WHERE Subject LIKE 'Flowstral Test%']; if(!cases.isEmpty()) { delete cases; System.debug('Deleted ' + cases.size() + ' test cases'); }"
+        },
+        "expectedResult": "Cases deleted"
+      },
+      {
+        "id": "step_4",
+        "order": 4,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Test Opportunities",
+        "description": "Delete all test Opportunities",
+        "args": {
+          "code": "List<Opportunity> opps = [SELECT Id FROM Opportunity WHERE Name LIKE 'Flowstral Test%']; if(!opps.isEmpty()) { delete opps; System.debug('Deleted ' + opps.size() + ' test opportunities'); }"
+        },
+        "expectedResult": "Opportunities deleted"
+      },
+      {
+        "id": "step_5",
+        "order": 5,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Test Leads",
+        "description": "Delete all test Leads",
+        "args": {
+          "code": "List<Lead> leads = [SELECT Id FROM Lead WHERE Email LIKE '%prospect%' OR Email LIKE '%qualified%']; if(!leads.isEmpty()) { delete leads; System.debug('Deleted ' + leads.size() + ' test leads'); }"
+        },
+        "expectedResult": "Leads deleted"
+      },
+      {
+        "id": "step_6",
+        "order": 6,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Test Contacts",
+        "description": "Delete all test Contacts",
+        "args": {
+          "code": "List<Contact> contacts = [SELECT Id FROM Contact WHERE Email LIKE '%flowstral%']; if(!contacts.isEmpty()) { delete contacts; System.debug('Deleted ' + contacts.size() + ' test contacts'); }"
+        },
+        "expectedResult": "Contacts deleted"
+      },
+      {
+        "id": "step_7",
+        "order": 7,
+        "qword": "ExecuteApex",
+        "type": "sf_execute_apex",
+        "action": "Delete Test Accounts",
+        "description": "Delete all test Accounts",
+        "args": {
+          "code": "List<Account> accounts = [SELECT Id FROM Account WHERE Name LIKE 'Flowstral Test%']; if(!accounts.isEmpty()) { delete accounts; System.debug('Deleted ' + accounts.size() + ' test accounts'); }"
+        },
+        "expectedResult": "Accounts deleted"
+      },
+      {
+        "id": "step_8",
+        "order": 8,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Accounts Deleted",
+        "description": "Verify all test Accounts were deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM Account WHERE Name LIKE 'Flowstral Test%'",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No test accounts remain"
+      },
+      {
+        "id": "step_9",
+        "order": 9,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Contacts Deleted",
+        "description": "Verify all test Contacts were deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM Contact WHERE Email LIKE '%flowstral%'",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No test contacts remain"
+      },
+      {
+        "id": "step_10",
+        "order": 10,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Verify Opportunities Deleted",
+        "description": "Verify all test Opportunities were deleted",
+        "args": {
+          "query": "SELECT COUNT() FROM Opportunity WHERE Name LIKE 'Flowstral Test%'",
+          "assertion": "count == 0"
+        },
+        "expectedResult": "No test opportunities remain"
+      }
+    ]
+  },
+  "steps": [
+    { "stepNumber": 1, "action": "Navigate to SF", "expectedResult": "Home loads" },
+    { "stepNumber": 2, "action": "Find Cases to delete", "expectedResult": "IDs found" },
+    { "stepNumber": 3, "action": "Delete Cases", "expectedResult": "Deleted" },
+    { "stepNumber": 4, "action": "Delete Opportunities", "expectedResult": "Deleted" },
+    { "stepNumber": 5, "action": "Delete Leads", "expectedResult": "Deleted" },
+    { "stepNumber": 6, "action": "Delete Contacts", "expectedResult": "Deleted" },
+    { "stepNumber": 7, "action": "Delete Accounts", "expectedResult": "Deleted" },
+    { "stepNumber": 8, "action": "Verify Accounts gone", "expectedResult": "Count = 0" },
+    { "stepNumber": 9, "action": "Verify Contacts gone", "expectedResult": "Count = 0" },
+    { "stepNumber": 10, "action": "Verify Opportunities gone", "expectedResult": "Count = 0" }
+  ],
+  "createdAt": "2024-12-30T00:00:00.000Z",
+  "updatedAt": "2024-12-30T00:00:00.000Z"
+}
+

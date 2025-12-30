@@ -1,0 +1,469 @@
+{
+  "id": "tc_sf_data_loader",
+  "name": "SF Tools - Data Loader (Run First)",
+  "description": "Creates test data in your Salesforce org for testing all SF Tools features. Run this BEFORE testing SF Tools.",
+  "priority": "high",
+  "automationStatus": "automated",
+  "tags": ["salesforce", "data-setup", "prerequisite"],
+  "preconditions": [
+    "User is logged into Salesforce org as System Administrator",
+    "Org has available DML limits (this creates ~15 records)"
+  ],
+  "unified_data": {
+    "steps": [
+      {
+        "id": "step_1",
+        "order": 1,
+        "qword": "goto",
+        "type": "navigate",
+        "action": "Navigate to Salesforce",
+        "description": "Navigate to Salesforce Home",
+        "args": ["https://YOUR_ORG.lightning.force.com"],
+        "expectedResult": "Salesforce home page loads"
+      },
+      {
+        "id": "step_2",
+        "order": 2,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Parent Account 1",
+        "description": "Create first test Account (Technology)",
+        "args": {
+          "objectType": "Account",
+          "data": {
+            "Name": "Flowstral Test Corp - Technology",
+            "Industry": "Technology",
+            "Type": "Customer - Direct",
+            "BillingStreet": "123 Tech Park Drive",
+            "BillingCity": "San Francisco",
+            "BillingState": "CA",
+            "BillingPostalCode": "94105",
+            "BillingCountry": "USA",
+            "Phone": "415-555-1001",
+            "Website": "https://flowstral-tech.example.com",
+            "Description": "Test account for SF Tools - Technology sector"
+          },
+          "storeAs": "{{account1Id}}"
+        },
+        "expectedResult": "Account created"
+      },
+      {
+        "id": "step_3",
+        "order": 3,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Parent Account 2",
+        "description": "Create second test Account (Finance)",
+        "args": {
+          "objectType": "Account",
+          "data": {
+            "Name": "Flowstral Test Bank - Finance",
+            "Industry": "Finance",
+            "Type": "Customer - Channel",
+            "BillingStreet": "456 Wall Street",
+            "BillingCity": "New York",
+            "BillingState": "NY",
+            "BillingPostalCode": "10005",
+            "BillingCountry": "USA",
+            "Phone": "212-555-2002",
+            "Website": "https://flowstral-bank.example.com",
+            "Description": "Test account for SF Tools - Finance sector"
+          },
+          "storeAs": "{{account2Id}}"
+        },
+        "expectedResult": "Account created"
+      },
+      {
+        "id": "step_4",
+        "order": 4,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Parent Account 3",
+        "description": "Create third test Account (Healthcare)",
+        "args": {
+          "objectType": "Account",
+          "data": {
+            "Name": "Flowstral Test Health - Healthcare",
+            "Industry": "Healthcare",
+            "Type": "Prospect",
+            "BillingStreet": "789 Medical Center Blvd",
+            "BillingCity": "Boston",
+            "BillingState": "MA",
+            "BillingPostalCode": "02115",
+            "BillingCountry": "USA",
+            "Phone": "617-555-3003",
+            "Website": "https://flowstral-health.example.com",
+            "Description": "Test account for SF Tools - Healthcare sector"
+          },
+          "storeAs": "{{account3Id}}"
+        },
+        "expectedResult": "Account created"
+      },
+      {
+        "id": "step_5",
+        "order": 5,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Contact 1",
+        "description": "Create primary Contact for Account 1",
+        "args": {
+          "objectType": "Contact",
+          "data": {
+            "FirstName": "Alice",
+            "LastName": "Tech",
+            "Title": "CTO",
+            "Email": "alice.tech@flowstral-tech.example.com",
+            "Phone": "415-555-1101",
+            "MobilePhone": "415-555-1102",
+            "AccountId": "{{account1Id}}",
+            "MailingStreet": "123 Tech Park Drive",
+            "MailingCity": "San Francisco",
+            "MailingState": "CA",
+            "MailingPostalCode": "94105",
+            "Description": "Primary contact for Technology account"
+          },
+          "storeAs": "{{contact1Id}}"
+        },
+        "expectedResult": "Contact created"
+      },
+      {
+        "id": "step_6",
+        "order": 6,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Contact 2",
+        "description": "Create secondary Contact for Account 1",
+        "args": {
+          "objectType": "Contact",
+          "data": {
+            "FirstName": "Bob",
+            "LastName": "Developer",
+            "Title": "Lead Developer",
+            "Email": "bob.dev@flowstral-tech.example.com",
+            "Phone": "415-555-1201",
+            "AccountId": "{{account1Id}}",
+            "Description": "Secondary contact for Technology account"
+          },
+          "storeAs": "{{contact2Id}}"
+        },
+        "expectedResult": "Contact created"
+      },
+      {
+        "id": "step_7",
+        "order": 7,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Contact 3",
+        "description": "Create Contact for Account 2",
+        "args": {
+          "objectType": "Contact",
+          "data": {
+            "FirstName": "Carol",
+            "LastName": "Finance",
+            "Title": "CFO",
+            "Email": "carol.finance@flowstral-bank.example.com",
+            "Phone": "212-555-2101",
+            "AccountId": "{{account2Id}}",
+            "Description": "Primary contact for Finance account"
+          },
+          "storeAs": "{{contact3Id}}"
+        },
+        "expectedResult": "Contact created"
+      },
+      {
+        "id": "step_8",
+        "order": 8,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Contact 4",
+        "description": "Create Contact for Account 3",
+        "args": {
+          "objectType": "Contact",
+          "data": {
+            "FirstName": "David",
+            "LastName": "Health",
+            "Title": "Medical Director",
+            "Email": "david.health@flowstral-health.example.com",
+            "Phone": "617-555-3101",
+            "AccountId": "{{account3Id}}",
+            "Description": "Primary contact for Healthcare account"
+          },
+          "storeAs": "{{contact4Id}}"
+        },
+        "expectedResult": "Contact created"
+      },
+      {
+        "id": "step_9",
+        "order": 9,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Opportunity 1",
+        "description": "Create Opportunity at Prospecting stage",
+        "args": {
+          "objectType": "Opportunity",
+          "data": {
+            "Name": "Flowstral Test Deal - Prospecting",
+            "AccountId": "{{account1Id}}",
+            "StageName": "Prospecting",
+            "CloseDate": "2025-06-30",
+            "Amount": 50000,
+            "Probability": 10,
+            "Type": "New Customer",
+            "LeadSource": "Web",
+            "Description": "Test opportunity at early stage for stage transition testing"
+          },
+          "storeAs": "{{opp1Id}}"
+        },
+        "expectedResult": "Opportunity created at Prospecting"
+      },
+      {
+        "id": "step_10",
+        "order": 10,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Opportunity 2",
+        "description": "Create Opportunity at Qualification stage",
+        "args": {
+          "objectType": "Opportunity",
+          "data": {
+            "Name": "Flowstral Test Deal - Qualification",
+            "AccountId": "{{account2Id}}",
+            "StageName": "Qualification",
+            "CloseDate": "2025-05-15",
+            "Amount": 100000,
+            "Probability": 20,
+            "Type": "Existing Customer - Upgrade",
+            "LeadSource": "Partner Referral",
+            "Description": "Test opportunity at qualification stage"
+          },
+          "storeAs": "{{opp2Id}}"
+        },
+        "expectedResult": "Opportunity created at Qualification"
+      },
+      {
+        "id": "step_11",
+        "order": 11,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Opportunity 3",
+        "description": "Create Opportunity at Closed Won",
+        "args": {
+          "objectType": "Opportunity",
+          "data": {
+            "Name": "Flowstral Test Deal - Closed Won",
+            "AccountId": "{{account3Id}}",
+            "StageName": "Closed Won",
+            "CloseDate": "2025-01-15",
+            "Amount": 75000,
+            "Probability": 100,
+            "Type": "New Customer",
+            "LeadSource": "Web",
+            "Description": "Test opportunity that was won"
+          },
+          "storeAs": "{{opp3Id}}"
+        },
+        "expectedResult": "Opportunity created at Closed Won"
+      },
+      {
+        "id": "step_12",
+        "order": 12,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Lead 1",
+        "description": "Create open Lead",
+        "args": {
+          "objectType": "Lead",
+          "data": {
+            "FirstName": "Emma",
+            "LastName": "Prospect",
+            "Company": "Prospect Corp",
+            "Title": "VP of Operations",
+            "Email": "emma.prospect@prospectcorp.example.com",
+            "Phone": "555-555-4001",
+            "Status": "Open - Not Contacted",
+            "LeadSource": "Web",
+            "Industry": "Technology",
+            "Description": "Test lead for conversion testing"
+          },
+          "storeAs": "{{lead1Id}}"
+        },
+        "expectedResult": "Lead created"
+      },
+      {
+        "id": "step_13",
+        "order": 13,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Lead 2",
+        "description": "Create qualified Lead",
+        "args": {
+          "objectType": "Lead",
+          "data": {
+            "FirstName": "Frank",
+            "LastName": "Qualified",
+            "Company": "Qualified Inc",
+            "Title": "Director",
+            "Email": "frank.qualified@qualifiedinc.example.com",
+            "Phone": "555-555-4002",
+            "Status": "Working - Contacted",
+            "LeadSource": "Partner Referral",
+            "Industry": "Finance",
+            "Description": "Test lead already contacted"
+          },
+          "storeAs": "{{lead2Id}}"
+        },
+        "expectedResult": "Lead created"
+      },
+      {
+        "id": "step_14",
+        "order": 14,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Case 1",
+        "description": "Create support Case",
+        "args": {
+          "objectType": "Case",
+          "data": {
+            "Subject": "Flowstral Test Case - Technical Support",
+            "Status": "New",
+            "Priority": "Medium",
+            "Origin": "Web",
+            "AccountId": "{{account1Id}}",
+            "ContactId": "{{contact1Id}}",
+            "Description": "Test case for support workflow testing"
+          },
+          "storeAs": "{{case1Id}}"
+        },
+        "expectedResult": "Case created"
+      },
+      {
+        "id": "step_15",
+        "order": 15,
+        "qword": "CreateRecord",
+        "type": "sf_create_record",
+        "action": "Create Case 2",
+        "description": "Create high priority Case",
+        "args": {
+          "objectType": "Case",
+          "data": {
+            "Subject": "Flowstral Test Case - High Priority",
+            "Status": "Working",
+            "Priority": "High",
+            "Origin": "Phone",
+            "AccountId": "{{account2Id}}",
+            "ContactId": "{{contact3Id}}",
+            "Description": "Test case with high priority for escalation testing"
+          },
+          "storeAs": "{{case2Id}}"
+        },
+        "expectedResult": "Case created"
+      },
+      {
+        "id": "step_16",
+        "order": 16,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Verify All Data Created",
+        "description": "Query to verify all test data was created",
+        "args": {
+          "query": "SELECT COUNT() FROM Account WHERE Name LIKE 'Flowstral Test%'",
+          "storeAs": "{{accountCount}}"
+        },
+        "expectedResult": "Returns count of 3 accounts"
+      },
+      {
+        "id": "step_17",
+        "order": 17,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Assert Accounts Created",
+        "description": "Verify accounts were created",
+        "args": {
+          "query": "SELECT COUNT() FROM Account WHERE Name LIKE 'Flowstral Test%'",
+          "assertion": "count == 3"
+        },
+        "expectedResult": "3 test accounts exist"
+      },
+      {
+        "id": "step_18",
+        "order": 18,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Assert Contacts Created",
+        "description": "Verify contacts were created",
+        "args": {
+          "query": "SELECT COUNT() FROM Contact WHERE Email LIKE '%flowstral%'",
+          "assertion": "count == 4"
+        },
+        "expectedResult": "4 test contacts exist"
+      },
+      {
+        "id": "step_19",
+        "order": 19,
+        "qword": "AssertSOQL",
+        "type": "sf_assert_soql",
+        "action": "Assert Opportunities Created",
+        "description": "Verify opportunities were created",
+        "args": {
+          "query": "SELECT COUNT() FROM Opportunity WHERE Name LIKE 'Flowstral Test%'",
+          "assertion": "count == 3"
+        },
+        "expectedResult": "3 test opportunities exist"
+      },
+      {
+        "id": "step_20",
+        "order": 20,
+        "qword": "ExecuteSOQL",
+        "type": "sf_soql",
+        "action": "Query All Test Data Summary",
+        "description": "Get summary of all created test data",
+        "args": {
+          "query": "SELECT Name, Industry, (SELECT Name, Email FROM Contacts), (SELECT Name, StageName FROM Opportunities) FROM Account WHERE Name LIKE 'Flowstral Test%'",
+          "storeAs": "{{testDataSummary}}"
+        },
+        "expectedResult": "Returns all test data with relationships"
+      }
+    ],
+    "variables": {
+      "account1Id": { "type": "id", "description": "Technology Account ID" },
+      "account2Id": { "type": "id", "description": "Finance Account ID" },
+      "account3Id": { "type": "id", "description": "Healthcare Account ID" },
+      "contact1Id": { "type": "id", "description": "Alice Tech Contact ID" },
+      "contact2Id": { "type": "id", "description": "Bob Developer Contact ID" },
+      "contact3Id": { "type": "id", "description": "Carol Finance Contact ID" },
+      "contact4Id": { "type": "id", "description": "David Health Contact ID" },
+      "opp1Id": { "type": "id", "description": "Prospecting Opportunity ID" },
+      "opp2Id": { "type": "id", "description": "Qualification Opportunity ID" },
+      "opp3Id": { "type": "id", "description": "Closed Won Opportunity ID" },
+      "lead1Id": { "type": "id", "description": "Open Lead ID" },
+      "lead2Id": { "type": "id", "description": "Qualified Lead ID" },
+      "case1Id": { "type": "id", "description": "Support Case ID" },
+      "case2Id": { "type": "id", "description": "High Priority Case ID" }
+    }
+  },
+  "steps": [
+    { "stepNumber": 1, "action": "Navigate to SF", "expectedResult": "Home loads" },
+    { "stepNumber": 2, "action": "Create Account 1 (Technology)", "expectedResult": "Account created" },
+    { "stepNumber": 3, "action": "Create Account 2 (Finance)", "expectedResult": "Account created" },
+    { "stepNumber": 4, "action": "Create Account 3 (Healthcare)", "expectedResult": "Account created" },
+    { "stepNumber": 5, "action": "Create Contact 1 (Alice)", "expectedResult": "Contact created" },
+    { "stepNumber": 6, "action": "Create Contact 2 (Bob)", "expectedResult": "Contact created" },
+    { "stepNumber": 7, "action": "Create Contact 3 (Carol)", "expectedResult": "Contact created" },
+    { "stepNumber": 8, "action": "Create Contact 4 (David)", "expectedResult": "Contact created" },
+    { "stepNumber": 9, "action": "Create Opportunity 1 (Prospecting)", "expectedResult": "Opp created" },
+    { "stepNumber": 10, "action": "Create Opportunity 2 (Qualification)", "expectedResult": "Opp created" },
+    { "stepNumber": 11, "action": "Create Opportunity 3 (Closed Won)", "expectedResult": "Opp created" },
+    { "stepNumber": 12, "action": "Create Lead 1 (Open)", "expectedResult": "Lead created" },
+    { "stepNumber": 13, "action": "Create Lead 2 (Working)", "expectedResult": "Lead created" },
+    { "stepNumber": 14, "action": "Create Case 1 (Medium)", "expectedResult": "Case created" },
+    { "stepNumber": 15, "action": "Create Case 2 (High)", "expectedResult": "Case created" },
+    { "stepNumber": 16, "action": "Verify Account count", "expectedResult": "Count = 3" },
+    { "stepNumber": 17, "action": "Assert Accounts", "expectedResult": "Pass" },
+    { "stepNumber": 18, "action": "Assert Contacts", "expectedResult": "Pass" },
+    { "stepNumber": 19, "action": "Assert Opportunities", "expectedResult": "Pass" },
+    { "stepNumber": 20, "action": "Query summary", "expectedResult": "All data shown" }
+  ],
+  "createdAt": "2024-12-30T00:00:00.000Z",
+  "updatedAt": "2024-12-30T00:00:00.000Z"
+}
+
