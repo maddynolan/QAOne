@@ -1196,6 +1196,15 @@ export default function TestRepository() {
   const [newReleaseStartDate, setNewReleaseStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [newReleaseEndDate, setNewReleaseEndDate] = useState('');
 
+  // Tab state and data (must be declared before useEffects that use them)
+  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs'>('repository');
+  const [suites, setSuites] = useState<TestSuite[]>([]);
+  const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
+  const [releases, setReleases] = useState<Release[]>([]);
+  const [testRuns, setTestRuns] = useState<TestRun[]>([]);
+  const [executingRunId, setExecutingRunId] = useState<string | null>(null);
+  const [executingStepIndex, setExecutingStepIndex] = useState<number>(-1);
+
   // Load data
   useEffect(() => {
     // Load folders
@@ -2079,15 +2088,6 @@ export default function TestRepository() {
     toast.success(`Release "${newRelease.name}" created with ${newReleaseSuites.length} suites`);
   }, [newReleaseName, newReleaseDescription, newReleaseStartDate, newReleaseEndDate, newReleaseSuites]);
 
-  // Additional state for tabs
-  const [activeTab, setActiveTab] = useState<'repository' | 'suites' | 'plans' | 'releases' | 'runs'>('repository');
-  const [suites, setSuites] = useState<TestSuite[]>([]);
-  const [testPlans, setTestPlans] = useState<TestPlan[]>([]);
-  const [releases, setReleases] = useState<Release[]>([]);
-  const [testRuns, setTestRuns] = useState<TestRun[]>([]);
-  const [executingRunId, setExecutingRunId] = useState<string | null>(null);
-  const [executingStepIndex, setExecutingStepIndex] = useState<number>(-1);
-  
   // Check if running in Electron desktop app
   const isElectron = useCallback(() => {
     return typeof window !== 'undefined' && 
