@@ -265,7 +265,19 @@ export default function TestCaseExecution() {
         }
       };
       
-      // 1. Load from flowstral_test_cases
+      // 1. Load from Electron local storage (primary source for desktop app)
+      try {
+        const electronAPI = (window as any).electronAPI || (window as any).flowstral;
+        if (electronAPI?.localStorage?.getTestCases) {
+          const electronCases = await electronAPI.localStorage.getTestCases();
+          console.log('[Execution] Loaded from Electron storage:', electronCases?.length || 0, 'test cases');
+          addCases(electronCases || []);
+        }
+      } catch (e) {
+        console.log('[Execution] Electron storage not available');
+      }
+      
+      // 2. Load from flowstral_test_cases
       try {
         const localCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
         addCases(localCases);
@@ -273,7 +285,7 @@ export default function TestCaseExecution() {
         console.log('flowstral_test_cases not available');
       }
       
-      // 2. Load from test_cases key
+      // 3. Load from test_cases key
       try {
         const altCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
         addCases(altCases);
@@ -281,7 +293,7 @@ export default function TestCaseExecution() {
         console.log('test_cases not available');
       }
       
-      // 3. Load from unified_test_case_* keys (legacy format)
+      // 4. Load from unified_test_case_* keys (legacy format)
       try {
         const keys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
         for (const key of keys) {
@@ -297,7 +309,7 @@ export default function TestCaseExecution() {
         console.log('unified_test_case keys not available');
       }
       
-      // 4. Try backend API as additional source
+      // 5. Try backend API as additional source
       try {
         const response = await fetch(`http://localhost:8000/test-cases`);
         if (response.ok) {
@@ -310,11 +322,14 @@ export default function TestCaseExecution() {
       }
       
       console.log('[Execution] Loaded', allCases.length, 'test cases from all sources');
+      console.log('[Execution] Looking for testCaseId:', testCaseId);
+      console.log('[Execution] Available IDs:', allCases.slice(0, 5).map(tc => tc.id));
       
       setAllTestCases(allCases);
       
       const foundCase = allCases.find((tc: any) => tc.id === testCaseId);
       if (foundCase) {
+        console.log('[Execution] Found test case:', foundCase.name);
         setTestCase(foundCase);
         const steps = getSteps(foundCase);
         if (steps.length > 0 && (!run?.manualStepResults?.[testCaseId!] || run.manualStepResults[testCaseId!].length === 0)) {
@@ -324,7 +339,9 @@ export default function TestCaseExecution() {
           })));
         }
       } else {
-        toast.error("Test case not found");
+        console.error('[Execution] Test case NOT found. ID searched:', testCaseId);
+        console.error('[Execution] Available test cases:', allCases.map(tc => ({ id: tc.id, name: tc.name })));
+        toast.error(`Test case not found (ID: ${testCaseId?.slice(0, 8)}...)`);
       }
     } catch (error: any) {
       console.error("Error loading data:", error);
