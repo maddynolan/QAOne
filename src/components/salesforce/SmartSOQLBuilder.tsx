@@ -506,14 +506,19 @@ export function SmartSOQLBuilder({
                                     onClick={() => {
                                       const recordId = record.Id || record.id;
                                       const recordName = record.Name || record.name || recordId;
+                                      const query = `SELECT ${Array.from(selectedFields).join(', ')} FROM ${selectedObject} WHERE Id = '${recordId}'`;
                                       if (onAddAsStep) {
                                         onAddAsStep({
-                                          type: 'sf_query_record',
-                                          action: `Query ${selectedObject} Record`,
-                                          object: selectedObject,
-                                          recordId,
-                                          recordName,
-                                          query: `SELECT ${Array.from(selectedFields).join(', ')} FROM ${selectedObject} WHERE Id = '${recordId}'`
+                                          type: 'sf_soql',
+                                          action: 'ExecuteSOQL',
+                                          args: {
+                                            query,
+                                            object: selectedObject,
+                                            recordId,
+                                            recordName,
+                                            storeAs: `{{${selectedObject.toLowerCase()}Record}}`,
+                                            description: `Query ${selectedObject}: ${recordName}`
+                                          }
                                         });
                                         toast.success(`Added step for ${recordName}`);
                                       }
@@ -528,20 +533,22 @@ export function SmartSOQLBuilder({
                                     onClick={() => {
                                       const recordId = record.Id || record.id;
                                       const recordName = record.Name || record.name || recordId;
+                                      const query = `SELECT Id FROM ${selectedObject} WHERE Id = '${recordId}'`;
+                                      const expectedFields = Object.fromEntries(
+                                        Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 3)
+                                      );
                                       if (onAddAsStep) {
                                         onAddAsStep({
-                                          type: 'sf_assert_record',
-                                          action: `Assert ${selectedObject} exists`,
-                                          object: selectedObject,
-                                          recordId,
-                                          recordName,
-                                          assertion: {
-                                            type: 'record_exists',
+                                          type: 'sf_assert_soql',
+                                          action: 'AssertSOQL',
+                                          args: {
+                                            query,
                                             object: selectedObject,
                                             recordId,
-                                            expectedFields: Object.fromEntries(
-                                              Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 3)
-                                            )
+                                            recordName,
+                                            assertion: 'count > 0',
+                                            expectedFields: JSON.stringify(expectedFields),
+                                            description: `Assert ${selectedObject} exists: ${recordName}`
                                           }
                                         });
                                         toast.success(`Added assertion for ${recordName}`);
