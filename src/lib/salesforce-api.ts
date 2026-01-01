@@ -210,12 +210,82 @@ class SalesforceApiService {
   private currentOrg: SalesforceOrg | null = null;
   private orgs: SalesforceOrg[] = [];
   private apiVersion = 'v59.0';
+  private backendConnected = false;
 
   constructor() {
     this.loadOrgs();
+    // Try to auto-connect from backend (async, non-blocking)
+    this.autoConnectFromBackend();
   }
 
   // ========== ORG MANAGEMENT ==========
+
+  /**
+   * Auto-connect from backend auth service if configured.
+   * This enables seamless parallel execution and CI/CD scenarios.
+   */
+  async autoConnectFromBackend(): Promise<boolean> {
+    try {
+      // Check if backend has a configured org
+      const statusResponse = await fetch('http://localhost:8000/api/salesforce/auth/status');
+      if (!statusResponse.ok) return false;
+      
+      const status = await statusResponse.json();
+      if (!status.configured_orgs || status.configured_orgs.length === 0) {
+        console.log('[SF API] No orgs configured in backend');
+        return false;
+      }
+      
+      // Get a token from the backend
+      const tokenResponse = await fetch('http://localhost:8000/api/salesforce/auth/token', {
+        method: 'POST',
+      });
+      
+      if (!tokenResponse.ok) {
+        console.warn('[SF API] Backend token request failed');
+        return false;
+      }
+      
+      const token = await tokenResponse.json();
+      const backendOrg = status.configured_orgs.find((o: any) => o.is_default) || status.configured_orgs[0];
+      
+      // Create/update org in local storage
+      const existingOrg = this.orgs.find(o => o.instanceUrl === backendOrg.instance_url);
+      
+      if (existingOrg) {
+        // Update existing org with fresh token
+        this.updateOrg(existingOrg.id, {
+          accessToken: token.access_token,
+          tokenExpiry: Date.now() + (token.expires_in * 1000),
+        });
+        this.currentOrg = existingOrg;
+      } else {
+        // Add new org from backend
+        const newOrg = this.addOrg({
+          name: backendOrg.name || 'Backend Org',
+          instanceUrl: backendOrg.instance_url,
+          loginUrl: backendOrg.login_url || 'https://login.salesforce.com',
+          username: backendOrg.username || '',
+          orgType: 'developer',
+          color: '#4CAF50',
+          accessToken: token.access_token,
+          tokenExpiry: Date.now() + (token.expires_in * 1000),
+          apiVersion: this.apiVersion,
+          isDefault: true,
+        });
+        this.currentOrg = newOrg;
+        localStorage.setItem(STORAGE_KEYS.CURRENT_ORG, newOrg.id);
+      }
+      
+      this.backendConnected = true;
+      console.log('[SF API] Auto-connected from backend:', backendOrg.instance_url);
+      return true;
+    } catch (e) {
+      // Backend not available - fall back to localStorage
+      console.log('[SF API] Backend not available, using localStorage');
+      return false;
+    }
+  }
 
   loadOrgs(): SalesforceOrg[] {
     try {
@@ -232,6 +302,13 @@ class SalesforceApiService {
       console.error('Failed to load orgs:', e);
       return [];
     }
+  }
+  
+  /**
+   * Check if connected to backend auth service.
+   */
+  isBackendConnected(): boolean {
+    return this.backendConnected;
   }
 
   saveOrgs(): void {
@@ -389,23 +466,80 @@ class SalesforceApiService {
   }
 
   private async getAccessToken(): Promise<string> {
-    if (!this.currentOrg) {
-      throw new Error('No org selected. Please select or connect to a Salesforce org.');
+    // AUTO-CONNECT: If no org or no token, try to connect from backend
+    if (!this.currentOrg || !this.currentOrg.accessToken) {
+      console.log('[SF API] No org/token, attempting auto-connect from backend...');
+      const connected = await this.ensureConnected();
+      if (!connected) {
+        throw new Error('No org selected. Please select or connect to a Salesforce org.');
+      }
     }
     
-    if (!this.currentOrg.accessToken) {
+    if (!this.currentOrg!.accessToken) {
       throw new Error('No access token. Please re-authenticate.');
     }
     
     // Check if token is expired
-    if (this.currentOrg.tokenExpiry && Date.now() > this.currentOrg.tokenExpiry) {
-      if (this.currentOrg.refreshToken) {
-        return await this.refreshAccessToken(this.currentOrg);
+    if (this.currentOrg!.tokenExpiry && Date.now() > this.currentOrg!.tokenExpiry) {
+      // Try auto-refresh from backend first
+      console.log('[SF API] Token expired, attempting auto-refresh...');
+      const refreshed = await this.autoRefreshFromBackend();
+      if (refreshed) {
+        return this.currentOrg!.accessToken!;
+      }
+      
+      // Fall back to local refresh token
+      if (this.currentOrg!.refreshToken) {
+        return await this.refreshAccessToken(this.currentOrg!);
       }
       throw new Error('Access token expired. Please re-authenticate.');
     }
     
-    return this.currentOrg.accessToken;
+    return this.currentOrg!.accessToken;
+  }
+  
+  /**
+   * Ensure Salesforce is connected before making API calls.
+   * This is the key method for auto-connection in parallel/CI/CD scenarios.
+   */
+  async ensureConnected(): Promise<boolean> {
+    // If already connected with valid token, return true
+    if (this.currentOrg?.accessToken && 
+        (!this.currentOrg.tokenExpiry || Date.now() < this.currentOrg.tokenExpiry)) {
+      return true;
+    }
+    
+    // Try auto-connect from backend
+    return await this.autoConnectFromBackend();
+  }
+  
+  /**
+   * Auto-refresh token from backend auth service.
+   * Used when the current token is expired.
+   */
+  private async autoRefreshFromBackend(): Promise<boolean> {
+    try {
+      const response = await fetch('http://localhost:8000/api/salesforce/auth/token', {
+        method: 'POST',
+      });
+      
+      if (!response.ok) return false;
+      
+      const token = await response.json();
+      
+      if (this.currentOrg) {
+        this.updateOrg(this.currentOrg.id, {
+          accessToken: token.access_token,
+          tokenExpiry: Date.now() + (token.expires_in * 1000),
+        });
+      }
+      
+      console.log('[SF API] Auto-refreshed token from backend');
+      return true;
+    } catch (e) {
+      console.warn('[SF API] Auto-refresh from backend failed:', e);
+      return false;
+    }
   }
 
   private getBaseUrl(): string {
@@ -421,14 +555,24 @@ class SalesforceApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Try to use auto-proxy (backend handles auth) if no local token
+    const hasLocalToken = this.currentOrg?.accessToken && 
+      (!this.currentOrg.tokenExpiry || Date.now() < this.currentOrg.tokenExpiry);
+    
+    if (!hasLocalToken) {
+      // Use auto-proxy - backend handles authentication
+      return this.requestAutoProxy<T>(endpoint, options);
+    }
+    
     const accessToken = await this.getAccessToken();
     const instanceUrl = this.currentOrg?.instanceUrl;
     
     if (!instanceUrl) {
-      throw new Error('No org connected');
+      // Fall back to auto-proxy
+      return this.requestAutoProxy<T>(endpoint, options);
     }
     
-    // Use backend proxy to avoid CORS issues
+    // Use backend proxy with local token
     const proxyUrl = 'http://localhost:8000/api/salesforce/proxy';
     
     const response = await fetch(proxyUrl, {
@@ -459,6 +603,12 @@ class SalesforceApiService {
     
     console.log('[SF API] Proxy response:', result);
     
+    // If token expired (401), try auto-proxy
+    if (!result.success && result.status === 401) {
+      console.log('[SF API] Token expired, trying auto-proxy...');
+      return this.requestAutoProxy<T>(endpoint, options);
+    }
+    
     if (!result.success) {
       const errorData = result.data;
       if (Array.isArray(errorData)) {
@@ -468,6 +618,74 @@ class SalesforceApiService {
     }
     
     // result.data contains the actual Salesforce response
+    if (result.data === null || result.data === undefined) {
+      throw new Error('Empty response from Salesforce');
+    }
+    
+    return result.data as T;
+  }
+
+  /**
+   * Make request using auto-proxy - backend handles authentication automatically.
+   * This is the key method for parallel/CI/CD execution without local tokens.
+   */
+  private async requestAutoProxy<T = any>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    console.log('[SF API] Using auto-proxy (backend auth)');
+    
+    const autoProxyUrl = 'http://localhost:8000/api/salesforce/auto-proxy';
+    
+    const response = await fetch(autoProxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        endpoint: endpoint.startsWith('/services') ? endpoint : `/services/data/${this.apiVersion}${endpoint}`,
+        method: options.method || 'GET',
+        body: options.body ? JSON.parse(options.body as string) : null,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorBody = await response.text();
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorBody);
+        errorMessage = errorJson.detail || errorJson.message || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[SF API] Auto-proxy response:', result);
+    
+    // Update local org with instance URL from backend (for reference)
+    if (result.instance_url && !this.currentOrg) {
+      // Create a minimal org record for reference
+      this.addOrg({
+        name: 'Backend Org',
+        instanceUrl: result.instance_url,
+        loginUrl: 'https://login.salesforce.com',
+        username: '',
+        orgType: 'developer',
+        color: '#4CAF50',
+        apiVersion: this.apiVersion,
+        isDefault: true,
+      });
+    }
+    
+    if (!result.success) {
+      const errorData = result.data;
+      if (Array.isArray(errorData)) {
+        throw new Error(errorData[0]?.message || 'Request failed');
+      }
+      throw new Error(typeof errorData === 'string' ? errorData : JSON.stringify(errorData));
+    }
+    
     if (result.data === null || result.data === undefined) {
       throw new Error('Empty response from Salesforce');
     }

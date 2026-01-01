@@ -7132,6 +7132,10 @@ app.include_router(enhanced_api_testing_router)
 from app.routers.salesforce_api import router as salesforce_router
 app.include_router(salesforce_router)
 
+# Salesforce Authentication Service (for parallel test execution)
+from app.routers.salesforce_auth import router as salesforce_auth_router
+app.include_router(salesforce_auth_router)
+
 # Framework Analyzer - Analyze and convert automation frameworks
 from app.routers.framework_analyzer_api import router as framework_analyzer_router
 app.include_router(framework_analyzer_router)
@@ -7155,6 +7159,10 @@ app.include_router(sample_data_router)
 # Enterprise Scale API (v2) - Production-ready paginated endpoints
 from app.routers.scale_api import router as scale_api_router
 app.include_router(scale_api_router)
+
+# Complex Verifications API - Email, PDF, File verification
+from app.routers.complex_verifications import router as complex_verifications_router
+app.include_router(complex_verifications_router)
 
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility

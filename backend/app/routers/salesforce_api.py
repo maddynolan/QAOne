@@ -628,6 +628,85 @@ async def proxy_salesforce_request(request: SalesforceProxyRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class AutoProxyRequest(BaseModel):
+    """Request for auto-authenticated proxy - no token needed from client"""
+    endpoint: str  # e.g., /sobjects or /query?q=SELECT...
+    method: str = "GET"
+    body: Optional[Dict[str, Any]] = None
+
+
+@router.post("/auto-proxy")
+async def auto_proxy_salesforce_request(request: AutoProxyRequest):
+    """
+    Auto-authenticated proxy - gets token automatically from backend auth service.
+    
+    This is the recommended endpoint for parallel/CI/CD scenarios.
+    The client just specifies what API endpoint to call, and the backend handles auth.
+    """
+    import httpx
+    
+    # Get token from auth service
+    try:
+        from app.services.salesforce.auth_service import get_auth_service
+        auth_service = get_auth_service()
+        token = await auth_service.get_token()
+        
+        instance_url = auth_service.get_org().instance_url
+        access_token = token.access_token
+    except Exception as e:
+        logger.error(f"Auto-auth failed: {e}")
+        raise HTTPException(status_code=401, detail=f"Salesforce authentication failed: {str(e)}")
+    
+    # Build the full URL
+    endpoint = request.endpoint
+    if not endpoint.startswith('/services'):
+        endpoint = f"/services/data/v59.0{endpoint}"
+    
+    full_url = f"{instance_url.rstrip('/')}{endpoint}"
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    
+    logger.info(f"Auto-proxying {request.method} request to: {full_url}")
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            if request.method.upper() == "GET":
+                response = await client.get(full_url, headers=headers)
+            elif request.method.upper() == "POST":
+                response = await client.post(full_url, headers=headers, json=request.body)
+            elif request.method.upper() == "PATCH":
+                response = await client.patch(full_url, headers=headers, json=request.body)
+            elif request.method.upper() == "DELETE":
+                response = await client.delete(full_url, headers=headers)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported method: {request.method}")
+            
+            # Return the response
+            try:
+                return {
+                    "status": response.status_code,
+                    "data": response.json() if response.text else None,
+                    "success": response.status_code < 400,
+                    "instance_url": instance_url  # Include for reference
+                }
+            except:
+                return {
+                    "status": response.status_code,
+                    "data": response.text,
+                    "success": response.status_code < 400,
+                    "instance_url": instance_url
+                }
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Request to Salesforce timed out")
+    except Exception as e:
+        logger.error(f"Auto-proxy error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/query")
 async def execute_soql_query_proxy(
     instance_url: str,

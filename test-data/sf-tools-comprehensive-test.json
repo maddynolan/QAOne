@@ -21,7 +21,7 @@
         "action": "Navigate to Salesforce",
         "description": "Navigate to Salesforce Home",
         "args": {
-          "url": "https://YOUR_ORG.lightning.force.com"
+          "url": "https://orgfarm-bac28d1362-dev-ed.develop.my.salesforce.com"
         },
         "expectedResult": "Salesforce home page loads"
       },

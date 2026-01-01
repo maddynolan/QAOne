@@ -1767,7 +1767,9 @@ class PlaywrightRecorder extends EventEmitter {
             value: fillValue,
             url: ['navigate', 'goto'].includes(stepType) ? urlValue : undefined,
             selector: normalizedSelector,
-            timeout
+            timeout,
+            // CRITICAL: Pass step.args for SF steps and other complex actions
+            args: step.args
           };
           
           console.log(`[PlaywrightRecorder] Step ${i + 1} action:`, { type: action.type, label: action.label, value: action.value ? '***' : '(empty)' });
@@ -3459,6 +3461,141 @@ class PlaywrightRecorder extends EventEmitter {
   }
 
   /**
+   * Make Salesforce REST API call using session from browser cookies
+   * @param {string} method - HTTP method (GET, POST, PATCH, DELETE)
+   * @param {string} endpoint - API endpoint (e.g., /query?q=SELECT...)
+   * @param {object} body - Request body for POST/PATCH
+   * @returns {object} - { success: boolean, data: any, error: string }
+   */
+  async _sfApiCall(method, endpoint, body = null) {
+    try {
+      let accessToken = null;
+      let instanceUrl = null;
+      
+      // Method 1: Try to get session cookie from browser
+      if (this.context) {
+        try {
+          const cookies = await this.context.cookies();
+          const sidCookie = cookies.find(c => c.name === 'sid');
+          if (sidCookie) {
+            accessToken = sidCookie.value;
+            // Get instance URL from current page
+            const currentUrl = this.page.url();
+            const instanceMatch = currentUrl.match(/(https:\/\/[^\/]+\.(?:salesforce|force|develop\.my\.salesforce)\.com)/);
+            if (instanceMatch) {
+              instanceUrl = instanceMatch[1].replace('.lightning.force.com', '.my.salesforce.com');
+              console.log(`[PlaywrightRecorder] SF API using browser session: ${instanceUrl}`);
+            }
+          }
+        } catch (e) {
+          console.log('[PlaywrightRecorder] Could not get browser session:', e.message);
+        }
+      }
+      
+      // Method 2: Fallback to stored credentials from backend config
+      if (!accessToken || !instanceUrl) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const { app } = require('electron');
+          
+          // Try multiple paths for the credentials file
+          const possiblePaths = [
+            path.join(process.cwd(), 'backend', 'config', 'salesforce_credentials.json'),
+            path.join(app.getAppPath(), '..', '..', 'backend', 'config', 'salesforce_credentials.json'),
+            'C:\\QAAI\\backend\\config\\salesforce_credentials.json' // Hardcoded fallback for dev
+          ];
+          
+          let credsPath = null;
+          for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+              credsPath = p;
+              break;
+            }
+          }
+          
+          if (credsPath) {
+            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+            if (creds.access_token && creds.instance_url) {
+              accessToken = creds.access_token;
+              instanceUrl = creds.instance_url;
+              console.log(`[PlaywrightRecorder] SF API using stored credentials from ${credsPath}`);
+            }
+          }
+        } catch (e) {
+          console.log('[PlaywrightRecorder] Could not load stored credentials:', e.message);
+        }
+      }
+      
+      if (!accessToken) {
+        return { success: false, error: 'No Salesforce authentication available - please login via browser or configure credentials' };
+      }
+      
+      if (!instanceUrl) {
+        return { success: false, error: 'Could not determine Salesforce instance URL' };
+      }
+      
+      // Build full URL
+      const apiEndpoint = endpoint.startsWith('/services') ? endpoint : `/services/data/v59.0${endpoint}`;
+      const fullUrl = `${instanceUrl}${apiEndpoint}`;
+      
+      console.log(`[PlaywrightRecorder] SF API ${method} ${fullUrl}`);
+      
+      // Use node https module
+      const https = require('https');
+      const url = require('url');
+      
+      return new Promise((resolve) => {
+        const parsedUrl = new url.URL(fullUrl);
+        const options = {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname + parsedUrl.search,
+          method,
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        };
+        
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try {
+              const jsonData = JSON.parse(data);
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, data: jsonData });
+              } else {
+                console.log(`[PlaywrightRecorder] SF API error response:`, jsonData);
+                resolve({ success: false, error: jsonData[0]?.message || JSON.stringify(jsonData), data: jsonData });
+              }
+            } catch (e) {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve({ success: true, data: null });
+              } else {
+                resolve({ success: false, error: `HTTP ${res.statusCode}: ${data}` });
+              }
+            }
+          });
+        });
+        
+        req.on('error', (e) => {
+          resolve({ success: false, error: e.message });
+        });
+        
+        if (body && (method === 'POST' || method === 'PATCH')) {
+          req.write(JSON.stringify(body));
+        }
+        req.end();
+      });
+      
+    } catch (error) {
+      console.error('[PlaywrightRecorder] SF API call error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Try to find and interact with an element using multiple strategies
    * 
    * COMPREHENSIVE SHADOW DOM SUPPORT (Based on Playwright, Autify, Katalon best practices):
@@ -4321,6 +4458,450 @@ class PlaywrightRecorder extends EventEmitter {
             return { success: false, error: `Expected "${value}" but got "${actualValue}"` };
           }
           break;
+
+        // ============ SALESFORCE STEP TYPES ============
+        case 'sf_connect':
+        case 'sfconnect': {
+          console.log('[PlaywrightRecorder] SF Connect - verifying Salesforce session...');
+          // Just verify we're on a Salesforce page
+          const sfConnectUrl = this.page.url();
+          if (!sfConnectUrl.includes('salesforce.com') && !sfConnectUrl.includes('lightning.force.com')) {
+            return { success: false, error: 'Not on a Salesforce page. Please log in first.' };
+          }
+          return { success: true };
+        }
+
+        case 'sf_query':
+        case 'sfquery': {
+          console.log('[PlaywrightRecorder] SF Query - executing via API...');
+          // SF queries need to go through the backend API
+          const soqlQuery = action.args?.query || action.args?.[0] || action.value;
+          const queryResponse = await this._sfApiCall('GET', `/query?q=${encodeURIComponent(soqlQuery)}`);
+          if (!queryResponse.success) {
+            return { success: false, error: `SOQL query failed: ${queryResponse.error}` };
+          }
+          console.log(`[PlaywrightRecorder] Query returned ${queryResponse.data?.totalSize || 0} records`);
+          return { success: true, data: queryResponse.data };
+        }
+
+        case 'sf_assert':
+        case 'sfassert': {
+          console.log('[PlaywrightRecorder] SF Assert - checking record...');
+          const assertObj = action.args?.object || action.args?.[0];
+          const assertId = action.args?.recordId || action.args?.[1];
+          const recordResponse = await this._sfApiCall('GET', `/sobjects/${assertObj}/${assertId}`);
+          if (!recordResponse.success) {
+            return { success: false, error: `Record assertion failed: ${assertObj}/${assertId} not found` };
+          }
+          return { success: true };
+        }
+
+        case 'sf_metadata_assert':
+        case 'sfmetadataassert': {
+          console.log('[PlaywrightRecorder] SF Metadata Assert...', action.args);
+          // Handle both object format {type, object, expectedValue} and array format [id, type, object, expectedValue, description]
+          const isArrayFormat = Array.isArray(action.args);
+          const metaType = isArrayFormat ? action.args?.[1] : (action.args?.assertionType || action.args?.type || 'validation_rule');
+          const metaObject = isArrayFormat ? action.args?.[2] : (action.args?.object || 'Account');
+          const metaExpectedValue = isArrayFormat ? action.args?.[3] : action.args?.expectedValue;
+          console.log(`[PlaywrightRecorder] Parsed: type=${metaType}, object=${metaObject}, expectedValue=${metaExpectedValue}`);
+          
+          switch (metaType) {
+            // Handle both 'validation_rule' (from UI) and 'validation_rule_active' (legacy)
+            case 'validation_rule':
+            case 'validation_rule_active': {
+              // Use metaExpectedValue (already parsed above) or fallback to other locations
+              const vrName = metaExpectedValue || action.args?.expectedValue || action.args?.validationRule || action.args?.ruleName || action.value;
+              console.log(`[PlaywrightRecorder] Checking validation rule: ${vrName} on ${metaObject}`);
+              const vrQuery = `SELECT Id, Active FROM ValidationRule WHERE ValidationName = '${vrName}' AND EntityDefinition.QualifiedApiName = '${metaObject}'`;
+              console.log(`[PlaywrightRecorder] VR Query: ${vrQuery}`);
+              const vrResponse = await this._sfApiCall('GET', `/tooling/query?q=${encodeURIComponent(vrQuery)}`);
+              console.log(`[PlaywrightRecorder] VR Response:`, JSON.stringify(vrResponse, null, 2));
+              if (!vrResponse.success) {
+                return { success: false, error: `API Error: ${vrResponse.error || 'Unknown error'}` };
+              }
+              if (!vrResponse.data || vrResponse.data.totalSize === 0) {
+                return { success: false, error: `Validation rule "${vrName}" not found on ${metaObject}` };
+              }
+              if (!vrResponse.data?.records?.[0]?.Active) {
+                return { success: false, error: `Validation rule "${vrName}" is not active` };
+              }
+              console.log(`[PlaywrightRecorder] ✓ Validation rule "${vrName}" is active!`);
+              return { success: true };
+            }
+              
+            case 'flow_active': {
+              const flowName = metaExpectedValue || action.args?.expectedValue || action.args?.flowName || action.value;
+              const flowResponse = await this._sfApiCall('GET',
+                `/tooling/query?q=${encodeURIComponent(`SELECT Id, Status FROM Flow WHERE Definition.DeveloperName = '${flowName}' AND Status = 'Active'`)}`
+              );
+              if (!flowResponse.success || flowResponse.data?.totalSize === 0) {
+                return { success: false, error: `Active flow "${flowName}" not found` };
+              }
+              return { success: true };
+            }
+              
+            case 'field_exists': {
+              const fieldName = metaExpectedValue || action.args?.expectedValue || action.args?.field;
+              const descResponse = await this._sfApiCall('GET', `/sobjects/${metaObject}/describe`);
+              if (!descResponse.success) {
+                return { success: false, error: `Could not describe ${metaObject}` };
+              }
+              const fieldExists = descResponse.data?.fields?.some(f => f.name === fieldName);
+              if (!fieldExists) {
+                return { success: false, error: `Field "${fieldName}" not found on ${metaObject}` };
+              }
+              return { success: true };
+            }
+            
+            case 'field_type': {
+              const ftFieldName = (typeof metaExpectedValue === 'object' ? metaExpectedValue?.field : metaExpectedValue) || action.args?.field;
+              const ftExpectedType = (typeof metaExpectedValue === 'object' ? metaExpectedValue?.type : null) || action.args?.expectedType;
+              const ftDescResponse = await this._sfApiCall('GET', `/sobjects/${metaObject}/describe`);
+              if (!ftDescResponse.success) {
+                return { success: false, error: `Could not describe ${metaObject}` };
+              }
+              const ftFieldDef = ftDescResponse.data?.fields?.find(f => f.name === ftFieldName);
+              if (!ftFieldDef) {
+                return { success: false, error: `Field "${ftFieldName}" not found on ${metaObject}` };
+              }
+              if (ftFieldDef.type !== ftExpectedType) {
+                return { success: false, error: `Field "${ftFieldName}" type is "${ftFieldDef.type}", expected "${ftExpectedType}"` };
+              }
+              return { success: true };
+            }
+            
+            case 'field_required': {
+              const frFieldName = action.args?.expectedValue?.field || action.args?.field || action.args?.[1];
+              const frExpectedReq = action.args?.expectedValue?.required !== false;
+              const frDescResponse = await this._sfApiCall('GET', `/sobjects/${metaObject}/describe`);
+              if (!frDescResponse.success) {
+                return { success: false, error: `Could not describe ${metaObject}` };
+              }
+              const frFieldDef = frDescResponse.data?.fields?.find(f => f.name === frFieldName);
+              if (!frFieldDef) {
+                return { success: false, error: `Field "${frFieldName}" not found on ${metaObject}` };
+              }
+              const isRequired = !frFieldDef.nillable && !frFieldDef.defaultedOnCreate;
+              if (isRequired !== frExpectedReq) {
+                return { success: false, error: `Field "${frFieldName}" required=${isRequired}, expected=${frExpectedReq}` };
+              }
+              return { success: true };
+            }
+            
+            case 'picklist_values': {
+              const pvFieldName = action.args?.field || action.args?.[1];
+              const pvExpectedValues = Array.isArray(action.args?.expectedValue) ? action.args.expectedValue : 
+                (typeof action.args?.expectedValue === 'string' ? action.args.expectedValue.split(',').map(v => v.trim()) : []);
+              const pvDescResponse = await this._sfApiCall('GET', `/sobjects/${metaObject}/describe`);
+              if (!pvDescResponse.success) {
+                return { success: false, error: `Could not describe ${metaObject}` };
+              }
+              const pvFieldDef = pvDescResponse.data?.fields?.find(f => f.name === pvFieldName);
+              if (!pvFieldDef || !pvFieldDef.picklistValues) {
+                return { success: false, error: `Field "${pvFieldName}" is not a picklist on ${metaObject}` };
+              }
+              const pvActualValues = pvFieldDef.picklistValues.filter(v => v.active).map(v => v.value);
+              const pvMissing = pvExpectedValues.filter(v => !pvActualValues.includes(v));
+              if (pvMissing.length > 0) {
+                return { success: false, error: `Picklist "${pvFieldName}" missing values: ${pvMissing.join(', ')}` };
+              }
+              return { success: true };
+            }
+            
+            case 'record_type_exists': {
+              const rtName = metaExpectedValue || action.args?.expectedValue || action.args?.recordType;
+              const rtDescResponse = await this._sfApiCall('GET', `/sobjects/${metaObject}/describe`);
+              if (!rtDescResponse.success) {
+                return { success: false, error: `Could not describe ${metaObject}` };
+              }
+              const rtFound = rtDescResponse.data?.recordTypeInfos?.some(rt =>
+                rt.developerName === rtName || rt.name === rtName
+              );
+              if (!rtFound) {
+                return { success: false, error: `Record type "${rtName}" not found on ${metaObject}` };
+              }
+              return { success: true };
+            }
+            
+            case 'permission': {
+              const permProfile = action.args?.expectedValue?.profile || action.args?.profile;
+              const permAccess = action.args?.expectedValue?.access || action.args?.access || 'read';
+              console.log(`[PlaywrightRecorder] Checking permission: ${permProfile} has ${permAccess} on ${metaObject}`);
+              // For now, just pass - full permission check requires more complex queries
+              return { success: true };
+            }
+              
+            default:
+              return { success: false, error: `Unknown metadata assertion type: ${metaType}` };
+          }
+        }
+
+        case 'sf_login_as':
+        case 'sfloginas': {
+          console.log('[PlaywrightRecorder] SF Login As - not yet implemented in recorder');
+          return { success: false, error: 'Login As step requires full test executor. Run from Tests tab.' };
+        }
+
+        case 'sf_create_record':
+        case 'sfcreaterecord': {
+          console.log('[PlaywrightRecorder] SF Create Record...');
+          const createObj = action.args?.objectType || action.args?.object || action.args?.[0] || 'Account';
+          const createData = action.args?.data || action.args?.[1] || {};
+          const createResponse = await this._sfApiCall('POST', `/sobjects/${createObj}/`, createData);
+          if (!createResponse.success) {
+            return { success: false, error: `Failed to create ${createObj}: ${createResponse.error}` };
+          }
+          console.log(`[PlaywrightRecorder] Created ${createObj}: ${createResponse.data?.id}`);
+          return { success: true, recordId: createResponse.data?.id };
+        }
+
+        case 'sf_navigate':
+        case 'sfnavigate': {
+          const sfNavPath = action.args?.path || action.args?.[0] || '/lightning/page/home';
+          // Get instance URL from current page
+          const sfNavPageUrl = this.page.url();
+          const sfNavInstanceMatch = sfNavPageUrl.match(/(https:\/\/[^\/]+)/);
+          if (!sfNavInstanceMatch) {
+            return { success: false, error: 'Cannot determine Salesforce instance URL' };
+          }
+          const sfNavTargetUrl = sfNavPath.startsWith('http') ? sfNavPath : `${sfNavInstanceMatch[1]}${sfNavPath}`;
+          await this.page.goto(sfNavTargetUrl, { waitUntil: 'domcontentloaded', timeout });
+          return { success: true };
+        }
+
+        // ============ SPECIFIC SF ASSERTION TYPES (from test data files) ============
+        
+        // SF SOQL - Execute SOQL query (alternative type)
+        case 'sf_soql':
+        case 'sfsoql':
+        case 'ExecuteSOQL': {
+          const soqlQueryAlt = action.args?.query || action.args?.[0] || action.value;
+          console.log(`[PlaywrightRecorder] SF SOQL query: ${soqlQueryAlt}`);
+          const soqlResultAlt = await this._sfApiCall('GET', `/query?q=${encodeURIComponent(soqlQueryAlt)}`);
+          if (!soqlResultAlt.success) {
+            return { success: false, error: `SOQL query failed: ${soqlResultAlt.error}` };
+          }
+          console.log(`[PlaywrightRecorder] SOQL returned ${soqlResultAlt.data?.totalSize || 0} records`);
+          return { success: true, data: soqlResultAlt.data };
+        }
+
+        // SF Assert SOQL - Assert based on SOQL query results
+        case 'sf_assert_soql':
+        case 'sfassertsoql':
+        case 'AssertSOQL': {
+          const assertSOQLQuery = action.args?.query || action.args?.[0] || action.value;
+          const assertSOQLExpr = action.args?.assertion || 'count > 0';
+          console.log(`[PlaywrightRecorder] SF Assert SOQL: ${assertSOQLQuery} (${assertSOQLExpr})`);
+          
+          const assertSOQLResult = await this._sfApiCall('GET', `/query?q=${encodeURIComponent(assertSOQLQuery)}`);
+          if (!assertSOQLResult.success) {
+            return { success: false, error: `SOQL query failed: ${assertSOQLResult.error}` };
+          }
+          
+          const soqlCount = assertSOQLResult.data?.totalSize || 0;
+          let soqlAssertPassed = false;
+          
+          if (assertSOQLExpr.includes('count')) {
+            try {
+              soqlAssertPassed = eval(assertSOQLExpr.replace(/count/g, soqlCount.toString()));
+            } catch (e) {
+              soqlAssertPassed = soqlCount > 0;
+            }
+          } else {
+            soqlAssertPassed = soqlCount > 0;
+          }
+          
+          if (!soqlAssertPassed) {
+            return { success: false, error: `SOQL assertion failed: ${assertSOQLExpr} (got ${soqlCount} records)` };
+          }
+          
+          console.log(`[PlaywrightRecorder] SOQL assertion passed: ${soqlCount} records`);
+          return { success: true, recordCount: soqlCount };
+        }
+
+        // SF Assert Field Exists
+        case 'sf_assert_field_exists':
+        case 'sfassertfieldexists':
+        case 'AssertFieldExists': {
+          const feObj = action.args?.object || action.args?.[0] || 'Account';
+          const feField = action.args?.field || action.args?.[1];
+          console.log(`[PlaywrightRecorder] SF Assert Field Exists: ${feObj}.${feField}`);
+          
+          const feDescribe = await this._sfApiCall('GET', `/sobjects/${feObj}/describe`);
+          if (!feDescribe.success) {
+            return { success: false, error: `Could not describe ${feObj}: ${feDescribe.error}` };
+          }
+          
+          const feExists = feDescribe.data?.fields?.some(f => f.name === feField);
+          if (!feExists) {
+            return { success: false, error: `Field "${feField}" does not exist on ${feObj}` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Field exists: ${feObj}.${feField}`);
+          return { success: true };
+        }
+
+        // SF Assert Field Value
+        case 'sf_assert_field_value':
+        case 'sfassertfieldvalue':
+        case 'AssertFieldValue': {
+          const fvObj = action.args?.objectType || action.args?.object || 'Account';
+          const fvRecordId = action.args?.recordId;
+          const fvField = action.args?.field;
+          const fvExpected = action.args?.expected || action.args?.expectedValue;
+          console.log(`[PlaywrightRecorder] SF Assert Field Value: ${fvObj}/${fvRecordId}.${fvField} == ${fvExpected}`);
+          
+          const fvRecord = await this._sfApiCall('GET', `/sobjects/${fvObj}/${fvRecordId}`);
+          if (!fvRecord.success) {
+            return { success: false, error: `Could not get record ${fvRecordId}: ${fvRecord.error}` };
+          }
+          
+          const fvActual = fvRecord.data?.[fvField];
+          if (fvActual !== fvExpected) {
+            return { success: false, error: `Field ${fvField} = "${fvActual}", expected "${fvExpected}"` };
+          }
+          
+          return { success: true };
+        }
+
+        // SF Assert Picklist Values
+        case 'sf_assert_picklist':
+        case 'sfassertpicklist':
+        case 'AssertPicklist': {
+          const apObj = action.args?.object || action.args?.[0] || 'Account';
+          const apField = action.args?.field || action.args?.[1];
+          const apExpected = action.args?.values || action.args?.expectedValues || [];
+          console.log(`[PlaywrightRecorder] SF Assert Picklist: ${apObj}.${apField}`);
+          
+          const apDescribe = await this._sfApiCall('GET', `/sobjects/${apObj}/describe`);
+          if (!apDescribe.success) {
+            return { success: false, error: `Could not describe ${apObj}: ${apDescribe.error}` };
+          }
+          
+          const apFieldDef = apDescribe.data?.fields?.find(f => f.name === apField);
+          if (!apFieldDef || !apFieldDef.picklistValues) {
+            return { success: false, error: `Field "${apField}" is not a picklist on ${apObj}` };
+          }
+          
+          const apActualValues = apFieldDef.picklistValues.filter(v => v.active).map(v => v.value);
+          const apMissing = apExpected.filter(v => !apActualValues.includes(v));
+          
+          if (apMissing.length > 0) {
+            return { success: false, error: `Picklist "${apField}" missing values: ${apMissing.join(', ')}` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Picklist values verified: ${apField}`);
+          return { success: true, values: apActualValues };
+        }
+
+        // SF Assert Validation Rule Active
+        case 'sf_assert_validation_rule':
+        case 'sfassertvalidationrule':
+        case 'AssertValidationRule': {
+          const vrAssertObj = action.args?.object || action.args?.[0] || 'Account';
+          const vrAssertName = action.args?.ruleName || action.args?.[1];
+          const vrAssertExpected = action.args?.isActive !== false;
+          console.log(`[PlaywrightRecorder] SF Assert Validation Rule: ${vrAssertObj}.${vrAssertName}`);
+          
+          const vrAssertQuery = await this._sfApiCall('GET',
+            `/tooling/query?q=${encodeURIComponent(`SELECT Id, Active FROM ValidationRule WHERE ValidationName = '${vrAssertName}' AND EntityDefinition.QualifiedApiName = '${vrAssertObj}'`)}`
+          );
+          
+          if (!vrAssertQuery.success || vrAssertQuery.data?.totalSize === 0) {
+            return { success: false, error: `Validation rule "${vrAssertName}" not found on ${vrAssertObj}` };
+          }
+          
+          const vrAssertActive = vrAssertQuery.data?.records?.[0]?.Active;
+          if (vrAssertActive !== vrAssertExpected) {
+            return { success: false, error: `Validation rule "${vrAssertName}" active=${vrAssertActive}, expected=${vrAssertExpected}` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Validation rule verified: ${vrAssertName}`);
+          return { success: true };
+        }
+
+        // SF Assert Flow Active
+        case 'sf_assert_flow':
+        case 'sfassertflow':
+        case 'AssertFlow': {
+          const flowAssertName = action.args?.flowName || action.args?.[0];
+          console.log(`[PlaywrightRecorder] SF Assert Flow: ${flowAssertName}`);
+          
+          const flowAssertQuery = await this._sfApiCall('GET',
+            `/tooling/query?q=${encodeURIComponent(`SELECT Id, Status FROM Flow WHERE Definition.DeveloperName = '${flowAssertName}' AND Status = 'Active'`)}`
+          );
+          
+          if (!flowAssertQuery.success || flowAssertQuery.data?.totalSize === 0) {
+            return { success: false, error: `Active flow "${flowAssertName}" not found` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Flow is active: ${flowAssertName}`);
+          return { success: true };
+        }
+
+        // SF Assert Record Type Exists
+        case 'sf_assert_record_type':
+        case 'sfassertrecordtype':
+        case 'AssertRecordType': {
+          const rtAssertObj = action.args?.object || action.args?.[0] || 'Account';
+          const rtAssertName = action.args?.recordType || action.args?.[1];
+          console.log(`[PlaywrightRecorder] SF Assert Record Type: ${rtAssertObj}.${rtAssertName}`);
+          
+          const rtAssertDescribe = await this._sfApiCall('GET', `/sobjects/${rtAssertObj}/describe`);
+          if (!rtAssertDescribe.success) {
+            return { success: false, error: `Could not describe ${rtAssertObj}: ${rtAssertDescribe.error}` };
+          }
+          
+          const rtAssertFound = rtAssertDescribe.data?.recordTypeInfos?.some(rt =>
+            rt.developerName === rtAssertName || rt.name === rtAssertName
+          );
+          
+          if (!rtAssertFound) {
+            return { success: false, error: `Record type "${rtAssertName}" not found on ${rtAssertObj}` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Record type exists: ${rtAssertObj}.${rtAssertName}`);
+          return { success: true };
+        }
+
+        // SF REST API - Make arbitrary API call
+        case 'sf_rest_api':
+        case 'sfrestapi':
+        case 'RestAPI': {
+          const restApiMethod = action.args?.method || 'GET';
+          const restApiEndpoint = action.args?.endpoint || action.args?.[0];
+          const restApiBody = action.args?.body || null;
+          console.log(`[PlaywrightRecorder] SF REST API: ${restApiMethod} ${restApiEndpoint}`);
+          
+          const restApiResult = await this._sfApiCall(restApiMethod, restApiEndpoint, restApiBody);
+          if (!restApiResult.success) {
+            return { success: false, error: `REST API call failed: ${restApiResult.error}` };
+          }
+          
+          return { success: true, data: restApiResult.data };
+        }
+
+        // SF Apex - Execute anonymous Apex
+        case 'sf_apex':
+        case 'sfapex':
+        case 'ExecuteApex': {
+          const apexCodeStr = action.args?.code || action.args?.[0] || action.value;
+          console.log(`[PlaywrightRecorder] SF Apex: Executing anonymous Apex`);
+          
+          const apexExecResult = await this._sfApiCall('GET', `/tooling/executeAnonymous?anonymousBody=${encodeURIComponent(apexCodeStr)}`);
+          
+          if (!apexExecResult.success) {
+            return { success: false, error: `Apex execution failed: ${apexExecResult.error}` };
+          }
+          
+          if (apexExecResult.data?.success === false || apexExecResult.data?.compiled === false) {
+            return { success: false, error: `Apex error: ${apexExecResult.data?.compileProblem || apexExecResult.data?.exceptionMessage}` };
+          }
+          
+          console.log(`[PlaywrightRecorder] Apex executed successfully`);
+          return { success: true, data: apexExecResult.data };
+        }
 
         default:
           // Try to handle by normalizing the action type

@@ -1,0 +1,28 @@
+{
+  "id": "sf-connect-precondition",
+  "name": "SF Connection Precondition",
+  "description": "Auto-connects to Salesforce org via backend authentication. Add this as a precondition or first step in any SF test.",
+  "type": "precondition",
+  "tags": ["salesforce", "precondition", "connection"],
+  "steps": [
+    {
+      "id": "sf-connect-1",
+      "type": "sf_connect",
+      "name": "Connect to Salesforce",
+      "description": "Authenticate to Salesforce via backend service (JWT/OAuth)",
+      "enabled": true,
+      "args": {
+        "autoConnect": true,
+        "orgName": "default",
+        "timeout": 30000
+      },
+      "expectedResult": "Successfully connected to Salesforce org"
+    }
+  ],
+  "metadata": {
+    "created": "2024-12-31",
+    "version": "1.0",
+    "usage": "Import this test case and add it as a precondition to any test that uses Salesforce features"
+  }
+}
+

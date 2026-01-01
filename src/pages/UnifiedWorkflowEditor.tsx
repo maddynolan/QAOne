@@ -36,7 +36,7 @@ import {
   Home, Briefcase, Gamepad2, BarChart3,
   Activity, FileJson, Link2, Key, Timer,
   ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
-  Pencil, Flag, FileDown
+  Pencil, Flag, FileDown, Cloud, File
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -163,7 +163,12 @@ type StepType =
   | 'extract' | 'store_variable'
   | 'condition' | 'loop'
   | 'module'
-  | 'custom';
+  | 'custom'
+  // Salesforce step types
+  | 'sf_connect' | 'sf_query' | 'sf_assert' | 'sf_navigate' 
+  | 'sf_metadata_assert' | 'sf_login_as' | 'sf_create_record'
+  // Complex Verification step types
+  | 'email_verify' | 'pdf_verify' | 'file_verify';
 
 interface StepAssertion {
   id?: string;  // For multiple assertions
@@ -462,6 +467,34 @@ const STEP_CATEGORIES = {
       { type: 'note', label: 'Note / Comment', icon: FileText, color: 'bg-slate-500', desc: 'Free-form text' },
       { type: 'manual_step', label: 'Manual Step', icon: ClipboardList, color: 'bg-slate-500', desc: 'Manual action' },
       { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-slate-600', desc: 'Verification point' },
+    ]
+  },
+  // SALESFORCE - SF-specific steps (auto-connects via backend)
+  salesforce: {
+    label: 'Salesforce',
+    icon: Cloud,
+    color: 'sky',
+    description: 'Salesforce automation & assertions',
+    steps: [
+      { type: 'sf_connect', label: 'SF Connect', icon: Cloud, color: 'bg-sky-500', desc: 'Connect to SF org (auto)' },
+      { type: 'sf_navigate', label: 'SF Navigate', icon: Navigation, color: 'bg-sky-500', desc: 'Navigate in SF' },
+      { type: 'sf_query', label: 'SOQL Query', icon: Database, color: 'bg-sky-600', desc: 'Run SOQL query' },
+      { type: 'sf_assert', label: 'SF Assert', icon: ShieldCheck, color: 'bg-sky-600', desc: 'Assert record/field' },
+      { type: 'sf_metadata_assert', label: 'Metadata Assert', icon: Settings, color: 'bg-sky-700', desc: 'Assert metadata' },
+      { type: 'sf_login_as', label: 'Login As User', icon: User, color: 'bg-sky-700', desc: 'Switch user context' },
+      { type: 'sf_create_record', label: 'Create Record', icon: Plus, color: 'bg-sky-800', desc: 'Create SF record' },
+    ]
+  },
+  // COMPLEX VERIFY - Email, PDF, File verification
+  complex_verify: {
+    label: 'Complex Verify',
+    icon: Mail,
+    color: 'indigo',
+    description: 'Email, PDF, and file verification',
+    steps: [
+      { type: 'email_verify', label: 'Email Verify', icon: Mail, color: 'bg-indigo-500', desc: 'Verify email received' },
+      { type: 'pdf_verify', label: 'PDF Verify', icon: FileText, color: 'bg-indigo-600', desc: 'Verify PDF content' },
+      { type: 'file_verify', label: 'File Verify', icon: File, color: 'bg-indigo-700', desc: 'Verify downloaded file' },
     ]
   },
 };
@@ -3368,17 +3401,54 @@ export default function UnifiedWorkflowEditor() {
               <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 shrink-0 mt-1">
                 <Layers className="h-5 w-5 text-white" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 group">
+                {/* Display mode - truncated with ellipsis */}
+                <div 
+                  className="text-lg font-semibold text-white leading-7 cursor-text group-focus-within:hidden"
+                  style={{ 
+                    display: 'block',
+                    maxHeight: '56px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: testCase.name.length > 40 ? 'normal' : 'nowrap',
+                    wordBreak: 'break-word'
+                  }}
+                  onClick={(e) => {
+                    const textarea = e.currentTarget.nextElementSibling as HTMLTextAreaElement;
+                    textarea?.focus();
+                  }}
+                  title={testCase.name}
+                >
+                  {testCase.name || 'Test Case Name'}
+                </div>
+                {/* Edit mode - full textarea */}
                 <Textarea
                   value={testCase.name}
                   onChange={(e) => setTestCase(prev => ({ ...prev, name: e.target.value }))}
-                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[56px] bg-transparent focus-visible:ring-0 text-white resize-none overflow-hidden leading-7"
+                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[84px] bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-white resize-none overflow-y-auto leading-7 opacity-0 absolute pointer-events-none focus:opacity-100 focus:relative focus:pointer-events-auto"
                   placeholder="Test Case Name"
                   rows={1}
+                  onFocus={(e) => {
+                    e.currentTarget.style.opacity = '1';
+                    e.currentTarget.style.position = 'relative';
+                    e.currentTarget.style.pointerEvents = 'auto';
+                    const display = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (display) display.style.display = 'none';
+                    // Auto-resize
+                    e.currentTarget.style.height = 'auto';
+                    e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 84) + 'px';
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.opacity = '0';
+                    e.currentTarget.style.position = 'absolute';
+                    e.currentTarget.style.pointerEvents = 'none';
+                    const display = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (display) display.style.display = 'block';
+                  }}
                   onInput={(e) => {
                     const target = e.target as HTMLTextAreaElement;
                     target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, 56) + 'px';
+                    target.style.height = Math.min(target.scrollHeight, 84) + 'px';
                   }}
                 />
                 <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
