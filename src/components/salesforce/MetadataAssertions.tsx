@@ -386,7 +386,7 @@ export function MetadataAssertions({
                       "flex items-center gap-2 p-2 rounded-lg border text-left transition-all",
                       isSelected 
                         ? `bg-${type.color}-500/10 border-${type.color}-500/30` 
-                        : "bg-[#1a1a25] border-white/5 hover:border-white/20"
+                        : "bg-secondary border-border hover:border-primary/30"
                     )}
                   >
                     <Icon className={cn(
@@ -409,25 +409,25 @@ export function MetadataAssertions({
           
           {/* Type Description - Compact */}
           {currentType && (
-            <div className="px-2 py-1.5 rounded bg-amber-500/10 border border-amber-500/20">
+            <div className="px-2 py-1.5 rounded bg-primary/10 border border-primary/20">
               <p className="text-[10px] text-foreground">
-                <span className="text-amber-400 font-medium">→</span> {currentType.description}
+                <span className="text-primary font-medium">→</span> {currentType.description}
               </p>
             </div>
           )}
           
           {/* Dynamic Form based on assertion type */}
-          <div className="space-y-2 p-2 rounded-lg bg-[#1a1a25] border border-white/5">
+          <div className="space-y-2 p-2 rounded-lg bg-secondary border border-white/5">
             
             {/* Object picker - needed for most assertions */}
             {['field_exists', 'field_type', 'field_required', 'picklist_values', 'validation_rule', 'record_type_exists', 'permission'].includes(selectedType) && (
               <div className="space-y-1.5">
                 <label className="text-[10px] font-medium text-muted-foreground">Object</label>
                 <Select value={selectedObject} onValueChange={setSelectedObject}>
-                  <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                  <SelectTrigger className="h-8 bg-input border-border text-xs">
                     <SelectValue placeholder="Select object..." />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[200px] bg-[#1a1a25] border-white/10">
+                  <SelectContent className="max-h-[200px] bg-secondary border-border">
                     {allObjects.map(obj => (
                       <SelectItem key={obj.name} value={obj.name} className="text-xs">
                         {obj.label}
@@ -443,10 +443,10 @@ export function MetadataAssertions({
               <div className="space-y-1.5">
                 <label className="text-[10px] font-medium text-muted-foreground">Field</label>
                 <Select value={selectedField} onValueChange={setSelectedField}>
-                  <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                  <SelectTrigger className="h-8 bg-input border-border text-xs">
                     <SelectValue placeholder="Select field..." />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[200px] bg-[#1a1a25] border-white/10">
+                  <SelectContent className="max-h-[200px] bg-secondary border-border">
                     {objectDescribe.fields.map(field => (
                       <SelectItem key={field.name} value={field.name} className="text-xs">
                         {field.label} ({field.name})
@@ -462,10 +462,10 @@ export function MetadataAssertions({
               <div className="space-y-1.5">
                 <label className="text-[10px] font-medium text-muted-foreground">Expected Type</label>
                 <Select value={expectedType} onValueChange={setExpectedType}>
-                  <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                  <SelectTrigger className="h-8 bg-input border-border text-xs">
                     <SelectValue placeholder="Select type..." />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[200px] bg-[#1a1a25] border-white/10">
+                  <SelectContent className="max-h-[200px] bg-secondary border-border">
                     {fieldTypes.map(type => (
                       <SelectItem key={type} value={type} className="text-xs">
                         {type}
@@ -509,7 +509,7 @@ export function MetadataAssertions({
                   value={expectedPicklistValues}
                   onChange={(e) => setExpectedPicklistValues(e.target.value)}
                   placeholder="Value1, Value2, Value3"
-                  className="h-8 bg-[#0d0d14] border-white/10 text-xs"
+                  className="h-8 bg-input border-border text-xs"
                 />
                 {selectedField && objectDescribe && (
                   <div className="mt-1">
@@ -544,10 +544,10 @@ export function MetadataAssertions({
                 <label className="text-[10px] font-medium text-gray-400">Validation Rule</label>
                 {validationRules.length > 0 ? (
                   <Select value={validationRuleName} onValueChange={setValidationRuleName}>
-                    <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                    <SelectTrigger className="h-8 bg-input border-border text-xs">
                       <SelectValue placeholder="Select rule..." />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#1a1a25] border-white/10">
+                    <SelectContent className="bg-secondary border-border">
                       {validationRules.map(rule => (
                         <SelectItem key={rule.Id} value={rule.ValidationName} className="text-xs">
                           {rule.ValidationName} {rule.Active ? '✓' : '(inactive)'}
@@ -560,7 +560,7 @@ export function MetadataAssertions({
                     value={validationRuleName}
                     onChange={(e) => setValidationRuleName(e.target.value)}
                     placeholder="Enter validation rule API name"
-                    className="h-8 bg-[#0d0d14] border-white/10 text-xs"
+                    className="h-8 bg-input border-border text-xs"
                   />
                 )}
               </div>
@@ -572,10 +572,10 @@ export function MetadataAssertions({
                 <label className="text-[10px] font-medium text-gray-400">Flow</label>
                 {flows.length > 0 ? (
                   <Select value={flowName} onValueChange={setFlowName}>
-                    <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                    <SelectTrigger className="h-8 bg-input border-border text-xs">
                       <SelectValue placeholder="Select flow..." />
                     </SelectTrigger>
-                    <SelectContent className="max-h-[200px] bg-[#1a1a25] border-white/10">
+                    <SelectContent className="max-h-[200px] bg-secondary border-border">
                       {flows.map(flow => (
                         <SelectItem key={flow.Id} value={flow.DeveloperName} className="text-xs">
                           {flow.MasterLabel}
@@ -588,7 +588,7 @@ export function MetadataAssertions({
                     value={flowName}
                     onChange={(e) => setFlowName(e.target.value)}
                     placeholder="Enter flow API name"
-                    className="h-8 bg-[#0d0d14] border-white/10 text-xs"
+                    className="h-8 bg-input border-border text-xs"
                   />
                 )}
               </div>
@@ -600,10 +600,10 @@ export function MetadataAssertions({
                 <label className="text-[10px] font-medium text-gray-400">Record Type</label>
                 {objectDescribe.recordTypeInfos?.length > 0 ? (
                   <Select value={recordTypeName} onValueChange={setRecordTypeName}>
-                    <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                    <SelectTrigger className="h-8 bg-input border-border text-xs">
                       <SelectValue placeholder="Select record type..." />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#1a1a25] border-white/10">
+                    <SelectContent className="bg-secondary border-border">
                       {objectDescribe.recordTypeInfos
                         .filter((rt: any) => rt.developerName !== 'Master')
                         .map((rt: any) => (
@@ -618,7 +618,7 @@ export function MetadataAssertions({
                     value={recordTypeName}
                     onChange={(e) => setRecordTypeName(e.target.value)}
                     placeholder="Enter record type developer name"
-                    className="h-8 bg-[#0d0d14] border-white/10 text-xs"
+                    className="h-8 bg-input border-border text-xs"
                   />
                 )}
               </div>
@@ -631,10 +631,10 @@ export function MetadataAssertions({
                   <label className="text-[10px] font-medium text-gray-400">Profile</label>
                   {profiles.length > 0 ? (
                     <Select value={profileName} onValueChange={setProfileName}>
-                      <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+                      <SelectTrigger className="h-8 bg-input border-border text-xs">
                         <SelectValue placeholder="Select profile..." />
                       </SelectTrigger>
-                      <SelectContent className="max-h-[200px] bg-[#1a1a25] border-white/10">
+                      <SelectContent className="max-h-[200px] bg-secondary border-border">
                         {profiles.map(profile => (
                           <SelectItem key={profile.Id} value={profile.Name} className="text-xs">
                             {profile.Name}
@@ -647,7 +647,7 @@ export function MetadataAssertions({
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
                       placeholder="Enter profile name"
-                      className="h-8 bg-[#0d0d14] border-white/10 text-xs"
+                      className="h-8 bg-input border-border text-xs"
                     />
                   )}
                 </div>
@@ -677,7 +677,7 @@ export function MetadataAssertions({
           </div>
           
           {/* Action Bar - Sticky at bottom */}
-          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-white/10 bg-[#0d0d14] -mx-2 space-y-1.5">
+          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-border bg-input -mx-2 space-y-1.5">
             {/* Preview of step to be added */}
             {selectedType && (selectedObject || selectedType === 'flow_active') && (
               <div className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 font-mono truncate">
@@ -693,7 +693,7 @@ export function MetadataAssertions({
               </div>
             )}
             <Button
-              className="w-full h-8 bg-amber-600 hover:bg-amber-700 text-xs"
+              className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground text-xs"
               onClick={addAssertionStep}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />

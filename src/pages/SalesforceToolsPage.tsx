@@ -756,18 +756,18 @@ export function SalesforceToolsPage() {
   // ========== RENDER ==========
 
   return (
-    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
+    <div className="h-full overflow-y-auto bg-background">
         {/* Header */}
-        <div className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-40">
+        <div className="border-b border-border bg-card backdrop-blur-sm sticky top-0 z-40">
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-                  <Cloud className="w-5 h-5 text-gray-900 dark:text-white" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/25">
+                  <Cloud className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Salesforce Tools</h1>
-                  <p className="text-xs text-gray-400">API • Data • Development</p>
+                  <h1 className="text-xl font-bold text-foreground">Salesforce Tools</h1>
+                  <p className="text-xs text-muted-foreground">API • Data • Development</p>
                 </div>
               </div>
               
@@ -779,8 +779,8 @@ export function SalesforceToolsPage() {
                     style={{ backgroundColor: currentOrg.color }}
                   />
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">{currentOrg.name}</div>
-                    <div className="text-xs text-slate-400">{currentOrg.username}</div>
+                    <div className="text-sm font-medium text-foreground">{currentOrg.name}</div>
+                    <div className="text-xs text-muted-foreground">{currentOrg.username}</div>
                   </div>
                   <Badge 
                     variant="outline" 
@@ -805,98 +805,98 @@ export function SalesforceToolsPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Compact wrapping tabs */}
             <div className="mb-4">
-              <TabsList className="bg-gray-900 border border-gray-700 p-1 h-auto flex flex-wrap gap-0.5">
-                <TabsTrigger value="orgs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+              <TabsList className="bg-secondary border border-border p-1 h-auto flex flex-wrap gap-0.5">
+                <TabsTrigger value="orgs" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Orgs</span>
                 </TabsTrigger>
-                <TabsTrigger value="soql" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="soql" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Search className="w-3.5 h-3.5" />
                   <span>SOQL</span>
                 </TabsTrigger>
-                <TabsTrigger value="bulk" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="bulk" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Upload className="w-3.5 h-3.5" />
                   <span>Bulk</span>
                 </TabsTrigger>
-                <TabsTrigger value="api" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="api" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Code className="w-3.5 h-3.5" />
                   <span>API</span>
                 </TabsTrigger>
-                <TabsTrigger value="schema" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="schema" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Database className="w-3.5 h-3.5" />
                   <span>Schema</span>
                 </TabsTrigger>
-                <TabsTrigger value="inspect" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="inspect" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Eye className="w-3.5 h-3.5" />
                   <span>Inspector</span>
                 </TabsTrigger>
-                <TabsTrigger value="tests" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="tests" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Play className="w-3.5 h-3.5" />
                   <span>Tests</span>
                 </TabsTrigger>
-                <TabsTrigger value="permissions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="permissions" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Shield className="w-3.5 h-3.5" />
                   <span>Perms</span>
                 </TabsTrigger>
-                <TabsTrigger value="datafactory" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="datafactory" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Layers className="w-3.5 h-3.5" />
                   <span>Factory</span>
                 </TabsTrigger>
-                <TabsTrigger value="relationships" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="relationships" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Globe className="w-3.5 h-3.5" />
                   <span>Relations</span>
                 </TabsTrigger>
-                <TabsTrigger value="logs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="logs" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <FileJson className="w-3.5 h-3.5" />
                   <span>Logs</span>
                 </TabsTrigger>
-                <TabsTrigger value="assertions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="assertions" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Assert</span>
                 </TabsTrigger>
-                <TabsTrigger value="cloner" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="cloner" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Copy className="w-3.5 h-3.5" />
                   <span>Clone</span>
                 </TabsTrigger>
-                <TabsTrigger value="diff" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="diff" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <ArrowRight className="w-3.5 h-3.5" />
                   <span>Diff</span>
                 </TabsTrigger>
-                <TabsTrigger value="create" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="create" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create</span>
                 </TabsTrigger>
-                <TabsTrigger value="apex" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="apex" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Terminal className="w-3.5 h-3.5" />
                   <span>Apex</span>
                 </TabsTrigger>
-                <TabsTrigger value="fieldanalysis" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="fieldanalysis" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Hash className="w-3.5 h-3.5" />
                   <span>Fields</span>
                 </TabsTrigger>
-                <TabsTrigger value="reports" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="reports" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Table className="w-3.5 h-3.5" />
                   <span>Reports</span>
                 </TabsTrigger>
                 {/* Testing Tabs */}
-                <TabsTrigger value="functional" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-blue-500/30 data-[state=active]:text-blue-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="functional" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-primary/20 data-[state=active]:text-primary hover:bg-accent hover:text-foreground">
                   <Shield className="w-3.5 h-3.5" />
                   <span>Functional</span>
                 </TabsTrigger>
-                <TabsTrigger value="integration" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-green-500/30 data-[state=active]:text-green-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="integration" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-success/20 data-[state=active]:text-success hover:bg-accent hover:text-foreground">
                   <Globe className="w-3.5 h-3.5" />
                   <span>Integration</span>
                 </TabsTrigger>
-                <TabsTrigger value="regression" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-yellow-500/30 data-[state=active]:text-yellow-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="regression" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-warning/20 data-[state=active]:text-warning hover:bg-accent hover:text-foreground">
                   <GitBranch className="w-3.5 h-3.5" />
                   <span>Regression</span>
                 </TabsTrigger>
-                <TabsTrigger value="uat" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-pink-500/30 data-[state=active]:text-pink-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
+                <TabsTrigger value="uat" className="gap-1 px-2 py-1 text-xs text-muted-foreground data-[state=active]:bg-pink-500/20 data-[state=active]:text-pink-500 hover:bg-accent hover:text-foreground">
                   <Users className="w-3.5 h-3.5" />
                   <span>UAT</span>
                 </TabsTrigger>
                 {/* Orchestrator - Main Hub */}
-                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-gray-300 bg-gradient-to-r from-amber-600/30 to-orange-600/30 data-[state=active]:from-amber-500/50 data-[state=active]:to-orange-500/50 data-[state=active]:text-amber-300 hover:from-amber-500/40 hover:to-orange-500/40 hover:text-gray-900 dark:text-white border border-amber-500/30">
+                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-muted-foreground bg-gradient-to-r from-primary/10 to-blue-500/10 data-[state=active]:from-primary/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-primary hover:from-primary/20 hover:to-blue-500/20 hover:text-foreground border border-primary/30">
                   <Rocket className="w-3.5 h-3.5" />
                   <span>Orchestrator</span>
                 </TabsTrigger>
@@ -911,7 +911,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-gray-900 dark:text-white">Connected Orgs</CardTitle>
+                        <CardTitle className="text-foreground">Connected Orgs</CardTitle>
                         <Button onClick={() => setShowAddOrgDialog(true)} size="sm" className="gap-2">
                           <Plus className="w-4 h-4" />
                           Add Org
@@ -923,7 +923,7 @@ export function SalesforceToolsPage() {
                       {orgs.length === 0 ? (
                         <div className="text-center py-12">
                           <Cloud className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No orgs connected</h3>
+                          <h3 className="text-lg font-medium text-foreground mb-2">No orgs connected</h3>
                           <p className="text-slate-400 mb-4">Connect a Salesforce org to get started</p>
                           <Button onClick={() => setShowAddOrgDialog(true)} className="gap-2">
                             <Plus className="w-4 h-4" />
@@ -951,7 +951,7 @@ export function SalesforceToolsPage() {
                                     <Cloud className="w-5 h-5" style={{ color: org.color }} />
                                   </div>
                                   <div>
-                                    <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                    <div className="font-medium text-foreground flex items-center gap-2">
                                       {org.name}
                                       {currentOrg?.id === org.id && (
                                         <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-xs">
@@ -995,7 +995,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-gray-900 dark:text-white">API Limits</CardTitle>
+                        <CardTitle className="text-foreground">API Limits</CardTitle>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -1017,7 +1017,7 @@ export function SalesforceToolsPage() {
                               <div key={key}>
                                 <div className="flex justify-between text-sm mb-1">
                                   <span className="text-slate-400">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                  <span className="text-gray-900 dark:text-white">{value.Remaining.toLocaleString()} / {value.Max.toLocaleString()}</span>
+                                  <span className="text-foreground">{value.Remaining.toLocaleString()} / {value.Max.toLocaleString()}</span>
                                 </div>
                                 <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                                   <div
@@ -1077,7 +1077,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader className="py-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                        <CardTitle className="text-foreground text-sm flex items-center gap-2">
                           <Table className="w-4 h-4" />
                           Results ({queryResults.length} records)
                         </CardTitle>
@@ -1094,7 +1094,7 @@ export function SalesforceToolsPage() {
                             navigator.clipboard.writeText(csv);
                             toast.success('Copied as CSV');
                           }}
-                          className="gap-1.5 text-slate-300 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700"
+                          className="gap-1.5 text-muted-foreground border-border hover:text-foreground hover:bg-accent"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           Copy CSV
@@ -1151,7 +1151,7 @@ export function SalesforceToolsPage() {
                 <div className="lg:col-span-2">
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white">Bulk Data Loader</CardTitle>
+                      <CardTitle className="text-foreground">Bulk Data Loader</CardTitle>
                       <CardDescription>Insert, update, or delete thousands of records</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1160,7 +1160,7 @@ export function SalesforceToolsPage() {
                           <div>
                             <Label>Operation</Label>
                             <Select value={bulkOperation} onValueChange={(v: any) => setBulkOperation(v)}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
+                              <SelectTrigger className="bg-input border-border text-foreground">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1177,7 +1177,7 @@ export function SalesforceToolsPage() {
                               value={bulkObjectName}
                               onChange={(e) => setBulkObjectName(e.target.value)}
                               placeholder="e.g., Account, Contact"
-                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
+                              className="bg-input border-border text-foreground"
                             />
                           </div>
                         </div>
@@ -1189,7 +1189,7 @@ export function SalesforceToolsPage() {
                               value={bulkExternalIdField}
                               onChange={(e) => setBulkExternalIdField(e.target.value)}
                               placeholder="e.g., External_Id__c"
-                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
+                              className="bg-input border-border text-foreground"
                             />
                           </div>
                         )}
@@ -1315,7 +1315,7 @@ export function SalesforceToolsPage() {
                     <div className="space-y-4">
                       <div className="flex gap-2">
                         <Select value={apiMethod} onValueChange={(v: any) => setApiMethod(v)}>
-                          <SelectTrigger className="w-[100px] bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
+                          <SelectTrigger className="w-[100px] bg-input border-border text-foreground">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1450,7 +1450,7 @@ export function SalesforceToolsPage() {
                           value={objectFilter}
                           onChange={(e) => setObjectFilter(e.target.value)}
                           placeholder="Filter objects..."
-                          className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
+                          className="bg-input border-border text-foreground"
                         />
                         <div className="flex items-center gap-2">
                           <Checkbox
@@ -1587,7 +1587,7 @@ export function SalesforceToolsPage() {
                           value={inspectObjectType}
                           onChange={(e) => setInspectObjectType(e.target.value)}
                           placeholder="Account, Contact, etc."
-                          className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
+                          className="bg-input border-border text-foreground"
                         />
                       </div>
                     </div>
@@ -1851,7 +1851,7 @@ export function SalesforceToolsPage() {
                           <div>
                             <Label>Object</Label>
                             <Select value={selectedDataObject} onValueChange={setSelectedDataObject}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
+                              <SelectTrigger className="bg-input border-border text-foreground">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1871,13 +1871,13 @@ export function SalesforceToolsPage() {
                               max={1000}
                               value={dataRecordCount}
                               onChange={(e) => setDataRecordCount(parseInt(e.target.value) || 10)}
-                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
+                              className="bg-input border-border text-foreground"
                             />
                           </div>
                           <div>
                             <Label>Industry</Label>
                             <Select value={dataIndustry} onValueChange={(v: any) => setDataIndustry(v)}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
+                              <SelectTrigger className="bg-input border-border text-foreground">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>

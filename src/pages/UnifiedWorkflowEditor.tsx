@@ -5044,14 +5044,14 @@ function StepCard({
       onDragEnd={onDragEnd}
       className={`group relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
         isSelected
-          ? 'ring-2 ring-primary bg-primary/10 border-primary/50'
+          ? 'ring-2 ring-primary bg-primary/5 border-primary/50'
           : isDragging
           ? 'ring-2 ring-purple-500 bg-purple-500/10 border-purple-500/50 opacity-90'
           : executionStatus === 'passed'
-          ? 'bg-emerald-500/10 border-emerald-500/30'
+          ? 'bg-success/5 border-success/30'
           : executionStatus === 'failed'
-          ? 'bg-red-500/10 border-red-500/30'
-          : 'bg-card border-border hover:border-primary/30 hover:bg-accent'
+          ? 'bg-destructive/5 border-destructive/30'
+          : 'bg-card border-border hover:border-primary/40 hover:bg-primary/5'
       }`}
       onClick={onSelect}
     >
@@ -5073,26 +5073,26 @@ function StepCard({
       {/* Content - NO CODE/SELECTOR shown */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <info.icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-          <span className="font-semibold text-white text-base">{displayName}</span>
+          <info.icon className="h-4 w-4 text-primary" />
+          <span className="font-bold text-foreground text-base">{displayName}</span>
           {!step.enabled && (
-            <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-300">Disabled</Badge>
+            <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">Disabled</Badge>
           )}
           {step.fallback && (
-            <Badge variant="outline" className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+            <Badge variant="outline" className="text-xs bg-warning/20 text-warning border-warning/30">
               <Wand2 className="h-3 w-3 mr-1" />
               Fallback
             </Badge>
           )}
           {step.assertion?.enabled && (
-            <Badge variant="outline" className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+            <Badge variant="outline" className="text-xs bg-success/20 text-success border-success/30">
               <CheckCircle className="h-3 w-3 mr-1" />
               Assert
             </Badge>
           )}
           {/* Show automation status */}
           {((step as any).qword && (step as any).args?.length > 0) && (
-            <Badge variant="outline" className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+            <Badge variant="outline" className="text-xs bg-primary/20 text-primary border-primary/30">
               <Zap className="h-3 w-3 mr-1" />
               Script
             </Badge>
@@ -5100,7 +5100,7 @@ function StepCard({
         </div>
         {/* Show human-readable description, not selector */}
         {description && (
-          <div className="text-sm text-gray-300 mt-2">
+          <div className="text-sm text-muted-foreground font-medium mt-2">
             {description}
           </div>
         )}
@@ -5126,28 +5126,28 @@ function StepCard({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="bg-white dark:bg-gray-900 border-gray-700">
+          <DropdownMenuContent className="bg-popover border-border">
             <DropdownMenuItem 
               onClick={onDuplicate}
-              className="text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white focus:bg-gray-100 dark:bg-gray-800 focus:text-white cursor-pointer"
+              className="text-foreground hover:bg-accent focus:bg-accent cursor-pointer"
             >
-              <Copy className="h-4 w-4 mr-2 text-blue-400" />
+              <Copy className="h-4 w-4 mr-2 text-primary" />
               Duplicate
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={() => onUpdate({ enabled: !step.enabled })}
-              className="text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white focus:bg-gray-100 dark:bg-gray-800 focus:text-white cursor-pointer"
+              className="text-foreground hover:bg-accent focus:bg-accent cursor-pointer"
             >
               {step.enabled ? (
-                <><EyeOff className="h-4 w-4 mr-2 text-amber-400" />Disable</>
+                <><EyeOff className="h-4 w-4 mr-2 text-warning" />Disable</>
               ) : (
-                <><Eye className="h-4 w-4 mr-2 text-green-400" />Enable</>
+                <><Eye className="h-4 w-4 mr-2 text-success" />Enable</>
               )}
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-gray-700" />
+            <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuItem 
               onClick={onDelete} 
-              className="text-red-400 hover:bg-red-500/20 hover:text-red-300 focus:bg-red-500/20 focus:text-red-300 cursor-pointer"
+              className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 cursor-pointer"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete

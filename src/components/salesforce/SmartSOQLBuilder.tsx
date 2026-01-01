@@ -266,22 +266,22 @@ export function SmartSOQLBuilder({
   };
 
   return (
-    <div className={cn("flex flex-col h-full overflow-hidden bg-[#0d0d14]", className)}>
+    <div className={cn("flex flex-col h-full overflow-hidden bg-card", className)}>
       {/* Top Section - Object & Fields */}
-      <div className="shrink-0 p-2 border-b border-white/10 space-y-2">
+      <div className="shrink-0 p-2 border-b border-border space-y-2">
         {/* Object Picker Row */}
         <div className="flex items-center gap-2">
           <Select value={selectedObject} onValueChange={setSelectedObject}>
-            <SelectTrigger className="h-8 flex-1 bg-[#1a1a25] border-blue-500/30 text-white text-xs">
+            <SelectTrigger className="h-8 flex-1 bg-secondary border-primary/30 text-foreground text-xs">
               <SelectValue placeholder={loadingObjects ? "Loading..." : "Select Object"} />
             </SelectTrigger>
-            <SelectContent className="max-h-[300px] bg-[#1a1a25] border-white/10">
-              <div className="p-1.5 border-b border-white/10">
+            <SelectContent className="max-h-[300px] bg-secondary border-border">
+              <div className="p-1.5 border-b border-border">
                 <Input
                   value={objectSearch}
                   onChange={(e) => setObjectSearch(e.target.value)}
                   placeholder="Search..."
-                  className="h-7 text-xs bg-[#0d0d14] border-white/10"
+                  className="h-7 text-xs bg-card border-border"
                 />
               </div>
               {filteredObjects.slice(0, 100).filter(obj => obj.name).map(obj => (
@@ -294,10 +294,10 @@ export function SmartSOQLBuilder({
           
           {objectDescribe?.recordTypeInfos && objectDescribe.recordTypeInfos.length > 1 && (
             <Select value={selectedRecordType} onValueChange={setSelectedRecordType}>
-              <SelectTrigger className="h-8 w-32 bg-[#1a1a25] border-purple-500/30 text-white text-xs">
+              <SelectTrigger className="h-8 w-32 bg-secondary border-purple-500/30 text-foreground text-xs">
                 <SelectValue placeholder="Record Type" />
               </SelectTrigger>
-              <SelectContent className="bg-[#1a1a25] border-white/10">
+              <SelectContent className="bg-secondary border-border">
                 <SelectItem value="all">All Types</SelectItem>
                 {objectDescribe.recordTypeInfos.filter((rt: any) => rt.active && rt.developerName && rt.developerName !== 'Master').map((rt: any) => (
                   <SelectItem key={rt.recordTypeId} value={rt.developerName} className="text-xs">{rt.name}</SelectItem>
@@ -322,7 +322,7 @@ export function SmartSOQLBuilder({
                 value={fieldSearch}
                 onChange={(e) => setFieldSearch(e.target.value)}
                 placeholder="Search fields..."
-                className="h-7 pl-7 text-xs bg-[#1a1a25] border-white/10"
+                className="h-7 pl-7 text-xs bg-secondary border-border"
               />
             </div>
             <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-400" onClick={() => {
@@ -345,7 +345,7 @@ export function SmartSOQLBuilder({
           {objectDescribe && !loadingDescribe && (
             <>
               {/* Fields Grid */}
-              <div className="bg-[#1a1a25] rounded border border-white/5 p-1.5 max-h-32 overflow-y-auto">
+              <div className="bg-secondary rounded border border-border p-1.5 max-h-32 overflow-y-auto">
                 <div className="grid grid-cols-3 gap-0.5">
                   {filteredFields.slice(0, 60).map(field => (
                     <label key={field.name} className={cn(
@@ -381,40 +381,40 @@ export function SmartSOQLBuilder({
                   const picklistValues = getPicklistValues(cond.field);
                   const operators = getOperatorsForField(cond.field);
                   return (
-                    <div key={cond.id} className="flex items-center gap-1 p-1 bg-[#1a1a25] rounded border border-white/5">
+                    <div key={cond.id} className="flex items-center gap-1 p-1 bg-secondary rounded border border-border">
                       {idx > 0 && (
                         <Select value={cond.connector} onValueChange={(v) => updateWhereCondition(cond.id, { connector: v as 'AND' | 'OR' })}>
-                          <SelectTrigger className="h-6 w-14 text-[9px] bg-transparent border-white/10"><SelectValue /></SelectTrigger>
-                          <SelectContent className="bg-[#1a1a25] border-white/10">
+                          <SelectTrigger className="h-6 w-14 text-[9px] bg-transparent border-border"><SelectValue /></SelectTrigger>
+                          <SelectContent className="bg-secondary border-border">
                             <SelectItem value="AND">AND</SelectItem>
                             <SelectItem value="OR">OR</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
                       <Select value={cond.field} onValueChange={(v) => updateWhereCondition(cond.id, { field: v })}>
-                        <SelectTrigger className="h-6 flex-1 text-[9px] bg-transparent border-white/10"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-[#1a1a25] border-white/10 max-h-48">
+                        <SelectTrigger className="h-6 flex-1 text-[9px] bg-transparent border-border"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-secondary border-border max-h-48">
                           {objectDescribe.fields.filter(f => f.name).map(f => (
                             <SelectItem key={f.name} value={f.name} className="text-xs">{f.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <Select value={cond.operator} onValueChange={(v) => updateWhereCondition(cond.id, { operator: v })}>
-                        <SelectTrigger className="h-6 w-16 text-[9px] bg-transparent border-white/10"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-[#1a1a25] border-white/10">
+                        <SelectTrigger className="h-6 w-16 text-[9px] bg-transparent border-border"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-secondary border-border">
                           {operators.filter(op => op.value).map(op => <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       {!['IS_NULL', 'TODAY'].includes(cond.operator) && (
                         picklistValues.length > 0 ? (
                           <Select value={cond.value} onValueChange={(v) => updateWhereCondition(cond.id, { value: v })}>
-                            <SelectTrigger className="h-6 flex-1 text-[9px] bg-transparent border-white/10"><SelectValue placeholder="Value" /></SelectTrigger>
-                            <SelectContent className="bg-[#1a1a25] border-white/10 max-h-48">
+                            <SelectTrigger className="h-6 flex-1 text-[9px] bg-transparent border-border"><SelectValue placeholder="Value" /></SelectTrigger>
+                            <SelectContent className="bg-secondary border-border max-h-48">
                               {picklistValues.filter(pv => pv.value).map(pv => <SelectItem key={pv.value} value={pv.value} className="text-xs">{pv.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Input value={cond.value} onChange={(e) => updateWhereCondition(cond.id, { value: e.target.value })} placeholder="Value" className="h-6 flex-1 text-[9px] bg-transparent border-white/10" />
+                          <Input value={cond.value} onChange={(e) => updateWhereCondition(cond.id, { value: e.target.value })} placeholder="Value" className="h-6 flex-1 text-[9px] bg-transparent border-border" />
                         )
                       )}
                       <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-gray-500 hover:text-red-400" onClick={() => setWhereConditions(prev => prev.filter(c => c.id !== cond.id))}>
@@ -429,21 +429,21 @@ export function SmartSOQLBuilder({
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-gray-500 w-14">ORDER BY</span>
                 <Select value={orderByField} onValueChange={setOrderByField}>
-                  <SelectTrigger className="h-6 flex-1 text-[9px] bg-[#1a1a25] border-white/10"><SelectValue placeholder="None" /></SelectTrigger>
-                  <SelectContent className="bg-[#1a1a25] border-white/10 max-h-48">
+                  <SelectTrigger className="h-6 flex-1 text-[9px] bg-secondary border-border"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent className="bg-secondary border-border max-h-48">
                     <SelectItem value="__none__">None</SelectItem>
                     {Array.from(selectedFields).filter(f => f).map(f => <SelectItem key={f} value={f} className="text-xs">{f}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={orderByDir} onValueChange={(v) => setOrderByDir(v as 'ASC' | 'DESC')}>
-                  <SelectTrigger className="h-6 w-16 text-[9px] bg-[#1a1a25] border-white/10"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1a1a25] border-white/10">
+                  <SelectTrigger className="h-6 w-16 text-[9px] bg-secondary border-border"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="ASC">ASC</SelectItem>
                     <SelectItem value="DESC">DESC</SelectItem>
                   </SelectContent>
                 </Select>
                 <span className="text-[10px] text-gray-500 ml-2">LIMIT</span>
-                <Input type="number" value={limit} onChange={(e) => setLimit(parseInt(e.target.value) || 100)} className="h-6 w-16 text-[9px] bg-[#1a1a25] border-white/10" min={1} max={50000} />
+                <Input type="number" value={limit} onChange={(e) => setLimit(parseInt(e.target.value) || 100)} className="h-6 w-16 text-[9px] bg-secondary border-border" min={1} max={50000} />
               </div>
 
               {/* Generated Query */}
@@ -462,9 +462,9 @@ export function SmartSOQLBuilder({
                   </div>
                 </div>
                 {showRawEditor ? (
-                  <textarea value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} className="w-full h-20 p-2 rounded text-[10px] font-mono bg-[#1a1a25] border border-blue-500/20 text-blue-300 resize-none focus:outline-none" spellCheck={false} />
+                  <textarea value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} className="w-full h-20 p-2 rounded text-[10px] font-mono bg-secondary border border-blue-500/20 text-blue-300 resize-none focus:outline-none" spellCheck={false} />
                 ) : (
-                  <div className="p-2 rounded bg-[#1a1a25] border border-white/5 max-h-20 overflow-auto">
+                  <div className="p-2 rounded bg-secondary border border-border max-h-20 overflow-auto">
                     <pre className="text-[10px] font-mono text-blue-300 whitespace-pre">{generatedQuery || 'Select an object and fields'}</pre>
                   </div>
                 )}
@@ -483,7 +483,7 @@ export function SmartSOQLBuilder({
               {queryResults && (
                 <div className="space-y-1">
                   <span className="text-[10px] text-gray-500">{queryResults.totalSize || 0} records</span>
-                  <div className="bg-[#1a1a25] rounded border border-white/5 max-h-48 overflow-auto">
+                  <div className="bg-secondary rounded border border-border max-h-48 overflow-auto">
                     {queryResults.records?.length > 0 ? (
                       <table className="w-full text-[9px]">
                         <thead className="bg-white/5 sticky top-0">
@@ -496,7 +496,7 @@ export function SmartSOQLBuilder({
                         </thead>
                         <tbody>
                           {queryResults.records.slice(0, 15).map((record: any, idx: number) => (
-                            <tr key={idx} className="border-t border-white/5 hover:bg-white/5 group">
+                            <tr key={idx} className="border-t border-border hover:bg-white/5 group">
                               {Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 5).map(([key, value]: [string, any]) => (
                                 <td key={key} className="px-1.5 py-1 text-gray-300 truncate max-w-[100px]">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</td>
                               ))}
@@ -574,7 +574,7 @@ export function SmartSOQLBuilder({
           )}
           
           {/* Action Bar - Inside scroll area */}
-          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-white/10 bg-[#0d0d14] flex gap-1.5 -mx-2">
+          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-border bg-card flex gap-1.5 -mx-2">
             <Button size="sm" className="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-xs" onClick={executeQuery} disabled={isExecuting || !selectedObject}>
               {isExecuting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
               Run

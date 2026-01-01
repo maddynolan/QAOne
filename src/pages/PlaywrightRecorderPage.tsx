@@ -2219,7 +2219,7 @@ Recorded Test
                       .map((s, i) => (
                         <div 
                           key={`${s.element}-${i}`}
-                          className="flex items-center gap-2 p-2.5 rounded-lg bg-[#1a1a25] hover:bg-[#252530] border border-transparent hover:border-gray-200 dark:border-white/10 group transition-colors"
+                          className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary hover:bg-accent border border-transparent hover:border-primary/20 group transition-colors"
                         >
                           {/* Icon based on category */}
                           <div className={cn(
@@ -2301,7 +2301,7 @@ Recorded Test
                       onClick={handleRefreshSuggestions}
                       variant="outline"
                       size="sm"
-                      className="mt-4 text-xs border-amber-500/30 text-amber-400"
+                      className="mt-4 text-xs border-primary/30 text-primary"
                     >
                       <RefreshCw className="h-3 w-3 mr-1.5" />
                       Analyze Page
@@ -2315,7 +2315,7 @@ Recorded Test
             {/* ========== SF TOOLS TAB ========== */}
             <TabsContent value="sftools" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
               {/* SF Tools Sub-tabs bar */}
-              <div className="shrink-0 bg-white dark:bg-[#0d0d14] border-b border-gray-200 dark:border-gray-200 dark:border-white/10">
+              <div className="shrink-0 bg-card border-b border-border">
                 <div className="flex">
                   <button
                     onClick={() => setSfToolsSubTab('soql')}
