@@ -46,10 +46,10 @@ interface VirtualTestCaseListProps {
 
 const PriorityBadge: React.FC<{ priority: string }> = ({ priority }) => {
   const colors: Record<string, string> = {
-    critical: 'bg-red-500/20 text-red-400 border-red-500/30',
-    high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    low: 'bg-green-500/20 text-green-400 border-green-500/30',
+    critical: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/30',
+    high: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-500/30',
+    medium: 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-500/20 dark:text-yellow-400 dark:border-yellow-500/30',
+    low: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/30',
   };
   
   return (
@@ -69,7 +69,7 @@ const PriorityBadge: React.FC<{ priority: string }> = ({ priority }) => {
 const AutomationBadge: React.FC<{ status: string }> = ({ status }) => {
   if (status === 'full') {
     return (
-      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/30">
         <Bot className="w-3 h-3" />
         Automated
       </span>
@@ -78,7 +78,7 @@ const AutomationBadge: React.FC<{ status: string }> = ({ status }) => {
   
   if (status === 'partial') {
     return (
-      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+      <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30">
         <Bot className="w-3 h-3" />
         Partial
       </span>
@@ -86,7 +86,7 @@ const AutomationBadge: React.FC<{ status: string }> = ({ status }) => {
   }
   
   return (
-    <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-gray-500/20 text-gray-400 border border-gray-500/30">
+    <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-500/20 dark:text-gray-400 dark:border-gray-500/30">
       <FileText className="w-3 h-3" />
       Manual
     </span>
@@ -118,10 +118,11 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
     <div
       style={style}
       className={cn(
-        'absolute top-0 left-0 w-full px-4 py-3 border-b border-gray-800/50',
+        'absolute top-0 left-0 w-full px-4 py-3 border-b',
+        'border-gray-200 dark:border-gray-800/50',
         'flex items-center gap-4 cursor-pointer transition-colors',
-        'hover:bg-gray-800/50',
-        isSelected && 'bg-amber-500/10 border-l-2 border-l-amber-500'
+        'hover:bg-gray-100 dark:hover:bg-gray-800/50',
+        isSelected && 'bg-blue-50 dark:bg-amber-500/10 border-l-2 border-l-blue-600 dark:border-l-amber-500'
       )}
       onClick={onSelect}
       onDoubleClick={onOpen}
@@ -131,10 +132,10 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
       <div className={cn(
         'flex-none w-9 h-9 rounded-lg flex items-center justify-center',
         testCase.automation_status === 'full' 
-          ? 'bg-emerald-500/20 text-emerald-400'
+          ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
           : testCase.automation_status === 'partial'
-          ? 'bg-amber-500/20 text-amber-400'
-          : 'bg-gray-700/50 text-gray-400'
+          ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+          : 'bg-gray-100 text-gray-500 dark:bg-gray-700/50 dark:text-gray-400'
       )}>
         {testCase.automation_status === 'full' ? (
           <Bot className="w-4 h-4" />
@@ -146,13 +147,13 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
       {/* Main content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <h4 className="font-medium text-white truncate">
+          <h4 className="font-medium text-gray-900 dark:text-white truncate">
             {testCase.name}
           </h4>
         </div>
         
         {testCase.description && (
-          <p className="text-xs text-gray-500 truncate mt-0.5">
+          <p className="text-xs text-gray-600 dark:text-gray-400 truncate mt-0.5">
             {testCase.description}
           </p>
         )}
@@ -160,14 +161,14 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
         {/* Tags */}
         {testCase.tags && testCase.tags.length > 0 && (
           <div className="flex items-center gap-1 mt-1">
-            <Tag className="w-3 h-3 text-gray-500" />
+            <Tag className="w-3 h-3 text-gray-400 dark:text-gray-500" />
             {testCase.tags.slice(0, 3).map((tag, i) => (
-              <span key={i} className="text-xs text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+              <span key={i} className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                 {tag}
               </span>
             ))}
             {testCase.tags.length > 3 && (
-              <span className="text-xs text-gray-600">+{testCase.tags.length - 3}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-600">+{testCase.tags.length - 3}</span>
             )}
           </div>
         )}
@@ -175,7 +176,7 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
       
       {/* Folder */}
       {testCase.folder_name && (
-        <div className="hidden md:flex items-center gap-1 text-xs text-gray-500">
+        <div className="hidden md:flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
           <Folder className="w-3 h-3" />
           <span className="truncate max-w-[120px]">{testCase.folder_name}</span>
         </div>
@@ -193,14 +194,14 @@ const TestCaseRow: React.FC<TestCaseRowProps> = React.memo(({
       
       {/* Updated time */}
       {testCase.updated_at && (
-        <div className="hidden xl:flex items-center gap-1 text-xs text-gray-500 flex-none">
+        <div className="hidden xl:flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 flex-none">
           <Clock className="w-3 h-3" />
           {new Date(testCase.updated_at).toLocaleDateString()}
         </div>
       )}
       
       {/* Arrow */}
-      <ChevronRight className="w-4 h-4 text-gray-600 flex-none" />
+      <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-600 flex-none" />
     </div>
   );
 });
@@ -214,15 +215,15 @@ TestCaseRow.displayName = 'TestCaseRow';
 const SkeletonRow: React.FC<{ style: React.CSSProperties }> = ({ style }) => (
   <div
     style={style}
-    className="absolute top-0 left-0 w-full px-4 py-3 border-b border-gray-800/50 flex items-center gap-4"
+    className="absolute top-0 left-0 w-full px-4 py-3 border-b border-gray-200 dark:border-gray-800/50 flex items-center gap-4"
   >
-    <div className="w-9 h-9 rounded-lg bg-gray-800 animate-pulse" />
+    <div className="w-9 h-9 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse" />
     <div className="flex-1 space-y-2">
-      <div className="h-4 bg-gray-800 rounded w-1/3 animate-pulse" />
-      <div className="h-3 bg-gray-800/50 rounded w-2/3 animate-pulse" />
+      <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/3 animate-pulse" />
+      <div className="h-3 bg-gray-100 dark:bg-gray-800/50 rounded w-2/3 animate-pulse" />
     </div>
-    <div className="w-16 h-5 bg-gray-800 rounded animate-pulse" />
-    <div className="w-20 h-5 bg-gray-800 rounded animate-pulse" />
+    <div className="w-16 h-5 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
+    <div className="w-20 h-5 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
   </div>
 );
 
@@ -270,9 +271,9 @@ export const VirtualTestCaseList: React.FC<VirtualTestCaseListProps> = ({
   // Empty state
   if (!isLoading && testCases.length === 0) {
     return (
-      <div className={cn('flex flex-col items-center justify-center h-64 text-gray-500', className)}>
-        <AlertCircle className="w-12 h-12 mb-4 text-gray-600" />
-        <p className="text-lg font-medium">{emptyMessage}</p>
+      <div className={cn('flex flex-col items-center justify-center h-64 text-gray-600 dark:text-gray-400', className)}>
+        <AlertCircle className="w-12 h-12 mb-4 text-gray-400 dark:text-gray-600" />
+        <p className="text-lg font-medium text-gray-700 dark:text-gray-300">{emptyMessage}</p>
         <p className="text-sm mt-1">Try adjusting your filters or search query</p>
       </div>
     );

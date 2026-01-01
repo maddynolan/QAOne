@@ -1,4 +1,4 @@
-import { Bell, Search, User, LogOut, Settings, UserCircle } from "lucide-react";
+import { Bell, Search, User, LogOut, Settings, UserCircle, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 export const TopNav = () => {
   const { user, signOut, currentOrg, currentProject } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -61,6 +63,21 @@ export const TopNav = () => {
             </>
           )}
         </div>
+
+        {/* Theme Toggle */}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={toggleTheme}
+          className="relative"
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        >
+          {theme === 'light' ? (
+            <Moon className="h-5 w-5 text-slate-600" />
+          ) : (
+            <Sun className="h-5 w-5 text-amber-400" />
+          )}
+        </Button>
 
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />

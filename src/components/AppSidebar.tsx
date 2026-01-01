@@ -193,10 +193,10 @@ export function AppSidebar() {
             />
             {!collapsed && (
               <div>
-                <h2 className="font-bold text-lg text-sidebar-foreground tracking-tight">
-                  Aris<span className="text-amber-500">Trace</span>
+                <h2 className="font-bold text-lg text-gray-900 dark:text-white tracking-tight">
+                  Aris<span className="text-blue-600 dark:text-amber-500">Trace</span>
                 </h2>
-                <p className="text-xs text-sidebar-foreground/60">QA Excellence Platform</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">QA Excellence Platform</p>
               </div>
             )}
           </div>
@@ -211,8 +211,8 @@ export function AppSidebar() {
                 onOpenChange={() => toggleGroup(group.label)}
               >
                 <CollapsibleTrigger asChild>
-                  <SidebarGroupLabel className="cursor-pointer hover:bg-sidebar-accent/50 rounded px-2 py-1 flex items-center justify-between text-sidebar-foreground/70">
-                    <span className="text-xs font-medium uppercase tracking-wider">{group.label}</span>
+                  <SidebarGroupLabel className="cursor-pointer hover:bg-gray-100 dark:hover:bg-sidebar-accent/50 rounded px-2 py-1 flex items-center justify-between text-gray-600 dark:text-gray-400">
+                    <span className="text-xs font-semibold uppercase tracking-wider">{group.label}</span>
                     {openGroups[group.label] ? (
                       <ChevronDown className="h-3 w-3" />
                     ) : (
@@ -252,8 +252,8 @@ export function AppSidebar() {
                                 end={item.url === '/'} 
                                 className={
                                   isActive
-                                    ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium"
-                                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                    ? "bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 hover:bg-blue-700 dark:hover:bg-amber-400 font-medium"
+                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                                 }
                               >
                                 <item.icon className="h-4 w-4" />
@@ -270,7 +270,7 @@ export function AppSidebar() {
             ) : (
               <>
                 {!collapsed && (
-                  <SidebarGroupLabel className="text-sidebar-foreground/70 text-xs font-medium uppercase tracking-wider px-2">
+                  <SidebarGroupLabel className="text-gray-600 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider px-2">
                     {group.label}
                   </SidebarGroupLabel>
                 )}
@@ -288,11 +288,11 @@ export function AppSidebar() {
                             <SidebarMenuButton asChild>
                               <button
                                 onClick={() => showRecorder()}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sidebar-foreground hover:bg-cyan-100 hover:text-cyan-700 border border-cyan-200 bg-cyan-50/50"
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-gray-700 dark:text-gray-100 hover:bg-cyan-100 dark:hover:bg-cyan-900/30 hover:text-cyan-700 dark:hover:text-cyan-400 border border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-900/20"
                               >
-                                <item.icon className="h-4 w-4 text-cyan-600 fill-cyan-600" />
+                                <item.icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400 fill-cyan-600 dark:fill-cyan-400" />
                                 <span>{item.title}</span>
-                                <span className="ml-auto text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
+                                <span className="ml-auto text-[10px] bg-cyan-600 dark:bg-cyan-500 text-white px-1.5 py-0.5 rounded font-medium">REC</span>
                               </button>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
@@ -307,16 +307,16 @@ export function AppSidebar() {
                               end={item.url === '/'} 
                               className={`${
                                 isActive
-                                  ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium"
+                                  ? "bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 hover:bg-blue-700 dark:hover:bg-amber-400 font-medium"
                                   : itemHighlight
-                                    ? "text-sidebar-foreground hover:bg-amber-100 hover:text-amber-700 border border-amber-200 bg-amber-50/50"
-                                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                    ? "text-gray-800 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-gray-800 hover:text-blue-700 dark:hover:text-amber-400 border border-blue-200 dark:border-gray-700 bg-blue-50/50 dark:bg-gray-800/50"
+                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
                               }`}
                             >
-                              <item.icon className={`h-4 w-4 ${itemHighlight && !isActive ? 'text-amber-600' : ''}`} />
+                              <item.icon className={`h-4 w-4 ${itemHighlight && !isActive ? 'text-blue-600 dark:text-amber-500' : ''}`} />
                               <span>{item.title}</span>
                               {itemHighlight && !isActive && (
-                                <span className="ml-auto text-[10px] bg-amber-600 text-white px-1.5 py-0.5 rounded font-medium">★</span>
+                                <span className="ml-auto text-[10px] bg-blue-600 dark:bg-amber-500 text-white dark:text-gray-900 px-1.5 py-0.5 rounded font-medium">★</span>
                               )}
                             </NavLink>
                           </SidebarMenuButton>

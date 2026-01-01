@@ -73,14 +73,14 @@ const NodeComponent = ({ node, isSelected, onClick, onDragStart }: {
 
   const getColor = () => {
     switch (node.data.type) {
-      case 'navigate': return 'border-blue-500 bg-blue-50';
-      case 'click': return 'border-green-500 bg-green-50';
-      case 'input': return 'border-purple-500 bg-purple-50';
-      case 'wait': return 'border-yellow-500 bg-yellow-50';
-      case 'assert': return 'border-red-500 bg-red-50';
-      case 'condition': return 'border-orange-500 bg-orange-50';
-      case 'loop': return 'border-pink-500 bg-pink-50';
-      default: return 'border-gray-500 bg-gray-50';
+      case 'navigate': return 'border-blue-500 bg-blue-50 dark:bg-blue-950';
+      case 'click': return 'border-green-500 bg-green-50 dark:bg-green-950';
+      case 'input': return 'border-purple-500 bg-purple-50 dark:bg-purple-950';
+      case 'wait': return 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950';
+      case 'assert': return 'border-red-500 bg-red-50 dark:bg-red-950';
+      case 'condition': return 'border-orange-500 bg-orange-50 dark:bg-orange-950';
+      case 'loop': return 'border-pink-500 bg-pink-50 dark:bg-pink-950';
+      default: return 'border-gray-500 bg-gray-50 dark:bg-gray-900';
     }
   };
 
@@ -109,45 +109,45 @@ const NodeComponent = ({ node, isSelected, onClick, onDragStart }: {
         cursor: 'move'
       }}
       className={`
-        px-4 py-3 rounded-lg border-2 bg-white shadow-md min-w-[200px] max-w-[250px]
-        ${isSelected ? 'border-blue-600 shadow-lg ring-2 ring-blue-200' : getColor()}
+        px-4 py-3 rounded-lg border-2 bg-white dark:bg-gray-900 shadow-md min-w-[200px] max-w-[250px]
+        ${isSelected ? 'border-blue-600 dark:border-amber-500 shadow-lg ring-2 ring-blue-200 dark:ring-amber-500/30' : getColor()}
         hover:shadow-lg transition-all
       `}
     >
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-gray-400 rounded-full hover:border-blue-500" />
+      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-full hover:border-blue-500 dark:hover:border-amber-500" />
       
       <div className="flex items-center gap-2 mb-1">
         <div className={`${getIconColor()} text-white p-1.5 rounded`}>
           {getIcon()}
         </div>
         <div className="flex-1">
-          <div className="font-semibold text-sm text-gray-800">{node.data.label}</div>
+          <div className="font-semibold text-sm text-gray-800 dark:text-gray-100">{node.data.label}</div>
         </div>
         {/* Step number badge */}
-        <div className="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+        <div className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
           {node.stepNumber || '?'}
         </div>
       </div>
       
       {node.data.selector && (
-        <div className="text-xs text-gray-600 mt-1 truncate">
+        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
           {node.data.selector}
         </div>
       )}
       
       {node.data.value && (
-        <div className="text-xs text-gray-600 mt-1 truncate">
+        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
           Value: {node.data.value}
         </div>
       )}
       
       {node.data.url && (
-        <div className="text-xs text-gray-600 mt-1 truncate">
+        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
           {node.data.url}
         </div>
       )}
       
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-gray-400 rounded-full hover:border-blue-500" />
+      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-full hover:border-blue-500 dark:hover:border-amber-500" />
     </div>
   );
 };
@@ -1443,9 +1443,9 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <Input
             type="text"
@@ -1550,8 +1550,8 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Node Palette */}
-        <div className="w-64 bg-white border-r p-4 overflow-y-auto">
-          <h3 className="font-semibold mb-4 text-gray-700">Add Actions</h3>
+        <div className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-4 overflow-y-auto">
+          <h3 className="font-semibold mb-4 text-gray-800 dark:text-gray-200">Add Actions</h3>
           <div className="space-y-2">
             {[
               { type: 'navigate' as const, icon: <Navigation className="h-4 w-4" />, label: 'Navigate', color: 'blue' },
@@ -1651,7 +1651,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
         {/* Canvas */}
         <div 
           ref={canvasRef}
-          className="flex-1 relative overflow-auto bg-gray-50"
+          className="flex-1 relative overflow-auto bg-gray-50 dark:bg-gray-950"
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseDown={handleCanvasMouseDown}
@@ -1760,7 +1760,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
           </div>
 
           {/* Controls */}
-          <div className="absolute bottom-4 right-4 flex flex-col gap-2 bg-white rounded-lg shadow-lg p-2">
+          <div className="absolute bottom-4 right-4 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 border border-gray-200 dark:border-gray-700">
             <Button
               variant="ghost"
               size="icon"
@@ -1814,11 +1814,11 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
 
         {/* Right Sidebar - Properties */}
         {selectedNode && (
-          <div className="w-80 bg-white border-l p-4 overflow-y-auto">
+          <div className="w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-700">Properties</h3>
+                  <h3 className="font-semibold text-gray-800 dark:text-gray-200">Properties</h3>
                   {selectedNode && (
                     <Badge variant="outline" className="text-xs">
                       Step {getNodeIndex(selectedNode.id) + 1} of {nodes.length}

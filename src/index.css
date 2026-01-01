@@ -3,76 +3,96 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * FLOWSTRAL DESIGN SYSTEM
+ * FLOWSTRAL ENTERPRISE DESIGN SYSTEM
+ * 
+ * Inspired by enterprise QA tools:
+ * - OpenText ALM/QC: Clean, professional, efficient
+ * - Katalon: Modern, accessible, blue accents
+ * - Tricentis Tosca: Structured, corporate feel
+ * - Provar: Salesforce-native, clean
+ * - Testim: Modern SaaS, readable
  * 
  * Color Philosophy:
- * - Primary: Amber (#F59E0B) - Warm, energetic, distinctive
- * - Background: Deep charcoal for reduced eye strain
- * - Accent: Orange gradient for CTAs and highlights
- * - All colors use HSL for consistency
+ * - Light theme: White/gray background, blue primary, professional
+ * - Dark theme: Dark gray background, amber accents (original Flowstral)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer base {
-  :root {
-    /* Flowstral Amber Theme - Light Mode (rarely used) */
-    --background: 220 17% 97%;
-    --foreground: 220 15% 15%;
+  /* ═══════════════════════════════════════════════════════════════════════════
+   * LIGHT MODE - Enterprise Professional Theme (DEFAULT)
+   * ═══════════════════════════════════════════════════════════════════════════ */
+  :root,
+  .light {
+    /* Backgrounds - Clean white/gray palette */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    
+    /* Cards - Subtle elevation */
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 15%;
+    --card-foreground: 222 47% 11%;
+    
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 15%;
+    --popover-foreground: 222 47% 11%;
     
-    /* Primary: Amber */
-    --primary: 38 92% 50%;
+    /* Primary: Professional Blue (like Katalon, Salesforce) */
+    --primary: 217 91% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 38 92% 60%;
+    --primary-glow: 217 91% 60%;
     
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 15% 20%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 13% 46%;
+    /* Secondary: Cool gray - darker for better contrast */
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 222 47% 15%;
     
-    /* Accent: Orange */
-    --accent: 25 95% 53%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 13% 40%;
+    
+    /* Accent: Teal for highlights (like Testim) */
+    --accent: 199 89% 48%;
     --accent-foreground: 0 0% 100%;
     
+    /* Semantic colors */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 76% 36%;
+    --success: 142 71% 40%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 38 92% 45%;
     --warning-foreground: 0 0% 100%;
     
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 38 92% 50%;
-    --radius: 0.75rem;
+    /* Borders - Visible but subtle */
+    --border: 220 13% 85%;
+    --input: 220 13% 85%;
+    --ring: 217 91% 50%;
+    --radius: 0.5rem;
     
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
-    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 76% 50%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 17% 99%));
-    
-    /* Shadows */
+    /* Shadows - Soft elevation */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-glow: 0 0 40px hsl(38 92% 50% / 0.3);
-    --shadow-amber: 0 4px 20px hsl(38 92% 50% / 0.25);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+    --shadow-glow: 0 0 0 3px hsl(217 91% 50% / 0.15);
     
-    /* Sidebar */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 15% 20%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 14% 96%;
-    --sidebar-accent-foreground: 220 15% 20%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 38 92% 50%;
+    /* Sidebar - Light gray with better contrast */
+    --sidebar-background: 220 14% 97%;
+    --sidebar-foreground: 222 47% 15%;
+    --sidebar-primary: 217 91% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 92%;
+    --sidebar-accent-foreground: 222 47% 15%;
+    --sidebar-border: 220 13% 85%;
+    --sidebar-ring: 217 91% 50%;
+    
+    /* Enterprise-specific */
+    --header-bg: 0 0% 100%;
+    --header-border: 220 13% 85%;
+    --nav-active: 217 91% 50%;
+    --nav-hover: 220 14% 94%;
+    --step-pass: 142 71% 40%;
+    --step-fail: 0 84% 55%;
+    --step-pending: 220 13% 40%;
+    --step-skip: 38 92% 45%;
   }
 
   /* ═══════════════════════════════════════════════════════════════════════════
-   * DARK MODE - Primary theme for Flowstral
+   * DARK MODE - Original Flowstral Theme
    * ═══════════════════════════════════════════════════════════════════════════ */
   .dark {
     /* Deep charcoal background */
@@ -114,12 +134,7 @@
     --input: 220 18% 15%;
     --ring: 38 92% 50%;
     
-    /* Dark mode gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
-    --gradient-success: linear-gradient(135deg, hsl(142 71% 45%), hsl(142 76% 55%));
-    --gradient-card: linear-gradient(180deg, hsl(220 18% 8%), hsl(220 18% 10%));
-    
-    /* Enhanced dark shadows */
+    /* Dark mode shadows */
     --shadow-glow: 0 0 50px hsl(38 92% 50% / 0.35);
     --shadow-amber: 0 4px 25px hsl(38 92% 50% / 0.3);
     
@@ -132,6 +147,16 @@
     --sidebar-accent-foreground: 220 10% 90%;
     --sidebar-border: 220 18% 15%;
     --sidebar-ring: 38 92% 50%;
+    
+    /* Dark-specific */
+    --header-bg: 220 20% 6%;
+    --header-border: 220 18% 15%;
+    --nav-active: 38 92% 50%;
+    --nav-hover: 220 18% 12%;
+    --step-pass: 142 71% 45%;
+    --step-fail: 0 72% 51%;
+    --step-pending: 220 10% 55%;
+    --step-skip: 38 92% 50%;
   }
 }
 
@@ -145,37 +170,242 @@
   }
 
   html {
-    /* Force dark mode */
-    @apply dark;
+    /* Default to light theme - will be overridden by ThemeContext */
   }
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
     font-feature-settings: "cv11", "ss01";
-    font-variation-settings: "opsz" 32;
   }
 
-  /* Custom scrollbar for dark theme */
-  ::-webkit-scrollbar {
+  /* Light mode scrollbar - subtle */
+  .light ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
-  ::-webkit-scrollbar-track {
+  .light ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  .light ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  .light ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .dark ::-webkit-scrollbar-track {
     @apply bg-gray-900;
   }
 
-  ::-webkit-scrollbar-thumb {
+  .dark ::-webkit-scrollbar-thumb {
     @apply bg-gray-700 rounded-full;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
+  .dark ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-600;
   }
 
-  /* Selection color */
-  ::selection {
+  /* Selection colors */
+  .light ::selection {
+    @apply bg-blue-100 text-blue-900;
+  }
+
+  .dark ::selection {
     @apply bg-amber-500/30 text-amber-100;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * LIGHT MODE COMPONENT STYLES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Enterprise header */
+  .light .enterprise-header {
+    @apply bg-white border-b border-gray-200 shadow-sm;
+  }
+
+  /* Enterprise sidebar */
+  .light .enterprise-sidebar {
+    @apply bg-gray-50 border-r border-gray-200;
+  }
+
+  /* Enterprise cards */
+  .light .enterprise-card {
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm;
+  }
+
+  .light .enterprise-card:hover {
+    @apply shadow-md border-gray-300;
+  }
+
+  /* Enterprise inputs */
+  .light .enterprise-input {
+    @apply bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400;
+    @apply focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20;
+  }
+
+  /* Enterprise buttons */
+  .light .enterprise-btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 shadow-sm;
+  }
+
+  .light .enterprise-btn-secondary {
+    @apply bg-white border border-gray-300 text-gray-700 hover:bg-gray-50;
+  }
+
+  .light .enterprise-btn-ghost {
+    @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900;
+  }
+
+  /* Enterprise tabs */
+  .light .enterprise-tab {
+    @apply text-gray-600 hover:text-gray-900 hover:bg-gray-100;
+  }
+
+  .light .enterprise-tab-active {
+    @apply text-blue-600 bg-blue-50 border-b-2 border-blue-600;
+  }
+
+  /* Enterprise badges */
+  .light .enterprise-badge {
+    @apply bg-gray-100 text-gray-700 border border-gray-200;
+  }
+
+  .light .enterprise-badge-success {
+    @apply bg-green-50 text-green-700 border border-green-200;
+  }
+
+  .light .enterprise-badge-error {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .light .enterprise-badge-warning {
+    @apply bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .light .enterprise-badge-info {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+
+  /* Step status colors */
+  .light .step-status-pass {
+    @apply bg-green-50 border-green-200 text-green-700;
+  }
+
+  .light .step-status-fail {
+    @apply bg-red-50 border-red-200 text-red-700;
+  }
+
+  .light .step-status-pending {
+    @apply bg-gray-50 border-gray-200 text-gray-500;
+  }
+
+  .light .step-status-skip {
+    @apply bg-amber-50 border-amber-200 text-amber-700;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DARK MODE COMPONENT STYLES (Original Flowstral)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Dark header */
+  .dark .enterprise-header {
+    @apply bg-gray-950 border-b border-gray-800;
+  }
+
+  /* Dark sidebar */
+  .dark .enterprise-sidebar {
+    @apply bg-gray-950 border-r border-gray-800;
+  }
+
+  /* Dark cards */
+  .dark .enterprise-card {
+    @apply bg-gray-900 border border-gray-800 rounded-lg;
+  }
+
+  .dark .enterprise-card:hover {
+    @apply border-amber-500/30;
+    box-shadow: 0 0 20px hsl(38 92% 50% / 0.1);
+  }
+
+  /* Dark inputs */
+  .dark .enterprise-input {
+    @apply bg-gray-900 border border-gray-700 text-white placeholder:text-gray-500;
+    @apply focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20;
+  }
+
+  /* Dark buttons */
+  .dark .enterprise-btn-primary {
+    @apply bg-gradient-to-r from-amber-500 to-orange-500 text-white;
+    @apply hover:from-amber-400 hover:to-orange-400;
+  }
+
+  .dark .enterprise-btn-secondary {
+    @apply bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-700;
+  }
+
+  .dark .enterprise-btn-ghost {
+    @apply text-gray-400 hover:bg-gray-800 hover:text-white;
+  }
+
+  /* Dark tabs */
+  .dark .enterprise-tab {
+    @apply text-gray-400 hover:text-white hover:bg-gray-800;
+  }
+
+  .dark .enterprise-tab-active {
+    @apply text-amber-400 bg-amber-500/10 border-b-2 border-amber-500;
+  }
+
+  /* Dark badges */
+  .dark .enterprise-badge {
+    @apply bg-gray-800 text-gray-300 border border-gray-700;
+  }
+
+  .dark .enterprise-badge-success {
+    @apply bg-green-500/10 text-green-400 border border-green-500/20;
+  }
+
+  .dark .enterprise-badge-error {
+    @apply bg-red-500/10 text-red-400 border border-red-500/20;
+  }
+
+  .dark .enterprise-badge-warning {
+    @apply bg-amber-500/10 text-amber-400 border border-amber-500/20;
+  }
+
+  .dark .enterprise-badge-info {
+    @apply bg-blue-500/10 text-blue-400 border border-blue-500/20;
+  }
+
+  /* Dark step status */
+  .dark .step-status-pass {
+    @apply bg-green-500/10 border-green-500/30 text-green-400;
+  }
+
+  .dark .step-status-fail {
+    @apply bg-red-500/10 border-red-500/30 text-red-400;
+  }
+
+  .dark .step-status-pending {
+    @apply bg-gray-800 border-gray-700 text-gray-400;
+  }
+
+  .dark .step-status-skip {
+    @apply bg-amber-500/10 border-amber-500/30 text-amber-400;
   }
 }
 
@@ -184,57 +414,47 @@
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer utilities {
-  /* Flowstral gradients */
-  .gradient-primary {
-    background: var(--gradient-primary);
+  /* Glass effects */
+  .light .glass {
+    @apply bg-white/80 backdrop-blur-lg border border-gray-200/50;
   }
-  
-  .gradient-success {
-    background: var(--gradient-success);
-  }
-  
-  .gradient-card {
-    background: var(--gradient-card);
-  }
-  
-  /* Amber glow effects */
-  .shadow-glow {
-    box-shadow: var(--shadow-glow);
-  }
-  
-  .shadow-amber {
-    box-shadow: var(--shadow-amber);
-  }
-  
-  .glow-amber {
-    box-shadow: 0 0 20px hsl(38 92% 50% / 0.4), 0 0 40px hsl(38 92% 50% / 0.2);
-  }
-  
-  .glow-amber-sm {
-    box-shadow: 0 0 10px hsl(38 92% 50% / 0.3);
-  }
-  
-  /* Text gradient */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500;
-  }
-  
-  /* Border gradient */
-  .border-gradient {
-    border: 1px solid transparent;
-    background: linear-gradient(var(--card), var(--card)) padding-box,
-                linear-gradient(135deg, hsl(38 92% 50% / 0.5), hsl(25 95% 53% / 0.5)) border-box;
-  }
-  
-  /* Glass effect */
-  .glass {
+
+  .dark .glass {
     @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800/50;
   }
-  
-  .glass-light {
-    @apply bg-gray-800/40 backdrop-blur-lg border border-gray-700/30;
+
+  /* Text gradients */
+  .light .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-500;
   }
-  
+
+  .dark .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500;
+  }
+
+  /* Focus ring */
+  .light .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-1;
+  }
+
+  .dark .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:ring-offset-1 focus:ring-offset-gray-900;
+  }
+
+  /* Hover lift */
+  .hover-lift {
+    @apply transition-all duration-200;
+  }
+
+  .light .hover-lift:hover {
+    @apply -translate-y-0.5 shadow-md;
+  }
+
+  .dark .hover-lift:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 8px 25px hsl(38 92% 50% / 0.15);
+  }
+
   /* Animations */
   .animate-slide-up {
     animation: slide-up 0.5s ease-out;
@@ -246,20 +466,6 @@
   
   .animate-scale-in {
     animation: scale-in 0.3s ease-out;
-  }
-  
-  .animate-glow-pulse {
-    animation: glow-pulse 2s ease-in-out infinite;
-  }
-  
-  /* Hover lift effect */
-  .hover-lift {
-    @apply transition-all duration-200;
-  }
-  
-  .hover-lift:hover {
-    @apply -translate-y-0.5;
-    box-shadow: 0 8px 25px hsl(38 92% 50% / 0.15);
   }
 }
 
@@ -308,420 +514,219 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * COMPONENT OVERRIDES
+ * ENTERPRISE TABLE STYLES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Buttons with amber accent */
-.btn-primary {
-  @apply bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium;
-  @apply hover:from-amber-400 hover:to-orange-400;
-  @apply shadow-amber transition-all duration-200;
+.light table {
+  @apply bg-white border-collapse;
 }
 
-.btn-primary:hover {
-  @apply shadow-glow;
+.light thead tr {
+  @apply bg-gray-50 border-b border-gray-200;
 }
 
-/* Cards with subtle amber border on hover */
-.card-hover {
-  @apply transition-all duration-200 border border-gray-800;
+.light th {
+  @apply text-left text-xs font-semibold text-gray-600 uppercase tracking-wider py-3 px-4;
 }
 
-.card-hover:hover {
-  @apply border-amber-500/30;
-  box-shadow: 0 0 20px hsl(38 92% 50% / 0.1);
+.light td {
+  @apply py-3 px-4 border-b border-gray-100 text-gray-700;
 }
 
-/* Input focus states */
-input:focus, textarea:focus, select:focus {
-  @apply ring-2 ring-amber-500/50 border-amber-500/50;
+.light tbody tr:hover {
+  @apply bg-gray-50;
 }
 
-/* Badge variants */
-.badge-amber {
-  @apply bg-amber-500/10 text-amber-400 border border-amber-500/20;
+.dark table {
+  @apply bg-gray-900;
 }
 
-.badge-success {
-  @apply bg-green-500/10 text-green-400 border border-green-500/20;
+.dark thead tr {
+  @apply bg-gray-800 border-b border-gray-700;
 }
 
-.badge-error {
-  @apply bg-red-500/10 text-red-400 border border-red-500/20;
+.dark th {
+  @apply text-left text-xs font-semibold text-gray-400 uppercase tracking-wider py-3 px-4;
+}
+
+.dark td {
+  @apply py-3 px-4 border-b border-gray-800 text-gray-300;
+}
+
+.dark tbody tr:hover {
+  @apply bg-gray-800/50;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * GLOBAL DARK MODE OVERRIDES
- * Force dark styling on all components for consistency
+ * FORM CONTROL STYLES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Force dark backgrounds on cards */
-.dark [data-slot="card"],
-.dark .card,
-[class*="CardContent"],
-[class*="CardHeader"] {
-  --tw-bg-opacity: 1;
+/* Light mode forms */
+.light input:not([type="checkbox"]):not([type="radio"]),
+.light textarea,
+.light select {
+  @apply bg-white border-gray-300 text-gray-900;
 }
 
-/* Dark card styling */
-.dark .bg-card,
-.dark [class*="bg-card"] {
-  background-color: rgb(17 24 39) !important; /* gray-900 */
+.light input:focus,
+.light textarea:focus,
+.light select:focus {
+  @apply border-blue-500 ring-2 ring-blue-500/20 outline-none;
 }
 
-.dark .bg-muted,
-.dark [class*="bg-muted"] {
-  background-color: rgb(31 41 55) !important; /* gray-800 */
+.light input::placeholder,
+.light textarea::placeholder {
+  @apply text-gray-400;
 }
 
-/* Text colors */
-.dark .text-muted-foreground,
-.dark [class*="text-muted-foreground"] {
-  color: rgb(156 163 175) !important; /* gray-400 */
-}
-
-/* Border colors */
-.dark .border-border,
-.dark [class*="border-border"],
-.dark .border {
-  border-color: rgb(55 65 81) !important; /* gray-700 */
-}
-
-/* Input styling - CRITICAL for dark theme */
-.dark input,
+/* Dark mode forms */
+.dark input:not([type="checkbox"]):not([type="radio"]),
 .dark textarea,
-.dark select,
-.dark [type="text"],
-.dark [type="email"],
-.dark [type="password"],
-.dark [type="number"],
-.dark [type="url"] {
-  background-color: rgb(17 24 39) !important; /* gray-900 */
-  border-color: rgb(55 65 81) !important; /* gray-700 */
-  color: white !important;
-}
-
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: rgb(107 114 128) !important; /* gray-500 */
+.dark select {
+  @apply bg-gray-900 border-gray-700 text-white;
 }
 
 .dark input:focus,
 .dark textarea:focus,
 .dark select:focus {
-  border-color: rgb(245 158 11) !important; /* amber-500 */
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(245 158 11 / 0.2) !important;
+  @apply border-amber-500 ring-2 ring-amber-500/20 outline-none;
 }
 
-/* Select/Dropdown styling */
-.dark [data-radix-select-trigger],
-.dark [role="combobox"] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
+.dark input::placeholder,
+.dark textarea::placeholder {
+  @apply text-gray-500;
 }
 
-.dark [data-radix-select-content],
-.dark [role="listbox"] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DIALOG/MODAL STYLES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.light [role="dialog"],
+.light [data-radix-dialog-content] {
+  @apply bg-white border-gray-200;
 }
 
-/* Dialog/Modal dark styling */
 .dark [role="dialog"],
 .dark [data-radix-dialog-content] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
+  @apply bg-gray-900 border-gray-800;
 }
 
-/* Dropdown menu dark styling */
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DROPDOWN MENU STYLES
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.light [role="menu"],
+.light [data-radix-menu-content] {
+  @apply bg-white border-gray-200 shadow-lg;
+}
+
+.light [role="menuitem"]:hover,
+.light [role="menuitem"]:focus {
+  @apply bg-gray-100;
+}
+
 .dark [role="menu"],
 .dark [data-radix-menu-content] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
+  @apply bg-gray-900 border-gray-800;
 }
 
 .dark [role="menuitem"]:hover,
 .dark [role="menuitem"]:focus {
-  background-color: rgb(31 41 55) !important;
-}
-
-/* Tab styling */
-.dark [role="tablist"] {
-  background-color: rgb(31 41 55) !important;
-  border-color: rgb(55 65 81) !important;
-}
-
-.dark [role="tab"] {
-  color: rgb(156 163 175) !important;
-}
-
-.dark [role="tab"][data-state="active"],
-.dark [role="tab"]:hover {
-  color: white !important;
-}
-
-.dark [role="tab"][data-state="active"] {
-  background-color: rgb(55 65 81) !important;
-}
-
-/* Alert styling */
-.dark [role="alert"] {
-  background-color: rgb(31 41 55) !important;
-  border-color: rgb(55 65 81) !important;
-}
-
-/* Table styling */
-.dark table {
-  background-color: rgb(17 24 39) !important;
-}
-
-.dark th {
-  background-color: rgb(31 41 55) !important;
-  color: rgb(156 163 175) !important;
-  border-color: rgb(55 65 81) !important;
-}
-
-.dark td {
-  border-color: rgb(55 65 81) !important;
-}
-
-.dark tr:hover {
-  background-color: rgb(31 41 55) !important;
-}
-
-/* Progress bar */
-.dark [role="progressbar"] {
-  background-color: rgb(55 65 81) !important;
-}
-
-/* Button outline variant */
-.dark .btn-outline,
-.dark button[class*="outline"] {
-  border-color: rgb(55 65 81) !important;
-  color: rgb(156 163 175) !important;
-}
-
-.dark .btn-outline:hover,
-.dark button[class*="outline"]:hover {
-  background-color: rgb(31 41 55) !important;
-  color: white !important;
-}
-
-/* Fix violet/purple sections to use amber */
-.dark .from-violet-50,
-.dark .from-violet-950\/30,
-.dark .to-purple-50,
-.dark .to-purple-950\/30 {
-  --tw-gradient-from: rgb(245 158 11 / 0.1) !important;
-  --tw-gradient-to: rgb(234 88 12 / 0.1) !important;
-}
-
-.dark .text-violet-700,
-.dark .text-violet-300,
-.dark .text-violet-600 {
-  color: rgb(251 191 36) !important; /* amber-400 */
-}
-
-.dark .border-violet-200,
-.dark .border-violet-800 {
-  border-color: rgb(245 158 11 / 0.3) !important;
-}
-
-/* Fix any remaining white backgrounds */
-.dark .bg-white {
-  background-color: rgb(17 24 39) !important;
-}
-
-.dark .bg-gray-50,
-.dark .bg-slate-50 {
-  background-color: rgb(31 41 55) !important;
-}
-
-/* Scrollbar for dialogs and panels */
-.dark ::-webkit-scrollbar-track {
-  background: rgb(17 24 39);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgb(55 65 81);
+  @apply bg-gray-800;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * COMPONENT-SPECIFIC DARK OVERRIDES
+ * TOOLTIP STYLES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Fix any Card components that might use light defaults */
-[class*="rounded-lg"][class*="shadow"],
-[class*="rounded-xl"][class*="shadow"],
-[class*="rounded-md"][class*="shadow"] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
+.light [role="tooltip"] {
+  @apply bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg;
 }
 
-/* Ensure all form elements are dark */
-.dark .form-input,
-.dark .form-select,
-.dark .form-textarea,
-.dark .form-multiselect {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
-  color: white !important;
-}
-
-/* ShadCN UI Component Fixes */
-.dark [data-radix-popper-content-wrapper] {
-  --background: rgb(17 24 39);
-}
-
-/* Combobox/Command palette fixes */
-.dark [cmdk-root],
-.dark [cmdk-input-wrapper],
-.dark [cmdk-list] {
-  background-color: rgb(17 24 39) !important;
-}
-
-.dark [cmdk-input] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
-  color: white !important;
-}
-
-.dark [cmdk-item] {
-  color: rgb(209 213 219) !important;
-}
-
-.dark [cmdk-item][data-selected="true"],
-.dark [cmdk-item]:hover {
-  background-color: rgb(31 41 55) !important;
-  color: white !important;
-}
-
-/* Tooltip fixes */
-.dark [role="tooltip"],
-.dark [data-radix-popper-content-wrapper] [role="tooltip"] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
-  color: white !important;
-}
-
-/* Popover fixes */
-.dark [data-radix-popover-content] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
-}
-
-/* Accordion fixes */
-.dark [data-radix-accordion-content] {
-  background-color: rgb(17 24 39) !important;
-}
-
-.dark [data-radix-accordion-trigger] {
-  color: white !important;
-}
-
-/* Label styling */
-.dark label {
-  color: rgb(209 213 219) !important;
-}
-
-/* Code/Pre blocks */
-.dark pre,
-.dark code {
-  background-color: rgb(17 24 39) !important;
-  color: rgb(209 213 219) !important;
-}
-
-.dark code {
-  border-color: rgb(55 65 81) !important;
-}
-
-/* Sheet/Drawer fixes */
-.dark [data-radix-dialog-content] {
-  background-color: rgb(17 24 39) !important;
-  border-color: rgb(55 65 81) !important;
-}
-
-/* Separator styling */
-.dark [data-radix-separator-root],
-.dark hr {
-  background-color: rgb(55 65 81) !important;
-  border-color: rgb(55 65 81) !important;
+.dark [role="tooltip"] {
+  @apply bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg border border-gray-700;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * UTILITY CLASSES FOR CONSISTENT DARK UI
+ * LIGHT MODE TEXT READABILITY OVERRIDES
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Dark card variant */
-.card-dark {
-  @apply bg-gray-900 border border-gray-700 rounded-lg;
+/* Ensure all text is readable in light mode */
+.light {
+  /* Base text colors */
+  --text-primary: #1a1a2e;
+  --text-secondary: #4a4a68;
+  --text-muted: #6b7280;
 }
 
-.card-dark-hover {
-  @apply bg-gray-900 border border-gray-700 rounded-lg hover:border-amber-500/50 transition-all;
+/* Light mode specific overrides for better contrast */
+.light .text-sidebar-foreground,
+.light [class*="text-sidebar"] {
+  color: #374151 !important;
 }
 
-/* Dark input variant */
-.input-dark {
-  @apply bg-gray-900 border border-gray-700 text-white placeholder:text-gray-500 focus:border-amber-500 focus:ring-amber-500/20;
+.light .text-muted-foreground {
+  color: #6b7280 !important;
 }
 
-/* Dark button variants */
-.btn-primary {
-  @apply bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white;
+/* Ensure buttons and interactive elements are readable */
+.light button:not(.bg-primary):not(.bg-blue-600):not(.bg-destructive) {
+  color: #374151;
 }
 
-.btn-success {
-  @apply bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white;
+.light [class*="text-gray-400"],
+.light [class*="text-gray-500"] {
+  color: #6b7280 !important;
 }
 
-.btn-outline-dark {
-  @apply border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white;
+.light [class*="text-gray-600"] {
+  color: #4b5563 !important;
 }
 
-/* Tab styling */
-.tab-dark {
-  @apply text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white;
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+ * STATUS INDICATORS
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Badge variants */
-.badge-dark {
-  @apply border border-gray-600 text-gray-300 bg-gray-800;
-}
-
-/* Panel/Container styling */
-.panel-dark {
-  @apply bg-gray-900 border border-gray-800 rounded-lg;
-}
-
-.panel-dark-inset {
-  @apply bg-gray-800/50 rounded-lg border border-gray-700;
-}
-
-/* Tab styles */
-.tab-active {
-  @apply bg-amber-500/10 text-amber-500 border-b-2 border-amber-500;
-}
-
-/* Status indicators */
 .status-dot {
   @apply w-2 h-2 rounded-full;
 }
 
-.status-dot-success {
+.light .status-dot-success {
+  @apply bg-green-500;
+}
+
+.light .status-dot-warning {
+  @apply bg-amber-500;
+}
+
+.light .status-dot-error {
+  @apply bg-red-500;
+}
+
+.light .status-dot-pending {
+  @apply bg-gray-400;
+}
+
+.dark .status-dot-success {
   @apply bg-green-500 shadow-[0_0_8px_hsl(142_71%_45%/0.5)];
 }
 
-.status-dot-warning {
+.dark .status-dot-warning {
   @apply bg-amber-500 shadow-[0_0_8px_hsl(38_92%_50%/0.5)];
 }
 
-.status-dot-error {
+.dark .status-dot-error {
   @apply bg-red-500 shadow-[0_0_8px_hsl(0_72%_51%/0.5)];
 }
 
-/* Recording indicator */
+.dark .status-dot-pending {
+  @apply bg-gray-500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * RECORDING INDICATOR (Dark mode specific)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 .recording-pulse {
   @apply relative;
 }
