@@ -1773,8 +1773,8 @@ Recorded Test
 
   if (!isElectron()) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-[#0a0a0f]">
-        <Card className="max-w-md bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10">
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Card className="max-w-md bg-card border-border">
           <CardContent className="pt-6 text-center">
             <Video className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <h2 className="text-xl font-semibold mb-2 text-foreground">Desktop App Required</h2>
@@ -1788,7 +1788,7 @@ Recorded Test
   return (
     <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
       {/* ============ TOP TOOLBAR ============ */}
-      <div className="h-12 bg-white dark:bg-[#0d0d14] border-b border-gray-200 dark:border-gray-200 dark:border-white/10 flex items-center justify-between px-4">
+      <div className="h-12 bg-card border-b border-gray-200 dark:border-border flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           {isRecording && (
             <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
@@ -1820,7 +1820,7 @@ Recorded Test
                     <Button
             onClick={handleExportToBuilder}
                       size="sm"
-            className="h-8 px-4 text-xs bg-amber-600 hover:bg-amber-700"
+            className="h-8 px-4 text-xs bg-primary hover:bg-primary/90"
             disabled={actions.length === 0}
                     >
             <Layers className="h-3.5 w-3.5 mr-1.5" />
@@ -1831,7 +1831,7 @@ Recorded Test
               <Download className="h-3.5 w-3.5 mr-1" />
               <SelectValue placeholder="Export" />
             </SelectTrigger>
-            <SelectContent className="bg-[#1a1a25] border-gray-200 dark:border-white/10">
+            <SelectContent className="bg-secondary border-border">
               <SelectItem value="playwright" className="text-xs">Playwright</SelectItem>
               <SelectItem value="cypress" className="text-xs">Cypress</SelectItem>
               <SelectItem value="selenium" className="text-xs">Selenium</SelectItem>
@@ -1846,11 +1846,11 @@ Recorded Test
       {/* ============ MAIN CONTENT ============ */}
       <div className="flex-1 flex overflow-hidden">
         {/* ============ LEFT PANEL - URL & Recorded Steps ============ */}
-        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-gray-200 dark:border-white/10">
+        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-border">
           {/* URL Bar */}
-          <div className="p-3 border-b border-gray-200 dark:border-white/10">
-            <div className="flex items-center gap-2 p-2 bg-[#1a1a25] rounded-lg border border-gray-200 dark:border-white/10">
-              <Globe className="h-4 w-4 text-gray-500 shrink-0" />
+          <div className="p-3 border-b border-border">
+            <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg border border-border">
+              <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
               <Input
                   type="url"
                   value={url}
@@ -1863,7 +1863,7 @@ Recorded Test
               </div>
               
 {/* Recording Controls */}
-          <div className="p-3 border-b border-gray-200 dark:border-white/10 space-y-2">
+          <div className="p-3 border-b border-border space-y-2">
             {/* Selected Test Info (Automate Existing mode) */}
             {selectedTestCase && (
               <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
@@ -1938,7 +1938,7 @@ Recorded Test
                       "w-28 h-10",
                       isPaused 
                         ? "bg-emerald-600 hover:bg-emerald-700" 
-                        : "bg-amber-600 hover:bg-amber-700"
+                        : "bg-primary hover:bg-primary/90"
                     )}
                   >
                     {isPaused ? (
@@ -1977,7 +1977,7 @@ Recorded Test
           {/* Recorded Steps List */}
           <ScrollArea className="flex-1">
             {actions.length === 0 ? (
-              <div className="text-center py-12 px-4 text-gray-500">
+              <div className="text-center py-12 px-4 text-muted-foreground">
                 <Video className="h-10 w-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No actions recorded yet.</p>
                 <p className="text-xs mt-1">Click 'Start Recording' to begin.</p>
@@ -1999,8 +1999,8 @@ Recorded Test
                     onDragEnd={handleDragEnd}
                     onClick={() => setSelectedActionIndex(isSelected ? null : index)}
                     className={cn(
-                      "flex items-center gap-2 p-2.5 rounded-lg bg-white dark:bg-[#12121a] hover:bg-gray-50 dark:hover:bg-[#1a1a25] border group cursor-pointer active:cursor-grabbing transition-all",
-                      isSelected && "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30",
+                      "flex items-center gap-2 p-2.5 rounded-lg bg-card hover:bg-accent border group cursor-pointer active:cursor-grabbing transition-all",
+                      isSelected && "border-primary bg-primary/10 ring-1 ring-primary/30",
                       draggedIndex === index && "opacity-50 border-cyan-500/50",
                       dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
                       !isSelected && draggedIndex === null && "border-transparent hover:border-white/5"
@@ -2017,17 +2017,17 @@ Recorded Test
                         <div className="w-1 h-1 rounded-full bg-current" />
                       </div>
                     </div>
-                    <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-gray-500 font-mono shrink-0">
+                    <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-muted-foreground font-mono shrink-0">
                       {String(index + 1).padStart(2, '0')}
                     </div>
                     {getActionIcon(action.qword || action.type || '')}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">
                         {displayAction.description || `${action.qword || action.type} ${displayAction.args?.[0] || ''}`}
-                        {isPw && <span className="ml-1 text-amber-400">🔒</span>}
+                        {isPw && <span className="ml-1 text-primary">🔒</span>}
                       </p>
                       {displayAction.args?.[0] && (
-                        <p className="text-xs text-gray-500 truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {isPw ? `${displayAction.args[0]} → ••••••••` : displayAction.args.join(' → ')}
                         </p>
                       )}
@@ -2049,7 +2049,7 @@ Recorded Test
                   
 {/* Footer - Save/Merge Button */}
               {actions.length > 0 && (
-            <div className="p-3 border-t border-gray-200 dark:border-white/10 space-y-2">
+            <div className="p-3 border-t border-border space-y-2">
               {selectedTestCase ? (
                 <>
                   <Button
@@ -2059,7 +2059,7 @@ Recorded Test
                     <Merge className="h-4 w-4 mr-2" />
                     Merge {actions.length} Actions into "{selectedTestCase.name?.slice(0, 20)}..."
                       </Button>
-                  <p className="text-[11px] text-gray-500 text-center">
+                  <p className="text-[11px] text-muted-foreground text-center">
                     Position-based merge: Action 1 → Step 1, Action 2 → Step 2, etc.
                   </p>
                 </>
@@ -2077,13 +2077,13 @@ Recorded Test
         <div className="flex-1 flex flex-col overflow-hidden">
           <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="h-full flex flex-col">
             {/* Tab Headers - Compact */}
-            <div className="shrink-0 px-3 py-1.5 border-b border-gray-200 dark:border-white/10">
-              <TabsList className="h-8 bg-[#1a1a25] p-0.5">
-                <TabsTrigger value="suggestions" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+            <div className="shrink-0 px-3 py-1.5 border-b border-border">
+              <TabsList className="h-8 bg-secondary p-0.5">
+                <TabsTrigger value="suggestions" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
                   <Lightbulb className="h-3 w-3 mr-1" />
                   Suggestions
                   {totalSuggestions > 0 && (
-                    <Badge className="ml-1 h-4 bg-amber-500/30 text-amber-300 text-[9px] px-1">
+                    <Badge className="ml-1 h-4 bg-primary/30 text-primary text-[9px] px-1">
                       {totalSuggestions}
                     </Badge>
                   )}
@@ -2102,9 +2102,9 @@ Recorded Test
             {/* ========== SUGGESTIONS TAB ========== */}
             <TabsContent value="suggestions" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
               {/* Compact Header Row */}
-              <div className="px-3 py-2 border-b border-gray-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-[#0f0f15] z-10">
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-[#0f0f15] z-10">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-amber-400" />
+                  <Zap className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold">Suggested Actions</span>
                   {totalSuggestions > 0 && (
                     <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5">
@@ -2134,7 +2134,7 @@ Recorded Test
               </div>
 
               {/* Category Filter & Search Row - Combined */}
-              <div className="px-3 py-1.5 border-b border-gray-200 dark:border-white/10 flex items-center gap-2 flex-wrap sticky top-[42px] bg-[#0f0f15] z-10">
+              <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap sticky top-[42px] bg-[#0f0f15] z-10">
                 <div className="flex gap-1.5 flex-wrap">
                   <Badge 
                     className={cn(
@@ -2169,16 +2169,16 @@ Recorded Test
                   <Badge 
                     className={cn(
                       "cursor-pointer transition-colors text-[10px] px-1.5 py-0.5",
-                      elementFilter === 'headings' ? "bg-amber-500/30 border-amber-500 text-amber-400" : "bg-amber-500/10 border-amber-500/30 text-amber-400/70"
+                      elementFilter === 'headings' ? "bg-warning/30 border-warning text-warning" : "bg-warning/10 border-warning/30 text-warning/70"
                     )}
                     onClick={() => setElementFilter(elementFilter === 'headings' ? 'all' : 'headings')}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning mr-1" />
                     Headings {categoryCounts.headings}
                   </Badge>
                 </div>
                 <div className="flex-1 relative min-w-[120px]">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-500" />
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                   <Input
                     value={suggestionSearch}
                     onChange={(e) => setSuggestionSearch(e.target.value)}
@@ -2193,8 +2193,8 @@ Recorded Test
                 <div className="p-2 min-h-full">
                 {isLoadingSuggestions && !suggestResult?.suggestions?.length && (
                   <div className="text-center py-8">
-                    <Loader2 className="h-8 w-8 mx-auto animate-spin text-amber-400" />
-                    <p className="text-xs mt-2 text-gray-500">Analyzing page...</p>
+                    <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
+                    <p className="text-xs mt-2 text-muted-foreground">Analyzing page...</p>
                   </div>
                 )}
                 
@@ -2226,7 +2226,7 @@ Recorded Test
                             "p-1.5 rounded shrink-0",
                             s.category === 'input' && 'bg-purple-500/20 text-purple-400',
                             s.category === 'link' && 'bg-blue-500/20 text-blue-400',
-                            s.category === 'heading' && 'bg-amber-500/20 text-amber-400',
+                            s.category === 'heading' && 'bg-warning/20 text-warning',
                             s.category === 'button' && 'bg-emerald-500/20 text-emerald-400',
                             !['input', 'link', 'heading', 'button'].includes(s.category || '') && 'bg-muted/20 text-muted-foreground'
                           )}>
@@ -2277,7 +2277,7 @@ Recorded Test
                       }
                       return true;
                     }).length === 0 && (
-                      <div className="text-center py-6 text-gray-500">
+                      <div className="text-center py-6 text-muted-foreground">
                         <p className="text-xs">No {elementFilter !== 'all' ? elementFilter : 'elements'} match{suggestionSearch ? ` "${suggestionSearch}"` : ''}</p>
                         <Button
                           onClick={() => { setElementFilter('all'); setSuggestionSearch(''); }}
@@ -2293,7 +2293,7 @@ Recorded Test
                 )}
                 
                 {!isLoadingSuggestions && (!suggestResult?.suggestions || suggestResult.suggestions.length === 0) && (
-                  <div className="text-center py-12 text-gray-500">
+                  <div className="text-center py-12 text-muted-foreground">
                     <Lightbulb className="h-10 w-10 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-medium">No suggestions yet</p>
                     <p className="text-xs mt-1">Start recording to see page elements</p>
@@ -2347,7 +2347,7 @@ Recorded Test
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'stages' 
                         ? "bg-cyan-500/10 text-cyan-400 border-cyan-500" 
-                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
                     )}
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -2359,7 +2359,7 @@ Recorded Test
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'quick' 
                         ? "bg-purple-500/10 text-purple-400 border-purple-500" 
-                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
                     )}
                   >
                     <Zap className="h-3.5 w-3.5" />
@@ -2510,9 +2510,9 @@ Recorded Test
                         <tbody>
                           {soqlResults.slice(0, 10).map((row, idx) => (
                             <tr key={idx} className="border-t border-blue-500/10 hover:bg-blue-500/5">
-                              <td className="px-1 py-0.5 text-gray-500">{idx + 1}</td>
+                              <td className="px-1 py-0.5 text-muted-foreground">{idx + 1}</td>
                               {soqlColumns.slice(0, 4).map(col => (
-                                <td key={col} className="px-1 py-0.5 text-gray-300 truncate max-w-[80px]">
+                                <td key={col} className="px-1 py-0.5 text-foreground truncate max-w-[80px]">
                                   {String(row[col] ?? '-')}
                                 </td>
                               ))}
@@ -2532,7 +2532,7 @@ Recorded Test
                         </tbody>
                       </table>
                       {soqlResults.length > 10 && (
-                        <div className="text-center text-[9px] text-gray-500 py-1">
+                        <div className="text-center text-[9px] text-muted-foreground py-1">
                           +{soqlResults.length - 10} more records
                         </div>
                       )}
@@ -2579,7 +2579,7 @@ Recorded Test
                           <div key={field} className="flex items-center justify-between py-0.5 px-1 text-[9px] hover:bg-purple-500/10 rounded group">
                             <span className="text-purple-300 truncate max-w-[100px]">{field}</span>
                             <div className="flex items-center gap-1">
-                              <span className="text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{String(value ?? 'null')}</span>
+                              <span className="text-muted-foreground truncate max-w-[100px]">{String(value ?? 'null')}</span>
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -2599,12 +2599,12 @@ Recorded Test
                 
                 {/* ===== DATA SETUP TOOLS ===== */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Data Setup</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Data Setup</h4>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 text-[10px] border-gray-200 dark:border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
+                      className="h-11 text-[10px] border-border hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('datafactory'); setSfToolInput('Account'); setSfToolInput2('5'); setShowSFToolDialog(true); }}
                     >
                       <Sparkles className="h-4 w-4 text-pink-400" />
@@ -2613,7 +2613,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 text-[10px] border-gray-200 dark:border-white/10 hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
+                      className="h-11 text-[10px] border-border hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('createrecord'); setSfToolInput('Account'); setSfToolInput2('{"Name":"Test"}'); setShowSFToolDialog(true); }}
                     >
                       <Plus className="h-4 w-4 text-sky-400" />
@@ -2622,7 +2622,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 text-[10px] border-gray-200 dark:border-white/10 hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
+                      className="h-11 text-[10px] border-border hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('clone'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
                     >
                       <Copy className="h-4 w-4 text-purple-400" />
@@ -2631,7 +2631,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-11 text-[10px] border-gray-200 dark:border-white/10 hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
+                      className="h-11 text-[10px] border-border hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('bulkload'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
                     >
                       <Upload className="h-4 w-4 text-fuchsia-400" />
@@ -2642,12 +2642,12 @@ Recorded Test
                 
                 {/* ===== CODE EXECUTION ===== */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Code & API</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Code & API</h4>
                   <div className="grid grid-cols-3 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('apex'); setSfToolInput('// Apex code\nSystem.debug(\'Test\');'); setShowSFToolDialog(true); }}
                     >
                       <Zap className="h-3.5 w-3.5 text-emerald-400" />
@@ -2656,7 +2656,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('api'); setSfToolInput('/services/data/v59.0/sobjects/Account'); setSfToolInput2('GET'); setShowSFToolDialog(true); }}
                     >
                       <Globe className="h-3.5 w-3.5 text-cyan-400" />
@@ -2665,7 +2665,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('flow'); setSfToolInput(''); setShowSFToolDialog(true); }}
                     >
                       <ArrowRight className="h-3.5 w-3.5 text-orange-400" />
@@ -2676,21 +2676,21 @@ Recorded Test
                 
                 {/* ===== ASSERTIONS & VALIDATIONS ===== */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Assertions</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Assertions</h4>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-amber-500/50 hover:bg-amber-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-primary/50 hover:bg-primary/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('validation'); setSfToolInput(''); setSfToolInput2(''); setShowSFToolDialog(true); }}
                     >
-                      <Shield className="h-3.5 w-3.5 text-amber-400" />
+                      <Shield className="h-3.5 w-3.5 text-primary" />
                       <span>Validation Rule</span>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-teal-500/50 hover:bg-teal-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-teal-500/50 hover:bg-teal-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => {
                         const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'AssertFieldValue', args: ['FieldName', 'ExpectedValue'], description: 'Assert Field Value', timestamp: Date.now() };
                         setActions(prev => [...prev, action]);
@@ -2703,7 +2703,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('soql'); setSfToolInput('SELECT COUNT() FROM Account'); setShowSFToolDialog(true); }}
                     >
                       <Database className="h-3.5 w-3.5 text-blue-400" />
@@ -2712,7 +2712,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('runreport'); setSfToolInput(''); setShowSFToolDialog(true); }}
                     >
                       <FileText className="h-3.5 w-3.5 text-yellow-400" />
@@ -2723,12 +2723,12 @@ Recorded Test
                 
                 {/* ===== ADMIN & CLEANUP ===== */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Admin & Cleanup</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Admin & Cleanup</h4>
                   <div className="grid grid-cols-3 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 text-[10px] border-gray-200 dark:border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5 flex-col gap-0.5 justify-center"
+                      className="h-9 text-[10px] border-border hover:border-indigo-500/50 hover:bg-indigo-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('permission'); setSfToolInput(''); setSfToolInput2('assign'); setShowSFToolDialog(true); }}
                     >
                       <Layers className="h-3.5 w-3.5 text-indigo-400" />
@@ -2737,7 +2737,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 text-[10px] border-gray-200 dark:border-white/10 hover:border-lime-500/50 hover:bg-lime-500/5 flex-col gap-0.5 justify-center"
+                      className="h-9 text-[10px] border-border hover:border-lime-500/50 hover:bg-lime-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('apextest'); setSfToolInput(''); setShowSFToolDialog(true); }}
                     >
                       <Play className="h-3.5 w-3.5 text-lime-400" />
@@ -2746,7 +2746,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 text-[10px] border-gray-200 dark:border-white/10 hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
+                      className="h-9 text-[10px] border-border hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => {
                         const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'DeleteRecord', args: ['CurrentRecord'], description: 'Delete Current Record', timestamp: Date.now() };
                         setActions(prev => [...prev, action]);
@@ -2760,17 +2760,17 @@ Recorded Test
                 </div>
                 
                 {/* ===== NAVIGATE TO FULL SF TAB ===== */}
-                <div className="pt-2 border-t border-gray-200 dark:border-white/10">
+                <div className="pt-2 border-t border-border">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full h-8 text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    className="w-full h-8 text-xs border-primary/30 text-primary hover:bg-primary/10"
                     onClick={() => window.location.href = '/salesforce'}
                   >
                     <ExternalLink className="h-3.5 w-3.5 mr-2" />
                     Open Full Salesforce Tools
                   </Button>
-                  <p className="text-[9px] text-gray-500 text-center mt-1.5">
+                  <p className="text-[9px] text-muted-foreground text-center mt-1.5">
                     Access Schema Browser, Debug Logs, Data Diff, and 20+ more tools
                   </p>
                 </div>
@@ -2787,12 +2787,12 @@ Recorded Test
             <div style={{ display: 'none' }}>
                 {/* Data & Query Tools */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Data & Query</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Data & Query</h4>
                   <div className="grid grid-cols-2 gap-1.5">
                         <Button
                       variant="outline"
                           size="sm"
-                      className="h-12 text-[10px] border-gray-200 dark:border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
+                      className="h-12 text-[10px] border-border hover:border-blue-500/50 hover:bg-blue-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('soql'); setSfToolInput('SELECT Id, Name FROM Account LIMIT 10'); setShowSFToolDialog(true); }}
                     >
                       <Database className="h-4 w-4 text-blue-400" />
@@ -2801,7 +2801,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-12 text-[10px] border-gray-200 dark:border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
+                      className="h-12 text-[10px] border-border hover:border-emerald-500/50 hover:bg-emerald-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('apex'); setSfToolInput('// Apex code\nSystem.debug(\'Test\');'); setShowSFToolDialog(true); }}
                     >
                       <Zap className="h-4 w-4 text-emerald-400" />
@@ -2810,7 +2810,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-12 text-[10px] border-gray-200 dark:border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
+                      className="h-12 text-[10px] border-border hover:border-cyan-500/50 hover:bg-cyan-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('api'); setSfToolInput('/services/data/v59.0/sobjects/Account'); setSfToolInput2('GET'); setShowSFToolDialog(true); }}
                     >
                       <Globe className="h-4 w-4 text-cyan-400" />
@@ -2819,7 +2819,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-12 text-[10px] border-gray-200 dark:border-white/10 hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
+                      className="h-12 text-[10px] border-border hover:border-pink-500/50 hover:bg-pink-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('datafactory'); setSfToolInput('Account'); setSfToolInput2('5'); setShowSFToolDialog(true); }}
                     >
                       <Sparkles className="h-4 w-4 text-pink-400" />
@@ -2830,12 +2830,12 @@ Recorded Test
 
                 {/* Record Operations */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Record Operations</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Record Operations</h4>
                   <div className="grid grid-cols-2 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-12 text-[10px] border-gray-200 dark:border-white/10 hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
+                      className="h-12 text-[10px] border-border hover:border-purple-500/50 hover:bg-purple-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('clone'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
                     >
                       <Copy className="h-4 w-4 text-purple-400" />
@@ -2844,7 +2844,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-rose-500/50 hover:bg-rose-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => {
                         const action: RecordedAction = { id: `action_${Date.now()}`, qword: 'DeleteRecord', args: ['CurrentRecord'], description: 'Delete Current Record', timestamp: Date.now() };
                         setActions(prev => [...prev, action]);
@@ -2861,12 +2861,12 @@ Recorded Test
 
                 {/* More Tools - OLD SECTION */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">More Tools</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">More Tools</h4>
                   <div className="grid grid-cols-3 gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-sky-500/50 hover:bg-sky-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('createrecord'); setSfToolInput('Account'); setSfToolInput2('{}'); setShowSFToolDialog(true); }}
                     >
                       <Plus className="h-4 w-4 text-sky-400" />
@@ -2875,7 +2875,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-fuchsia-500/50 hover:bg-fuchsia-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('bulkload'); setSfToolInput('Account'); setSfToolInput2(''); setShowSFToolDialog(true); }}
                     >
                       <Upload className="h-4 w-4 text-fuchsia-400" />
@@ -2884,7 +2884,7 @@ Recorded Test
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-10 text-[10px] border-gray-200 dark:border-white/10 hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
+                      className="h-10 text-[10px] border-border hover:border-yellow-500/50 hover:bg-yellow-500/5 flex-col gap-0.5 justify-center"
                       onClick={() => { setSfToolType('runreport'); setSfToolInput(''); setShowSFToolDialog(true); }}
                     >
                       <FileText className="h-4 w-4 text-yellow-400" />
@@ -2895,21 +2895,21 @@ Recorded Test
 
                 {/* Quick UI Actions */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Quick Actions</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Quick Actions</h4>
                   <div className="grid grid-cols-4 gap-1">
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['Global Search'], description: 'Click Global Search', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <Search className="h-3 w-3" />Search
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['App Launcher'], description: 'Click App Launcher', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <LayoutGrid className="h-3 w-3" />Apps
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Wait', args: ['2000'], description: 'Wait 2 seconds', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <RefreshCw className="h-3 w-3" />Wait
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Screenshot', args: [`ss_${Date.now()}.png`], description: 'Take Screenshot', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <Eye className="h-3 w-3" />Screenshot
                     </Button>
@@ -2918,10 +2918,10 @@ Recorded Test
 
                 {/* Navigate To - Sales */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Navigate - Sales</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Navigate - Sales</h4>
                   <div className="grid grid-cols-4 gap-1">
                     {['Accounts', 'Contacts', 'Opportunities', 'Leads', 'Campaigns', 'Products', 'Quotes', 'Contracts'].map(obj => (
-                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5"
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-white/5"
                         onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
                         {obj}
                       </Button>
@@ -2931,10 +2931,10 @@ Recorded Test
 
                 {/* Navigate To - Service */}
                 <div>
-                  <h4 className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Navigate - Service & More</h4>
+                  <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Navigate - Service & More</h4>
                   <div className="grid grid-cols-4 gap-1">
                     {['Cases', 'Tasks', 'Events', 'Reports', 'Dashboards', 'Files', 'Chatter', 'Setup'].map(obj => (
-                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-gray-200 dark:border-white/10 hover:bg-white/5"
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-white/5"
                         onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
                         {obj}
                       </Button>
@@ -2944,7 +2944,7 @@ Recorded Test
 
                 {/* Full SF Tools Link */}
                 <div className="pt-1">
-                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-gray-500 hover:text-white hover:bg-white/5"
+                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-muted-foreground hover:text-white hover:bg-white/5"
                     onClick={() => navigate('/salesforce')}>
                     <ExternalLink className="h-3 w-3 mr-1" />Open Full SF Tools<ChevronRight className="h-3 w-3 ml-auto" />
                   </Button>
@@ -2980,7 +2980,7 @@ Recorded Test
 
       {/* Test Picker Dialog - Enterprise Scale */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
-        <DialogContent className="max-w-4xl h-[85vh] bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10 flex flex-col overflow-hidden">
+        <DialogContent className="max-w-4xl h-[85vh] bg-card border-border flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center justify-between">
               <span>Select Test Case to Automate</span>
@@ -2991,15 +2991,15 @@ Recorded Test
           </DialogHeader>
           
           {/* Search & Filters */}
-          <div className="space-y-3 pb-3 border-b border-gray-200 dark:border-white/10">
+          <div className="space-y-3 pb-3 border-b border-border">
             {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                 value={testSearchQuery}
                 onChange={(e) => setTestSearchQuery(e.target.value)}
                 placeholder="Search by name, ID, description, or tags..."
-                className="pl-10 bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                className="pl-10 bg-secondary border-border text-white"
               />
             </div>
             
@@ -3007,14 +3007,14 @@ Recorded Test
             <div className="flex gap-2 flex-wrap">
             {/* Status Filter */}
               <Select value={testStatusFilter} onValueChange={(v: any) => setTestStatusFilter(v)}>
-                <SelectTrigger className="w-[140px] h-8 bg-[#1a1a25] border-gray-200 dark:border-white/10 text-xs">
+                <SelectTrigger className="w-[140px] h-8 bg-secondary border-border text-xs">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
-                <SelectContent className="bg-[#1a1a25] border-gray-200 dark:border-white/10">
+                <SelectContent className="bg-secondary border-border">
                   <SelectItem value="all" className="text-xs">All Status</SelectItem>
                   <SelectItem value="none" className="text-xs">
                     <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-gray-500" />
+                      <span className="w-2 h-2 rounded-full bg-muted-foreground" />
                       Manual Only
                     </span>
                   </SelectItem>
@@ -3035,13 +3035,13 @@ Recorded Test
             
             {/* Folder Filter */}
               <Select value={testFolderFilter} onValueChange={setTestFolderFilter}>
-                <SelectTrigger className="w-[160px] h-8 bg-[#1a1a25] border-gray-200 dark:border-white/10 text-xs">
+                <SelectTrigger className="w-[160px] h-8 bg-secondary border-border text-xs">
                   <Folder className="h-3 w-3 mr-1" />
                 <SelectValue placeholder="Folder" />
               </SelectTrigger>
-                <SelectContent className="bg-[#1a1a25] border-gray-200 dark:border-white/10">
+                <SelectContent className="bg-secondary border-border">
                   <SelectItem value="all" className="text-xs">All Folders</SelectItem>
-                  <SelectItem value="orphan" className="text-xs text-amber-400">⚠️ Orphaned (No Folder)</SelectItem>
+                  <SelectItem value="orphan" className="text-xs text-primary">⚠️ Orphaned (No Folder)</SelectItem>
                   {allFolders.map(f => (
                     <SelectItem key={f.id} value={f.id} className="text-xs">{f.name}</SelectItem>
                 ))}
@@ -3051,11 +3051,11 @@ Recorded Test
             {/* Tag Filter */}
               {allTags.length > 0 && (
                 <Select value={testTagFilter} onValueChange={setTestTagFilter}>
-                  <SelectTrigger className="w-[140px] h-8 bg-[#1a1a25] border-gray-200 dark:border-white/10 text-xs">
+                  <SelectTrigger className="w-[140px] h-8 bg-secondary border-border text-xs">
                     <Tag className="h-3 w-3 mr-1" />
                 <SelectValue placeholder="Tag" />
               </SelectTrigger>
-                  <SelectContent className="bg-[#1a1a25] border-gray-200 dark:border-white/10">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="all" className="text-xs">All Tags</SelectItem>
                 {allTags.map(tag => (
                       <SelectItem key={tag} value={tag} className="text-xs">{tag}</SelectItem>
@@ -3075,7 +3075,7 @@ Recorded Test
                     setTestFolderFilter('all');
                     setTestTagFilter('all');
                   }}
-                  className="h-8 text-xs text-gray-500 dark:text-gray-400 hover:text-white"
+                  className="h-8 text-xs text-muted-foreground hover:text-white"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -3088,7 +3088,7 @@ Recorded Test
           <div className="flex-1 min-h-0 overflow-hidden">
             <ScrollArea className="h-full">
               {paginatedTestCases.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
+                <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
                   <p className="text-sm">
                     {allTestCases.length === 0 ? 'No test cases found' : 'No tests match your filters'}
@@ -3114,7 +3114,7 @@ Recorded Test
                       setShowTestPicker(false);
                         toast.success(`Selected: ${tc.name}`);
                       }}
-                      className="p-3 rounded-lg border border-gray-200 dark:border-white/10 hover:border-purple-500/50 cursor-pointer transition-colors group"
+                      className="p-3 rounded-lg border border-border hover:border-purple-500/50 cursor-pointer transition-colors group"
                     >
                       <div className="flex items-start gap-3">
                         {/* Status Indicator */}
@@ -3122,7 +3122,7 @@ Recorded Test
                           "w-2 h-2 rounded-full mt-1.5 shrink-0",
                           status === 'full' && "bg-emerald-500",
                           status === 'partial' && "bg-amber-500",
-                          status === 'none' && "bg-gray-500"
+                          status === 'none' && "bg-muted-foreground"
                         )} />
                         
                         <div className="flex-1 min-w-0">
@@ -3132,10 +3132,10 @@ Recorded Test
                               <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5">Automated</Badge>
                             )}
                             {status === 'partial' && (
-                              <Badge className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5">Partial</Badge>
+                              <Badge className="bg-amber-500/20 text-primary text-[10px] px-1.5">Partial</Badge>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                             <span>{tc.steps?.length || 0} steps</span>
                             {status !== 'none' && (
                               <span className="text-emerald-400/70">{automatedCount} automated</span>
@@ -3150,12 +3150,12 @@ Recorded Test
                           {tc.tags && tc.tags.length > 0 && (
                             <div className="flex gap-1 mt-1.5">
                               {tc.tags.slice(0, 3).map(tag => (
-                                <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-gray-500 dark:text-gray-400">
+                                <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-muted-foreground">
                               {tag}
                             </Badge>
                           ))}
                               {tc.tags.length > 3 && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-gray-500 dark:text-gray-400">
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-white/20 text-muted-foreground">
                                   +{tc.tags.length - 3}
                                 </Badge>
                               )}
@@ -3163,7 +3163,7 @@ Recorded Test
                           )}
                       </div>
                         
-                        <ChevronRight className="h-4 w-4 text-gray-500 group-hover:text-purple-400 shrink-0" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-purple-400 shrink-0" />
                       </div>
                     </div>
                   );
@@ -3175,8 +3175,8 @@ Recorded Test
           
           {/* Pagination */}
           {totalTestPages > 1 && (
-            <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-white/10">
-              <span className="text-xs text-gray-500">
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <span className="text-xs text-muted-foreground">
                 Page {testPage} of {totalTestPages} • Showing {((testPage - 1) * TESTS_PER_PAGE) + 1}-{Math.min(testPage * TESTS_PER_PAGE, filteredTestCases.length)} of {filteredTestCases.length}
               </span>
               <div className="flex gap-2">
@@ -3206,7 +3206,7 @@ Recorded Test
 
       {/* Test Execution Result Modal */}
       <Dialog open={showTestResultModal} onOpenChange={setShowTestResultModal}>
-        <DialogContent className="max-w-2xl bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10 overflow-hidden">
+        <DialogContent className="max-w-2xl bg-card border-border overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               {testExecutionResult?.status === 'running' && (
@@ -3235,8 +3235,8 @@ Recorded Test
             {testExecutionResult?.status === 'running' && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Step {(testExecutionResult?.currentStep || 0) + 1} of {testExecutionResult?.totalSteps}</span>
-                  <span className="text-gray-500 dark:text-gray-400">{Math.round(((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100)}%</span>
+                  <span className="text-muted-foreground">Step {(testExecutionResult?.currentStep || 0) + 1} of {testExecutionResult?.totalSteps}</span>
+                  <span className="text-muted-foreground">{Math.round(((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100)}%</span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div 
@@ -3275,19 +3275,19 @@ Recorded Test
                           }
                         }}
                       >
-                        <span className="text-gray-500 w-6 shrink-0 pt-0.5">{idx + 1}</span>
+                        <span className="text-muted-foreground w-6 shrink-0 pt-0.5">{idx + 1}</span>
                         <div className="shrink-0 pt-0.5">
                           {isCurrent && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
                           {stepResult?.status === 'passed' && <Check className="h-4 w-4 text-emerald-400" />}
                           {stepResult?.status === 'failed' && <X className="h-4 w-4 text-red-400" />}
-                          {!isCurrent && !stepResult && <Circle className="h-4 w-4 text-gray-500" />}
+                          {!isCurrent && !stepResult && <Circle className="h-4 w-4 text-muted-foreground" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className={cn(
                             "break-words",
                             stepResult?.status === 'passed' && "text-emerald-400",
                             stepResult?.status === 'failed' && "text-red-400",
-                            !stepResult && "text-gray-500 dark:text-gray-400"
+                            !stepResult && "text-muted-foreground"
                           )}>
                             {(() => {
                               const displayAction = maskSensitiveAction(action);
@@ -3300,7 +3300,7 @@ Recorded Test
                           )}
                         </div>
                         {hasScreenshot && (
-                          <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />
+                          <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
                       </div>
                     );
@@ -3310,9 +3310,9 @@ Recorded Test
               
               {/* Screenshot Preview */}
               {testExecutionResult?.selectedScreenshot && (
-                <div className="w-[300px] shrink-0 bg-gray-900 rounded-lg p-2 border border-gray-200 dark:border-white/10">
+                <div className="w-[300px] shrink-0 bg-gray-900 rounded-lg p-2 border border-border">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Step Screenshot</span>
+                    <span className="text-xs text-muted-foreground">Step Screenshot</span>
             <Button
                       variant="ghost"
                       size="sm"
@@ -3325,7 +3325,7 @@ Recorded Test
                   <img 
                     src={testExecutionResult.selectedScreenshot} 
                     alt="Step screenshot" 
-                    className="w-full rounded border border-gray-200 dark:border-white/10"
+                    className="w-full rounded border border-border"
                   />
                 </div>
               )}
@@ -3340,8 +3340,8 @@ Recorded Test
             
             {/* Summary */}
             {testExecutionResult?.status !== 'running' && (
-              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-white/10">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex justify-between items-center pt-2 border-t border-border">
+                <span className="text-sm text-muted-foreground">
                   {testExecutionResult?.stepResults.filter(r => r.status === 'passed').length || 0} / {testExecutionResult?.totalSteps || actions.length} steps passed
                 </span>
             <Button
@@ -3358,7 +3358,7 @@ Recorded Test
 
       {/* Merge Preview Dialog */}
       <Dialog open={showMergePreview} onOpenChange={setShowMergePreview}>
-        <DialogContent className="max-w-3xl h-[80vh] bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10 flex flex-col overflow-hidden">
+        <DialogContent className="max-w-3xl h-[80vh] bg-card border-border flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-white flex items-center gap-2">
               <Merge className="h-5 w-5 text-purple-400" />
@@ -3366,14 +3366,14 @@ Recorded Test
             </DialogTitle>
           </DialogHeader>
           
-          <div className="text-sm text-gray-500 dark:text-gray-400 pb-3 border-b border-gray-200 dark:border-white/10 shrink-0">
+          <div className="text-sm text-muted-foreground pb-3 border-b border-border shrink-0">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 Automated ({mergedSteps.filter(s => s.qword && !s._manualOnly).length})
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-gray-500" />
+                <span className="w-2 h-2 rounded-full bg-muted-foreground" />
                 Manual Only ({mergedSteps.filter(s => s._manualOnly).length})
               </span>
               <span className="flex items-center gap-1">
@@ -3393,13 +3393,13 @@ Recorded Test
                   className={cn(
                     "p-3 rounded-lg border",
                     step._merged && "bg-emerald-500/10 border-emerald-500/30",
-                    step._manualOnly && "bg-gray-500/10 border-gray-500/30",
+                    step._manualOnly && "bg-muted-foreground/10 border-gray-500/30",
                     step._extra && "bg-purple-500/10 border-purple-500/30",
                     !step._merged && !step._manualOnly && !step._extra && step.qword && "bg-emerald-500/10 border-emerald-500/30"
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-sm text-gray-500 w-6 shrink-0">{idx + 1}</span>
+                    <span className="text-sm text-muted-foreground w-6 shrink-0">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-white text-sm truncate">
@@ -3409,14 +3409,14 @@ Recorded Test
                           <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Merged</Badge>
                         )}
                         {step._manualOnly && (
-                          <Badge className="bg-gray-500/20 text-gray-500 dark:text-gray-400 text-[10px]">Manual</Badge>
+                          <Badge className="bg-muted-foreground/20 text-muted-foreground text-[10px]">Manual</Badge>
                         )}
                         {step._extra && (
                           <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">New Step</Badge>
                         )}
                       </div>
                       {step.qword && (
-                        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                           <Badge variant="outline" className="text-[10px] border-white/20">
                             {step.qword}
                           </Badge>
@@ -3427,7 +3427,7 @@ Recorded Test
                     {step.qword ? (
                       <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
                     ) : (
-                      <AlertCircle className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />
+                      <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
                   </div>
                 </div>
@@ -3436,7 +3436,7 @@ Recorded Test
             </ScrollArea>
           </div>
           
-          <DialogFooter className="border-t border-gray-200 dark:border-white/10 pt-4 shrink-0">
+          <DialogFooter className="border-t border-border pt-4 shrink-0">
             <Button variant="outline" onClick={() => setShowMergePreview(false)} className="border-white/20">
               Cancel
             </Button>
@@ -3450,13 +3450,13 @@ Recorded Test
 
       {/* SF Tools Customization Dialog */}
       <Dialog open={showSFToolDialog} onOpenChange={setShowSFToolDialog}>
-        <DialogContent className="max-w-lg bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10">
+        <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               {sfToolType === 'soql' && <><Database className="h-5 w-5 text-blue-400" /> Add SOQL Query Step</>}
               {sfToolType === 'apex' && <><Zap className="h-5 w-5 text-emerald-400" /> Add Apex Execution Step</>}
               {sfToolType === 'clone' && <><Copy className="h-5 w-5 text-purple-400" /> Add Clone Record Step</>}
-              {sfToolType === 'validation' && <><Shield className="h-5 w-5 text-amber-400" /> Add Validation Assert Step</>}
+              {sfToolType === 'validation' && <><Shield className="h-5 w-5 text-primary" /> Add Validation Assert Step</>}
               {sfToolType === 'api' && <><Globe className="h-5 w-5 text-cyan-400" /> Add REST API Call Step</>}
               {sfToolType === 'datafactory' && <><Sparkles className="h-5 w-5 text-pink-400" /> Add Data Factory Step</>}
               {sfToolType === 'permission' && <><Layers className="h-5 w-5 text-indigo-400" /> Add Permission Set Step</>}
@@ -3472,23 +3472,23 @@ Recorded Test
             {sfToolType === 'soql' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">SOQL Query</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">SOQL Query</label>
                   <textarea
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="SELECT Id, Name FROM Account WHERE..."
-                    className="w-full h-24 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-blue-500 focus:outline-none"
+                    className="w-full h-24 bg-secondary border border-border rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-blue-500 focus:outline-none"
                   />
-                  <p className="text-[10px] text-gray-500 mt-1">The query result will be stored and can be used in later steps</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">The query result will be stored and can be used in later steps</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <span className="text-[10px] text-gray-500">Quick:</span>
+                  <span className="text-[10px] text-muted-foreground">Quick:</span>
                   {[
                     'SELECT Id, Name FROM Account LIMIT 10',
                     'SELECT Id, Email FROM Contact WHERE Email != null LIMIT 5',
                     'SELECT Id, Name FROM Opportunity WHERE StageName = \'Closed Won\'',
                   ].map((q, i) => (
-                    <Button key={i} variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-500 dark:text-gray-400" onClick={() => setSfToolInput(q)}>
+                    <Button key={i} variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-muted-foreground" onClick={() => setSfToolInput(q)}>
                       Template {i + 1}
                     </Button>
                   ))}
@@ -3499,26 +3499,26 @@ Recorded Test
             {sfToolType === 'apex' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Apex Code (Anonymous)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Apex Code (Anonymous)</label>
                   <textarea
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="// Your Apex code here&#10;System.debug('Hello');"
-                    className="w-full h-32 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-emerald-500 focus:outline-none"
+                    className="w-full h-32 bg-secondary border border-border rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-emerald-500 focus:outline-none"
                   />
-                  <p className="text-[10px] text-gray-500 mt-1">Execute anonymous Apex during test - useful for data setup/cleanup</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Execute anonymous Apex during test - useful for data setup/cleanup</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <span className="text-[10px] text-gray-500">Templates:</span>
-                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-500 dark:text-gray-400" 
+                  <span className="text-[10px] text-muted-foreground">Templates:</span>
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-muted-foreground" 
                     onClick={() => setSfToolInput('// Insert test data\nAccount acc = new Account(Name = \'Test Account\');\ninsert acc;')}>
                     Insert Record
                   </Button>
-                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-500 dark:text-gray-400"
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-muted-foreground"
                     onClick={() => setSfToolInput('// Delete test data\ndelete [SELECT Id FROM Account WHERE Name LIKE \'Test%\'];')}>
                     Delete Records
                   </Button>
-                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-gray-500 dark:text-gray-400"
+                  <Button variant="outline" size="sm" className="h-5 text-[9px] px-1.5 border-white/20 text-muted-foreground"
                     onClick={() => setSfToolInput('// Update records\nList<Account> accs = [SELECT Id FROM Account LIMIT 5];\nfor(Account a : accs) { a.Description = \'Updated\'; }\nupdate accs;')}>
                     Update Records
                   </Button>
@@ -3529,64 +3529,64 @@ Recorded Test
             {sfToolType === 'clone' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Object Type</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Object Type</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Opportunity..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Record ID (optional - will use current page if empty)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Record ID (optional - will use current page if empty)</label>
                   <Input
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="001XXXXXXXXXXXX or leave empty"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Clone will duplicate the record with a new ID, copying all cloneable fields</p>
+                <p className="text-[10px] text-muted-foreground">Clone will duplicate the record with a new ID, copying all cloneable fields</p>
               </>
             )}
 
             {sfToolType === 'validation' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Validation Rule Name</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Validation Rule Name</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="e.g., Account_Name_Required"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Expected Error Message (contains)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Expected Error Message (contains)</label>
                   <Input
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="e.g., Account Name is required"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Asserts that the expected validation error appears when triggered</p>
+                <p className="text-[10px] text-muted-foreground">Asserts that the expected validation error appears when triggered</p>
               </>
             )}
 
             {sfToolType === 'api' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">API Endpoint</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">API Endpoint</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="/services/data/v59.0/sobjects/Account"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white font-mono text-sm"
+                    className="bg-secondary border-border text-white font-mono text-sm"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">HTTP Method</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">HTTP Method</label>
                   <div className="flex gap-2">
                     {['GET', 'POST', 'PATCH', 'DELETE'].map(m => (
                       <Button key={m} variant={sfToolInput2 === m ? 'default' : 'outline'} size="sm"
@@ -3597,57 +3597,57 @@ Recorded Test
                 </div>
                 {(sfToolInput2 === 'POST' || sfToolInput2 === 'PATCH') && (
                   <div>
-                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Request Body (JSON)</label>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Request Body (JSON)</label>
                     <textarea
                       value={sfToolInput3}
                       onChange={(e) => setSfToolInput3(e.target.value)}
                       placeholder='{"Name": "Test Account"}'
-                      className="w-full h-20 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                      className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
                     />
                   </div>
                 )}
-                <p className="text-[10px] text-gray-500">Make a REST API call to Salesforce - useful for data setup/cleanup</p>
+                <p className="text-[10px] text-muted-foreground">Make a REST API call to Salesforce - useful for data setup/cleanup</p>
               </>
             )}
 
             {sfToolType === 'datafactory' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Object Type</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Object Type</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Lead..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Number of Records</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Number of Records</label>
                   <Input
                     type="number"
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="5"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white w-24"
+                    className="bg-secondary border-border text-white w-24"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Generate test records with random data - great for bulk testing</p>
+                <p className="text-[10px] text-muted-foreground">Generate test records with random data - great for bulk testing</p>
               </>
             )}
 
             {sfToolType === 'permission' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Permission Set Name</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Permission Set Name</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Sales_Cloud_Admin, Service_User..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Action</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Action</label>
                   <div className="flex gap-2">
                     <Button variant={sfToolInput2 === 'assign' ? 'default' : 'outline'} size="sm"
                       className={sfToolInput2 === 'assign' ? 'bg-indigo-600' : 'border-white/20'}
@@ -3657,104 +3657,104 @@ Recorded Test
                       onClick={() => setSfToolInput2('remove')}>Remove</Button>
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500">Assign or remove permission sets for the current test user</p>
+                <p className="text-[10px] text-muted-foreground">Assign or remove permission sets for the current test user</p>
               </>
             )}
 
             {sfToolType === 'flow' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Flow API Name</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Flow API Name</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="My_Automation_Flow"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Input Variables (JSON, optional)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Input Variables (JSON, optional)</label>
                   <textarea
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"recordId": "001XXXXXXXXXXXX"}'
-                    className="w-full h-16 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Manually trigger a Flow to test automation logic</p>
+                <p className="text-[10px] text-muted-foreground">Manually trigger a Flow to test automation logic</p>
               </>
             )}
 
             {sfToolType === 'apextest' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Test Class Name</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Test Class Name</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="AccountTriggerTest, ContactServiceTest..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Test Method (optional - runs all if empty)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Test Method (optional - runs all if empty)</label>
                   <Input
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="testInsertAccount"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Run Apex tests as part of your test flow - validates backend logic</p>
+                <p className="text-[10px] text-muted-foreground">Run Apex tests as part of your test flow - validates backend logic</p>
               </>
             )}
 
             {sfToolType === 'createrecord' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Object Type</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Object Type</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Opportunity..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Field Values (JSON)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Field Values (JSON)</label>
                   <textarea
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"Name": "Test Account", "Industry": "Technology"}'
-                    className="w-full h-20 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Create a single record via API - the record ID will be stored for later use</p>
+                <p className="text-[10px] text-muted-foreground">Create a single record via API - the record ID will be stored for later use</p>
               </>
             )}
 
             {sfToolType === 'bulkload' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Object Type</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Object Type</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Lead..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">CSV File Path or Variable</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">CSV File Path or Variable</label>
                   <Input
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="./test-data/accounts.csv or ${csvData}"
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white font-mono text-sm"
+                    className="bg-secondary border-border text-white font-mono text-sm"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Operation</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Operation</label>
                   <div className="flex gap-2">
                     {['insert', 'update', 'upsert', 'delete'].map(op => (
                       <Button key={op} variant={sfToolInput3 === op ? 'default' : 'outline'} size="sm"
@@ -3763,31 +3763,31 @@ Recorded Test
                     ))}
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-500">Bulk load data from CSV - useful for data-driven testing</p>
+                <p className="text-[10px] text-muted-foreground">Bulk load data from CSV - useful for data-driven testing</p>
               </>
             )}
 
             {sfToolType === 'runreport' && (
               <>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Report API Name or ID</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Report API Name or ID</label>
                   <Input
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Monthly_Sales_Report or 00O..."
-                    className="bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white"
+                    className="bg-secondary border-border text-white"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">Filters (JSON, optional)</label>
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Filters (JSON, optional)</label>
                   <textarea
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"column": "ACCOUNT_NAME", "operator": "contains", "value": "Test"}'
-                    className="w-full h-16 bg-[#1a1a25] border border-gray-200 dark:border-white/10 rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Run a Salesforce report and store results for assertions</p>
+                <p className="text-[10px] text-muted-foreground">Run a Salesforce report and store results for assertions</p>
               </>
             )}
           </div>
@@ -3840,7 +3840,7 @@ Recorded Test
                 sfToolType === 'soql' && "bg-blue-600 hover:bg-blue-700",
                 sfToolType === 'apex' && "bg-emerald-600 hover:bg-emerald-700",
                 sfToolType === 'clone' && "bg-purple-600 hover:bg-purple-700",
-                sfToolType === 'validation' && "bg-amber-600 hover:bg-amber-700",
+                sfToolType === 'validation' && "bg-primary hover:bg-primary/90",
                 sfToolType === 'api' && "bg-cyan-600 hover:bg-cyan-700",
                 sfToolType === 'datafactory' && "bg-pink-600 hover:bg-pink-700",
                 sfToolType === 'permission' && "bg-indigo-600 hover:bg-indigo-700",
@@ -3875,17 +3875,17 @@ function SuggestionItem({
     const qword = suggestion.qword?.toLowerCase() || '';
     if (qword === 'fill') return <PenLine className="h-4 w-4 text-purple-400" />;
     if (qword.includes('click')) return <Hand className="h-4 w-4 text-emerald-400" />;
-    return <CircleDot className="h-4 w-4 text-gray-500 dark:text-gray-400" />;
+    return <CircleDot className="h-4 w-4 text-muted-foreground" />;
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-[#12121a] hover:bg-gray-50 dark:hover:bg-[#1a1a25] border border-transparent hover:border-gray-200 dark:border-white/10 group">
+    <div className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-accent border border-transparent hover:border-border group">
       {getIcon()}
       <div className="flex-1 min-w-0">
         <p className="text-sm text-white truncate">{suggestion.element || suggestion.args?.[0] || suggestion.description}</p>
               </div>
       {suggestion.count && suggestion.count > 1 && (
-        <Badge className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5">
+        <Badge className="bg-amber-500/20 text-primary text-[10px] px-1.5">
           {suggestion.count} FOUND
         </Badge>
       )}

@@ -908,7 +908,7 @@ export function SalesforceToolsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Org List */}
                 <div className="lg:col-span-2">
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-foreground">Connected Orgs</CardTitle>
@@ -922,9 +922,9 @@ export function SalesforceToolsPage() {
                     <CardContent>
                       {orgs.length === 0 ? (
                         <div className="text-center py-12">
-                          <Cloud className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                          <Cloud className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                           <h3 className="text-lg font-medium text-foreground mb-2">No orgs connected</h3>
-                          <p className="text-slate-400 mb-4">Connect a Salesforce org to get started</p>
+                          <p className="text-muted-foreground mb-4">Connect a Salesforce org to get started</p>
                           <Button onClick={() => setShowAddOrgDialog(true)} className="gap-2">
                             <Plus className="w-4 h-4" />
                             Connect Your First Org
@@ -937,8 +937,8 @@ export function SalesforceToolsPage() {
                               key={org.id}
                               className={`p-4 rounded-lg border transition-all cursor-pointer ${
                                 currentOrg?.id === org.id
-                                  ? 'bg-slate-700/50 border-blue-500/50'
-                                  : 'bg-slate-800/30 border-slate-700/50 hover:border-slate-600'
+                                  ? 'bg-primary/10 border-primary/50'
+                                  : 'bg-secondary border-border hover:border-primary/30'
                               }`}
                               onClick={() => handleSelectOrg(org.id)}
                             >
@@ -959,7 +959,7 @@ export function SalesforceToolsPage() {
                                         </Badge>
                                       )}
                                     </div>
-                                    <div className="text-sm text-slate-400">{org.username}</div>
+                                    <div className="text-sm text-muted-foreground">{org.username}</div>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -973,13 +973,13 @@ export function SalesforceToolsPage() {
                                       e.stopPropagation();
                                       handleRemoveOrg(org.id);
                                     }}
-                                    className="text-slate-400 hover:text-red-400"
+                                    className="text-muted-foreground hover:text-red-400"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
                                 </div>
                               </div>
-                              <div className="mt-2 text-xs text-slate-500">
+                              <div className="mt-2 text-xs text-muted-foreground">
                                 {org.instanceUrl}
                               </div>
                             </div>
@@ -992,7 +992,7 @@ export function SalesforceToolsPage() {
 
                 {/* API Limits */}
                 <div>
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-foreground">API Limits</CardTitle>
@@ -1008,7 +1008,7 @@ export function SalesforceToolsPage() {
                     </CardHeader>
                     <CardContent>
                       {!currentOrg ? (
-                        <p className="text-slate-400 text-sm">Select an org to view limits</p>
+                        <p className="text-muted-foreground text-sm">Select an org to view limits</p>
                       ) : apiLimits ? (
                         <div className="space-y-4">
                           {Object.entries(apiLimits).slice(0, 6).map(([key, value]: [string, any]) => {
@@ -1016,10 +1016,10 @@ export function SalesforceToolsPage() {
                             return (
                               <div key={key}>
                                 <div className="flex justify-between text-sm mb-1">
-                                  <span className="text-slate-400">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                  <span className="text-muted-foreground">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
                                   <span className="text-foreground">{value.Remaining.toLocaleString()} / {value.Max.toLocaleString()}</span>
                                 </div>
-                                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div className="h-2 bg-secondary rounded-full overflow-hidden">
                                   <div
                                     className={`h-full transition-all ${
                                       percentage > 80 ? 'bg-red-500' :
@@ -1074,7 +1074,7 @@ export function SalesforceToolsPage() {
 
                 {/* Results Table */}
                 {queryResults.length > 0 && (
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader className="py-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-foreground text-sm flex items-center gap-2">
@@ -1104,11 +1104,11 @@ export function SalesforceToolsPage() {
                     <CardContent className="p-0">
                       <div className="overflow-auto max-h-[400px]">
                         <table className="w-full text-sm">
-                          <thead className="bg-slate-800 sticky top-0">
+                          <thead className="bg-secondary sticky top-0">
                             <tr>
-                              <th className="px-4 py-2 text-left text-slate-500 font-medium w-12">#</th>
+                              <th className="px-4 py-2 text-left text-muted-foreground font-medium w-12">#</th>
                               {queryColumns.map(col => (
-                                <th key={col} className="px-4 py-2 text-left text-slate-300 font-medium">
+                                <th key={col} className="px-4 py-2 text-left text-foreground font-medium">
                                   {col}
                                 </th>
                               ))}
@@ -1116,10 +1116,10 @@ export function SalesforceToolsPage() {
                           </thead>
                           <tbody>
                             {queryResults.map((record, idx) => (
-                              <tr key={idx} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                <td className="px-4 py-2 text-slate-500">{idx + 1}</td>
+                              <tr key={idx} className="border-t border-border hover:bg-secondary/50">
+                                <td className="px-4 py-2 text-muted-foreground">{idx + 1}</td>
                                 {queryColumns.map(col => (
-                                  <td key={col} className="px-4 py-2 text-slate-300">
+                                  <td key={col} className="px-4 py-2 text-foreground">
                                     {typeof record[col] === 'object' 
                                       ? JSON.stringify(record[col])
                                       : String(record[col] ?? '')}
@@ -1136,7 +1136,7 @@ export function SalesforceToolsPage() {
 
                 {/* Empty state */}
                 {!queryError && queryResults.length === 0 && (
-                  <div className="text-center py-12 text-slate-500">
+                  <div className="text-center py-12 text-muted-foreground">
                     <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>Run a SOQL query to see results</p>
                     <p className="text-sm mt-1">Press Ctrl+Enter or click Run</p>
@@ -1149,7 +1149,7 @@ export function SalesforceToolsPage() {
             <TabsContent value="bulk">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
                       <CardTitle className="text-foreground">Bulk Data Loader</CardTitle>
                       <CardDescription>Insert, update, or delete thousands of records</CardDescription>
@@ -1200,7 +1200,7 @@ export function SalesforceToolsPage() {
                             value={bulkCsvData}
                             onChange={(e) => setBulkCsvData(e.target.value)}
                             placeholder="Name,Phone,Website&#10;Acme Corp,(555) 123-4567,www.acme.com"
-                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[200px] text-gray-900 dark:text-white placeholder:text-slate-500"
+                            className="font-mono text-sm bg-input border-border min-h-[200px] text-foreground placeholder:text-muted-foreground"
                           />
                         </div>
 
@@ -1217,7 +1217,7 @@ export function SalesforceToolsPage() {
                             )}
                             Start Bulk Job
                           </Button>
-                          <Button variant="outline" asChild className="text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
+                          <Button variant="outline" asChild className="text-foreground border-border hover:text-foreground hover:bg-secondary">
                             <label className="cursor-pointer gap-2">
                               <FolderOpen className="w-4 h-4" />
                               Upload CSV
@@ -1246,15 +1246,15 @@ export function SalesforceToolsPage() {
 
                 {/* Job Status */}
                 <div>
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white text-sm">Job Status</CardTitle>
+                      <CardTitle className="text-foreground text-sm">Job Status</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {bulkJobStatus ? (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-400">State</span>
+                            <span className="text-muted-foreground">State</span>
                             <Badge className={
                               bulkJobStatus.state === 'JobComplete' ? 'bg-green-500/20 text-green-400' :
                               bulkJobStatus.state === 'Failed' ? 'bg-red-500/20 text-red-400' :
@@ -1264,20 +1264,20 @@ export function SalesforceToolsPage() {
                             </Badge>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-400">Processed</span>
-                            <span className="text-gray-900 dark:text-white">{bulkJobStatus.numberRecordsProcessed}</span>
+                            <span className="text-muted-foreground">Processed</span>
+                            <span className="text-foreground">{bulkJobStatus.numberRecordsProcessed}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-400">Failed</span>
+                            <span className="text-muted-foreground">Failed</span>
                             <span className="text-red-400">{bulkJobStatus.numberRecordsFailed}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-400">Job ID</span>
-                            <span className="text-gray-900 dark:text-white font-mono text-xs">{bulkJobStatus.id}</span>
+                            <span className="text-muted-foreground">Job ID</span>
+                            <span className="text-foreground font-mono text-xs">{bulkJobStatus.id}</span>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-slate-500 text-sm">No active job</p>
+                        <p className="text-muted-foreground text-sm">No active job</p>
                       )}
                     </CardContent>
                   </Card>
@@ -1289,9 +1289,9 @@ export function SalesforceToolsPage() {
             <TabsContent value="api">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* API Reference Browser */}
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-gray-900 dark:text-white text-sm">API Reference</CardTitle>
+                    <CardTitle className="text-foreground text-sm">API Reference</CardTitle>
                     <CardDescription className="text-xs">Click any endpoint to load it</CardDescription>
                   </CardHeader>
                   <CardContent className="p-3">
@@ -1307,9 +1307,9 @@ export function SalesforceToolsPage() {
                 </Card>
 
                 {/* Request Builder */}
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-gray-900 dark:text-white text-sm">Request Builder</CardTitle>
+                    <CardTitle className="text-foreground text-sm">Request Builder</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -1329,18 +1329,18 @@ export function SalesforceToolsPage() {
                           value={apiEndpoint}
                           onChange={(e) => setApiEndpoint(e.target.value)}
                           placeholder="/sobjects/Account/describe"
-                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-sm text-gray-900 dark:text-white placeholder:text-slate-500"
+                          className="flex-1 bg-input border-border font-mono text-sm text-foreground placeholder:text-muted-foreground"
                         />
                       </div>
 
                       {(apiMethod === 'POST' || apiMethod === 'PATCH') && (
                         <div>
-                          <Label className="text-slate-400 text-xs">Request Body (JSON)</Label>
+                          <Label className="text-muted-foreground text-xs">Request Body (JSON)</Label>
                           <Textarea
                             value={apiBody}
                             onChange={(e) => setApiBody(e.target.value)}
                             placeholder='{"Name": "Test Account"}'
-                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[150px] text-gray-900 dark:text-white placeholder:text-slate-500 mt-1"
+                            className="font-mono text-sm bg-input border-border min-h-[150px] text-foreground placeholder:text-muted-foreground mt-1"
                           />
                         </div>
                       )}
@@ -1366,7 +1366,7 @@ export function SalesforceToolsPage() {
                             setApiResponse(null);
                             setApiError(null);
                           }}
-                          className="text-slate-300 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700"
+                          className="text-foreground border-border hover:text-foreground hover:bg-secondary"
                         >
                           Clear
                         </Button>
@@ -1374,9 +1374,9 @@ export function SalesforceToolsPage() {
 
                       {/* Full URL Preview */}
                       {currentOrg && apiEndpoint && (
-                        <div className="p-2 rounded bg-slate-900/50 border border-slate-700">
-                          <Label className="text-slate-500 text-xs">Full URL</Label>
-                          <code className="text-xs text-slate-400 font-mono block mt-1 break-all">
+                        <div className="p-2 rounded bg-input/50 border border-border">
+                          <Label className="text-muted-foreground text-xs">Full URL</Label>
+                          <code className="text-xs text-muted-foreground font-mono block mt-1 break-all">
                             {currentOrg.instanceUrl}/services/data/v59.0{apiEndpoint}
                           </code>
                         </div>
@@ -1386,10 +1386,10 @@ export function SalesforceToolsPage() {
                 </Card>
 
                 {/* Response */}
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-gray-900 dark:text-white text-sm">Response</CardTitle>
+                      <CardTitle className="text-foreground text-sm">Response</CardTitle>
                       {apiResponse && (
                         <Button
                           variant="ghost"
@@ -1411,11 +1411,11 @@ export function SalesforceToolsPage() {
                         {apiError}
                       </div>
                     ) : apiResponse ? (
-                      <pre className="p-4 rounded-lg bg-slate-900 border border-slate-700 overflow-auto max-h-[500px] text-xs text-slate-300 font-mono">
+                      <pre className="p-4 rounded-lg bg-input border border-border overflow-auto max-h-[500px] text-xs text-foreground font-mono">
                         {JSON.stringify(apiResponse, null, 2)}
                       </pre>
                     ) : (
-                      <div className="text-center py-12 text-slate-500">
+                      <div className="text-center py-12 text-muted-foreground">
                         <Code className="w-10 h-10 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">Select an endpoint and send a request</p>
                       </div>
@@ -1430,10 +1430,10 @@ export function SalesforceToolsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 {/* Object List */}
                 <div>
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-gray-900 dark:text-white text-sm">Objects</CardTitle>
+                        <CardTitle className="text-foreground text-sm">Objects</CardTitle>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1458,7 +1458,7 @@ export function SalesforceToolsPage() {
                             checked={showCustomOnly}
                             onCheckedChange={(c) => setShowCustomOnly(!!c)}
                           />
-                          <Label htmlFor="customOnly" className="text-sm text-slate-400">
+                          <Label htmlFor="customOnly" className="text-sm text-muted-foreground">
                             Custom objects only
                           </Label>
                         </div>
@@ -1469,7 +1469,7 @@ export function SalesforceToolsPage() {
                               className={`p-2 rounded cursor-pointer transition-colors ${
                                 selectedObject === obj.name
                                   ? 'bg-blue-500/20 text-blue-400'
-                                  : 'hover:bg-slate-700/50 text-slate-300'
+                                  : 'hover:bg-secondary/50 text-foreground'
                               }`}
                               onClick={() => loadObjectDescribe(obj.name)}
                             >
@@ -1477,7 +1477,7 @@ export function SalesforceToolsPage() {
                                 {obj.custom && <Badge variant="outline" className="text-[10px] px-1 text-blue-300 border-blue-500/50">C</Badge>}
                                 <span className="text-sm truncate">{obj.label}</span>
                               </div>
-                              <div className="text-xs text-slate-500">{obj.name}</div>
+                              <div className="text-xs text-muted-foreground">{obj.name}</div>
                             </div>
                           ))}
                           {objects.length === 0 && (
@@ -1493,9 +1493,9 @@ export function SalesforceToolsPage() {
 
                 {/* Object Details */}
                 <div className="lg:col-span-3">
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white">
+                      <CardTitle className="text-foreground">
                         {objectDescribe ? `${objectDescribe.label} (${objectDescribe.name})` : 'Select an Object'}
                       </CardTitle>
                     </CardHeader>
@@ -1512,21 +1512,21 @@ export function SalesforceToolsPage() {
                           </div>
 
                           {/* Fields Table */}
-                          <div className="overflow-auto max-h-[500px] rounded-lg border border-slate-700">
+                          <div className="overflow-auto max-h-[500px] rounded-lg border border-border">
                             <table className="w-full text-sm">
-                              <thead className="bg-slate-800 sticky top-0">
+                              <thead className="bg-secondary sticky top-0">
                                 <tr>
-                                  <th className="px-4 py-2 text-left text-slate-300">Field</th>
-                                  <th className="px-4 py-2 text-left text-slate-300">API Name</th>
-                                  <th className="px-4 py-2 text-left text-slate-300">Type</th>
-                                  <th className="px-4 py-2 text-left text-slate-300">Properties</th>
+                                  <th className="px-4 py-2 text-left text-foreground">Field</th>
+                                  <th className="px-4 py-2 text-left text-foreground">API Name</th>
+                                  <th className="px-4 py-2 text-left text-foreground">Type</th>
+                                  <th className="px-4 py-2 text-left text-foreground">Properties</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {objectDescribe.fields.map(field => (
-                                  <tr key={field.name} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                    <td className="px-4 py-2 text-gray-900 dark:text-white">{field.label}</td>
-                                    <td className="px-4 py-2 text-slate-300 font-mono text-xs">{field.name}</td>
+                                  <tr key={field.name} className="border-t border-border hover:bg-secondary/50">
+                                    <td className="px-4 py-2 text-foreground">{field.label}</td>
+                                    <td className="px-4 py-2 text-foreground font-mono text-xs">{field.name}</td>
                                     <td className="px-4 py-2">
                                       <Badge variant="outline" className="text-xs text-cyan-300 border-cyan-500/50 bg-cyan-900/20">
                                         {field.type}
@@ -1548,7 +1548,7 @@ export function SalesforceToolsPage() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-slate-500">Select an object from the list to view its schema</p>
+                        <p className="text-muted-foreground">Select an object from the list to view its schema</p>
                       )}
                     </CardContent>
                   </Card>
@@ -1559,9 +1559,9 @@ export function SalesforceToolsPage() {
             {/* ==================== RECORD INSPECTOR TAB ==================== */}
             <TabsContent value="inspect">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader>
-                    <CardTitle className="text-gray-900 dark:text-white">Record Inspector</CardTitle>
+                    <CardTitle className="text-foreground">Record Inspector</CardTitle>
                     <CardDescription>View any Salesforce record by ID</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1571,7 +1571,7 @@ export function SalesforceToolsPage() {
                           value={inspectRecordId}
                           onChange={(e) => setInspectRecordId(e.target.value)}
                           placeholder="Enter Record ID (e.g., 001xx...)"
-                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-gray-900 dark:text-white placeholder:text-slate-500"
+                          className="flex-1 bg-input border-border font-mono text-foreground placeholder:text-muted-foreground"
                         />
                         <Button
                           onClick={handleInspectRecord}
@@ -1594,10 +1594,10 @@ export function SalesforceToolsPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-gray-900 dark:text-white">Record Details</CardTitle>
+                      <CardTitle className="text-foreground">Record Details</CardTitle>
                       {inspectedRecord && (
                         <Button
                           variant="ghost"
@@ -1618,16 +1618,16 @@ export function SalesforceToolsPage() {
                         {Object.entries(inspectedRecord)
                           .filter(([key]) => key !== 'attributes')
                           .map(([key, value]) => (
-                            <div key={key} className="flex justify-between p-2 rounded bg-slate-900/50">
-                              <span className="text-slate-400 text-sm">{key}</span>
-                              <span className="text-gray-900 dark:text-white text-sm font-mono">
+                            <div key={key} className="flex justify-between p-2 rounded bg-input/50">
+                              <span className="text-muted-foreground text-sm">{key}</span>
+                              <span className="text-foreground text-sm font-mono">
                                 {typeof value === 'object' ? JSON.stringify(value) : String(value ?? 'null')}
                               </span>
                             </div>
                           ))}
                       </div>
                     ) : (
-                      <p className="text-slate-500 text-sm">Enter a record ID to inspect</p>
+                      <p className="text-muted-foreground text-sm">Enter a record ID to inspect</p>
                     )}
                   </CardContent>
                 </Card>
@@ -1638,10 +1638,10 @@ export function SalesforceToolsPage() {
             <TabsContent value="tests">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Test Classes */}
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-gray-900 dark:text-white text-sm">Test Classes</CardTitle>
+                      <CardTitle className="text-foreground text-sm">Test Classes</CardTitle>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1657,7 +1657,7 @@ export function SalesforceToolsPage() {
                       {testClasses.map(cls => (
                         <div
                           key={cls.Id}
-                          className="flex items-center gap-2 p-2 rounded hover:bg-slate-700/50"
+                          className="flex items-center gap-2 p-2 rounded hover:bg-secondary/50"
                         >
                           <Checkbox
                             checked={selectedTestClasses.includes(cls.Id)}
@@ -1669,7 +1669,7 @@ export function SalesforceToolsPage() {
                               }
                             }}
                           />
-                          <span className="text-sm text-slate-300">{cls.Name}</span>
+                          <span className="text-sm text-foreground">{cls.Name}</span>
                         </div>
                       ))}
                       {testClasses.length === 0 && (
@@ -1697,10 +1697,10 @@ export function SalesforceToolsPage() {
 
                 {/* Test Results */}
                 <div className="lg:col-span-2">
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-gray-900 dark:text-white">Test Results</CardTitle>
+                        <CardTitle className="text-foreground">Test Results</CardTitle>
                         {testRunStatus !== 'idle' && (
                           <Badge className={
                             testRunStatus === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -1730,11 +1730,11 @@ export function SalesforceToolsPage() {
                                   ) : (
                                     <X className="w-4 h-4 text-red-400" />
                                   )}
-                                  <span className="text-gray-900 dark:text-white font-medium">
+                                  <span className="text-foreground font-medium">
                                     {result.apexClass?.name}.{result.methodName}
                                   </span>
                                 </div>
-                                <span className="text-slate-400 text-sm">{result.runTime}ms</span>
+                                <span className="text-muted-foreground text-sm">{result.runTime}ms</span>
                               </div>
                               {result.message && (
                                 <div className="mt-2 text-sm text-red-400">{result.message}</div>
@@ -1743,7 +1743,7 @@ export function SalesforceToolsPage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-slate-500 text-sm">Select test classes and run tests to see results</p>
+                        <p className="text-muted-foreground text-sm">Select test classes and run tests to see results</p>
                       )}
                     </CardContent>
                   </Card>
@@ -1754,9 +1754,9 @@ export function SalesforceToolsPage() {
             {/* ==================== PERMISSIONS TAB ==================== */}
             <TabsContent value="permissions">
               <div className="space-y-6">
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-card border-border">
                   <CardHeader>
-                    <CardTitle className="text-gray-900 dark:text-white">Permission Analyzer</CardTitle>
+                    <CardTitle className="text-foreground">Permission Analyzer</CardTitle>
                     <CardDescription>Check user permissions on objects and fields</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1765,7 +1765,7 @@ export function SalesforceToolsPage() {
                         value={permissionUserId}
                         onChange={(e) => setPermissionUserId(e.target.value)}
                         placeholder="User ID (leave blank for current user)"
-                        className="max-w-md bg-slate-900 border-slate-700 font-mono text-gray-900 dark:text-white placeholder:text-slate-500"
+                        className="max-w-md bg-input border-border font-mono text-foreground placeholder:text-muted-foreground"
                       />
                       <Button
                         onClick={handleAnalyzePermissions}
@@ -1784,45 +1784,45 @@ export function SalesforceToolsPage() {
                 </Card>
 
                 {objectPermissions.length > 0 && (
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white">Object Permissions</CardTitle>
+                      <CardTitle className="text-foreground">Object Permissions</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-auto max-h-[400px] rounded-lg border border-slate-700">
+                      <div className="overflow-auto max-h-[400px] rounded-lg border border-border">
                         <table className="w-full text-sm">
-                          <thead className="bg-slate-800 sticky top-0">
+                          <thead className="bg-secondary sticky top-0">
                             <tr>
-                              <th className="px-4 py-2 text-left text-slate-300">Object</th>
-                              <th className="px-4 py-2 text-center text-slate-300">Create</th>
-                              <th className="px-4 py-2 text-center text-slate-300">Read</th>
-                              <th className="px-4 py-2 text-center text-slate-300">Edit</th>
-                              <th className="px-4 py-2 text-center text-slate-300">Delete</th>
-                              <th className="px-4 py-2 text-center text-slate-300">View All</th>
-                              <th className="px-4 py-2 text-center text-slate-300">Modify All</th>
+                              <th className="px-4 py-2 text-left text-foreground">Object</th>
+                              <th className="px-4 py-2 text-center text-foreground">Create</th>
+                              <th className="px-4 py-2 text-center text-foreground">Read</th>
+                              <th className="px-4 py-2 text-center text-foreground">Edit</th>
+                              <th className="px-4 py-2 text-center text-foreground">Delete</th>
+                              <th className="px-4 py-2 text-center text-foreground">View All</th>
+                              <th className="px-4 py-2 text-center text-foreground">Modify All</th>
                             </tr>
                           </thead>
                           <tbody>
                             {objectPermissions.map((perm, idx) => (
-                              <tr key={idx} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                <td className="px-4 py-2 text-gray-900 dark:text-white">{perm.objectName}</td>
+                              <tr key={idx} className="border-t border-border hover:bg-secondary/50">
+                                <td className="px-4 py-2 text-foreground">{perm.objectName}</td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canCreate ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canCreate ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canRead ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canRead ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canEdit ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canEdit ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canDelete ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canDelete ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canViewAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canViewAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                                 <td className="px-4 py-2 text-center">
-                                  {perm.canModifyAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
+                                  {perm.canModifyAll ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-muted-foreground mx-auto" />}
                                 </td>
                               </tr>
                             ))}
@@ -1840,9 +1840,9 @@ export function SalesforceToolsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Data Generation */}
                 <div className="lg:col-span-2">
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white">Test Data Factory</CardTitle>
+                      <CardTitle className="text-foreground">Test Data Factory</CardTitle>
                       <CardDescription>Generate realistic Salesforce test data</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1901,11 +1901,11 @@ export function SalesforceToolsPage() {
                           </Button>
                           {generatedRecords.length > 0 && (
                             <>
-                              <Button variant="outline" onClick={handleExportTestDataCSV} className="gap-2 text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
+                              <Button variant="outline" onClick={handleExportTestDataCSV} className="gap-2 text-foreground border-border hover:text-foreground hover:bg-secondary">
                                 <Download className="w-4 h-4" />
                                 Export CSV
                               </Button>
-                              <Button variant="outline" onClick={handleCopyTestDataJSON} className="gap-2 text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
+                              <Button variant="outline" onClick={handleCopyTestDataJSON} className="gap-2 text-foreground border-border hover:text-foreground hover:bg-secondary">
                                 <Copy className="w-4 h-4" />
                                 Copy JSON
                               </Button>
@@ -1929,9 +1929,9 @@ export function SalesforceToolsPage() {
                           <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-blue-400">Inserting records...</span>
-                              <span className="text-gray-900 dark:text-white">{seedingProgress.current} / {seedingProgress.total}</span>
+                              <span className="text-foreground">{seedingProgress.current} / {seedingProgress.total}</span>
                             </div>
-                            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-blue-500 transition-all"
                                 style={{ width: `${(seedingProgress.current / seedingProgress.total) * 100}%` }}
@@ -1941,22 +1941,22 @@ export function SalesforceToolsPage() {
                         )}
 
                         {generatedRecords.length > 0 && (
-                          <div className="overflow-auto max-h-[400px] rounded-lg border border-slate-700">
+                          <div className="overflow-auto max-h-[400px] rounded-lg border border-border">
                             <table className="w-full text-sm">
-                              <thead className="bg-slate-800 sticky top-0">
+                              <thead className="bg-secondary sticky top-0">
                                 <tr>
-                                  <th className="px-4 py-2 text-left text-slate-300">#</th>
+                                  <th className="px-4 py-2 text-left text-foreground">#</th>
                                   {Object.keys(generatedRecords[0]?.data || {}).slice(0, 5).map(key => (
-                                    <th key={key} className="px-4 py-2 text-left text-slate-300">{key}</th>
+                                    <th key={key} className="px-4 py-2 text-left text-foreground">{key}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
                                 {generatedRecords.slice(0, 20).map((record, idx) => (
-                                  <tr key={idx} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                    <td className="px-4 py-2 text-slate-500">{idx + 1}</td>
+                                  <tr key={idx} className="border-t border-border hover:bg-secondary/50">
+                                    <td className="px-4 py-2 text-muted-foreground">{idx + 1}</td>
                                     {Object.entries(record.data).slice(0, 5).map(([key, value]) => (
-                                      <td key={key} className="px-4 py-2 text-slate-300">
+                                      <td key={key} className="px-4 py-2 text-foreground">
                                         {String(value ?? '').slice(0, 30)}
                                         {String(value ?? '').length > 30 && '...'}
                                       </td>
@@ -1966,7 +1966,7 @@ export function SalesforceToolsPage() {
                               </tbody>
                             </table>
                             {generatedRecords.length > 20 && (
-                              <div className="p-2 text-center text-slate-500 bg-slate-800/50">
+                              <div className="p-2 text-center text-muted-foreground bg-secondary/50">
                                 ... and {generatedRecords.length - 20} more records
                               </div>
                             )}
@@ -1979,9 +1979,9 @@ export function SalesforceToolsPage() {
 
                 {/* Seeding Templates */}
                 <div>
-                  <Card className="bg-slate-800/50 border-slate-700">
+                  <Card className="bg-card border-border">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white text-sm">Data Seeding Templates</CardTitle>
+                      <CardTitle className="text-foreground text-sm">Data Seeding Templates</CardTitle>
                       <CardDescription>Pre-built data sets for common scenarios</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1992,15 +1992,15 @@ export function SalesforceToolsPage() {
                             className={`p-3 rounded-lg border cursor-pointer transition-all ${
                               selectedSeedTemplate === template.name
                                 ? 'bg-purple-500/10 border-purple-500/50'
-                                : 'bg-slate-900/50 border-slate-700/50 hover:border-slate-600'
+                                : 'bg-input/50 border-border hover:border-border'
                             }`}
                             onClick={() => handleApplySeedTemplate(template.name)}
                           >
-                            <div className="font-medium text-gray-900 dark:text-white text-sm">{template.name}</div>
-                            <div className="text-xs text-slate-400 mt-1">{template.description}</div>
+                            <div className="font-medium text-foreground text-sm">{template.name}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{template.description}</div>
                             <div className="flex flex-wrap gap-1 mt-2">
                               {template.objects.map(obj => (
-                                <Badge key={obj.object} variant="outline" className="text-[10px] text-slate-200 border-slate-500 bg-slate-800/50">
+                                <Badge key={obj.object} variant="outline" className="text-[10px] text-foreground border-slate-500 bg-secondary/50">
                                   {obj.object} ({obj.count})
                                 </Badge>
                               ))}
@@ -2012,9 +2012,9 @@ export function SalesforceToolsPage() {
                   </Card>
 
                   {/* Object Fields Preview */}
-                  <Card className="bg-slate-800/50 border-slate-700 mt-4">
+                  <Card className="bg-card border-border mt-4">
                     <CardHeader>
-                      <CardTitle className="text-gray-900 dark:text-white text-sm">
+                      <CardTitle className="text-foreground text-sm">
                         {selectedDataObject} Fields
                       </CardTitle>
                     </CardHeader>
@@ -2023,9 +2023,9 @@ export function SalesforceToolsPage() {
                         {STANDARD_OBJECT_TEMPLATES.find(t => t.apiName === selectedDataObject)?.fields.map(field => (
                           <div
                             key={field.name}
-                            className="flex items-center justify-between p-2 rounded bg-slate-900/50"
+                            className="flex items-center justify-between p-2 rounded bg-input/50"
                           >
-                            <span className="text-sm text-slate-300">{field.label}</span>
+                            <span className="text-sm text-foreground">{field.label}</span>
                             <Badge variant="outline" className="text-[10px] text-cyan-300 border-cyan-500/50">
                               {field.type}
                             </Badge>
@@ -2112,9 +2112,9 @@ export function SalesforceToolsPage() {
 
         {/* Add Org Dialog */}
         <Dialog open={showAddOrgDialog} onOpenChange={setShowAddOrgDialog}>
-          <DialogContent className="bg-slate-900 border-slate-700 max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-input border-border max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-gray-900 dark:text-white">Connect Salesforce Org</DialogTitle>
+              <DialogTitle className="text-foreground">Connect Salesforce Org</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {/* Browser OAuth Option - Recommended */}
@@ -2123,7 +2123,7 @@ export function SalesforceToolsPage() {
                   <ExternalLink className="w-5 h-5 text-blue-400" />
                   <span className="font-medium text-blue-300">Recommended: Login with Browser</span>
                 </div>
-                <p className="text-sm text-slate-400 mb-3">
+                <p className="text-sm text-muted-foreground mb-3">
                   Opens Salesforce login in your browser. Works with SSO, MFA, and all org types.
                 </p>
                 <div className="space-y-2">
@@ -2132,7 +2132,7 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.orgType} 
                       onValueChange={(v) => setNewOrgForm({ ...newOrgForm, orgType: v })}
                     >
-                      <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
+                      <SelectTrigger className="w-[140px] bg-secondary border-border text-foreground">
                         <SelectValue placeholder="Org Type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2145,16 +2145,16 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.name}
                       onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
                       placeholder="Org nickname (for display)"
-                      className="flex-1 bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                      className="flex-1 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
                   <Input
                     value={newOrgForm.loginUrl}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, loginUrl: e.target.value })}
                     placeholder="Paste your Salesforce URL (e.g., https://orgfarm-xxx-dev-ed.develop.my.salesforce.com)"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-xs"
                   />
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Paste your full Salesforce login URL, or leave empty to use standard login
                   </p>
                 </div>
@@ -2302,18 +2302,18 @@ export function SalesforceToolsPage() {
                   <Key className="w-5 h-5 text-green-400" />
                   <span className="font-medium text-green-300">Quick: Connect with Session ID</span>
                 </div>
-                <p className="text-xs text-slate-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   If username/password doesn't work, copy your session from the browser.
                 </p>
                 <div className="space-y-2">
                   <Input
                     placeholder="Instance URL (e.g., https://orgfarm-xxx.develop.my.salesforce.com)"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-xs"
                     id="session-instance-url"
                   />
                   <Input
                     placeholder="Session ID (from browser cookies)"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground text-xs"
                     id="session-id-input"
                   />
                   <Button 
@@ -2370,26 +2370,26 @@ export function SalesforceToolsPage() {
 
               {/* Divider */}
               <div className="flex items-center gap-4">
-                <div className="flex-1 border-t border-slate-700" />
-                <span className="text-xs text-slate-500">OR use credentials</span>
-                <div className="flex-1 border-t border-slate-700" />
+                <div className="flex-1 border-t border-border" />
+                <span className="text-xs text-muted-foreground">OR use credentials</span>
+                <div className="flex-1 border-t border-border" />
               </div>
 
               {/* Manual Credentials */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label className="text-slate-300">Org Name</Label>
+                  <Label className="text-foreground">Org Name</Label>
                   <Input
                     value={newOrgForm.name}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
                     placeholder="My Production Org"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Org Type</Label>
+                  <Label className="text-foreground">Org Type</Label>
                   <Select value={newOrgForm.orgType} onValueChange={(v) => setNewOrgForm({ ...newOrgForm, orgType: v })}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2401,9 +2401,9 @@ export function SalesforceToolsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-slate-300">Color</Label>
+                  <Label className="text-foreground">Color</Label>
                   <Select value={newOrgForm.color} onValueChange={(v) => setNewOrgForm({ ...newOrgForm, color: v })}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2419,7 +2419,7 @@ export function SalesforceToolsPage() {
                   </Select>
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-slate-300">Login URL</Label>
+                  <Label className="text-foreground">Login URL</Label>
                   <div className="flex gap-2">
                     <Select 
                       value={newOrgForm.loginUrl.includes('login.salesforce.com') ? 'https://login.salesforce.com' : 
@@ -2430,7 +2430,7 @@ export function SalesforceToolsPage() {
                         }
                       }}
                     >
-                      <SelectTrigger className="w-[200px] bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
+                      <SelectTrigger className="w-[200px] bg-secondary border-border text-foreground">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -2443,48 +2443,48 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.loginUrl}
                       onChange={(e) => setNewOrgForm({ ...newOrgForm, loginUrl: e.target.value })}
                       placeholder="https://orgfam.my.salesforce.com"
-                      className="flex-1 bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                      className="flex-1 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     For custom domains: https://[your-domain].my.salesforce.com
                   </p>
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-slate-300">Username</Label>
+                  <Label className="text-foreground">Username</Label>
                   <Input
                     value={newOrgForm.username}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, username: e.target.value })}
                     placeholder="user@example.com"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-slate-300">Password</Label>
+                  <Label className="text-foreground">Password</Label>
                   <Input
                     type="password"
                     value={newOrgForm.password}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, password: e.target.value })}
                     placeholder="Your password"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-slate-300">Security Token (optional)</Label>
+                  <Label className="text-foreground">Security Token (optional)</Label>
                   <Input
                     value={newOrgForm.securityToken}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, securityToken: e.target.value })}
                     placeholder="Security token from Salesforce"
-                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Required if IP restrictions are enabled. Get from: Setup → My Personal Information → Reset Security Token
                   </p>
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddOrgDialog(false)} className="text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
+              <Button variant="outline" onClick={() => setShowAddOrgDialog(false)} className="text-foreground border-border hover:text-foreground hover:bg-secondary">
                 Cancel
               </Button>
               <Button onClick={handleAddOrg} disabled={isLoading} className="gap-2">

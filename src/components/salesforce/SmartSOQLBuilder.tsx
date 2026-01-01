@@ -317,7 +317,7 @@ export function SmartSOQLBuilder({
         {objectDescribe && (
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-500" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
               <Input
                 value={fieldSearch}
                 onChange={(e) => setFieldSearch(e.target.value)}
@@ -328,7 +328,7 @@ export function SmartSOQLBuilder({
             <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-400" onClick={() => {
               setSelectedFields(new Set(['Id', 'Name', 'CreatedDate', 'LastModifiedDate'].filter(f => objectDescribe.fields.some(df => df.name === f))));
             }}>Common</Button>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-gray-500" onClick={() => setSelectedFields(new Set(['Id']))}>Clear</Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-muted-foreground" onClick={() => setSelectedFields(new Set(['Id']))}>Clear</Button>
           </div>
         )}
       </div>
@@ -361,7 +361,7 @@ export function SmartSOQLBuilder({
                         }}
                         className="h-3 w-3"
                       />
-                      <span className="truncate text-gray-300" title={field.label}>{field.label}</span>
+                      <span className="truncate text-foreground" title={field.label}>{field.label}</span>
                     </label>
                   ))}
                 </div>
@@ -370,7 +370,7 @@ export function SmartSOQLBuilder({
               {/* WHERE Conditions */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-gray-500 uppercase font-medium flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium flex items-center gap-1">
                     <Filter className="h-3 w-3" /> Where
                   </span>
                   <Button size="sm" variant="ghost" className="h-5 px-2 text-[9px] text-emerald-400" onClick={addWhereCondition}>
@@ -417,7 +417,7 @@ export function SmartSOQLBuilder({
                           <Input value={cond.value} onChange={(e) => updateWhereCondition(cond.id, { value: e.target.value })} placeholder="Value" className="h-6 flex-1 text-[9px] bg-transparent border-border" />
                         )
                       )}
-                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-gray-500 hover:text-red-400" onClick={() => setWhereConditions(prev => prev.filter(c => c.id !== cond.id))}>
+                      <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400" onClick={() => setWhereConditions(prev => prev.filter(c => c.id !== cond.id))}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -427,7 +427,7 @@ export function SmartSOQLBuilder({
 
               {/* Order & Limit */}
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-500 w-14">ORDER BY</span>
+                <span className="text-[10px] text-muted-foreground w-14">ORDER BY</span>
                 <Select value={orderByField} onValueChange={setOrderByField}>
                   <SelectTrigger className="h-6 flex-1 text-[9px] bg-secondary border-border"><SelectValue placeholder="None" /></SelectTrigger>
                   <SelectContent className="bg-secondary border-border max-h-48">
@@ -442,21 +442,21 @@ export function SmartSOQLBuilder({
                     <SelectItem value="DESC">DESC</SelectItem>
                   </SelectContent>
                 </Select>
-                <span className="text-[10px] text-gray-500 ml-2">LIMIT</span>
+                <span className="text-[10px] text-muted-foreground ml-2">LIMIT</span>
                 <Input type="number" value={limit} onChange={(e) => setLimit(parseInt(e.target.value) || 100)} className="h-6 w-16 text-[9px] bg-secondary border-border" min={1} max={50000} />
               </div>
 
               {/* Generated Query */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-gray-500 uppercase font-medium flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-medium flex items-center gap-1">
                     <Code className="h-3 w-3" /> Query
                   </span>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-5 px-2 text-[9px] text-gray-400" onClick={() => setShowRawEditor(!showRawEditor)}>
+                    <Button size="sm" variant="ghost" className="h-5 px-2 text-[9px] text-muted-foreground" onClick={() => setShowRawEditor(!showRawEditor)}>
                       {showRawEditor ? 'Visual' : 'Edit'}
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-5 px-2 text-[9px] text-gray-400" onClick={() => { navigator.clipboard.writeText(showRawEditor ? rawQuery : generatedQuery); toast.success('Copied'); }}>
+                    <Button size="sm" variant="ghost" className="h-5 px-2 text-[9px] text-muted-foreground" onClick={() => { navigator.clipboard.writeText(showRawEditor ? rawQuery : generatedQuery); toast.success('Copied'); }}>
                       <Copy className="h-3 w-3" />
                     </Button>
                   </div>
@@ -482,23 +482,23 @@ export function SmartSOQLBuilder({
               
               {queryResults && (
                 <div className="space-y-1">
-                  <span className="text-[10px] text-gray-500">{queryResults.totalSize || 0} records</span>
+                  <span className="text-[10px] text-muted-foreground">{queryResults.totalSize || 0} records</span>
                   <div className="bg-secondary rounded border border-border max-h-48 overflow-auto">
                     {queryResults.records?.length > 0 ? (
                       <table className="w-full text-[9px]">
                         <thead className="bg-white/5 sticky top-0">
                           <tr>
                             {Object.keys(queryResults.records[0]).filter(k => k !== 'attributes').slice(0, 5).map(key => (
-                              <th key={key} className="px-1.5 py-1 text-left text-gray-400 font-medium">{key}</th>
+                              <th key={key} className="px-1.5 py-1 text-left text-muted-foreground font-medium">{key}</th>
                             ))}
-                            <th className="px-1.5 py-1 text-right text-gray-400 font-medium w-16">Actions</th>
+                            <th className="px-1.5 py-1 text-right text-muted-foreground font-medium w-16">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {queryResults.records.slice(0, 15).map((record: any, idx: number) => (
                             <tr key={idx} className="border-t border-border hover:bg-white/5 group">
                               {Object.entries(record).filter(([k]) => k !== 'attributes').slice(0, 5).map(([key, value]: [string, any]) => (
-                                <td key={key} className="px-1.5 py-1 text-gray-300 truncate max-w-[100px]">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</td>
+                                <td key={key} className="px-1.5 py-1 text-foreground truncate max-w-[100px]">{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')}</td>
                               ))}
                               <td className="px-1.5 py-0.5 text-right">
                                 <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -566,7 +566,7 @@ export function SmartSOQLBuilder({
                           ))}
                         </tbody>
                       </table>
-                    ) : <p className="p-2 text-center text-gray-500 text-[10px]">No records</p>}
+                    ) : <p className="p-2 text-center text-muted-foreground text-[10px]">No records</p>}
                   </div>
                 </div>
               )}
@@ -588,7 +588,7 @@ export function SmartSOQLBuilder({
               +Assert
             </Button>
             <div className="flex-1" />
-            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-400" onClick={() => { navigator.clipboard.writeText(showRawEditor ? rawQuery : generatedQuery); toast.success('Copied'); }}>
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" onClick={() => { navigator.clipboard.writeText(showRawEditor ? rawQuery : generatedQuery); toast.success('Copied'); }}>
               <Copy className="h-3.5 w-3.5" />
             </Button>
           </div>
