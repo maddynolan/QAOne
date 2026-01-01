@@ -1100,17 +1100,17 @@ export default function VirtualUserGenerator() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
+    <div className="h-full overflow-y-auto bg-background">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-              <Gauge className="w-6 h-6 text-gray-900 dark:text-white" />
+            <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-lg">
+              <Gauge className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Performance Testing</h1>
-              <p className="text-sm text-gray-400">
+              <h1 className="text-2xl font-bold text-foreground">Performance Testing</h1>
+              <p className="text-sm text-muted-foreground">
                 Load testing • Virtual users • Browser flow simulation
               </p>
             </div>
@@ -1118,7 +1118,7 @@ export default function VirtualUserGenerator() {
           <div className="flex gap-2">
             {isRunning ? (
               <>
-                <Button variant="outline" onClick={togglePause} className="border-gray-700 text-gray-300 hover:bg-gray-800">
+                <Button variant="outline" onClick={togglePause} className="border-border text-foreground hover:bg-accent">
                   {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
                   {isPaused ? "Resume" : "Pause"}
                 </Button>
@@ -1128,7 +1128,7 @@ export default function VirtualUserGenerator() {
                 </Button>
               </>
             ) : (
-              <Button onClick={startLoadTest} disabled={config.steps.length === 0} className="bg-gradient-to-r from-amber-500 to-orange-500 text-gray-900 dark:text-white hover:from-amber-400 hover:to-orange-400">
+              <Button onClick={startLoadTest} disabled={config.steps.length === 0} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Play className="w-4 h-4 mr-2" />
                 Start Load Test
               </Button>
@@ -1162,32 +1162,32 @@ export default function VirtualUserGenerator() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7 bg-gray-900 border border-gray-700 p-1">
-          <TabsTrigger value="quickstart" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+        <TabsList className="grid w-full grid-cols-7 bg-secondary border border-border p-1">
+          <TabsTrigger value="quickstart" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Zap className="w-4 h-4 mr-2" />
             Quick Start
           </TabsTrigger>
-          <TabsTrigger value="protocol" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="protocol" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Activity className="w-4 h-4 mr-2" />
             Protocol
           </TabsTrigger>
-          <TabsTrigger value="configure" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="configure" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Settings className="w-4 h-4 mr-2" />
             Configure
           </TabsTrigger>
-          <TabsTrigger value="steps" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="steps" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <FileCode className="w-4 h-4 mr-2" />
             Test Steps
           </TabsTrigger>
-          <TabsTrigger value="users" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="users" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Bot className="w-4 h-4 mr-2" />
             Virtual Users
           </TabsTrigger>
-          <TabsTrigger value="metrics" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="metrics" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <BarChart3 className="w-4 h-4 mr-2" />
             Live Metrics
           </TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 text-gray-400">
+          <TabsTrigger value="results" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <LineChart className="w-4 h-4 mr-2" />
             Results
           </TabsTrigger>
@@ -1227,13 +1227,13 @@ export default function VirtualUserGenerator() {
           </Card>
 
           {/* Quick Start Scenarios - API Testing */}
-          <Card className="bg-gray-900 border-gray-700">
+          <Card className="bg-card border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg text-gray-900 dark:text-white">
-                <Zap className="w-5 h-5 text-amber-500" />
+              <CardTitle className="flex items-center gap-2 text-lg text-foreground">
+                <Zap className="w-5 h-5 text-primary" />
                 API Performance Tests
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className="text-muted-foreground">
                 One-click scenarios to test your API. Each scenario runs against the Target URL above.
               </CardDescription>
             </CardHeader>
@@ -1242,26 +1242,26 @@ export default function VirtualUserGenerator() {
                 {QUICK_START_SCENARIOS.map((scenario) => (
                   <Card 
                     key={scenario.id}
-                    className="bg-gray-800 border-gray-700 hover:border-amber-500/50 transition-all"
+                    className="bg-secondary border-border hover:border-primary/50 transition-all"
                   >
                     <CardContent className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{scenario.icon}</span>
-                        <span className="font-medium text-sm text-gray-900 dark:text-white">{scenario.name}</span>
+                        <span className="font-medium text-sm text-foreground">{scenario.name}</span>
                       </div>
-                      <p className="text-xs text-gray-400">{scenario.description}</p>
+                      <p className="text-xs text-muted-foreground">{scenario.description}</p>
                       <div className="flex items-center gap-2 text-xs">
-                        <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
+                        <Badge variant="outline" className="text-xs border-border text-muted-foreground">
                           {scenario.virtualUsers} users
                         </Badge>
-                        <Badge variant="outline" className="text-xs border-gray-600 text-gray-300">
+                        <Badge variant="outline" className="text-xs border-border text-muted-foreground">
                           {scenario.duration}s
                         </Badge>
                       </div>
                       <Button 
                         size="sm"
                         onClick={() => runApiTest(scenario)}
-                        className="w-full mt-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white"
+                        className="w-full mt-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                         disabled={isRunning}
                       >
                         <Play className="w-3 h-3 mr-1" />
@@ -1275,29 +1275,29 @@ export default function VirtualUserGenerator() {
           </Card>
 
           {/* Browser Flow Testing - Separate Section */}
-          <Card className="bg-gray-900 border-gray-700 border-dashed">
+          <Card className="bg-card border-border border-dashed">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg text-gray-900 dark:text-white">
-                <Globe className="w-5 h-5 text-amber-500" />
+              <CardTitle className="flex items-center gap-2 text-lg text-foreground">
+                <Globe className="w-5 h-5 text-primary" />
                 Browser Flow Testing
               </CardTitle>
-              <CardDescription className="text-gray-400">
+              <CardDescription className="text-muted-foreground">
                 Import a Flowstral recording to replay user journeys with multiple virtual users
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Record a browser session using Flowstral, then import it here to run as a load test.
                     This tests actual user flows (clicks, typing, navigation) not just API endpoints.
                   </p>
                 </div>
-                <Button onClick={() => setShowImportDialog(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white">
+                <Button onClick={() => setShowImportDialog(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Upload className="w-4 h-4 mr-2" />
                   Import Recording
                 </Button>
-                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-gray-400 hover:text-gray-900 dark:text-white hover:bg-gray-800">
+                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent">
                   <FileCode className="w-4 h-4 mr-2" />
                   View Steps
                 </Button>

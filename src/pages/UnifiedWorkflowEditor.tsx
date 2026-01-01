@@ -3392,9 +3392,9 @@ export default function UnifiedWorkflowEditor() {
   console.log('[Builder] Rendering with', testCase.steps.length, 'steps');
   
   return (
-    <div className="flex flex-col overflow-hidden bg-white dark:bg-white dark:bg-gray-950 h-full text-gray-900 dark:text-white" style={{ maxHeight: 'calc(100vh - 4rem)', minHeight: '600px' }}>
+    <div className="flex flex-col overflow-hidden bg-background h-full text-foreground" style={{ maxHeight: 'calc(100vh - 4rem)', minHeight: '600px' }}>
         {/* Header */}
-        <header className="flex-none border-b border-gray-200 dark:border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-white dark:bg-gray-900 px-4 py-3">
+        <header className="flex-none border-b border-border bg-card px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left: Title - Expanded to show full name */}
             <div className="flex items-start gap-3 max-w-[400px]">
@@ -3404,7 +3404,7 @@ export default function UnifiedWorkflowEditor() {
               <div className="flex-1 min-w-0 group">
                 {/* Display mode - truncated with ellipsis */}
                 <div 
-                  className="text-lg font-semibold text-gray-900 dark:text-white leading-7 cursor-text group-focus-within:hidden"
+                  className="text-lg font-semibold text-foreground leading-7 cursor-text group-focus-within:hidden"
                   style={{ 
                     display: 'block',
                     maxHeight: '56px',
@@ -3425,7 +3425,7 @@ export default function UnifiedWorkflowEditor() {
                 <Textarea
                   value={testCase.name}
                   onChange={(e) => setTestCase(prev => ({ ...prev, name: e.target.value }))}
-                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[84px] bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 dark:text-white resize-none overflow-y-auto leading-7 opacity-0 absolute pointer-events-none focus:opacity-100 focus:relative focus:pointer-events-auto"
+                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[84px] bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-foreground resize-none overflow-y-auto leading-7 opacity-0 absolute pointer-events-none focus:opacity-100 focus:relative focus:pointer-events-auto"
                   placeholder="Test Case Name"
                   rows={1}
                   onFocus={(e) => {
@@ -3621,12 +3621,12 @@ export default function UnifiedWorkflowEditor() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Compact & Focused */}
-          <aside className="w-48 flex-none border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-y-auto">
+          <aside className="w-48 flex-none border-r border-border bg-card overflow-y-auto">
             <div className="p-2 space-y-2">
               {/* Settings Section - Compact */}
               <Collapsible defaultOpen={false}>
                 <CollapsibleTrigger asChild>
-                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-gray-700 bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-white">
+                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-border bg-secondary hover:bg-accent transition-all text-muted-foreground hover:text-foreground">
                     <Settings className="h-3.5 w-3.5" />
                     <span className="text-[11px] font-medium flex-1 text-left">Settings</span>
                     <ChevronRight className="h-3 w-3" />
@@ -3635,11 +3635,11 @@ export default function UnifiedWorkflowEditor() {
                 <CollapsibleContent className="pt-2 space-y-2">
                   {/* Domain Selector */}
                   <button 
-                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-gray-100 dark:bg-gray-800/30 border border-gray-700 hover:border-amber-500/50 flex items-center gap-2"
+                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-secondary border border-border hover:border-primary/50 flex items-center gap-2"
                     onClick={() => setShowDomainSelector(true)}
                   >
                     <span>{DOMAINS[selectedDomain]?.icon}</span>
-                    <span className="truncate text-gray-300">{DOMAINS[selectedDomain]?.label || 'Select Domain'}</span>
+                    <span className="truncate text-foreground">{DOMAINS[selectedDomain]?.label || 'Select Domain'}</span>
                   </button>
                   
                   {/* Coverage - Only show if relevant */}
@@ -3649,7 +3649,7 @@ export default function UnifiedWorkflowEditor() {
                     return (
                       <div className="px-2">
                         <div className="flex items-center justify-between text-[10px] mb-1">
-                          <span className="text-gray-500">Coverage</span>
+                          <span className="text-muted-foreground">Coverage</span>
                           <span className={`font-medium ${
                             coverage.percentage >= 80 ? 'text-green-400' :
                             coverage.percentage >= 50 ? 'text-amber-400' : 'text-red-400'
@@ -3657,7 +3657,7 @@ export default function UnifiedWorkflowEditor() {
                             {coverage.percentage}%
                           </span>
                         </div>
-                        <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-1 bg-secondary rounded-full overflow-hidden">
                           <div 
                             className={`h-full transition-all ${
                               coverage.percentage >= 80 ? 'bg-green-500' :
@@ -5044,20 +5044,20 @@ function StepCard({
       onDragEnd={onDragEnd}
       className={`group relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
         isSelected
-          ? 'ring-2 ring-amber-500 bg-amber-500/10 border-amber-500/50'
+          ? 'ring-2 ring-primary bg-primary/10 border-primary/50'
           : isDragging
           ? 'ring-2 ring-purple-500 bg-purple-500/10 border-purple-500/50 opacity-90'
           : executionStatus === 'passed'
           ? 'bg-emerald-500/10 border-emerald-500/30'
           : executionStatus === 'failed'
           ? 'bg-red-500/10 border-red-500/30'
-          : 'bg-[#1a1a25] border-white/10 hover:border-amber-500/30 hover:bg-[#1f1f2e]'
+          : 'bg-card border-border hover:border-primary/30 hover:bg-accent'
       }`}
       onClick={onSelect}
     >
       {/* Drag Handle */}
       <div className="cursor-grab opacity-0 group-hover:opacity-100 active:cursor-grabbing flex items-center">
-        <svg className="h-5 w-5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <svg className="h-5 w-5 text-muted-foreground" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
         </svg>
       </div>

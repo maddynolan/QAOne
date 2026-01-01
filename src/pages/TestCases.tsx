@@ -88,33 +88,33 @@ function StatCard({
   label, 
   value, 
   icon: Icon, 
-  color = 'amber' 
+  color = 'primary' 
 }: { 
   label: string; 
   value: number | string; 
   icon: React.ElementType;
-  color?: 'amber' | 'green' | 'red' | 'blue';
+  color?: 'primary' | 'green' | 'red' | 'blue';
 }) {
   const colorClasses = {
-    amber: 'from-amber-500/20 to-orange-500/20 text-amber-500 border-amber-500/20',
-    green: 'from-green-500/20 to-emerald-500/20 text-green-500 border-green-500/20',
-    red: 'from-red-500/20 to-rose-500/20 text-red-500 border-red-500/20',
-    blue: 'from-blue-500/20 to-cyan-500/20 text-blue-500 border-blue-500/20',
+    primary: 'bg-primary/10 text-primary border-primary/20',
+    green: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
+    red: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
+    blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
   };
 
   return (
     <div className={cn(
-      "p-4 rounded-xl bg-gradient-to-br border",
+      "p-4 rounded-xl border",
       colorClasses[color]
     )}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
         </div>
         <div className={cn(
           "w-10 h-10 rounded-lg flex items-center justify-center",
-          color === 'amber' && "bg-amber-500/20",
+          color === 'primary' && "bg-primary/20",
           color === 'green' && "bg-green-500/20",
           color === 'red' && "bg-red-500/20",
           color === 'blue' && "bg-blue-500/20"
@@ -147,39 +147,39 @@ function TestCaseCard({
 }) {
   const getStatusIcon = () => {
     if (isRunning) {
-      return <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />;
+      return <Loader2 className="w-4 h-4 text-primary animate-spin" />;
     }
     switch (testCase.lastResult) {
       case 'passed': return <CheckCircle className="w-4 h-4 text-green-500" />;
       case 'failed': return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default: return <Clock className="w-4 h-4 text-gray-500" />;
+      default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
   const getAutomationBadge = () => {
     switch (testCase.automationStatus) {
-      case 'full': return <Badge className="bg-green-500/10 text-green-400 border-green-500/20">Automated</Badge>;
-      case 'partial': return <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20">Partial</Badge>;
-      default: return <Badge className="bg-gray-500/10 text-gray-400 border-gray-500/20">Manual</Badge>;
+      case 'full': return <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">Automated</Badge>;
+      case 'partial': return <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">Partial</Badge>;
+      default: return <Badge className="bg-secondary text-muted-foreground border-border">Manual</Badge>;
     }
   };
 
   return (
-    <Card className="bg-gray-900/50 border-gray-800 hover:border-amber-500/30 transition-all duration-200 group">
+    <Card className="bg-card border-border hover:border-primary/30 transition-all duration-200 group">
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             {/* Title row */}
             <div className="flex items-center gap-2">
               {getStatusIcon()}
-              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+              <h3 className="font-semibold text-foreground truncate">
                 {testCase.name || testCase.title || 'Untitled'}
               </h3>
             </div>
             
             {/* Description */}
             {testCase.description && (
-              <p className="text-sm text-gray-400 mt-1 line-clamp-2">
+              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                 {testCase.description}
               </p>
             )}
@@ -187,7 +187,7 @@ function TestCaseCard({
             {/* Meta row */}
             <div className="flex items-center gap-3 mt-3">
               {getAutomationBadge()}
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 {testCase.steps?.length || 0} steps
               </span>
               {testCase.priority && (
@@ -195,10 +195,10 @@ function TestCaseCard({
                   variant="outline" 
                   className={cn(
                     "text-xs",
-                    testCase.priority === 'critical' && "text-red-400 border-red-400/30",
-                    testCase.priority === 'high' && "text-orange-400 border-orange-400/30",
-                    testCase.priority === 'medium' && "text-amber-400 border-amber-400/30",
-                    testCase.priority === 'low' && "text-gray-400 border-gray-400/30"
+                    testCase.priority === 'critical' && "text-red-600 dark:text-red-400 border-red-400/30",
+                    testCase.priority === 'high' && "text-orange-600 dark:text-orange-400 border-orange-400/30",
+                    testCase.priority === 'medium' && "text-yellow-600 dark:text-yellow-400 border-yellow-400/30",
+                    testCase.priority === 'low' && "text-muted-foreground border-border"
                   )}
                 >
                   {testCase.priority}
@@ -220,8 +220,8 @@ function TestCaseCard({
               className={cn(
                 "h-8 w-8",
                 isRunning 
-                  ? "text-amber-400 bg-amber-500/10" 
-                  : "text-green-400 hover:text-green-300 hover:bg-green-500/10"
+                  ? "text-primary bg-primary/10" 
+                  : "text-green-600 dark:text-green-400 hover:text-green-700 hover:bg-green-500/10"
               )}
               title={isRunning ? "Running..." : "Run test"}
             >
@@ -235,26 +235,26 @@ function TestCaseCard({
               variant="ghost"
               size="icon"
               onClick={onBuilder}
-              className="h-8 w-8 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+              className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
               title="Open in Builder"
             >
               <Wrench className="h-4 w-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900 dark:text-white">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                <DropdownMenuItem onClick={onEdit} className="text-gray-300 focus:bg-gray-800">
+              <DropdownMenuContent align="end" className="bg-popover border-border">
+                <DropdownMenuItem onClick={onEdit} className="text-foreground focus:bg-accent">
                   <Edit className="h-4 w-4 mr-2" /> Edit Details
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onBuilder} className="text-gray-300 focus:bg-gray-800">
+                <DropdownMenuItem onClick={onBuilder} className="text-foreground focus:bg-accent">
                   <Wrench className="h-4 w-4 mr-2" /> Open Builder
                 </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem onClick={onDelete} className="text-red-400 focus:bg-red-500/10">
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem onClick={onDelete} className="text-destructive focus:bg-destructive/10">
                   <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -279,7 +279,7 @@ function ExecutionHistoryPanel({
 }) {
   if (runs.length === 0) {
     return (
-      <div className="text-center py-6 text-gray-500">
+      <div className="text-center py-6 text-muted-foreground">
         <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
         <p className="text-sm">No recent executions</p>
       </div>
@@ -292,16 +292,16 @@ function ExecutionHistoryPanel({
         <div
           key={run.id}
           onClick={() => onViewDetails(run)}
-          className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800 transition-colors"
+          className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-accent transition-colors"
         >
           <div className="flex items-center gap-3">
             {run.status === 'passed' && <CheckCircle className="w-4 h-4 text-green-500" />}
             {run.status === 'failed' && <XCircle className="w-4 h-4 text-red-500" />}
-            {run.status === 'running' && <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />}
-            {run.status === 'skipped' && <Clock className="w-4 h-4 text-gray-500" />}
+            {run.status === 'running' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
+            {run.status === 'skipped' && <Clock className="w-4 h-4 text-muted-foreground" />}
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-48">{run.testCaseName}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm font-medium text-foreground truncate max-w-48">{run.testCaseName}</p>
+              <p className="text-xs text-muted-foreground">
                 {new Date(run.startTime).toLocaleString()} • {run.mode}
               </p>
             </div>
@@ -310,15 +310,15 @@ function ExecutionHistoryPanel({
             <Badge 
               className={cn(
                 "text-xs",
-                run.status === 'passed' && "bg-green-500/10 text-green-400",
-                run.status === 'failed' && "bg-red-500/10 text-red-400",
-                run.status === 'running' && "bg-amber-500/10 text-amber-400",
-                run.status === 'skipped' && "bg-gray-500/10 text-gray-400"
+                run.status === 'passed' && "bg-green-500/10 text-green-600 dark:text-green-400",
+                run.status === 'failed' && "bg-red-500/10 text-red-600 dark:text-red-400",
+                run.status === 'running' && "bg-primary/10 text-primary",
+                run.status === 'skipped' && "bg-secondary text-muted-foreground"
               )}
             >
               {run.passedSteps}/{run.totalSteps}
             </Badge>
-            <ChevronRight className="w-4 h-4 text-gray-600" />
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </div>
       ))}
@@ -347,9 +347,9 @@ function RunResultsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-900 border-gray-700 text-gray-900 dark:text-white">
+      <DialogContent className="max-w-2xl bg-card border-border text-foreground">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-foreground">
             {run.status === 'passed' && <CheckCircle className="w-5 h-5 text-green-500" />}
             {run.status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
             Test Results: {run.testCaseName}
@@ -359,31 +359,31 @@ function RunResultsDialog({
         <div className="space-y-4">
           {/* Summary */}
           <div className="grid grid-cols-4 gap-3">
-            <div className="p-3 bg-gray-800 rounded-lg text-center">
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{passRate}%</p>
-              <p className="text-xs text-gray-400">Pass Rate</p>
+            <div className="p-3 bg-secondary rounded-lg text-center">
+              <p className="text-2xl font-bold text-foreground">{passRate}%</p>
+              <p className="text-xs text-muted-foreground">Pass Rate</p>
             </div>
-            <div className="p-3 bg-gray-800 rounded-lg text-center">
-              <p className="text-2xl font-bold text-green-400">{run.passedSteps}</p>
-              <p className="text-xs text-gray-400">Passed</p>
+            <div className="p-3 bg-secondary rounded-lg text-center">
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{run.passedSteps}</p>
+              <p className="text-xs text-muted-foreground">Passed</p>
             </div>
-            <div className="p-3 bg-gray-800 rounded-lg text-center">
-              <p className="text-2xl font-bold text-red-400">{run.failedSteps}</p>
-              <p className="text-xs text-gray-400">Failed</p>
+            <div className="p-3 bg-secondary rounded-lg text-center">
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{run.failedSteps}</p>
+              <p className="text-xs text-muted-foreground">Failed</p>
             </div>
-            <div className="p-3 bg-gray-800 rounded-lg text-center">
-              <p className="text-2xl font-bold text-gray-300">{run.duration ? `${(run.duration / 1000).toFixed(1)}s` : '-'}</p>
-              <p className="text-xs text-gray-400">Duration</p>
+            <div className="p-3 bg-secondary rounded-lg text-center">
+              <p className="text-2xl font-bold text-foreground">{run.duration ? `${(run.duration / 1000).toFixed(1)}s` : '-'}</p>
+              <p className="text-xs text-muted-foreground">Duration</p>
             </div>
           </div>
 
           {/* Progress bar */}
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Progress</span>
-              <span className="text-gray-900 dark:text-white">{run.passedSteps}/{run.totalSteps} steps</span>
+              <span className="text-muted-foreground">Progress</span>
+              <span className="text-foreground">{run.passedSteps}/{run.totalSteps} steps</span>
             </div>
-            <Progress value={passRate} className="h-2 bg-gray-800" />
+            <Progress value={passRate} className="h-2 bg-secondary" />
           </div>
 
           {/* Step results */}
@@ -395,17 +395,17 @@ function RunResultsDialog({
                   "flex items-center justify-between p-2 rounded-lg",
                   step.status === 'passed' && "bg-green-500/10",
                   step.status === 'failed' && "bg-red-500/10",
-                  step.status === 'skipped' && "bg-gray-500/10"
+                  step.status === 'skipped' && "bg-secondary"
                 )}
               >
                 <div className="flex items-center gap-2">
                   {step.status === 'passed' && <CheckCircle className="w-4 h-4 text-green-500" />}
                   {step.status === 'failed' && <XCircle className="w-4 h-4 text-red-500" />}
-                  {step.status === 'skipped' && <Clock className="w-4 h-4 text-gray-500" />}
-                  <span className="text-sm text-gray-900 dark:text-white">Step {step.step}: {step.name}</span>
+                  {step.status === 'skipped' && <Clock className="w-4 h-4 text-muted-foreground" />}
+                  <span className="text-sm text-foreground">Step {step.step}: {step.name}</span>
                 </div>
                 {step.duration && (
-                  <span className="text-xs text-gray-500">{step.duration}ms</span>
+                  <span className="text-xs text-muted-foreground">{step.duration}ms</span>
                 )}
               </div>
             ))}
@@ -414,13 +414,13 @@ function RunResultsDialog({
           {/* Error message if failed */}
           {run.error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-sm text-red-400">{run.error}</p>
+              <p className="text-sm text-red-600 dark:text-red-400">{run.error}</p>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-gray-700 text-gray-300">
+          <Button variant="outline" onClick={onClose} className="border-border text-foreground">
             Close
           </Button>
           <Button 
@@ -430,7 +430,7 @@ function RunResultsDialog({
               navigator.clipboard.writeText(text);
               toast.success('Results copied to clipboard');
             }}
-            className="bg-gray-800 text-gray-900 dark:text-white hover:bg-gray-700"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Copy className="w-4 h-4 mr-2" />
             Copy Results
@@ -681,7 +681,7 @@ export default function TestCases() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
+    <div className="h-full overflow-y-auto bg-background">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         
         {/* ─────────────────────────────────────────────────────────────────
@@ -689,25 +689,25 @@ export default function TestCases() {
             ───────────────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <FileText className="w-7 h-7 text-amber-500" />
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <FileText className="w-7 h-7 text-primary" />
               Test Cases
             </h1>
-            <p className="text-gray-400 mt-1">Manage your manual and automated test cases</p>
+            <p className="text-muted-foreground mt-1">Manage your manual and automated test cases</p>
           </div>
           <div className="flex gap-2">
             <Button 
               variant="outline" 
               onClick={loadTestCases} 
               disabled={loading}
-              className="border-gray-700 text-gray-300 hover:bg-gray-800"
+              className="border-border text-foreground hover:bg-accent"
             >
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Refresh
             </Button>
             <Button 
               onClick={() => navigate('/test-cases/builder')}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-gray-900 dark:text-white hover:from-amber-400 hover:to-orange-400"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <Plus className="h-4 w-4 mr-2" />
               New Test Case
@@ -719,7 +719,7 @@ export default function TestCases() {
             STATS
             ───────────────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-4 gap-4">
-          <StatCard label="Total Tests" value={totalCount} icon={Layers} color="amber" />
+          <StatCard label="Total Tests" value={totalCount} icon={Layers} color="primary" />
           <StatCard label="Automated" value={automatedCount} icon={Zap} color="blue" />
           <StatCard label="Passed" value={passedCount} icon={CheckCircle} color="green" />
           <StatCard label="Failed" value={failedCount} icon={AlertCircle} color="red" />
@@ -730,15 +730,15 @@ export default function TestCases() {
             ───────────────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search test cases..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-900/50 border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 focus:border-amber-500/50 focus:ring-amber-500/20"
+              className="pl-10 bg-input border-input text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-primary/20"
             />
           </div>
-          <div className="flex items-center gap-1 bg-gray-900/50 rounded-lg p-1 border border-gray-800">
+          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 border border-border">
             {(['all', 'manual', 'automated', 'passed', 'failed'] as const).map((f) => (
               <button
                 key={f}
@@ -746,10 +746,10 @@ export default function TestCases() {
                 className={cn(
                   "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
                   filter === f 
-                    ? f === 'passed' ? "bg-green-500/10 text-green-500"
-                    : f === 'failed' ? "bg-red-500/10 text-red-500"
-                    : "bg-amber-500/10 text-amber-500" 
-                    : "text-gray-400 hover:text-gray-900 dark:text-white"
+                    ? f === 'passed' ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                    : f === 'failed' ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : "bg-primary/10 text-primary" 
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -761,14 +761,14 @@ export default function TestCases() {
             size="sm"
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className={cn(
-              "border-gray-700",
-              showHistoryPanel ? "bg-amber-500/10 text-amber-500 border-amber-500/30" : "text-gray-400 hover:text-gray-900 dark:text-white"
+              "border-border",
+              showHistoryPanel ? "bg-primary/10 text-primary border-primary/30" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <History className="w-4 h-4 mr-2" />
             History
             {executionHistory.length > 0 && (
-              <Badge className="ml-2 h-5 bg-gray-800 text-gray-300">{executionHistory.length}</Badge>
+              <Badge className="ml-2 h-5 bg-secondary text-muted-foreground">{executionHistory.length}</Badge>
             )}
           </Button>
         </div>
@@ -777,10 +777,10 @@ export default function TestCases() {
             EXECUTION HISTORY PANEL (collapsible)
             ───────────────────────────────────────────────────────────────── */}
         {showHistoryPanel && (
-          <Card className="bg-gray-900/50 border-gray-800">
-            <CardHeader className="py-3 border-b border-gray-800">
-              <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-white">
-                <History className="w-4 h-4 text-amber-500" />
+          <Card className="bg-card border-border">
+            <CardHeader className="py-3 border-b border-border">
+              <CardTitle className="text-sm flex items-center gap-2 text-foreground">
+                <History className="w-4 h-4 text-primary" />
                 Recent Executions
               </CardTitle>
             </CardHeader>
@@ -804,24 +804,24 @@ export default function TestCases() {
             ───────────────────────────────────────────────────────────────── */}
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
-            <span className="ml-3 text-gray-400">Loading test cases...</span>
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground">Loading test cases...</span>
           </div>
         ) : filteredCases.length === 0 ? (
-          <Card className="bg-gray-900/50 border-gray-800">
+          <Card className="bg-card border-border">
             <CardContent className="py-16 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
-                <FileText className="w-8 h-8 text-gray-600" />
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-secondary flex items-center justify-center">
+                <FileText className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No test cases found</h3>
-              <p className="text-gray-400 mb-6">
+              <h3 className="text-lg font-semibold text-foreground mb-2">No test cases found</h3>
+              <p className="text-muted-foreground mb-6">
                 {searchTerm 
                   ? 'Try adjusting your search criteria' 
                   : 'Create your first test case to get started'}
               </p>
               <Button 
                 onClick={() => navigate('/test-cases/builder')}
-                className="bg-gradient-to-r from-amber-500 to-orange-500"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Test Case

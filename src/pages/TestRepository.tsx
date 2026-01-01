@@ -367,7 +367,7 @@ function TreeItem({
     switch (testCase.lastResult) {
       case 'passed': return <CheckCircle className="w-3.5 h-3.5 text-green-500" />;
       case 'failed': return <AlertCircle className="w-3.5 h-3.5 text-red-500" />;
-      default: return <Clock className="w-3.5 h-3.5 text-gray-500" />;
+      default: return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
     }
   };
 
@@ -383,8 +383,8 @@ function TreeItem({
         className={cn(
           "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors group",
           isSelected 
-            ? "bg-amber-500/20 text-blue-600 dark:text-amber-400" 
-            : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-300",
+            ? "bg-primary/20 text-primary" 
+            : "hover:bg-accent text-foreground",
           "select-none"
         )}
         style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
@@ -396,7 +396,7 @@ function TreeItem({
               e.stopPropagation();
               onToggle(node.id);
             }}
-            className="p-0.5 hover:bg-gray-700 rounded"
+            className="p-0.5 hover:bg-accent rounded"
           >
             {hasChildren ? (
               isExpanded ? (
@@ -415,12 +415,12 @@ function TreeItem({
         {/* Icon */}
         {node.type === 'folder' ? (
           isExpanded ? (
-            <FolderOpen className="w-4 h-4 text-blue-600 dark:text-amber-500" />
+            <FolderOpen className="w-4 h-4 text-primary" />
           ) : (
-            <Folder className="w-4 h-4 text-blue-600 dark:text-amber-500" />
+            <Folder className="w-4 h-4 text-primary" />
           )
         ) : (
-          <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <FileText className="w-4 h-4 text-muted-foreground" />
         )}
 
         {/* Name */}
@@ -441,7 +441,7 @@ function TreeItem({
 
         {/* Folder count badge */}
         {node.type === 'folder' && (
-          <Badge className="h-5 px-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100">
+          <Badge className="h-5 px-1.5 text-xs bg-secondary text-muted-foreground opacity-0 group-hover:opacity-100">
             {folderTestCount}
           </Badge>
         )}
@@ -453,18 +453,18 @@ function TreeItem({
               e.stopPropagation();
               handleContextMenu(e);
             }}
-            className="p-0.5 hover:bg-gray-700 rounded"
+            className="p-0.5 hover:bg-accent rounded"
           >
-            <MoreVertical className="w-3.5 h-3.5 text-gray-500" />
+            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
-          <GripVertical className="w-3.5 h-3.5 text-gray-600 cursor-grab" />
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground cursor-grab" />
         </div>
       </div>
 
       {/* Context Menu */}
       {showContextMenu && (
         <div 
-          className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+          className="fixed z-50 bg-popover border border-border rounded-lg shadow-xl py-1 min-w-[160px]"
           style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -476,7 +476,7 @@ function TreeItem({
                   setShowContextMenu(false);
                 }}
                 disabled={isRootFolder}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Pencil className="w-4 h-4" />
                 Rename Folder
@@ -487,7 +487,7 @@ function TreeItem({
                   setShowContextMenu(false);
                 }}
                 disabled={isRootFolder}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete Folder
@@ -500,7 +500,7 @@ function TreeItem({
                   onRename?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent"
               >
                 <Pencil className="w-4 h-4" />
                 Rename Test
@@ -510,18 +510,18 @@ function TreeItem({
                   onDuplicate?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent"
               >
                 <Copy className="w-4 h-4" />
                 Duplicate Test
               </button>
-              <div className="border-t border-gray-700 my-1" />
+              <div className="border-t border-border my-1" />
               <button
                 onClick={() => {
                   onDelete?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-accent"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete Test
@@ -581,8 +581,8 @@ function TestCaseCard({
     <Card
       onClick={onSelect}
       className={cn(
-        "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 cursor-pointer transition-all hover:border-blue-500/50 dark:hover:border-amber-500/30 group",
-        isSelected && "border-amber-500 ring-1 ring-amber-500/30"
+        "bg-card border-border cursor-pointer transition-all hover:border-primary/50 group",
+        isSelected && "border-primary ring-1 ring-primary/30"
       )}
     >
       <CardContent className="p-4">
@@ -590,47 +590,47 @@ function TestCaseCard({
           <div className="flex items-center gap-2">
             {testCase.lastResult === 'passed' && <CheckCircle className="w-4 h-4 text-green-500" />}
             {testCase.lastResult === 'failed' && <AlertCircle className="w-4 h-4 text-red-500" />}
-            {!testCase.lastResult && <Clock className="w-4 h-4 text-gray-500" />}
-            <h3 className="font-medium text-white truncate">{testCase.name}</h3>
+            {!testCase.lastResult && <Clock className="w-4 h-4 text-muted-foreground" />}
+            <h3 className="font-medium text-foreground truncate">{testCase.name}</h3>
           </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               onStar();
             }}
-            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            className="p-1 hover:bg-accent rounded"
           >
             {testCase.starred ? (
               <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
             ) : (
-              <StarOff className="w-4 h-4 text-gray-600" />
+              <StarOff className="w-4 h-4 text-muted-foreground" />
             )}
           </button>
         </div>
 
         {testCase.description && (
-          <p className="text-xs text-gray-500 mb-3 line-clamp-2">{testCase.description}</p>
+          <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{testCase.description}</p>
         )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {testCase.automationStatus === 'full' && (
-              <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">Auto</Badge>
+              <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 text-xs">Auto</Badge>
             )}
             {testCase.automationStatus === 'partial' && (
-              <Badge className="bg-amber-500/10 text-blue-600 dark:text-amber-400 border-amber-500/20 text-xs">Partial</Badge>
+              <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 text-xs">Partial</Badge>
             )}
             {(!testCase.automationStatus || testCase.automationStatus === 'none') && (
-              <Badge className="bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20 text-xs">Manual</Badge>
+              <Badge className="bg-secondary text-muted-foreground border-border text-xs">Manual</Badge>
             )}
             {testCase.priority && (
               <Badge
                 className={cn(
                   "text-xs",
-                  testCase.priority === 'critical' && "bg-red-500/10 text-red-400",
-                  testCase.priority === 'high' && "bg-orange-500/10 text-orange-400",
-                  testCase.priority === 'medium' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
-                  testCase.priority === 'low' && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
+                  testCase.priority === 'critical' && "bg-red-500/10 text-red-600 dark:text-red-400",
+                  testCase.priority === 'high' && "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+                  testCase.priority === 'medium' && "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+                  testCase.priority === 'low' && "bg-secondary text-muted-foreground"
                 )}
               >
                 {testCase.priority}
@@ -642,7 +642,7 @@ function TestCaseCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-green-400 hover:text-green-300 hover:bg-green-500/10"
+              className="h-7 w-7 text-green-600 dark:text-green-400 hover:text-green-700 hover:bg-green-500/10"
               onClick={(e) => {
                 e.stopPropagation();
                 onRun();
@@ -653,7 +653,7 @@ function TestCaseCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-500 dark:text-gray-400 hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit();
@@ -668,12 +668,12 @@ function TestCaseCard({
         {testCase.tags && testCase.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {testCase.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded">
+              <span key={tag} className="text-xs px-1.5 py-0.5 bg-secondary text-muted-foreground rounded">
                 {tag}
               </span>
             ))}
             {testCase.tags.length > 3 && (
-              <span className="text-xs text-gray-500">+{testCase.tags.length - 3}</span>
+              <span className="text-xs text-muted-foreground">+{testCase.tags.length - 3}</span>
             )}
           </div>
         )}
