@@ -1758,7 +1758,7 @@ Recorded Test
     if (type.includes('fill')) return <PenLine className={`${size} text-purple-400`} />;
     if (type.includes('click')) return <Hand className={`${size} text-emerald-400`} />;
     if (type.includes('assert')) return <Eye className={`${size} text-cyan-400`} />;
-    return <CircleDot className={`${size} text-gray-500 dark:text-gray-400`} />;
+    return <CircleDot className={`${size} text-muted-foreground`} />;
   };
 
   // Toggle group expansion
@@ -1776,9 +1776,9 @@ Recorded Test
       <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-[#0a0a0f]">
         <Card className="max-w-md bg-white dark:bg-[#12121a] border-gray-200 dark:border-white/10">
           <CardContent className="pt-6 text-center">
-            <Video className="h-12 w-12 mx-auto mb-4 text-gray-500 dark:text-gray-400" />
-            <h2 className="text-xl font-semibold mb-2 text-white">Desktop App Required</h2>
-            <p className="text-gray-500 dark:text-gray-400">Playwright Recorder requires Flowstral Desktop.</p>
+            <Video className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2 text-foreground">Desktop App Required</h2>
+            <p className="text-muted-foreground">Playwright Recorder requires Flowstral Desktop.</p>
           </CardContent>
         </Card>
       </div>
@@ -1786,25 +1786,25 @@ Recorded Test
   }
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-gray-50 dark:bg-[#0a0a0f] text-gray-900 dark:text-white flex flex-col overflow-hidden">
+    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
       {/* ============ TOP TOOLBAR ============ */}
       <div className="h-12 bg-white dark:bg-[#0d0d14] border-b border-gray-200 dark:border-gray-200 dark:border-white/10 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           {isRecording && (
             <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
               <div className={cn("w-2 h-2 rounded-full", isPaused ? "bg-amber-500" : "bg-red-500 animate-pulse")} />
-              <span className="text-xs text-gray-300">Ready</span>
-              <span className="text-xs text-gray-500">•</span>
-              <span className="text-xs text-gray-300">{actions.length} steps</span>
+              <span className="text-xs text-foreground">Ready</span>
+              <span className="text-xs text-muted-foreground">•</span>
+              <span className="text-xs text-foreground">{actions.length} steps</span>
         </div>
           )}
                       </div>
         
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-500 dark:text-gray-400 hover:text-white">
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground">
             <Settings className="h-3.5 w-3.5 mr-1.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-gray-500 dark:text-gray-400 hover:text-white">
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground">
             <Code className="h-3.5 w-3.5 mr-1.5" />
             Code
           </Button>
@@ -1871,7 +1871,7 @@ Recorded Test
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-purple-400" />
                     <span className="text-sm font-medium text-purple-300">Automating:</span>
-                    <span className="text-sm text-white truncate max-w-[200px]">{selectedTestCase.name}</span>
+                    <span className="text-sm text-foreground truncate max-w-[200px]">{selectedTestCase.name}</span>
                     <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">
                       {selectedTestCase.steps?.length || 0} steps
                     </Badge>
@@ -1883,7 +1883,7 @@ Recorded Test
                       setSelectedTestCase(null);
                       setMode('new');
                     }}
-                    className="h-6 px-2 text-xs text-gray-500 dark:text-gray-400 hover:text-white"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -1920,7 +1920,7 @@ Recorded Test
                 <Button
                       onClick={() => setShowTestPicker(true)}
                       variant="outline"
-                      className="h-10 px-3 border-white/20 text-gray-500 dark:text-gray-400 hover:text-white"
+                      className="h-10 px-3 border-border text-muted-foreground hover:text-foreground"
                 >
                       Change
                 </Button>
@@ -1967,7 +1967,7 @@ Recorded Test
                 </Badge>
               </div>
               {actions.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-gray-500 dark:text-gray-400 hover:text-red-400">
+              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive">
                 <Trash2 className="h-3 w-3 mr-1" />
                     Clear
                   </Button>
@@ -2007,7 +2007,7 @@ Recorded Test
                     )}
                   >
                     {/* Drag handle */}
-                    <div className="flex flex-col gap-0.5 text-gray-600 group-hover:text-gray-500 dark:text-gray-400 shrink-0 cursor-grab">
+                    <div className="flex flex-col gap-0.5 text-muted-foreground group-hover:text-foreground shrink-0 cursor-grab">
                       <div className="flex gap-0.5">
                         <div className="w-1 h-1 rounded-full bg-current" />
                         <div className="w-1 h-1 rounded-full bg-current" />
@@ -2022,7 +2022,7 @@ Recorded Test
                     </div>
                     {getActionIcon(action.qword || action.type || '')}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">
+                      <p className="text-sm text-foreground truncate">
                         {displayAction.description || `${action.qword || action.type} ${displayAction.args?.[0] || ''}`}
                         {isPw && <span className="ml-1 text-amber-400">🔒</span>}
                       </p>
@@ -2035,7 +2035,7 @@ Recorded Test
                   <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-gray-500 dark:text-gray-400 hover:text-red-400 shrink-0"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -2183,7 +2183,7 @@ Recorded Test
                     value={suggestionSearch}
                     onChange={(e) => setSuggestionSearch(e.target.value)}
                     placeholder="Search..."
-                    className="pl-7 h-6 bg-[#1a1a25] border-gray-200 dark:border-white/10 text-white text-[10px]"
+                    className="pl-7 h-6 bg-input border-border text-foreground text-[10px]"
                   />
                 </div>
               </div>
@@ -2228,7 +2228,7 @@ Recorded Test
                             s.category === 'link' && 'bg-blue-500/20 text-blue-400',
                             s.category === 'heading' && 'bg-amber-500/20 text-amber-400',
                             s.category === 'button' && 'bg-emerald-500/20 text-emerald-400',
-                            !['input', 'link', 'heading', 'button'].includes(s.category || '') && 'bg-gray-500/20 text-gray-500 dark:text-gray-400'
+                            !['input', 'link', 'heading', 'button'].includes(s.category || '') && 'bg-muted/20 text-muted-foreground'
                           )}>
                             {s.category === 'input' ? <PenLine className="h-3.5 w-3.5" /> :
                              s.category === 'link' ? <Link className="h-3.5 w-3.5" /> :
@@ -2238,8 +2238,8 @@ Recorded Test
                           
                           {/* Label */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white truncate font-medium">{s.element || s.description || s.args?.[0] || 'Unknown'}</p>
-                            <p className="text-[10px] text-gray-500 capitalize">{s.qword || s.type || s.category}</p>
+                            <p className="text-sm text-foreground truncate font-medium">{s.element || s.description || s.args?.[0] || 'Unknown'}</p>
+                            <p className="text-[10px] text-muted-foreground capitalize">{s.qword || s.type || s.category}</p>
                           </div>
                           
                           {/* Action buttons - always visible on mobile, hover on desktop */}
@@ -2283,7 +2283,7 @@ Recorded Test
                           onClick={() => { setElementFilter('all'); setSuggestionSearch(''); }}
                           variant="ghost"
                         size="sm"
-                          className="mt-2 text-xs text-gray-500 dark:text-gray-400"
+                          className="mt-2 text-xs text-muted-foreground"
                       >
                           Clear filters
                       </Button>
@@ -2322,8 +2322,8 @@ Recorded Test
                     className={cn(
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'soql' 
-                        ? "bg-blue-500/10 text-blue-400 border-blue-500" 
-                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                        ? "bg-primary/10 text-primary border-primary" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     )}
                   >
                     <Database className="h-3.5 w-3.5" />
@@ -2334,8 +2334,8 @@ Recorded Test
                     className={cn(
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'assertions' 
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500" 
-                        : "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent"
+                        ? "bg-warning/10 text-warning border-warning" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     )}
                   >
                     <Shield className="h-3.5 w-3.5" />

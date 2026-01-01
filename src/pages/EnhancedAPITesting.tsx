@@ -1160,8 +1160,8 @@ export default function EnhancedAPITesting() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-              <Globe className="w-6 h-6 text-gray-900 dark:text-white" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/25">
+              <Globe className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Testing</h1>
@@ -1170,36 +1170,36 @@ export default function EnhancedAPITesting() {
               </p>
             </div>
           </div>
-          <Badge className="text-sm px-4 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <Badge className="text-sm px-4 py-2 bg-primary/10 text-primary border border-primary/20">
             <Zap className="w-4 h-4 mr-2" />
             Enterprise Grade
           </Badge>
         </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8 bg-white dark:bg-gray-900 border border-gray-700 p-1">
-          <TabsTrigger value="templates" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+        <TabsList className="grid w-full grid-cols-8 bg-card border border-border p-1">
+          <TabsTrigger value="templates" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Rocket className="w-4 h-4 mr-1" />
             Templates
           </TabsTrigger>
-          <TabsTrigger value="flowstral" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+          <TabsTrigger value="flowstral" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Workflow className="w-4 h-4 mr-1" />
             Flowstral
           </TabsTrigger>
-          <TabsTrigger value="import" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Import</TabsTrigger>
-          <TabsTrigger value="database" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Database</TabsTrigger>
-          <TabsTrigger value="execute" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Execute</TabsTrigger>
-          <TabsTrigger value="environments" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Env</TabsTrigger>
-          <TabsTrigger value="virtual" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Virtual</TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Results</TabsTrigger>
+          <TabsTrigger value="import" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
+          <TabsTrigger value="database" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Database</TabsTrigger>
+          <TabsTrigger value="execute" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
+          <TabsTrigger value="environments" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
+          <TabsTrigger value="virtual" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Virtual</TabsTrigger>
+          <TabsTrigger value="results" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
         </TabsList>
 
         {/* Templates Tab - Quick Start */}
         <TabsContent value="templates" className="space-y-4">
-          <Alert className="bg-white dark:bg-gray-900 border-gray-700 text-gray-300">
-            <Rocket className="h-4 w-4 text-amber-500" />
+          <Alert className="bg-card border-border text-foreground">
+            <Rocket className="h-4 w-4 text-primary" />
             <AlertDescription>
-              <strong className="text-gray-900 dark:text-white">Quick Start:</strong> Load pre-configured protocol templates for the e-commerce test site at <code className="bg-gray-800 px-1 rounded text-amber-400">{ECOMMERCE_TEST_URL}</code>
+              <strong className="text-foreground">Quick Start:</strong> Load pre-configured protocol templates for the e-commerce test site at <code className="bg-secondary px-1 rounded text-primary">{ECOMMERCE_TEST_URL}</code>
             </AlertDescription>
           </Alert>
           
@@ -1230,7 +1230,7 @@ export default function EnhancedAPITesting() {
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white"
+                      className="flex-1 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 text-primary-foreground"
                       onClick={async () => {
                         setProtocol(template.protocol);
                         setSpecFormat(template.format);

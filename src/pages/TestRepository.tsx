@@ -3775,25 +3775,25 @@ export default function TestRepository() {
                         {/* Status indicator */}
                         <div className={cn(
                           "w-2 h-2 rounded-full flex-none",
-                          tc.automationStatus === 'automated' || tc.automationStatus === 'full' ? "bg-blue-500" :
-                          tc.automationStatus === 'partial' ? "bg-amber-500" : "bg-gray-600"
+                          tc.automationStatus === 'automated' || tc.automationStatus === 'full' ? "bg-success" :
+                          tc.automationStatus === 'partial' ? "bg-warning" : "bg-muted-foreground"
                         )} />
                         
                         {/* Test info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <h4 className="font-medium text-white truncate">{tc.name}</h4>
+                            <h4 className="font-medium text-foreground truncate">{tc.name}</h4>
                             <Badge className={cn(
                               "text-[10px] px-1.5",
-                              (tc.automationStatus === 'automated' || tc.automationStatus === 'full') && "bg-green-500/10 text-green-400",
-                              tc.automationStatus === 'partial' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
-                              (tc.automationStatus === 'none' || !tc.automationStatus) && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
+                              (tc.automationStatus === 'automated' || tc.automationStatus === 'full') && "bg-success/10 text-success",
+                              tc.automationStatus === 'partial' && "bg-warning/10 text-warning",
+                              (tc.automationStatus === 'none' || !tc.automationStatus) && "bg-muted/10 text-muted-foreground"
                             )}>
                               {tc.automationStatus === 'automated' || tc.automationStatus === 'full' ? 'Automated' : 
                                tc.automationStatus === 'partial' ? 'Partial' : 'Manual'}
                             </Badge>
                           </div>
-                          <p className="text-xs text-gray-500 truncate">
+                          <p className="text-xs text-muted-foreground truncate">
                             {tc.steps?.length || 0} steps • Updated {tc.updatedAt ? new Date(tc.updatedAt).toLocaleDateString() : 'N/A'}
                           </p>
                         </div>
@@ -5286,8 +5286,8 @@ export default function TestRepository() {
                         className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{tc.name}</p>
-                        <p className="text-xs text-gray-500">{tc.priority || 'No priority'} • {tc.automationStatus || 'none'}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
+                        <p className="text-xs text-muted-foreground">{tc.priority || 'No priority'} • {tc.automationStatus || 'none'}</p>
                       </div>
                       {tc.lastResult && (
                         <Badge className={cn(
@@ -5573,7 +5573,7 @@ export default function TestRepository() {
                           }}
                           className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
-                        <span className="text-sm text-white truncate">{tc.name}</span>
+                        <span className="text-sm text-foreground truncate">{tc.name}</span>
                       </label>
                     ))
                   )}

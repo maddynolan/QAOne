@@ -370,11 +370,11 @@ const STEP_CATEGORIES = {
     color: 'amber',
     description: 'User interface interactions',
     steps: [
-      { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-amber-500', desc: 'Go to URL' },
-      { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-amber-500', desc: 'Click element' },
-      { type: 'input', label: 'Input', icon: Type, color: 'bg-amber-500', desc: 'Enter text' },
-      { type: 'select', label: 'Select', icon: ChevronDown, color: 'bg-amber-500', desc: 'Choose option' },
-      { type: 'hover', label: 'Hover', icon: Target, color: 'bg-amber-600', desc: 'Mouse hover' },
+      { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-blue-500', desc: 'Go to URL' },
+      { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-blue-500', desc: 'Click element' },
+      { type: 'input', label: 'Input', icon: Type, color: 'bg-blue-500', desc: 'Enter text' },
+      { type: 'select', label: 'Select', icon: ChevronDown, color: 'bg-blue-500', desc: 'Choose option' },
+      { type: 'hover', label: 'Hover', icon: Target, color: 'bg-blue-600', desc: 'Mouse hover' },
       { type: 'upload', label: 'Upload', icon: Upload, color: 'bg-amber-600', desc: 'Upload file' },
     ]
   },
@@ -3451,7 +3451,7 @@ export default function UnifiedWorkflowEditor() {
                     target.style.height = Math.min(target.scrollHeight, 84) + 'px';
                   }}
                 />
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                   <span>{testCase.steps.length} steps</span>
                   <span>•</span>
                   <span>v{testCase.metadata.version}</span>
@@ -3481,15 +3481,15 @@ export default function UnifiedWorkflowEditor() {
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
               {/* Settings */}
-              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-gray-900 dark:hover:text-white">
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-border text-muted-foreground hover:bg-accent hover:text-foreground">
                 <Settings className="h-4 w-4" />
               </Button>
 
               {/* Export Dropdown - Formats Only */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white">
-                    <Download className="h-4 w-4 mr-1.5 text-amber-500" />
+                  <Button variant="outline" size="sm" className="border-border text-muted-foreground hover:bg-accent hover:text-foreground">
+                    <Download className="h-4 w-4 mr-1.5 text-primary" />
                     Export
                   </Button>
                 </DropdownMenuTrigger>
@@ -3501,7 +3501,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('istqb');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                    className="hover:bg-accent text-foreground focus:bg-accent"
                   >
                     <FileText className="h-4 w-4 mr-2 text-blue-400" />
                     ISTQB Format
@@ -3511,7 +3511,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('gherkin');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                    className="hover:bg-accent text-foreground focus:bg-accent"
                   >
                     <Code className="h-4 w-4 mr-2 text-green-400" />
                     Gherkin/BDD Format
@@ -3521,7 +3521,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('markdown');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                    className="hover:bg-accent text-foreground focus:bg-accent"
                   >
                     <FileText className="h-4 w-4 mr-2 text-purple-400" />
                     Markdown Format
@@ -3529,7 +3529,7 @@ export default function UnifiedWorkflowEditor() {
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
                     onClick={() => handleExport('automation')}
-                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                    className="hover:bg-accent text-foreground focus:bg-accent"
                   >
                     <Play className="h-4 w-4 mr-2 text-amber-400" />
                     Playwright Script
@@ -3554,7 +3554,7 @@ export default function UnifiedWorkflowEditor() {
                             toast.error('Export failed');
                           }
                         }}
-                        className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                        className="hover:bg-accent text-foreground focus:bg-accent"
                       >
                         <Save className="h-4 w-4 mr-2 text-green-400" />
                         Export All to File
@@ -3574,7 +3574,7 @@ export default function UnifiedWorkflowEditor() {
                             toast.error('Import failed');
                           }
                         }}
-                        className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
+                        className="hover:bg-accent text-foreground focus:bg-accent"
                       >
                         <FileDown className="h-4 w-4 mr-2 text-blue-400" />
                         Import from File
@@ -3691,7 +3691,7 @@ export default function UnifiedWorkflowEditor() {
                     violet: 'border-violet-500/30 hover:border-violet-500/50 text-violet-400',
                     rose: 'border-rose-500/30 hover:border-rose-500/50 text-rose-400',
                   };
-                  const headerColor = colorMap[cat.color] || 'border-gray-500/30 text-gray-500 dark:text-gray-400';
+                  const headerColor = colorMap[cat.color] || 'border-border text-foreground';
                   
                   return (
                     <Collapsible
@@ -3705,7 +3705,7 @@ export default function UnifiedWorkflowEditor() {
                     >
                       <CollapsibleTrigger asChild>
                         <button 
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border bg-white dark:bg-gray-900/50 transition-all ${headerColor}`}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border bg-card transition-all ${headerColor}`}
                         >
                           <CategoryIcon className="h-3.5 w-3.5" />
                           <span className="text-[11px] font-medium flex-1 text-left">{cat.label}</span>
@@ -3718,13 +3718,13 @@ export default function UnifiedWorkflowEditor() {
                             <button
                               key={step.type}
                               onClick={() => addStep(step.type as StepType)}
-                              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800/70 transition-colors group"
+                              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-accent transition-colors group"
                               title={step.desc}
                             >
                               <div className={`p-1 rounded ${step.color} text-white group-hover:scale-105 transition-transform flex-shrink-0`}>
                                 <step.icon className="h-3 w-3" />
                               </div>
-                              <span className="text-[11px] text-gray-300 group-hover:text-white">{step.label}</span>
+                              <span className="text-[11px] text-foreground">{step.label}</span>
                             </button>
                           ))}
                         </div>

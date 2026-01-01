@@ -371,7 +371,7 @@ export function MetadataAssertions({
           
           {/* Assertion Type Picker */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
               Assertion Type
             </label>
             <div className="grid grid-cols-2 gap-1">
@@ -396,7 +396,7 @@ export function MetadataAssertions({
                     <div>
                       <p className={cn(
                         "text-[11px] font-medium",
-                        isSelected ? "text-white" : "text-gray-400"
+                        isSelected ? "text-foreground" : "text-muted-foreground"
                       )}>
                         {type.label}
                       </p>
@@ -410,7 +410,7 @@ export function MetadataAssertions({
           {/* Type Description - Compact */}
           {currentType && (
             <div className="px-2 py-1.5 rounded bg-amber-500/10 border border-amber-500/20">
-              <p className="text-[10px] text-gray-300">
+              <p className="text-[10px] text-foreground">
                 <span className="text-amber-400 font-medium">→</span> {currentType.description}
               </p>
             </div>
@@ -422,7 +422,7 @@ export function MetadataAssertions({
             {/* Object picker - needed for most assertions */}
             {['field_exists', 'field_type', 'field_required', 'picklist_values', 'validation_rule', 'record_type_exists', 'permission'].includes(selectedType) && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-gray-400">Object</label>
+                <label className="text-[10px] font-medium text-muted-foreground">Object</label>
                 <Select value={selectedObject} onValueChange={setSelectedObject}>
                   <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
                     <SelectValue placeholder="Select object..." />
@@ -441,7 +441,7 @@ export function MetadataAssertions({
             {/* Field picker - for field-based assertions */}
             {['field_exists', 'field_type', 'field_required', 'picklist_values'].includes(selectedType) && objectDescribe && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-gray-400">Field</label>
+                <label className="text-[10px] font-medium text-muted-foreground">Field</label>
                 <Select value={selectedField} onValueChange={setSelectedField}>
                   <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
                     <SelectValue placeholder="Select field..." />
@@ -460,7 +460,7 @@ export function MetadataAssertions({
             {/* Field Type expected value */}
             {selectedType === 'field_type' && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-gray-400">Expected Type</label>
+                <label className="text-[10px] font-medium text-muted-foreground">Expected Type</label>
                 <Select value={expectedType} onValueChange={setExpectedType}>
                   <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
                     <SelectValue placeholder="Select type..." />
@@ -479,7 +479,7 @@ export function MetadataAssertions({
             {/* Field Required toggle */}
             {selectedType === 'field_required' && (
               <div className="flex items-center justify-between">
-                <label className="text-[10px] font-medium text-gray-400">Expected to be Required?</label>
+                <label className="text-[10px] font-medium text-muted-foreground">Expected to be Required?</label>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -504,7 +504,7 @@ export function MetadataAssertions({
             {/* Picklist values input */}
             {selectedType === 'picklist_values' && (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-medium text-gray-400">Expected Values (comma-separated)</label>
+                <label className="text-[10px] font-medium text-muted-foreground">Expected Values (comma-separated)</label>
                 <Input
                   value={expectedPicklistValues}
                   onChange={(e) => setExpectedPicklistValues(e.target.value)}

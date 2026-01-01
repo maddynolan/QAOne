@@ -369,7 +369,7 @@ export function SFContextDashboard({
     return (
       <div className={cn("flex flex-col h-full items-center justify-center p-4", className)}>
         <Cloud className="w-10 h-10 mb-3 text-gray-500 opacity-50" />
-        <h3 className="text-sm font-medium text-white mb-1">Not Connected</h3>
+        <h3 className="text-sm font-medium text-foreground mb-1">Not Connected</h3>
         <p className="text-xs text-gray-500 mb-3 text-center">
           Connect to a Salesforce org to access all features
         </p>
@@ -415,7 +415,7 @@ export function SFContextDashboard({
               <div className="p-2.5 rounded-lg bg-[#1a1a25] border border-white/5 space-y-2">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-3.5 w-3.5 text-blue-400" />
-                  <span className="text-xs text-white font-medium">{currentOrg.name}</span>
+                  <span className="text-xs text-foreground font-medium">{currentOrg.name}</span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-gray-500">
                   <span>{currentOrg.instanceUrl}</span>
@@ -439,7 +439,7 @@ export function SFContextDashboard({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <User className="h-3.5 w-3.5 text-purple-400" />
-                      <span className="text-xs text-white font-medium">{currentUser.name}</span>
+                      <span className="text-xs text-foreground font-medium">{currentUser.name}</span>
                     </div>
                     <Badge variant="outline" className="h-4 px-1.5 text-[9px] border-purple-500/30 text-purple-400">
                       {currentUser.profileName}
@@ -516,8 +516,8 @@ export function SFContextDashboard({
                       className="flex items-center justify-between p-2 rounded bg-[#1a1a25] border border-white/5 hover:border-indigo-500/30 group"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white font-medium truncate">{user.name}</p>
-                        <p className="text-[10px] text-gray-500 truncate">{user.profileName}</p>
+                        <p className="text-xs text-foreground font-medium truncate">{user.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{user.profileName}</p>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
@@ -612,7 +612,7 @@ export function SFContextDashboard({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-5 w-5 p-0 text-gray-400 hover:text-amber-400"
+                          className="h-5 w-5 p-0 text-muted-foreground hover:text-warning"
                           onClick={() => insertVariable(v.name)}
                           title="Copy to clipboard"
                         >
@@ -621,7 +621,7 @@ export function SFContextDashboard({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-5 w-5 p-0 text-gray-400 hover:text-red-400"
+                          className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
                           onClick={() => deleteVariable(v.name)}
                           title="Delete"
                         >
@@ -674,7 +674,7 @@ export function SFContextDashboard({
                           <Badge variant="outline" className="h-4 px-1 text-[8px] border-blue-500/30 text-blue-400">
                             {record.objectType}
                           </Badge>
-                          <span className="text-xs text-white truncate">{record.name}</span>
+                          <span className="text-xs text-foreground truncate">{record.name}</span>
                         </div>
                         <code className="text-[9px] text-gray-500 font-mono">{record.id}</code>
                       </div>
