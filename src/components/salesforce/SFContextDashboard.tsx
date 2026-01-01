@@ -412,7 +412,7 @@ export function SFContextDashboard({
             
             <CollapsibleContent className="mt-2 space-y-2">
               {/* Org Info */}
-              <div className="p-2.5 rounded-lg bg-[#1a1a25] border border-white/5 space-y-2">
+              <div className="p-2.5 rounded-lg bg-secondary border border-border space-y-2">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-3.5 w-3.5 text-blue-400" />
                   <span className="text-xs text-foreground font-medium">{currentOrg.name}</span>
@@ -435,7 +435,7 @@ export function SFContextDashboard({
               
               {/* Current User */}
               {currentUser && (
-                <div className="p-2.5 rounded-lg bg-[#1a1a25] border border-white/5 space-y-2">
+                <div className="p-2.5 rounded-lg bg-secondary border border-border space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <User className="h-3.5 w-3.5 text-purple-400" />
@@ -497,7 +497,7 @@ export function SFContextDashboard({
                     searchUsers(e.target.value);
                   }}
                   placeholder="Search by name, email, or username..."
-                  className="h-8 pl-8 text-xs bg-[#0d0d14] border-indigo-500/20"
+                  className="h-8 pl-8 text-xs bg-card border-indigo-500/20"
                 />
               </div>
               
@@ -513,7 +513,7 @@ export function SFContextDashboard({
                   {availableUsers.map(user => (
                     <div
                       key={user.id}
-                      className="flex items-center justify-between p-2 rounded bg-[#1a1a25] border border-white/5 hover:border-indigo-500/30 group"
+                      className="flex items-center justify-between p-2 rounded bg-secondary border border-border hover:border-indigo-500/30 group"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-foreground font-medium truncate">{user.name}</p>
@@ -555,7 +555,7 @@ export function SFContextDashboard({
             open={expandedSections.has('variables')}
             onOpenChange={() => toggleSection('variables')}
           >
-            <CollapsibleTrigger className="flex items-center justify-between w-full p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/15 transition-colors">
+            <CollapsibleTrigger className="flex items-center justify-between w-full p-2 rounded-lg bg-amber-500/10 border border-primary/20 hover:bg-amber-500/15 transition-colors">
               <div className="flex items-center gap-2">
                 <Target className="h-3.5 w-3.5 text-amber-400" />
                 <span className="text-xs font-medium text-amber-400">Variables</span>
@@ -579,13 +579,13 @@ export function SFContextDashboard({
                   value={newVarName}
                   onChange={(e) => setNewVarName(e.target.value)}
                   placeholder="name"
-                  className="h-7 text-[10px] bg-[#0d0d14] border-amber-500/20 flex-1"
+                  className="h-7 text-[10px] bg-card border-primary/20 flex-1"
                 />
                 <Input
                   value={newVarValue}
                   onChange={(e) => setNewVarValue(e.target.value)}
                   placeholder="value"
-                  className="h-7 text-[10px] bg-[#0d0d14] border-amber-500/20 flex-1"
+                  className="h-7 text-[10px] bg-card border-primary/20 flex-1"
                 />
                 <Button
                   size="sm"
@@ -602,7 +602,7 @@ export function SFContextDashboard({
                   {capturedVariables.map(v => (
                     <div
                       key={v.name}
-                      className="flex items-center justify-between p-2 rounded bg-[#1a1a25] border border-white/5 group"
+                      className="flex items-center justify-between p-2 rounded bg-secondary border border-border group"
                     >
                       <div className="flex-1 min-w-0">
                         <code className="text-[10px] text-amber-400 font-mono">{v.name}</code>
@@ -667,7 +667,7 @@ export function SFContextDashboard({
                   {recentRecords.map(record => (
                     <div
                       key={record.id}
-                      className="flex items-center justify-between p-2 rounded bg-[#1a1a25] border border-white/5 group"
+                      className="flex items-center justify-between p-2 rounded bg-secondary border border-border group"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -698,7 +698,7 @@ export function SFContextDashboard({
           </Collapsible>
           
           {/* Action Bar - Sticky at bottom */}
-          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-white/10 bg-[#0d0d14] -mx-3 space-y-1.5">
+          <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-border bg-card -mx-3 space-y-1.5">
             <Button
               variant="default"
               size="sm"

@@ -2102,7 +2102,7 @@ Recorded Test
             {/* ========== SUGGESTIONS TAB ========== */}
             <TabsContent value="suggestions" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
               {/* Compact Header Row */}
-              <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-[#0f0f15] z-10">
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold">Suggested Actions</span>
@@ -2134,7 +2134,7 @@ Recorded Test
               </div>
 
               {/* Category Filter & Search Row - Combined */}
-              <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap sticky top-[42px] bg-[#0f0f15] z-10">
+              <div className="px-3 py-1.5 border-b border-border flex items-center gap-2 flex-wrap sticky top-[42px] bg-card z-10">
                 <div className="flex gap-1.5 flex-wrap">
                   <Badge 
                     className={cn(
@@ -2347,7 +2347,7 @@ Recorded Test
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'stages' 
                         ? "bg-cyan-500/10 text-cyan-400 border-cyan-500" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     )}
                   >
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -2359,7 +2359,7 @@ Recorded Test
                       "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
                       sfToolsSubTab === 'quick' 
                         ? "bg-purple-500/10 text-purple-400 border-purple-500" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5 border-transparent"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
                     )}
                   >
                     <Zap className="h-3.5 w-3.5" />
@@ -2460,7 +2460,7 @@ Recorded Test
                       value={soqlQuery}
                       onChange={(e) => setSoqlQuery(e.target.value)}
                       placeholder="SELECT Id, Name FROM Account LIMIT 10"
-                      className="h-8 text-xs bg-[#0d0d14] border-blue-500/20 text-white font-mono"
+                      className="h-8 text-xs bg-input border-blue-500/20 text-white font-mono"
                       onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && executeSOQL()}
                     />
                     <Button
@@ -2496,7 +2496,7 @@ Recorded Test
                   
                   {/* Query Results (Compact) */}
                   {soqlResults.length > 0 && (
-                    <div className="mt-2 bg-[#0d0d14] rounded border border-blue-500/20 max-h-32 overflow-auto">
+                    <div className="mt-2 bg-input rounded border border-blue-500/20 max-h-32 overflow-auto">
                       <table className="w-full text-[9px]">
                         <thead className="bg-blue-500/10 sticky top-0">
                           <tr>
@@ -2557,7 +2557,7 @@ Recorded Test
                       value={inspectRecordId}
                       onChange={(e) => setInspectRecordId(e.target.value)}
                       placeholder="Enter Record ID (e.g., 001...)"
-                      className="h-7 text-xs bg-[#0d0d14] border-purple-500/20 text-white font-mono"
+                      className="h-7 text-xs bg-input border-purple-500/20 text-white font-mono"
                     />
                     <Button
                       size="sm"
@@ -2570,7 +2570,7 @@ Recorded Test
                   
                   {/* Inspected Record Fields */}
                   {inspectedRecord && (
-                    <div className="mt-2 bg-[#0d0d14] rounded border border-purple-500/20 max-h-40 overflow-auto">
+                    <div className="mt-2 bg-input rounded border border-purple-500/20 max-h-40 overflow-auto">
                       <div className="p-1">
                         {Object.entries(inspectedRecord)
                           .filter(([k]) => k !== 'attributes')
@@ -2897,19 +2897,19 @@ Recorded Test
                 <div>
                   <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Quick Actions</h4>
                   <div className="grid grid-cols-4 gap-1">
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['Global Search'], description: 'Click Global Search', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <Search className="h-3 w-3" />Search
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Click', args: ['App Launcher'], description: 'Click App Launcher', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <LayoutGrid className="h-3 w-3" />Apps
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Wait', args: ['2000'], description: 'Wait 2 seconds', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <RefreshCw className="h-3 w-3" />Wait
                     </Button>
-                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-white/5 flex-col gap-0 p-0.5"
+                    <Button variant="outline" size="sm" className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
                       onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'Screenshot', args: [`ss_${Date.now()}.png`], description: 'Take Screenshot', timestamp: Date.now() }]); toast.success('Added'); }}>
                       <Eye className="h-3 w-3" />Screenshot
                     </Button>
@@ -2921,7 +2921,7 @@ Recorded Test
                   <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Navigate - Sales</h4>
                   <div className="grid grid-cols-4 gap-1">
                     {['Accounts', 'Contacts', 'Opportunities', 'Leads', 'Campaigns', 'Products', 'Quotes', 'Contracts'].map(obj => (
-                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-white/5"
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-accent"
                         onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
                         {obj}
                       </Button>
@@ -2934,7 +2934,7 @@ Recorded Test
                   <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">Navigate - Service & More</h4>
                   <div className="grid grid-cols-4 gap-1">
                     {['Cases', 'Tasks', 'Events', 'Reports', 'Dashboards', 'Files', 'Chatter', 'Setup'].map(obj => (
-                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-white/5"
+                      <Button key={obj} variant="outline" size="sm" className="h-6 text-[9px] border-border hover:bg-accent"
                         onClick={() => { setActions(prev => [...prev, { id: `action_${Date.now()}`, qword: 'NavigateTo', args: [obj], description: `Navigate to ${obj}`, timestamp: Date.now() }]); toast.success(`Added: ${obj}`); }}>
                         {obj}
                       </Button>
@@ -2944,7 +2944,7 @@ Recorded Test
 
                 {/* Full SF Tools Link */}
                 <div className="pt-1">
-                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-muted-foreground hover:text-white hover:bg-white/5"
+                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-muted-foreground hover:text-white hover:bg-accent"
                     onClick={() => navigate('/salesforce')}>
                     <ExternalLink className="h-3 w-3 mr-1" />Open Full SF Tools<ChevronRight className="h-3 w-3 ml-auto" />
                   </Button>

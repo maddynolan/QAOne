@@ -85,24 +85,24 @@ export default function EnterpriseTestRepository() {
   }, [navigate]);
   
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-white overflow-hidden">
+    <div className="h-full flex flex-col bg-background text-foreground overflow-hidden">
       {/* Header */}
       <header className="flex-none border-b border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 flex items-center justify-between">
           {/* Title */}
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-amber-500 dark:to-orange-500">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-blue-500 dark:to-cyan-500">
               <FolderTree className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold flex items-center gap-2 text-gray-900 dark:text-white">
+              <h1 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 Test Management
                 <span className="flex items-center gap-1 text-xs font-normal text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
                   <Zap className="w-3 h-3" />
                   Enterprise
                 </span>
               </h1>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
+              <p className="text-xs text-muted-foreground">
                 {(summary?.testCases || 0).toLocaleString()} tests • {(summary?.suites || 0)} suites • {(summary?.releases || 0)} releases
               </p>
             </div>
@@ -113,7 +113,7 @@ export default function EnterpriseTestRepository() {
             <Button
               size="sm"
               onClick={handleCreateTestCase}
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-black"
+              className="bg-blue-600 hover:bg-blue-700 text-primary-foreground"
             >
               <Plus className="w-4 h-4 mr-2" />
               New Test
@@ -134,8 +134,8 @@ export default function EnterpriseTestRepository() {
                 className={cn(
                   "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
                   activeTab === tab.id
-                    ? "border-blue-600 text-blue-600 dark:border-amber-500 dark:text-amber-400"
-                    : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    ? "border-blue-600 text-blue-600 dark:border-primary dark:text-primary"
+                    : "border-transparent text-muted-foreground hover:text-gray-900 dark:hover:text-foreground"
                 )}
               >
                 <Icon className="w-4 h-4" />
@@ -143,8 +143,8 @@ export default function EnterpriseTestRepository() {
                 <span className={cn(
                   "text-xs px-1.5 py-0.5 rounded",
                   activeTab === tab.id 
-                    ? "bg-blue-100 text-blue-600 dark:bg-amber-500/20 dark:text-amber-400" 
-                    : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-500"
+                    ? "bg-blue-100 text-blue-600 dark:bg-primary/20 dark:text-primary" 
+                    : "bg-secondary text-muted-foreground"
                 )}>
                   {count.toLocaleString()}
                 </span>
@@ -195,29 +195,29 @@ const SuitesTab: React.FC = () => {
     <div className="p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Test Suites</h2>
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <h2 className="text-xl font-semibold text-foreground">Test Suites</h2>
+          <span className="text-sm text-muted-foreground">
             {data?.total || 0} suites
           </span>
         </div>
         
         {isLoading ? (
-          <div className="text-gray-600 dark:text-gray-400">Loading suites...</div>
+          <div className="text-muted-foreground">Loading suites...</div>
         ) : (
           <div className="grid gap-4">
             {data?.suites?.slice(0, 20).map((suite: any) => (
               <div 
                 key={suite.id}
-                className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors shadow-sm"
+                className="p-4 rounded-lg border border-border bg-card hover:bg-accent transition-colors shadow-sm"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{suite.name}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <h3 className="font-medium text-foreground">{suite.name}</h3>
+                    <p className="text-sm text-muted-foreground">
                       {suite.testCaseIds?.length || 0} test cases
                     </p>
                   </div>
-                  <Layers className="w-5 h-5 text-gray-400 dark:text-gray-600" />
+                  <Layers className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
             ))}
@@ -235,29 +235,29 @@ const PlansTab: React.FC = () => {
     <div className="p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Test Plans</h2>
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <h2 className="text-xl font-semibold text-foreground">Test Plans</h2>
+          <span className="text-sm text-muted-foreground">
             {data?.total || 0} plans
           </span>
         </div>
         
         {isLoading ? (
-          <div className="text-gray-600 dark:text-gray-400">Loading plans...</div>
+          <div className="text-muted-foreground">Loading plans...</div>
         ) : (
           <div className="grid gap-4">
             {data?.plans?.slice(0, 20).map((plan: any) => (
               <div 
                 key={plan.id}
-                className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors shadow-sm"
+                className="p-4 rounded-lg border border-border bg-card hover:bg-accent transition-colors shadow-sm"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{plan.name}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <h3 className="font-medium text-foreground">{plan.name}</h3>
+                    <p className="text-sm text-muted-foreground">
                       {plan.status} • {plan.testCaseIds?.length || 0} tests
                     </p>
                   </div>
-                  <Target className="w-5 h-5 text-gray-400 dark:text-gray-600" />
+                  <Target className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
             ))}
@@ -275,29 +275,29 @@ const ReleasesTab: React.FC = () => {
     <div className="p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Releases</h2>
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <h2 className="text-xl font-semibold text-foreground">Releases</h2>
+          <span className="text-sm text-muted-foreground">
             {data?.total || 0} releases
           </span>
         </div>
         
         {isLoading ? (
-          <div className="text-gray-600 dark:text-gray-400">Loading releases...</div>
+          <div className="text-muted-foreground">Loading releases...</div>
         ) : (
           <div className="grid gap-4">
             {data?.releases?.slice(0, 20).map((release: any) => (
               <div 
                 key={release.id}
-                className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors shadow-sm"
+                className="p-4 rounded-lg border border-border bg-card hover:bg-accent transition-colors shadow-sm"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900 dark:text-white">{release.name}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <h3 className="font-medium text-foreground">{release.name}</h3>
+                    <p className="text-sm text-muted-foreground">
                       {release.version} • {release.status}
                     </p>
                   </div>
-                  <Rocket className="w-5 h-5 text-gray-400 dark:text-gray-600" />
+                  <Rocket className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
             ))}
@@ -313,10 +313,10 @@ const RunsTab: React.FC = () => {
     <div className="p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Test Runs</h2>
+          <h2 className="text-xl font-semibold text-foreground">Test Runs</h2>
         </div>
-        <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-          <PlayCircle className="w-12 h-12 mx-auto mb-4 text-gray-400 dark:text-gray-600" />
+        <div className="text-center py-12 text-muted-foreground">
+          <PlayCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
           <p className="text-gray-700 dark:text-gray-300">No test runs yet</p>
           <p className="text-sm mt-1">Execute a test suite to see runs here</p>
         </div>

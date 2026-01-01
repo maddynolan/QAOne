@@ -246,14 +246,14 @@ export function StageTransitionTester({
           
           {/* Object Picker */}
           <div className="space-y-2">
-            <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
               Object
             </label>
             <Select value={selectedObject} onValueChange={setSelectedObject}>
-              <SelectTrigger className="h-8 bg-[#0d0d14] border-white/10 text-xs">
+              <SelectTrigger className="h-8 bg-card border-border text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#1a1a25] border-white/10">
+              <SelectContent className="bg-secondary border-border">
                 {STAGE_OBJECTS.map(obj => (
                   <SelectItem key={obj.name} value={obj.name} className="text-xs">
                     {obj.label}
@@ -273,7 +273,7 @@ export function StageTransitionTester({
             <>
               {/* Available Stages */}
               <div className="space-y-2">
-                <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                   Available Stages ({stageField})
                 </label>
                 <div className="flex flex-wrap gap-1.5">
@@ -289,7 +289,7 @@ export function StageTransitionTester({
                           "px-2 py-1 rounded text-[10px] font-medium transition-all",
                           isSelected
                             ? `bg-${color}-500/20 text-${color}-400 border border-${color}-500/40`
-                            : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                            : "bg-secondary text-muted-foreground border border-border hover:bg-accent"
                         )}
                       >
                         {stage.label}
@@ -308,13 +308,13 @@ export function StageTransitionTester({
               {selectedStages.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                       Test Progression
                     </label>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-5 px-1.5 text-[9px] text-gray-400"
+                      className="h-5 px-1.5 text-[9px] text-muted-foreground"
                       onClick={() => setSelectedStages([])}
                     >
                       <RotateCcw className="h-3 w-3 mr-0.5" />
@@ -322,7 +322,7 @@ export function StageTransitionTester({
                     </Button>
                   </div>
                   
-                  <div className="p-3 rounded-lg bg-[#0d0d14] border border-white/5">
+                  <div className="p-3 rounded-lg bg-card border border-border">
                     <div className="flex items-center flex-wrap gap-1">
                       {selectedStages.map((stage, idx) => {
                         const stageInfo = stageValues.find(s => s.value === stage);
@@ -341,7 +341,7 @@ export function StageTransitionTester({
                               {stageInfo?.label || stage}
                             </Badge>
                             {idx < selectedStages.length - 1 && (
-                              <ArrowRight className="h-3 w-3 mx-1 text-gray-600" />
+                              <ArrowRight className="h-3 w-3 mx-1 text-muted-foreground" />
                             )}
                           </div>
                         );
@@ -350,14 +350,14 @@ export function StageTransitionTester({
                     
                     {/* Transition Details */}
                     {selectedStages.length >= 2 && (
-                      <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
-                        <p className="text-[9px] text-gray-500 uppercase">Transitions to test:</p>
+                      <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+                        <p className="text-[9px] text-muted-foreground uppercase">Transitions to test:</p>
                         {selectedStages.slice(1).map((toStage, idx) => {
                           const fromStage = selectedStages[idx];
                           return (
                             <div 
                               key={`${fromStage}-${toStage}`}
-                              className="flex items-center justify-between text-[10px] text-gray-400"
+                              className="flex items-center justify-between text-[10px] text-muted-foreground"
                             >
                               <span>
                                 {idx + 1}. {fromStage} → {toStage}
@@ -382,8 +382,8 @@ export function StageTransitionTester({
               
               {/* Special Actions */}
               {specialActions.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-white/10">
-                  <label className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                     Special Actions
                   </label>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -394,7 +394,7 @@ export function StageTransitionTester({
                           key={action.action}
                           variant="outline"
                           size="sm"
-                          className="h-9 text-xs border-white/10 hover:border-cyan-500/40 justify-start"
+                          className="h-9 text-xs border-border hover:border-cyan-500/40 justify-start"
                           onClick={() => {
                             onAddAsStep?.({
                               type: `sf_${action.action.toLowerCase()}`,
@@ -419,8 +419,8 @@ export function StageTransitionTester({
           )}
           
           {/* Quick Templates */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <label className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
               Quick Templates
             </label>
             <div className="grid grid-cols-1 gap-1.5">
@@ -453,10 +453,10 @@ export function StageTransitionTester({
                     // Need to wait for object to load
                     setTimeout(() => setSelectedStages(template.stages), 500);
                   }}
-                  className="flex items-center gap-2 p-2 rounded bg-white/5 hover:bg-white/10 text-left transition-colors"
+                  className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-accent text-left transition-colors"
                 >
                   <Target className="h-3 w-3 text-cyan-400 shrink-0" />
-                  <span className="text-[10px] text-gray-400">{template.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{template.label}</span>
                 </button>
               ))}
             </div>
@@ -464,7 +464,7 @@ export function StageTransitionTester({
           
           {/* Action Bar - Sticky at bottom */}
           {selectedStages.length >= 2 && (
-            <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-white/10 bg-[#0d0d14] -mx-2">
+            <div className="sticky bottom-0 mt-4 px-2 py-2 border-t border-border bg-card -mx-2">
               <Button
                 className="w-full h-8 bg-cyan-600 hover:bg-cyan-700 text-xs"
                 onClick={generateTestSteps}
