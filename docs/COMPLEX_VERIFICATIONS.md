@@ -2,6 +2,8 @@
 
 ArisTrace supports advanced verification capabilities for testing scenarios that go beyond simple UI interactions. This guide covers Email, PDF, and File verification.
 
+> **Quick Start:** See [USER_MANUAL.md](./USER_MANUAL.md) for step-by-step usage guide with screenshots and examples.
+
 ## Overview
 
 | Feature | Use Case | Provider Support |
