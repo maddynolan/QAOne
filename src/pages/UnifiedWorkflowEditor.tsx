@@ -3392,19 +3392,19 @@ export default function UnifiedWorkflowEditor() {
   console.log('[Builder] Rendering with', testCase.steps.length, 'steps');
   
   return (
-    <div className="flex flex-col overflow-hidden bg-gray-950 h-full text-white" style={{ maxHeight: 'calc(100vh - 4rem)', minHeight: '600px' }}>
+    <div className="flex flex-col overflow-hidden bg-white dark:bg-white dark:bg-gray-950 h-full text-gray-900 dark:text-white" style={{ maxHeight: 'calc(100vh - 4rem)', minHeight: '600px' }}>
         {/* Header */}
-        <header className="flex-none border-b border-gray-800 bg-gray-900 px-4 py-3">
+        <header className="flex-none border-b border-gray-200 dark:border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-white dark:bg-gray-900 px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left: Title - Expanded to show full name */}
             <div className="flex items-start gap-3 max-w-[400px]">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/25 shrink-0 mt-1">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 dark:from-amber-500 dark:to-orange-500 shadow-lg shadow-blue-500/25 dark:shadow-amber-500/25 shrink-0 mt-1">
                 <Layers className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0 group">
                 {/* Display mode - truncated with ellipsis */}
                 <div 
-                  className="text-lg font-semibold text-white leading-7 cursor-text group-focus-within:hidden"
+                  className="text-lg font-semibold text-gray-900 dark:text-white leading-7 cursor-text group-focus-within:hidden"
                   style={{ 
                     display: 'block',
                     maxHeight: '56px',
@@ -3425,7 +3425,7 @@ export default function UnifiedWorkflowEditor() {
                 <Textarea
                   value={testCase.name}
                   onChange={(e) => setTestCase(prev => ({ ...prev, name: e.target.value }))}
-                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[84px] bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-white resize-none overflow-y-auto leading-7 opacity-0 absolute pointer-events-none focus:opacity-100 focus:relative focus:pointer-events-auto"
+                  className="text-lg font-semibold border-none p-0 min-h-[28px] max-h-[84px] bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 dark:text-white resize-none overflow-y-auto leading-7 opacity-0 absolute pointer-events-none focus:opacity-100 focus:relative focus:pointer-events-auto"
                   placeholder="Test Case Name"
                   rows={1}
                   onFocus={(e) => {
@@ -3451,7 +3451,7 @@ export default function UnifiedWorkflowEditor() {
                     target.style.height = Math.min(target.scrollHeight, 84) + 'px';
                   }}
                 />
-                <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   <span>{testCase.steps.length} steps</span>
                   <span>•</span>
                   <span>v{testCase.metadata.version}</span>
@@ -3472,7 +3472,7 @@ export default function UnifiedWorkflowEditor() {
 
             {/* Center: Test Type Badge */}
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="border-amber-500/50 text-amber-400 px-3 py-1">
+              <Badge variant="outline" className="border-blue-500/50 dark:border-amber-500/50 text-blue-600 dark:text-amber-400 px-3 py-1">
                 <FileText className="h-3 w-3 mr-1" />
                 Visual Test Builder
               </Badge>
@@ -3481,19 +3481,19 @@ export default function UnifiedWorkflowEditor() {
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
               {/* Settings */}
-              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-white">
+              <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-gray-900 dark:hover:text-white">
                 <Settings className="h-4 w-4" />
               </Button>
 
               {/* Export Dropdown - Formats Only */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+                  <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white">
                     <Download className="h-4 w-4 mr-1.5 text-amber-500" />
                     Export
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700 min-w-[200px]">
+                <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-700 min-w-[200px]">
                   <DropdownMenuLabel className="text-amber-400">Export Formats</DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
@@ -3501,7 +3501,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('istqb');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                   >
                     <FileText className="h-4 w-4 mr-2 text-blue-400" />
                     ISTQB Format
@@ -3511,7 +3511,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('gherkin');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                   >
                     <Code className="h-4 w-4 mr-2 text-green-400" />
                     Gherkin/BDD Format
@@ -3521,7 +3521,7 @@ export default function UnifiedWorkflowEditor() {
                       setSelectedFormat('markdown');
                       setShowFormatDialog(true);
                     }}
-                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                   >
                     <FileText className="h-4 w-4 mr-2 text-purple-400" />
                     Markdown Format
@@ -3529,7 +3529,7 @@ export default function UnifiedWorkflowEditor() {
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
                     onClick={() => handleExport('automation')}
-                    className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                    className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                   >
                     <Play className="h-4 w-4 mr-2 text-amber-400" />
                     Playwright Script
@@ -3554,7 +3554,7 @@ export default function UnifiedWorkflowEditor() {
                             toast.error('Export failed');
                           }
                         }}
-                        className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                        className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                       >
                         <Save className="h-4 w-4 mr-2 text-green-400" />
                         Export All to File
@@ -3574,7 +3574,7 @@ export default function UnifiedWorkflowEditor() {
                             toast.error('Import failed');
                           }
                         }}
-                        className="hover:bg-gray-800 text-gray-300 hover:text-white focus:bg-gray-800"
+                        className="hover:bg-gray-100 dark:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-white focus:bg-gray-100 dark:bg-gray-800"
                       >
                         <FileDown className="h-4 w-4 mr-2 text-blue-400" />
                         Import from File
@@ -3589,7 +3589,7 @@ export default function UnifiedWorkflowEditor() {
                 size="sm" 
                 variant="outline"
                 onClick={saveTestCase}
-                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 px-4"
+                className="border-blue-500/50 dark:border-amber-500/50 text-blue-600 dark:text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 px-4"
               >
                 <Save className="h-4 w-4 mr-1.5" />
                 {savedTestCaseId ? 'Save' : 'Save New'}
@@ -3621,12 +3621,12 @@ export default function UnifiedWorkflowEditor() {
         {/* Main Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Compact & Focused */}
-          <aside className="w-48 flex-none border-r border-gray-800 bg-gray-900 overflow-y-auto">
+          <aside className="w-48 flex-none border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-y-auto">
             <div className="p-2 space-y-2">
               {/* Settings Section - Compact */}
               <Collapsible defaultOpen={false}>
                 <CollapsibleTrigger asChild>
-                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-gray-700 bg-gray-800/50 hover:bg-gray-800 transition-all text-gray-400 hover:text-white">
+                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-gray-700 bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 transition-all text-gray-500 dark:text-gray-400 hover:text-white">
                     <Settings className="h-3.5 w-3.5" />
                     <span className="text-[11px] font-medium flex-1 text-left">Settings</span>
                     <ChevronRight className="h-3 w-3" />
@@ -3635,7 +3635,7 @@ export default function UnifiedWorkflowEditor() {
                 <CollapsibleContent className="pt-2 space-y-2">
                   {/* Domain Selector */}
                   <button 
-                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-gray-800/30 border border-gray-700 hover:border-amber-500/50 flex items-center gap-2"
+                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-gray-100 dark:bg-gray-800/30 border border-gray-700 hover:border-amber-500/50 flex items-center gap-2"
                     onClick={() => setShowDomainSelector(true)}
                   >
                     <span>{DOMAINS[selectedDomain]?.icon}</span>
@@ -3683,7 +3683,7 @@ export default function UnifiedWorkflowEditor() {
                   
                   // Color mapping for category headers
                   const colorMap: Record<string, string> = {
-                    amber: 'border-amber-500/30 hover:border-amber-500/50 text-amber-400',
+                    amber: 'border-amber-500/30 hover:border-blue-500/50 dark:border-amber-500/50 text-blue-600 dark:text-amber-400',
                     green: 'border-green-500/30 hover:border-green-500/50 text-green-400',
                     blue: 'border-blue-500/30 hover:border-blue-500/50 text-blue-400',
                     purple: 'border-purple-500/30 hover:border-purple-500/50 text-purple-400',
@@ -3691,7 +3691,7 @@ export default function UnifiedWorkflowEditor() {
                     violet: 'border-violet-500/30 hover:border-violet-500/50 text-violet-400',
                     rose: 'border-rose-500/30 hover:border-rose-500/50 text-rose-400',
                   };
-                  const headerColor = colorMap[cat.color] || 'border-gray-500/30 text-gray-400';
+                  const headerColor = colorMap[cat.color] || 'border-gray-500/30 text-gray-500 dark:text-gray-400';
                   
                   return (
                     <Collapsible
@@ -3705,7 +3705,7 @@ export default function UnifiedWorkflowEditor() {
                     >
                       <CollapsibleTrigger asChild>
                         <button 
-                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border bg-gray-900/50 transition-all ${headerColor}`}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border bg-white dark:bg-gray-900/50 transition-all ${headerColor}`}
                         >
                           <CategoryIcon className="h-3.5 w-3.5" />
                           <span className="text-[11px] font-medium flex-1 text-left">{cat.label}</span>
@@ -3718,7 +3718,7 @@ export default function UnifiedWorkflowEditor() {
                             <button
                               key={step.type}
                               onClick={() => addStep(step.type as StepType)}
-                              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-800/70 transition-colors group"
+                              className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800/70 transition-colors group"
                               title={step.desc}
                             >
                               <div className={`p-1 rounded ${step.color} text-white group-hover:scale-105 transition-transform flex-shrink-0`}>
@@ -3883,7 +3883,7 @@ export default function UnifiedWorkflowEditor() {
                               <div 
                                 key={precond.testCaseId} 
                                 className={`flex items-center justify-between p-2 rounded-md ${
-                                  precond.enabled ? 'bg-white dark:bg-gray-800' : 'bg-gray-100 dark:bg-gray-900 opacity-60'
+                                  precond.enabled ? 'bg-white dark:bg-gray-100 dark:bg-gray-800' : 'bg-gray-100 dark:bg-white dark:bg-gray-900 opacity-60'
                                 }`}
                               >
                                 <div className="flex items-center gap-2">
@@ -4426,7 +4426,7 @@ export default function UnifiedWorkflowEditor() {
                           {coverage.missingHigh.slice(0, 10).map(v => (
                             <div 
                               key={v.id}
-                              className="p-2 bg-white dark:bg-gray-900 rounded text-xs cursor-pointer hover:ring-2 ring-red-300"
+                              className="p-2 bg-white dark:bg-white dark:bg-gray-900 rounded text-xs cursor-pointer hover:ring-2 ring-red-300"
                               onClick={() => {
                                 setCoveredValidations(prev => [...prev, v.id]);
                               }}
@@ -4815,7 +4815,7 @@ export default function UnifiedWorkflowEditor() {
                           
                           {/* Test Data */}
                           {getCurrentManualStep().value && (
-                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
+                            <div className="mt-3 p-3 bg-white dark:bg-white dark:bg-gray-900 rounded border">
                               <span className="text-xs text-muted-foreground">Test Data:</span>
                               <p className="font-mono text-sm mt-1">{getCurrentManualStep().value}</p>
                             </div>
@@ -4845,7 +4845,7 @@ export default function UnifiedWorkflowEditor() {
                           
                           {/* Assertions to verify */}
                           {getCurrentManualStep().assertion?.enabled && (
-                            <div className="mt-3 p-3 bg-white dark:bg-gray-900 rounded border">
+                            <div className="mt-3 p-3 bg-white dark:bg-white dark:bg-gray-900 rounded border">
                               <span className="text-xs text-muted-foreground">Verify:</span>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline">{getCurrentManualStep().assertion.type}</Badge>
@@ -5057,7 +5057,7 @@ function StepCard({
     >
       {/* Drag Handle */}
       <div className="cursor-grab opacity-0 group-hover:opacity-100 active:cursor-grabbing flex items-center">
-        <svg className="h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <svg className="h-5 w-5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM16 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
         </svg>
       </div>
@@ -5073,7 +5073,7 @@ function StepCard({
       {/* Content - NO CODE/SELECTOR shown */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <info.icon className="h-4 w-4 text-gray-400" />
+          <info.icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           <span className="font-semibold text-white text-base">{displayName}</span>
           {!step.enabled && (
             <Badge variant="secondary" className="text-xs bg-gray-700 text-gray-300">Disabled</Badge>
@@ -5126,17 +5126,17 @@ function StepCard({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="bg-gray-900 border-gray-700">
+          <DropdownMenuContent className="bg-white dark:bg-gray-900 border-gray-700">
             <DropdownMenuItem 
               onClick={onDuplicate}
-              className="text-gray-200 hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white cursor-pointer"
+              className="text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white focus:bg-gray-100 dark:bg-gray-800 focus:text-white cursor-pointer"
             >
               <Copy className="h-4 w-4 mr-2 text-blue-400" />
               Duplicate
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={() => onUpdate({ enabled: !step.enabled })}
-              className="text-gray-200 hover:bg-gray-800 hover:text-white focus:bg-gray-800 focus:text-white cursor-pointer"
+              className="text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-100 dark:bg-gray-800 hover:text-white focus:bg-gray-100 dark:bg-gray-800 focus:text-white cursor-pointer"
             >
               {step.enabled ? (
                 <><EyeOff className="h-4 w-4 mr-2 text-amber-400" />Disable</>

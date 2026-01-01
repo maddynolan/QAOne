@@ -1,28 +1,23 @@
 /**
- * StreamlinedLayout - Clean, modern tab-based navigation
+ * StreamlinedLayout - Enterprise Navigation
  * 
  * Design Philosophy:
- * - Single header with unified branding
- * - 5 core modules via tabs
- * - Consistent amber/orange accent
- * - Dark theme optimized for long sessions
- * - No nested menus or sidebars
+ * - Clean, professional enterprise styling
+ * - Light theme default (like Katalon, OpenText, Provar)
+ * - Dark theme option (original Flowstral)
+ * - Minimal icons in navigation
+ * - Consistent with enterprise QA tools
  */
 
 import React from 'react';
 import { NavLink, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { isElectron } from '@/lib/electron-bridge';
+import { useTheme } from '@/contexts/ThemeContext';
 import {
-  Video,
-  FileText,
-  Globe,
-  Gauge,
-  Cloud,
   Settings,
   Bell,
   User,
-  Zap,
   ChevronDown,
   MoreHorizontal,
   LayoutDashboard,
@@ -36,12 +31,12 @@ import {
   Wrench,
   Box,
   RefreshCw,
-  Pencil,
   FolderTree,
-  Play,
   Kanban,
   Plug,
-  Eye,
+  Sun,
+  Moon,
+  FileText,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -62,88 +57,84 @@ interface NavItem {
   id: string;
   label: string;
   path: string;
-  icon: React.ElementType;
   description?: string;
 }
 
-// Workflow: Record → Build → Tests (with Runs inside)
+// Workflow: Record → Build → Tests (with Runs inside) - NO ICONS in nav
 const mainNavItems: NavItem[] = [
   {
     id: 'recorder',
     label: 'Record',
     path: '/recorder',
-    icon: Video,
     description: 'Capture browser interactions',
   },
   {
     id: 'builder',
     label: 'Build',
     path: '/test-cases/builder',
-    icon: Pencil,
     description: 'Create & edit test cases',
   },
   {
     id: 'tests',
     label: 'Tests',
     path: '/test-cases',
-    icon: FolderTree,
     description: 'Repository, Suites, Plans, Runs',
   },
   {
     id: 'api',
     label: 'API',
     path: '/api',
-    icon: Globe,
     description: 'API testing',
   },
   {
     id: 'performance',
     label: 'Perf',
     path: '/performance',
-    icon: Gauge,
     description: 'Load testing',
   },
   {
     id: 'accessibility',
     label: 'A11y',
     path: '/accessibility',
-    icon: Eye,
     description: 'Accessibility testing',
   },
   {
     id: 'salesforce',
     label: 'SF',
     path: '/salesforce',
-    icon: Cloud,
     description: 'Salesforce tools',
   },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LOGO COMPONENT
+// LOGO COMPONENT - Adapts to theme
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FlowstralLogo() {
+  const { theme } = useTheme();
+  
   return (
-    <div className="flex items-center gap-2">
-      {/* Logo icon */}
-      <div className="relative w-8 h-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-400 to-orange-600 rounded-lg shadow-lg shadow-amber-500/30" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
-        </div>
+    <div className="flex items-center gap-2.5">
+      {/* Logo icon - Blue in light, Orange in dark */}
+      <div className={cn(
+        "relative w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm",
+        theme === 'light' 
+          ? "bg-gradient-to-br from-blue-500 to-blue-700" 
+          : "bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg shadow-amber-500/30"
+      )}>
+        F
       </div>
       {/* Logo text */}
-      <span className="text-lg font-bold tracking-tight">
-        <span className="text-white">Flow</span>
-        <span className="text-amber-500">stral</span>
+      <span className="text-lg font-semibold tracking-tight">
+        <span className={theme === 'light' ? 'text-gray-900' : 'text-white'}>Flow</span>
+        <span className={theme === 'light' ? 'text-blue-600' : 'text-amber-500'}>stral</span>
       </span>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB BUTTON COMPONENT
+// TAB BUTTON COMPONENT - Clean text-only nav (enterprise style)
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface TabButtonProps {
@@ -152,38 +143,72 @@ interface TabButtonProps {
 }
 
 function TabButton({ item, isActive }: TabButtonProps) {
-  const Icon = item.icon;
+  const { theme } = useTheme();
   
   return (
     <NavLink
       to={item.path}
       className={cn(
-        "relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-        isActive 
-          ? "bg-amber-500/15 text-amber-400" 
-          : "text-gray-400 hover:text-white hover:bg-gray-800/50"
+        "relative px-4 py-2 text-sm font-medium transition-all duration-200 rounded-md",
+        // Light mode
+        theme === 'light' && (
+          isActive 
+            ? "text-blue-700 bg-blue-50" 
+            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+        ),
+        // Dark mode
+        theme === 'dark' && (
+          isActive 
+            ? "text-amber-400 bg-amber-500/10" 
+            : "text-gray-400 hover:text-white hover:bg-gray-800/50"
+        )
       )}
     >
-      <Icon className={cn(
-        "w-4 h-4",
-        isActive ? "text-amber-500" : ""
-      )} />
-      <span>{item.label}</span>
-      {/* Active indicator */}
+      {item.label}
+      {/* Active indicator line */}
       {isActive && (
-        <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full" />
+        <div className={cn(
+          "absolute bottom-0 left-2 right-2 h-0.5 rounded-full",
+          theme === 'light' ? "bg-blue-600" : "bg-gradient-to-r from-amber-400 to-orange-500"
+        )} />
       )}
     </NavLink>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HEADER COMPONENT
+// THEME TOGGLE COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggleTheme}
+      className={cn(
+        "h-9 w-9",
+        theme === 'light' 
+          ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900" 
+          : "text-gray-400 hover:bg-gray-800 hover:text-white"
+      )}
+      title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+    >
+      {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+    </Button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HEADER COMPONENT - Enterprise style
 // ═══════════════════════════════════════════════════════════════════════════
 
 function Header() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const currentPath = location.pathname;
   const inElectron = isElectron();
 
@@ -211,24 +236,30 @@ function Header() {
   ];
 
   return (
-    <header className="h-14 bg-gray-950 border-b border-gray-800/80 px-4 flex items-center justify-between sticky top-0 z-50">
+    <header className={cn(
+      "h-14 border-b px-4 flex items-center justify-between sticky top-0 z-50",
+      theme === 'light' 
+        ? "bg-white border-gray-200 shadow-sm" 
+        : "bg-gray-950 border-gray-800/80"
+    )}>
       {/* Left: Logo + Navigation */}
       <div className="flex items-center gap-6">
         <FlowstralLogo />
         
         {/* Divider */}
-        <div className="h-6 w-px bg-gray-800" />
+        <div className={cn(
+          "h-6 w-px",
+          theme === 'light' ? "bg-gray-200" : "bg-gray-800"
+        )} />
         
-        {/* Main Navigation Tabs */}
+        {/* Main Navigation Tabs - Clean text only */}
         <nav className="flex items-center gap-1">
           {mainNavItems.map(item => {
-            // Smart path matching - builder should NOT match when on test-cases main page
+            // Smart path matching
             let isActive = false;
             if (item.id === 'builder') {
-              // Builder is active only when on /test-cases/builder routes
               isActive = currentPath.includes('/builder');
             } else if (item.id === 'tests') {
-              // Tests is active when on /test-cases but NOT /builder
               isActive = currentPath.startsWith('/test-cases') && !currentPath.includes('/builder');
             } else {
               isActive = currentPath.startsWith(item.path);
@@ -248,27 +279,30 @@ function Header() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                  "text-gray-400 hover:text-white hover:bg-gray-800/50"
+                  "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                  theme === 'light'
+                    ? "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    : "text-gray-400 hover:text-white hover:bg-gray-800/50"
                 )}>
-                  <MoreHorizontal className="w-4 h-4" />
-                  <span>More</span>
-                  <ChevronDown className="w-3 h-3" />
+                  More
+                  <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56 bg-gray-900 border-gray-800 max-h-[70vh] overflow-y-auto">
-                <DropdownMenuLabel className="text-gray-500 text-xs">Additional Features</DropdownMenuLabel>
+              <DropdownMenuContent align="start" className="w-56 max-h-[70vh] overflow-y-auto">
+                <DropdownMenuLabel className="text-xs uppercase tracking-wider">Additional Features</DropdownMenuLabel>
                 {webFeatures.map((item, idx) => 
                   item.divider ? (
-                    <DropdownMenuSeparator key={idx} className="bg-gray-800" />
+                    <DropdownMenuSeparator key={idx} />
                   ) : (
                     <DropdownMenuItem 
                       key={item.path}
                       className={cn(
                         "cursor-pointer",
-                        currentPath === item.path 
-                          ? "bg-amber-500/10 text-amber-400" 
-                          : "text-gray-300 focus:bg-gray-800 focus:text-white"
+                        currentPath === item.path && (
+                          theme === 'light'
+                            ? "bg-blue-50 text-blue-700"
+                            : "bg-amber-500/10 text-amber-400"
+                        )
                       )}
                       onClick={() => navigate(item.path!)}
                     >
@@ -285,21 +319,37 @@ function Header() {
       
       {/* Right: Actions */}
       <div className="flex items-center gap-1">
+        {/* Theme Toggle */}
+        <ThemeToggle />
+        
         {/* Notifications */}
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-9 w-9 text-gray-400 hover:text-white hover:bg-gray-800"
+          className={cn(
+            "relative h-9 w-9",
+            theme === 'light'
+              ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
         >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full" />
+          <span className={cn(
+            "absolute top-1.5 right-1.5 w-2 h-2 rounded-full",
+            theme === 'light' ? "bg-blue-600" : "bg-amber-500"
+          )} />
         </Button>
         
         {/* Settings */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 text-gray-400 hover:text-white hover:bg-gray-800"
+          className={cn(
+            "h-9 w-9",
+            theme === 'light'
+              ? "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
           onClick={() => navigate('/settings')}
         >
           <Settings className="w-4 h-4" />
@@ -310,28 +360,38 @@ function Header() {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex items-center gap-2 h-9 text-gray-400 hover:text-white hover:bg-gray-800 px-2 ml-1"
+              className={cn(
+                "flex items-center gap-2 h-9 px-2 ml-1",
+                theme === 'light'
+                  ? "text-gray-600 hover:bg-gray-100"
+                  : "text-gray-400 hover:bg-gray-800"
+              )}
             >
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-                <User className="w-3.5 h-3.5 text-white" />
+              <div className={cn(
+                "w-7 h-7 rounded-full flex items-center justify-center",
+                theme === 'light'
+                  ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white"
+                  : "bg-gradient-to-br from-amber-400 to-orange-500 text-white"
+              )}>
+                <User className="w-3.5 h-3.5" />
               </div>
               <ChevronDown className="w-3 h-3" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 bg-gray-900 border-gray-800">
-            <DropdownMenuItem className="text-gray-300 focus:bg-gray-800 focus:text-white cursor-pointer">
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem className="cursor-pointer">
               <User className="w-4 h-4 mr-2" />
               Profile
             </DropdownMenuItem>
             <DropdownMenuItem 
-              className="text-gray-300 focus:bg-gray-800 focus:text-white cursor-pointer"
+              className="cursor-pointer"
               onClick={() => navigate('/settings')}
             >
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-gray-800" />
-            <DropdownMenuItem className="text-red-400 focus:bg-red-900/20 focus:text-red-400 cursor-pointer">
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-700 dark:focus:text-red-400">
               Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -346,8 +406,15 @@ function Header() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function StreamlinedLayout({ children }: { children?: React.ReactNode }) {
+  const { theme } = useTheme();
+  
   return (
-    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden">
+    <div className={cn(
+      "h-screen flex flex-col overflow-hidden",
+      theme === 'light' 
+        ? "bg-gray-50 text-gray-900" 
+        : "bg-gray-950 text-white"
+    )}>
       <Header />
       <main className="flex-1 overflow-hidden">
         {children || <Outlet />}

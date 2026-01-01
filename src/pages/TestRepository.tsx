@@ -383,8 +383,8 @@ function TreeItem({
         className={cn(
           "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer transition-colors group",
           isSelected 
-            ? "bg-amber-500/20 text-amber-400" 
-            : "hover:bg-gray-800 text-gray-300",
+            ? "bg-amber-500/20 text-blue-600 dark:text-amber-400" 
+            : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-300",
           "select-none"
         )}
         style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
@@ -415,12 +415,12 @@ function TreeItem({
         {/* Icon */}
         {node.type === 'folder' ? (
           isExpanded ? (
-            <FolderOpen className="w-4 h-4 text-amber-500" />
+            <FolderOpen className="w-4 h-4 text-blue-600 dark:text-amber-500" />
           ) : (
-            <Folder className="w-4 h-4 text-amber-500" />
+            <Folder className="w-4 h-4 text-blue-600 dark:text-amber-500" />
           )
         ) : (
-          <FileText className="w-4 h-4 text-gray-400" />
+          <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
         )}
 
         {/* Name */}
@@ -441,7 +441,7 @@ function TreeItem({
 
         {/* Folder count badge */}
         {node.type === 'folder' && (
-          <Badge className="h-5 px-1.5 text-xs bg-gray-800 text-gray-400 opacity-0 group-hover:opacity-100">
+          <Badge className="h-5 px-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100">
             {folderTestCount}
           </Badge>
         )}
@@ -476,7 +476,7 @@ function TreeItem({
                   setShowContextMenu(false);
                 }}
                 disabled={isRootFolder}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Pencil className="w-4 h-4" />
                 Rename Folder
@@ -487,7 +487,7 @@ function TreeItem({
                   setShowContextMenu(false);
                 }}
                 disabled={isRootFolder}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete Folder
@@ -500,7 +500,7 @@ function TreeItem({
                   onRename?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <Pencil className="w-4 h-4" />
                 Rename Test
@@ -510,7 +510,7 @@ function TreeItem({
                   onDuplicate?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <Copy className="w-4 h-4" />
                 Duplicate Test
@@ -521,7 +521,7 @@ function TreeItem({
                   onDelete?.(node);
                   setShowContextMenu(false);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-800"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete Test
@@ -581,7 +581,7 @@ function TestCaseCard({
     <Card
       onClick={onSelect}
       className={cn(
-        "bg-gray-900/50 border-gray-800 cursor-pointer transition-all hover:border-amber-500/30 group",
+        "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 cursor-pointer transition-all hover:border-blue-500/50 dark:hover:border-amber-500/30 group",
         isSelected && "border-amber-500 ring-1 ring-amber-500/30"
       )}
     >
@@ -598,7 +598,7 @@ function TestCaseCard({
               e.stopPropagation();
               onStar();
             }}
-            className="p-1 hover:bg-gray-800 rounded"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
           >
             {testCase.starred ? (
               <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
@@ -618,10 +618,10 @@ function TestCaseCard({
               <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">Auto</Badge>
             )}
             {testCase.automationStatus === 'partial' && (
-              <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">Partial</Badge>
+              <Badge className="bg-amber-500/10 text-blue-600 dark:text-amber-400 border-amber-500/20 text-xs">Partial</Badge>
             )}
             {(!testCase.automationStatus || testCase.automationStatus === 'none') && (
-              <Badge className="bg-gray-500/10 text-gray-400 border-gray-500/20 text-xs">Manual</Badge>
+              <Badge className="bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20 text-xs">Manual</Badge>
             )}
             {testCase.priority && (
               <Badge
@@ -629,8 +629,8 @@ function TestCaseCard({
                   "text-xs",
                   testCase.priority === 'critical' && "bg-red-500/10 text-red-400",
                   testCase.priority === 'high' && "bg-orange-500/10 text-orange-400",
-                  testCase.priority === 'medium' && "bg-amber-500/10 text-amber-400",
-                  testCase.priority === 'low' && "bg-gray-500/10 text-gray-400"
+                  testCase.priority === 'medium' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
+                  testCase.priority === 'low' && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
                 )}
               >
                 {testCase.priority}
@@ -653,7 +653,7 @@ function TestCaseCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-gray-400 hover:text-white hover:bg-gray-800"
+              className="h-7 w-7 text-gray-500 dark:text-gray-400 hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit();
@@ -668,7 +668,7 @@ function TestCaseCard({
         {testCase.tags && testCase.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {testCase.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded">
+              <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded">
                 {tag}
               </span>
             ))}
@@ -766,8 +766,8 @@ function TestRunResultsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden bg-gray-900 border-gray-800">
-        <DialogHeader className="border-b border-gray-800 pb-4">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden bg-gray-900 border-gray-200 dark:border-gray-800">
+        <DialogHeader className="border-b border-gray-200 dark:border-gray-800 pb-4">
           <DialogTitle className="flex items-center gap-3 text-white">
             <div className={cn(
               "p-2 rounded-lg",
@@ -779,12 +779,12 @@ function TestRunResultsDialog({
               ) : run.status === 'failed' ? (
                 <AlertCircle className="w-5 h-5 text-red-400" />
               ) : (
-                <Clock className="w-5 h-5 text-gray-400" />
+                <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               )}
             </div>
             <div>
               <span className="text-lg">{run.name}</span>
-              <div className="text-sm text-gray-400 font-normal mt-0.5">
+              <div className="text-sm text-gray-500 dark:text-gray-400 font-normal mt-0.5">
                 {testCase?.name || 'Test Execution Results'}
               </div>
             </div>
@@ -794,9 +794,9 @@ function TestRunResultsDialog({
         <div className="overflow-y-auto max-h-[60vh] py-4 space-y-4">
           {/* Summary Stats */}
           <div className="grid grid-cols-4 gap-3">
-            <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+            <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-white">{totalSteps}</div>
-              <div className="text-xs text-gray-400">{isMultiTest ? 'Total Tests' : 'Total Steps'}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{isMultiTest ? 'Total Tests' : 'Total Steps'}</div>
             </div>
             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
               <div className="text-2xl font-bold text-emerald-400">{passedSteps}</div>
@@ -806,17 +806,17 @@ function TestRunResultsDialog({
               <div className="text-2xl font-bold text-red-400">{failedSteps}</div>
               <div className="text-xs text-red-400/70">Failed</div>
             </div>
-            <div className="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-amber-400">{duration}s</div>
-              <div className="text-xs text-gray-400">Duration</div>
+            <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600 dark:text-amber-400">{duration}s</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Duration</div>
             </div>
           </div>
 
           {/* Execution Mode Info */}
-          <div className="flex items-center gap-2 text-sm text-gray-400 flex-wrap">
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
             <Badge className={cn(
               "text-xs",
-              run.mode === 'manual' ? "bg-amber-500/10 text-amber-400" : "bg-blue-500/10 text-blue-400"
+              run.mode === 'manual' ? "bg-amber-500/10 text-blue-600 dark:text-amber-400" : "bg-blue-500/10 text-blue-400"
             )}>
               {run.mode === 'manual' ? '📋 Manual Execution' : '🤖 Automated Execution'}
             </Badge>
@@ -824,7 +824,7 @@ function TestRunResultsDialog({
               <>
                 <Badge className={cn(
                   "text-xs",
-                  run.executionMode === 'parallel' ? "bg-purple-500/10 text-purple-400" : "bg-gray-500/10 text-gray-400"
+                  run.executionMode === 'parallel' ? "bg-purple-500/10 text-purple-400" : "bg-gray-500/10 text-gray-500 dark:text-gray-400"
                 )}>
                   {run.executionMode === 'parallel' ? 'Parallel' : 'Sequential'}
                 </Badge>
@@ -837,11 +837,11 @@ function TestRunResultsDialog({
           {/* Progress Bar */}
           {totalSteps > 0 && (
             <div className="space-y-1">
-              <div className="flex justify-between text-xs text-gray-400">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>Progress</span>
                 <span>{Math.round((passedSteps / totalSteps) * 100)}% passed</span>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden flex">
+              <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden flex">
                 <div 
                   className="bg-emerald-500 h-full transition-all duration-500" 
                   style={{ width: `${(passedSteps / totalSteps) * 100}%` }} 
@@ -884,7 +884,7 @@ function TestRunResultsDialog({
                         "rounded-lg border transition-colors",
                         testResult.status === 'passed' ? "bg-emerald-900/10 border-emerald-800/50" :
                         testResult.status === 'failed' ? "bg-red-900/20 border-red-800/50" :
-                        testResult.status === 'skipped' ? "bg-gray-800/50 border-gray-700/50" :
+                        testResult.status === 'skipped' ? "bg-gray-100 dark:bg-gray-800/50 border-gray-700/50" :
                         "bg-amber-900/10 border-amber-800/50"
                       )}
                     >
@@ -900,7 +900,7 @@ function TestRunResultsDialog({
                           ) : testResult.status === 'skipped' ? (
                             <Clock className="h-5 w-5 text-gray-500" />
                           ) : (
-                            <RefreshCw className="h-5 w-5 text-amber-400 animate-spin" />
+                            <RefreshCw className="h-5 w-5 text-blue-600 dark:text-amber-400 animate-spin" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -926,7 +926,7 @@ function TestRunResultsDialog({
                                 </span>
                               )}
                               <ChevronDown className={cn(
-                                "w-4 h-4 text-gray-400 transition-transform",
+                                "w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform",
                                 expandedTest === idx && "transform rotate-180"
                               )} />
                             </div>
@@ -941,8 +941,8 @@ function TestRunResultsDialog({
                       
                       {/* Expanded test details - handles both automated and manual step results */}
                       {expandedTest === idx && ((testResult as any).stepResults?.length > 0 || (testResult as any).steps?.length > 0) && (
-                        <div className="border-t border-gray-800 p-3 space-y-2 bg-black/20">
-                          <div className="text-xs text-gray-400 mb-2">Step Details:</div>
+                        <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2 bg-black/20">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Step Details:</div>
                           {((testResult as any).stepResults || (testResult as any).steps || []).map((step: any, stepIdx: number) => (
                             <div
                               key={stepIdx}
@@ -950,8 +950,8 @@ function TestRunResultsDialog({
                                 "rounded p-2 text-sm flex items-start gap-2",
                                 step.status === 'passed' ? "bg-emerald-900/20" :
                                 step.status === 'failed' ? "bg-red-900/30" :
-                                step.status === 'skipped' ? "bg-gray-800/30" :
-                                "bg-gray-800/50"
+                                step.status === 'skipped' ? "bg-gray-100 dark:bg-gray-800/30" :
+                                "bg-gray-100 dark:bg-gray-800/50"
                               )}
                             >
                               {step.status === 'passed' ? (
@@ -959,7 +959,7 @@ function TestRunResultsDialog({
                               ) : step.status === 'failed' ? (
                                 <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
                               ) : step.status === 'skipped' ? (
-                                <Clock className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                                <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" />
                               ) : (
                                 <Clock className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
                               )}
@@ -980,7 +980,7 @@ function TestRunResultsDialog({
                                   )}
                                 </div>
                                 {step.notes && (
-                                  <div className="mt-1 text-xs text-gray-400">
+                                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                     Notes: {step.notes}
                                   </div>
                                 )}
@@ -1064,7 +1064,7 @@ function TestRunResultsDialog({
                           "rounded-lg border p-3 transition-colors",
                           step.status === 'passed' ? "bg-emerald-900/10 border-emerald-800/50" :
                           step.status === 'failed' ? "bg-red-900/20 border-red-800/50" :
-                          step.status === 'skipped' ? "bg-gray-800/50 border-gray-700/50" :
+                          step.status === 'skipped' ? "bg-gray-100 dark:bg-gray-800/50 border-gray-700/50" :
                           "bg-amber-900/10 border-amber-800/50"
                         )}
                       >
@@ -1077,7 +1077,7 @@ function TestRunResultsDialog({
                             ) : step.status === 'skipped' ? (
                               <Clock className="h-5 w-5 text-gray-500" />
                             ) : (
-                              <RefreshCw className="h-5 w-5 text-amber-400 animate-spin" />
+                              <RefreshCw className="h-5 w-5 text-blue-600 dark:text-amber-400 animate-spin" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -1118,7 +1118,7 @@ function TestRunResultsDialog({
                                 {stepSelector && (
                                   <div className="flex items-start gap-2 text-xs">
                                     <span className="text-gray-500 min-w-[60px]">Target:</span>
-                                    <code className="text-amber-400/80 bg-gray-800 px-1.5 py-0.5 rounded font-mono text-[11px] break-all">
+                                    <code className="text-blue-600 dark:text-amber-400/80 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded font-mono text-[11px] break-all">
                                       {stepSelector}
                                     </code>
                                   </div>
@@ -1134,7 +1134,7 @@ function TestRunResultsDialog({
                             
                             {/* Notes (manual execution) */}
                             {step.notes && (
-                              <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-300">
+                              <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800/50 rounded text-xs text-gray-300">
                                 <span className="text-gray-500">Notes:</span> {step.notes}
                               </div>
                             )}
@@ -1206,8 +1206,8 @@ function TestRunResultsDialog({
                 <FileText className="w-4 h-4" />
                 Execution Logs
               </h3>
-              <div className="bg-gray-950 border border-gray-800 rounded-lg p-3 max-h-48 overflow-y-auto">
-                <pre className="text-xs text-gray-400 font-mono whitespace-pre-wrap">
+              <div className="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-3 max-h-48 overflow-y-auto">
+                <pre className="text-xs text-gray-500 dark:text-gray-400 font-mono whitespace-pre-wrap">
                   {run.logs.join('\n')}
                 </pre>
               </div>
@@ -1215,18 +1215,18 @@ function TestRunResultsDialog({
           )}
 
           {/* Timestamps */}
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-800">
+          <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-800">
             <span>Started: {run.startTime ? new Date(run.startTime).toLocaleString() : 'N/A'}</span>
             <span>Ended: {run.endTime ? new Date(run.endTime).toLocaleString() : 'N/A'}</span>
           </div>
         </div>
 
-        <DialogFooter className="border-t border-gray-800 pt-4">
+        <DialogFooter className="border-t border-gray-200 dark:border-gray-800 pt-4">
           <div className="flex gap-2 w-full justify-between">
             <Button
               variant="outline"
               onClick={onClose}
-              className="border-gray-700 text-gray-300 hover:bg-gray-800"
+              className="border-gray-700 text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               Close
             </Button>
@@ -3179,19 +3179,19 @@ export default function TestRepository() {
   }), [testCases, suites, releases, testRuns, defects]);
 
   return (
-    <div className="h-full flex flex-col bg-gray-950 text-white overflow-hidden">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-white overflow-hidden">
       {/* Header with Tabs */}
-      <header className="flex-none border-b border-gray-800">
+      <header className="flex-none border-b border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 dark:from-amber-500 dark:to-orange-500">
               <FolderTree className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Test Management</h1>
-              <p className="text-xs text-gray-500">
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Test Management</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-500">
                 {stats.totalTests} tests • {stats.suites} suites • {stats.releases} releases
-                {stats.openDefects > 0 && <span className="text-red-400"> • {stats.openDefects} open defects</span>}
+                {stats.openDefects > 0 && <span className="text-red-600 dark:text-red-400"> • {stats.openDefects} open defects</span>}
               </p>
             </div>
           </div>
@@ -3212,10 +3212,10 @@ export default function TestRepository() {
                 }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 bg-gray-900 border-gray-700 text-white h-9"
+                className="pl-9 h-9"
               />
               {searchLoading && (
-                <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500 animate-spin" />
+                <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600 dark:text-amber-500 animate-spin" />
               )}
             </div>
 
@@ -3243,7 +3243,7 @@ export default function TestRepository() {
                     }
                     window.dispatchEvent(new CustomEvent('reload-test-cases'));
                   }}
-                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                  className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                   title="Refresh test cases from storage"
                 >
                   <RefreshCw className="w-4 h-4" />
@@ -3252,7 +3252,7 @@ export default function TestRepository() {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowNewFolderDialog(true)}
-                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                  className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <FolderPlus className="w-4 h-4 mr-2" />
                   Folder
@@ -3266,7 +3266,6 @@ export default function TestRepository() {
                     setNewTestFolder(currentFolderId);
                     setShowCreateTestDialog(true);
                   }}
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 text-white"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   New Test
@@ -3312,7 +3311,7 @@ export default function TestRepository() {
                     };
                     input.click();
                   }}
-                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                  className="border-gray-700 text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Import
@@ -3389,7 +3388,7 @@ export default function TestRepository() {
         </div>
 
         {/* Tab Navigation - Following proper test management workflow */}
-        <div className="px-4 flex items-center gap-1 border-t border-gray-800/50 overflow-x-auto">
+        <div className="px-4 flex items-center gap-1 border-t border-gray-200 dark:border-gray-800/50 overflow-x-auto">
           {[
             { id: 'repository', label: 'Test Cases', icon: FolderTree, count: stats.totalTests, desc: 'All test cases' },
             { id: 'suites', label: 'Suites', icon: Layers, count: stats.suites, desc: 'Group related tests' },
@@ -3404,8 +3403,8 @@ export default function TestRepository() {
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
                 activeTab === tab.id
-                  ? "border-amber-500 text-amber-400"
-                  : "border-transparent text-gray-400 hover:text-white"
+                  ? "border-amber-500 text-blue-600 dark:text-amber-400"
+                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-white"
               )}
             >
               <tab.icon className={cn("w-4 h-4", tab.id === 'defects' && (tab as any).highlight && "text-red-400")} />
@@ -3414,7 +3413,7 @@ export default function TestRepository() {
                 "h-5 px-1.5 text-xs",
                 tab.id === 'defects' && (tab as any).highlight
                   ? "bg-red-500/20 text-red-400 border border-red-500/50"
-                  : "bg-gray-800 text-gray-400"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
               )}>{tab.count}</Badge>
             </button>
           ))}
@@ -3426,7 +3425,7 @@ export default function TestRepository() {
         /* Main Repository content */
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar - Tree View */}
-          <aside className="w-64 flex-none border-r border-gray-800 overflow-y-auto bg-gray-900/30">
+          <aside className="w-64 flex-none border-r border-gray-200 dark:border-gray-800 overflow-y-auto bg-gray-50 dark:bg-gray-900/30">
             <div className="p-2">
               {treeData && (
                 <TreeItem
@@ -3487,8 +3486,8 @@ export default function TestRepository() {
                       <button
                         onClick={() => setCurrentFolderId(folder.id)}
                         className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-800",
-                          folder.id === currentFolderId ? "text-amber-400" : "text-gray-400"
+                          "flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800",
+                          folder.id === currentFolderId ? "text-blue-600 dark:text-amber-400" : "text-gray-500 dark:text-gray-400"
                         )}
                       >
                         {idx === 0 ? <Home className="w-3.5 h-3.5" /> : <Folder className="w-3.5 h-3.5" />}
@@ -3500,7 +3499,7 @@ export default function TestRepository() {
 
                 {/* Stats bar */}
                 {/* Stats bar with filters for enterprise scale */}
-                <div className="flex flex-wrap items-center gap-4 mb-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                <div className="flex flex-wrap items-center gap-4 mb-4 p-3 bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -3514,19 +3513,19 @@ export default function TestRepository() {
                           setIsMultiSelectMode(false);
                         }
                       }}
-                      className="w-4 h-4 rounded border-gray-600 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                      className="w-4 h-4 rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500 cursor-pointer"
                       title="Select all tests on this page"
                     />
-                    <Layers className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm text-gray-400">
+                    <Layers className="w-4 h-4 text-blue-600 dark:text-amber-500" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
                       {filteredTests.length === currentFolderContent.tests.length 
                         ? `${currentFolderContent.tests.length} tests` 
                         : `${filteredTests.length} of ${currentFolderContent.tests.length} tests`}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Folder className="w-4 h-4 text-amber-500" />
-                    <span className="text-sm text-gray-400">{currentFolderContent.subfolders.length} folders</span>
+                    <Folder className="w-4 h-4 text-blue-600 dark:text-amber-500" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{currentFolderContent.subfolders.length} folders</span>
                   </div>
                   
                   <div className="flex-1" />
@@ -3535,7 +3534,7 @@ export default function TestRepository() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
-                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                    className="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Status</option>
                     <option value="full">Automated</option>
@@ -3546,7 +3545,7 @@ export default function TestRepository() {
                   <select
                     value={priorityFilter}
                     onChange={(e) => setPriorityFilter(e.target.value as any)}
-                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                    className="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Priority</option>
                     <option value="critical">Critical</option>
@@ -3559,7 +3558,7 @@ export default function TestRepository() {
                   <select
                     value={planFilter}
                     onChange={(e) => setPlanFilter(e.target.value)}
-                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                    className="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Plans</option>
                     {testPlans.map(plan => (
@@ -3573,7 +3572,7 @@ export default function TestRepository() {
                   <select
                     value={releaseFilter}
                     onChange={(e) => setReleaseFilter(e.target.value)}
-                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                    className="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="all">All Releases</option>
                     {releases.map(release => (
@@ -3586,7 +3585,7 @@ export default function TestRepository() {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as any)}
-                    className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                    className="text-xs bg-gray-100 dark:bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 focus:outline-none focus:border-amber-500"
                   >
                     <option value="updated">Sort by Updated</option>
                     <option value="name">Sort by Name</option>
@@ -3595,13 +3594,13 @@ export default function TestRepository() {
                   
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
                       {currentFolderContent.tests.filter(t => t.automationStatus === 'automated' || t.automationStatus === 'full').length} automated
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-400">
+                    <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
                       {currentFolderContent.tests.filter(t => !t.automationStatus || t.automationStatus === 'none').length} manual
                     </span>
                   </div>
@@ -3612,7 +3611,7 @@ export default function TestRepository() {
                   <div className="space-y-1">
                     {/* Inline subfolders (quick navigation + drop targets) */}
                     {currentFolderContent.subfolders.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-gray-800/50">
+                      <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-gray-200 dark:border-gray-800/50">
                         {currentFolderContent.subfolders.map((folder) => (
                           <button
                             key={folder.id}
@@ -3657,9 +3656,9 @@ export default function TestRepository() {
                                 toast.success(`Moved test to ${folder.name}`);
                               }
                             }}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 rounded-lg border border-gray-700 hover:border-amber-500/50 hover:bg-gray-800 transition-all text-sm"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800/50 rounded-lg border border-gray-700 hover:border-amber-500/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-sm"
                           >
-                            <FolderOpen className="w-4 h-4 text-amber-500" />
+                            <FolderOpen className="w-4 h-4 text-blue-600 dark:text-amber-500" />
                             <span className="text-gray-300">{folder.name}</span>
                             <span className="text-xs text-gray-500">
                               ({testCases.filter(tc => tc.folderId === folder.id).length})
@@ -3672,7 +3671,7 @@ export default function TestRepository() {
                     {/* Multi-select Action Bar */}
                     {selectedTestIds.size > 0 && (
                       <div className="sticky top-0 z-10 flex items-center gap-3 p-3 mb-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                        <Check className="w-5 h-5 text-amber-400" />
+                        <Check className="w-5 h-5 text-blue-600 dark:text-amber-400" />
                         <span className="text-sm text-white font-medium">
                           {selectedTestIds.size} test{selectedTestIds.size > 1 ? 's' : ''} selected
                         </span>
@@ -3684,9 +3683,9 @@ export default function TestRepository() {
                               Move to Folder
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="bg-gray-900 border-gray-700">
+                          <DropdownMenuContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                             <DropdownMenuItem 
-                              className="text-gray-300 focus:bg-gray-800"
+                              className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                               onClick={() => handleBulkMoveToFolder(null)}
                             >
                               <Home className="w-4 h-4 mr-2" />
@@ -3696,10 +3695,10 @@ export default function TestRepository() {
                             {folders.filter(f => f.id !== 'root').map(folder => (
                               <DropdownMenuItem 
                                 key={folder.id}
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={() => handleBulkMoveToFolder(folder.id)}
                               >
-                                <Folder className="w-4 h-4 mr-2 text-amber-500" />
+                                <Folder className="w-4 h-4 mr-2 text-blue-600 dark:text-amber-500" />
                                 {folder.name}
                               </DropdownMenuItem>
                             ))}
@@ -3709,7 +3708,7 @@ export default function TestRepository() {
                           size="sm" 
                           variant="ghost" 
                           onClick={clearSelection}
-                          className="text-gray-400 hover:text-white"
+                          className="text-gray-500 dark:text-gray-400 hover:text-white"
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -3746,7 +3745,7 @@ export default function TestRepository() {
                             ? "bg-amber-500/20 border-amber-500/50"
                             : selectedNode?.id === tc.id
                             ? "bg-amber-500/10 border-amber-500/30"
-                            : "bg-gray-900/30 border-gray-800 hover:bg-gray-800/50 hover:border-gray-700"
+                            : "bg-gray-50 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800/50 hover:border-gray-700"
                         )}
                       >
                         {/* Checkbox for multi-select */}
@@ -3766,7 +3765,7 @@ export default function TestRepository() {
                               return newSet;
                             });
                           }}
-                          className="w-4 h-4 rounded border-gray-600 text-amber-500 focus:ring-amber-500 flex-none cursor-pointer"
+                          className="w-4 h-4 rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500 flex-none cursor-pointer"
                           onClick={(e) => e.stopPropagation()}
                         />
                         
@@ -3787,8 +3786,8 @@ export default function TestRepository() {
                             <Badge className={cn(
                               "text-[10px] px-1.5",
                               (tc.automationStatus === 'automated' || tc.automationStatus === 'full') && "bg-green-500/10 text-green-400",
-                              tc.automationStatus === 'partial' && "bg-amber-500/10 text-amber-400",
-                              (tc.automationStatus === 'none' || !tc.automationStatus) && "bg-gray-500/10 text-gray-400"
+                              tc.automationStatus === 'partial' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
+                              (tc.automationStatus === 'none' || !tc.automationStatus) && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
                             )}>
                               {tc.automationStatus === 'automated' || tc.automationStatus === 'full' ? 'Automated' : 
                                tc.automationStatus === 'partial' ? 'Partial' : 'Manual'}
@@ -3804,7 +3803,7 @@ export default function TestRepository() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2 text-gray-400 hover:text-green-400 hover:bg-green-500/10"
+                            className="h-8 px-2 text-gray-500 dark:text-gray-400 hover:text-green-400 hover:bg-green-500/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleRunTest(tc);
@@ -3816,7 +3815,7 @@ export default function TestRepository() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2 text-gray-400 hover:text-amber-400 hover:bg-amber-500/10"
+                            className="h-8 px-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:text-amber-400 hover:bg-amber-500/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditTest(tc);
@@ -3830,15 +3829,15 @@ export default function TestRepository() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-8 px-2 text-gray-400 hover:text-white"
+                                className="h-8 px-2 text-gray-500 dark:text-gray-400 hover:text-white"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const newName = prompt('Enter new test name:', tc.name);
@@ -3859,7 +3858,7 @@ export default function TestRepository() {
                                 <Pencil className="w-4 h-4 mr-2" /> Rename
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleEditTestConfig(tc);
@@ -3868,17 +3867,17 @@ export default function TestRepository() {
                                 <Settings className="w-4 h-4 mr-2" /> Edit Configuration
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleStarTest(tc.id);
                                 }}
                               >
-                                <Star className={cn("w-4 h-4 mr-2", tc.starred && "fill-amber-400 text-amber-400")} />
+                                <Star className={cn("w-4 h-4 mr-2", tc.starred && "fill-amber-400 text-blue-600 dark:text-amber-400")} />
                                 {tc.starred ? 'Unstar' : 'Star'}
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Duplicate test case
@@ -3919,9 +3918,9 @@ export default function TestRepository() {
                     ))}
                     
                     {/* Load More / Infinite Scroll Controls */}
-                    <div className="mt-4 pt-4 border-t border-gray-800">
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm text-gray-400">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
                           Showing {displayedTests.length} of {prioritizedTests.length} tests
                           {prioritizedTests.length !== filteredTests.length && ` (${filteredTests.length} total in folder)`}
                         </span>
@@ -3936,7 +3935,7 @@ export default function TestRepository() {
                         <Button
                           onClick={loadMoreTests}
                           disabled={isLoadingMore}
-                          className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300"
+                          className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300"
                         >
                           {isLoadingMore ? (
                             <>
@@ -3961,7 +3960,7 @@ export default function TestRepository() {
                   </div>
                 ) : (
                   <div className="text-center py-16">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                       <FileText className="w-8 h-8 text-gray-600" />
                     </div>
                     <h3 className="text-lg font-semibold mb-2">No tests yet</h3>
@@ -3998,7 +3997,7 @@ export default function TestRepository() {
             {/* Search results info */}
             {searchTerm.trim() && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-amber-400">
+                <span className="text-blue-600 dark:text-amber-400">
                   Found {filteredSuites.length} suites matching "{searchTerm}"
                 </span>
               </div>
@@ -4016,7 +4015,7 @@ export default function TestRepository() {
             ) : (
               <div className="grid gap-4">
                 {filteredSuites.map((suite) => (
-                  <Card key={suite.id} className="bg-gray-900/50 border-gray-800 hover:border-amber-500/30 transition-all">
+                  <Card key={suite.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -4025,7 +4024,7 @@ export default function TestRepository() {
                             <p className="text-sm text-gray-500 mt-1">{suite.description}</p>
                           )}
                           <div className="flex items-center gap-4 mt-3">
-                            <Badge className="bg-gray-800 text-gray-300">
+                            <Badge className="bg-gray-100 dark:bg-gray-800 text-gray-300">
                               {suite.testCaseIds.length} tests
                             </Badge>
                             {suite.schedule && (
@@ -4056,18 +4055,18 @@ export default function TestRepository() {
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={() => handleEditSuite(suite)}
                               >
                                 <Edit className="w-4 h-4 mr-2" /> Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-gray-300 focus:bg-gray-800">
+                              <DropdownMenuItem className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800">
                                 <Copy className="w-4 h-4 mr-2" /> Duplicate
                               </DropdownMenuItem>
                               <DropdownMenuSeparator className="bg-gray-700" />
@@ -4097,7 +4096,7 @@ export default function TestRepository() {
             {/* Search results info */}
             {searchTerm.trim() && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-amber-400">
+                <span className="text-blue-600 dark:text-amber-400">
                   Found {filteredReleases.length} releases matching "{searchTerm}"
                 </span>
               </div>
@@ -4115,7 +4114,7 @@ export default function TestRepository() {
             ) : (
               <div className="grid gap-4">
                 {filteredReleases.map((release) => (
-                  <Card key={release.id} className="bg-gray-900/50 border-gray-800 hover:border-amber-500/30 transition-all">
+                  <Card key={release.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -4125,7 +4124,7 @@ export default function TestRepository() {
                               "text-xs",
                               release.status === 'planning' && "bg-blue-500/10 text-blue-400",
                               release.status === 'active' && "bg-green-500/10 text-green-400",
-                              release.status === 'completed' && "bg-gray-500/10 text-gray-400"
+                              release.status === 'completed' && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
                             )}>
                               {release.status}
                             </Badge>
@@ -4139,7 +4138,7 @@ export default function TestRepository() {
                               {new Date(release.startDate).toLocaleDateString()}
                               {release.endDate && ` - ${new Date(release.endDate).toLocaleDateString()}`}
                             </span>
-                            <Badge className="bg-gray-800 text-gray-300">
+                            <Badge className="bg-gray-100 dark:bg-gray-800 text-gray-300">
                               {release.suiteIds.length} suites
                             </Badge>
                           </div>
@@ -4155,18 +4154,18 @@ export default function TestRepository() {
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={() => handleEditRelease(release)}
                               >
                                 <Edit className="w-4 h-4 mr-2" /> Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-gray-300 focus:bg-gray-800">
+                              <DropdownMenuItem className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800">
                                 <Copy className="w-4 h-4 mr-2" /> Duplicate
                               </DropdownMenuItem>
                               <DropdownMenuSeparator className="bg-gray-700" />
@@ -4196,7 +4195,7 @@ export default function TestRepository() {
             {/* Search results info */}
             {searchTerm.trim() && (
               <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-amber-400">
+                <span className="text-blue-600 dark:text-amber-400">
                   Found {filteredPlans.length} plans matching "{searchTerm}"
                 </span>
               </div>
@@ -4242,7 +4241,7 @@ export default function TestRepository() {
                   const totalTests = plan.testCaseIds.length + linkedSuites.reduce((acc, s) => acc + s.testCaseIds.length, 0);
                   
                   return (
-                    <Card key={plan.id} className="bg-gray-900/50 border-gray-800 hover:border-amber-500/30 transition-all">
+                    <Card key={plan.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -4250,9 +4249,9 @@ export default function TestRepository() {
                               <h3 className="font-semibold text-white">{plan.name}</h3>
                               <Badge className={cn(
                                 "text-xs",
-                                plan.status === 'draft' && "bg-gray-500/10 text-gray-400",
+                                plan.status === 'draft' && "bg-gray-500/10 text-gray-500 dark:text-gray-400",
                                 plan.status === 'ready' && "bg-blue-500/10 text-blue-400",
-                                plan.status === 'in-progress' && "bg-amber-500/10 text-amber-400",
+                                plan.status === 'in-progress' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
                                 plan.status === 'completed' && "bg-green-500/10 text-green-400"
                               )}>
                                 {plan.status}
@@ -4262,11 +4261,11 @@ export default function TestRepository() {
                               <p className="text-sm text-gray-500 mb-2">{plan.description}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-3 text-xs">
-                              <span className="flex items-center gap-1 text-gray-400">
+                              <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
                                 <FileText className="w-3 h-3" />
                                 {totalTests} tests
                               </span>
-                              <span className="flex items-center gap-1 text-gray-400">
+                              <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
                                 <Layers className="w-3 h-3" />
                                 {plan.suiteIds.length} suites
                               </span>
@@ -4314,13 +4313,13 @@ export default function TestRepository() {
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
                                   <MoreVertical className="w-4 h-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                              <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                                 <DropdownMenuItem 
-                                  className="text-gray-300 focus:bg-gray-800"
+                                  className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                   onClick={() => {
                                     setEditingPlan(plan);
                                     setShowEditPlanDialog(true);
@@ -4329,7 +4328,7 @@ export default function TestRepository() {
                                   <Edit className="w-4 h-4 mr-2" /> Edit
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
-                                  className="text-gray-300 focus:bg-gray-800"
+                                  className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                   onClick={() => {
                                     setEditingPlan(plan);
                                     setShowLinkPlanToReleaseDialog(true);
@@ -4338,7 +4337,7 @@ export default function TestRepository() {
                                   <Link2 className="w-4 h-4 mr-2" /> Link to Release
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
-                                  className="text-gray-300 focus:bg-gray-800"
+                                  className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                   onClick={() => {
                                     const duplicate: TestPlan = {
                                       ...plan,
@@ -4401,9 +4400,9 @@ export default function TestRepository() {
                   <Plus className="w-4 h-4 mr-2" />
                   Create Test Run
                 </Button>
-                <div className="mt-6 p-4 bg-gray-800/50 rounded-lg max-w-md mx-auto">
-                  <p className="text-gray-400 text-sm">
-                    <strong className="text-amber-400">Automated:</strong> Runs tests via Playwright in desktop app<br/>
+                <div className="mt-6 p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg max-w-md mx-auto">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    <strong className="text-blue-600 dark:text-amber-400">Automated:</strong> Runs tests via Playwright in desktop app<br/>
                     <strong className="text-blue-400">Manual:</strong> Step-by-step execution with screenshots & defect linking
                   </p>
                 </div>
@@ -4421,9 +4420,9 @@ export default function TestRepository() {
                   
                   return (
                     <div className="grid grid-cols-5 gap-3 mb-4">
-                      <div className="bg-gray-800/50 rounded-lg p-3 text-center">
+                      <div className="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-white">{totalRuns}</div>
-                        <div className="text-xs text-gray-400">Total Runs</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Runs</div>
                       </div>
                       <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-emerald-400">{passedRuns}</div>
@@ -4434,8 +4433,8 @@ export default function TestRepository() {
                         <div className="text-xs text-red-400/70">Failed</div>
                       </div>
                       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-amber-400">{pendingRuns + runningRuns}</div>
-                        <div className="text-xs text-amber-400/70">Pending</div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-amber-400">{pendingRuns + runningRuns}</div>
+                        <div className="text-xs text-blue-600 dark:text-amber-400/70">Pending</div>
                       </div>
                       <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-purple-400">{passRate}%</div>
@@ -4450,12 +4449,12 @@ export default function TestRepository() {
                 {testRuns.slice(0, 50).map((run) => (
                   <div
                     key={run.id}
-                    className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-800 hover:border-gray-700 group"
+                    className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-gray-700 group"
                   >
                     <div className="flex items-center gap-3">
                       {run.status === 'passed' && <CheckCircle className="w-5 h-5 text-green-500" />}
                       {run.status === 'failed' && <AlertCircle className="w-5 h-5 text-red-500" />}
-                      {run.status === 'running' && <Clock className="w-5 h-5 text-amber-500 animate-pulse" />}
+                      {run.status === 'running' && <Clock className="w-5 h-5 text-blue-600 dark:text-amber-500 animate-pulse" />}
                       {run.status === 'pending' && <Clock className="w-5 h-5 text-gray-500" />}
                       {run.status === 'blocked' && <AlertCircle className="w-5 h-5 text-yellow-500" />}
                       <div>
@@ -4479,12 +4478,12 @@ export default function TestRepository() {
                         <div className="flex items-center gap-2 text-sm">
                           <span className="text-green-400">{run.results.passed}✓</span>
                           <span className="text-red-400">{run.results.failed}✗</span>
-                          <span className="text-gray-400">{run.results.skipped}○</span>
+                          <span className="text-gray-500 dark:text-gray-400">{run.results.skipped}○</span>
                         </div>
                       )}
                       <Badge className={cn(
                         "text-xs",
-                        run.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
+                        run.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-amber-400"
                       )}>
                         {run.mode}
                       </Badge>
@@ -4539,7 +4538,7 @@ export default function TestRepository() {
                         </Button>
                       )}
                       {run.status === 'running' && executingRunId === run.id && (
-                        <div className="flex items-center gap-2 text-xs text-amber-400">
+                        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-amber-400">
                           <Clock className="w-3 h-3 animate-spin" />
                           {run.testCaseIds && run.testCaseIds.length > 1 
                             ? `Test ${(run.currentTestIndex || 0) + 1}/${run.testCaseIds.length}`
@@ -4576,7 +4575,7 @@ export default function TestRepository() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 px-3 border-gray-700 text-gray-300 hover:bg-gray-800"
+                          className="h-7 px-3 border-gray-700 text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                           onClick={() => {
                             setSelectedRunForResults(run);
                             setShowResultsDialog(true);
@@ -4645,14 +4644,14 @@ export default function TestRepository() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-7 w-7 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-7 w-7 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                        <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                           <DropdownMenuItem 
-                            className="text-gray-300 focus:bg-gray-800"
+                            className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                             onClick={() => {
                               setSelectedRunForResults(run);
                               setShowResultsDialog(true);
@@ -4661,7 +4660,7 @@ export default function TestRepository() {
                             <BarChart3 className="w-4 h-4 mr-2" /> View Results
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            className="text-gray-300 focus:bg-gray-800"
+                            className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                             disabled={!run.testCaseId || executingRunId !== null}
                             onClick={async () => {
                               if (!run.testCaseId) return;
@@ -4718,7 +4717,7 @@ export default function TestRepository() {
               <div className="text-center py-16">
                 <Bug className="w-16 h-16 mx-auto mb-4 text-gray-600" />
                 <h2 className="text-xl font-semibold mb-2">No Defects Found</h2>
-                <p className="text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
                 <Button 
                   onClick={() => setShowCreateDefectDialog(true)}
                   className="bg-gradient-to-r from-red-500 to-orange-500"
@@ -4741,7 +4740,7 @@ export default function TestRepository() {
                     <Card key={stat.label} className={`bg-gray-900 border-${stat.color}-500/30`}>
                       <CardContent className="p-4 text-center">
                         <div className={`text-2xl font-bold text-${stat.color}-400`}>{stat.count}</div>
-                        <div className="text-xs text-gray-400">{stat.label}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</div>
                       </CardContent>
                     </Card>
                   ))}
@@ -4750,7 +4749,7 @@ export default function TestRepository() {
                 {/* Defect List */}
                 <div className="space-y-3">
                 {defects.map((defect) => (
-                  <Card key={defect.id} className="bg-gray-900 border-gray-800 hover:border-gray-700 transition-colors">
+                  <Card key={defect.id} className="bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-gray-700 transition-colors">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
@@ -4760,7 +4759,7 @@ export default function TestRepository() {
                               defect.severity === 'critical' && "bg-red-500/20 text-red-400 border-red-500/50",
                               defect.severity === 'major' && "bg-orange-500/20 text-orange-400 border-orange-500/50",
                               defect.severity === 'minor' && "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
-                              defect.severity === 'trivial' && "bg-gray-500/20 text-gray-400 border-gray-500/50",
+                              defect.severity === 'trivial' && "bg-gray-500/20 text-gray-500 dark:text-gray-400 border-gray-500/50",
                             )}>
                               {defect.severity}
                             </Badge>
@@ -4768,12 +4767,12 @@ export default function TestRepository() {
                               "text-xs",
                               defect.status === 'new' && "bg-purple-500/20 text-purple-400",
                               defect.status === 'open' && "bg-red-500/20 text-red-400",
-                              defect.status === 'in-progress' && "bg-amber-500/20 text-amber-400",
+                              defect.status === 'in-progress' && "bg-amber-500/20 text-blue-600 dark:text-amber-400",
                               defect.status === 'fixed' && "bg-blue-500/20 text-blue-400",
                               defect.status === 'verified' && "bg-cyan-500/20 text-cyan-400",
                               defect.status === 'closed' && "bg-green-500/20 text-green-400",
                               defect.status === 'reopened' && "bg-red-500/20 text-red-400",
-                              defect.status === 'deferred' && "bg-gray-500/20 text-gray-400",
+                              defect.status === 'deferred' && "bg-gray-500/20 text-gray-500 dark:text-gray-400",
                             )}>
                               {defect.status}
                             </Badge>
@@ -4781,7 +4780,7 @@ export default function TestRepository() {
                           </div>
                           <h3 className="font-medium text-white mb-1">{defect.title}</h3>
                           {defect.description && (
-                            <p className="text-sm text-gray-400 line-clamp-2">{defect.description}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{defect.description}</p>
                           )}
                           <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                             {defect.assignedTo && (
@@ -4801,7 +4800,7 @@ export default function TestRepository() {
                             )}
                             <span>{new Date(defect.createdAt).toLocaleDateString()}</span>
                             {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
-                              <span className="flex items-center gap-1 text-amber-400">
+                              <span className="flex items-center gap-1 text-blue-600 dark:text-amber-400">
                                 <Link2 className="w-3 h-3" />
                                 {defect.linkedTestCaseIds.length} test(s)
                               </span>
@@ -4820,13 +4819,13 @@ export default function TestRepository() {
                           </Badge>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={() => {
                                   setEditingDefect(defect);
                                   setShowEditDefectDialog(true);
@@ -4835,7 +4834,7 @@ export default function TestRepository() {
                                 <Edit className="w-4 h-4 mr-2" /> Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                className="text-gray-300 focus:bg-gray-800"
+                                className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                 onClick={() => {
                                   // Change status
                                   const nextStatus = {
@@ -4860,7 +4859,7 @@ export default function TestRepository() {
                               </DropdownMenuItem>
                               {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
                                 <DropdownMenuItem 
-                                  className="text-gray-300 focus:bg-gray-800"
+                                  className="text-gray-300 focus:bg-gray-100 dark:bg-gray-800"
                                   onClick={() => {
                                     const tc = testCases.find(t => defect.linkedTestCaseIds?.includes(t.id));
                                     if (tc) navigate(`/test-cases/builder?testCaseId=${tc.id}`);
@@ -4900,18 +4899,18 @@ export default function TestRepository() {
 
       {/* New Folder Dialog */}
       <Dialog open={showNewFolderDialog} onOpenChange={setShowNewFolderDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle>Create New Folder</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Folder Name</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder Name</label>
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="e.g., Login Tests, Payment Flow"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
               />
             </div>
@@ -4932,18 +4931,18 @@ export default function TestRepository() {
 
       {/* Edit Folder Dialog */}
       <Dialog open={showEditFolderDialog} onOpenChange={setShowEditFolderDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle>Rename Folder</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Folder Name</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder Name</label>
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Enter folder name"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveFolder()}
               />
             </div>
@@ -4961,18 +4960,18 @@ export default function TestRepository() {
 
       {/* Rename Folder Dialog (from context menu) */}
       <Dialog open={showRenameFolderDialog} onOpenChange={setShowRenameFolderDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle>Rename Folder</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Folder Name</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder Name</label>
               <Input
                 value={newFolderRename}
                 onChange={(e) => setNewFolderRename(e.target.value)}
                 placeholder="Enter folder name"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 onKeyDown={(e) => e.key === 'Enter' && handleSaveFolderRename()}
               />
             </div>
@@ -4990,7 +4989,7 @@ export default function TestRepository() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle className="text-red-400 flex items-center gap-2">
               <Trash2 className="w-5 h-5" />
@@ -5006,7 +5005,7 @@ export default function TestRepository() {
               ?
             </p>
             {deletingItem?.type === 'folder' && (
-              <p className="text-sm text-amber-400 bg-amber-500/10 p-3 rounded-lg">
+              <p className="text-sm text-blue-600 dark:text-amber-400 bg-amber-500/10 p-3 rounded-lg">
                 ⚠️ Any test cases in this folder will be moved to the root folder.
               </p>
             )}
@@ -5035,36 +5034,36 @@ export default function TestRepository() {
 
       {/* Edit Suite Dialog */}
       <Dialog open={showEditSuiteDialog} onOpenChange={setShowEditSuiteDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[500px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit Test Suite</DialogTitle>
           </DialogHeader>
           {editingSuite && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Suite Name</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name</label>
                 <Input
                   value={editingSuite.name}
                   onChange={(e) => setEditingSuite({ ...editingSuite, name: e.target.value })}
                   placeholder="Enter suite name"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
                 <Input
                   value={editingSuite.description || ''}
                   onChange={(e) => setEditingSuite({ ...editingSuite, description: e.target.value })}
                   placeholder="Enter description"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Schedule</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Schedule</label>
                 <select
                   value={editingSuite.schedule || 'on-demand'}
                   onChange={(e) => setEditingSuite({ ...editingSuite, schedule: e.target.value as any })}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="on-demand">On Demand</option>
                   <option value="daily">Daily</option>
@@ -5086,56 +5085,56 @@ export default function TestRepository() {
 
       {/* Edit Release Dialog */}
       <Dialog open={showEditReleaseDialog} onOpenChange={setShowEditReleaseDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Release</DialogTitle>
           </DialogHeader>
           {editingRelease && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Release Name</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name</label>
                 <Input
                   value={editingRelease.name}
                   onChange={(e) => setEditingRelease({ ...editingRelease, name: e.target.value })}
                   placeholder="Enter release name"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
                 <Input
                   value={editingRelease.description || ''}
                   onChange={(e) => setEditingRelease({ ...editingRelease, description: e.target.value })}
                   placeholder="Enter description"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Start Date</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
                   <Input
                     type="date"
                     value={editingRelease.startDate?.split('T')[0] || ''}
                     onChange={(e) => setEditingRelease({ ...editingRelease, startDate: e.target.value })}
-                    className="bg-gray-800 border-gray-700"
+                    className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">End Date</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
                   <Input
                     type="date"
                     value={editingRelease.endDate?.split('T')[0] || ''}
                     onChange={(e) => setEditingRelease({ ...editingRelease, endDate: e.target.value })}
-                    className="bg-gray-800 border-gray-700"
+                    className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Status</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
                 <select
                   value={editingRelease.status}
                   onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as any })}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="planning">Planning</option>
                   <option value="active">Active</option>
@@ -5143,10 +5142,10 @@ export default function TestRepository() {
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                   Link Test Suites ({editingRelease.suiteIds?.length || 0} selected)
                 </label>
-                <div className="max-h-32 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+                <div className="max-h-32 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                   {suites.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-2">No test suites available</p>
                   ) : (
@@ -5171,7 +5170,7 @@ export default function TestRepository() {
                               setEditingRelease({ ...editingRelease, suiteIds: currentIds.filter(id => id !== suite.id) });
                             }
                           }}
-                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                          className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
                         <span className="text-sm text-white truncate">{suite.name}</span>
                         <span className="text-xs text-gray-500">({suite.testCaseIds.length} tests)</span>
@@ -5181,10 +5180,10 @@ export default function TestRepository() {
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                   Link Test Plans ({editingRelease.planIds?.length || 0} selected)
                 </label>
-                <div className="max-h-32 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+                <div className="max-h-32 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                   {testPlans.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-2">No test plans available</p>
                   ) : (
@@ -5209,7 +5208,7 @@ export default function TestRepository() {
                               setEditingRelease({ ...editingRelease, planIds: currentIds.filter(id => id !== plan.id) });
                             }
                           }}
-                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                          className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
                         <span className="text-sm text-white truncate">{plan.name}</span>
                         <Badge className="text-[10px] bg-gray-700">{plan.status}</Badge>
@@ -5233,34 +5232,34 @@ export default function TestRepository() {
 
       {/* Create Suite Dialog with Test Case Linking */}
       <Dialog open={showCreateSuiteDialog} onOpenChange={setShowCreateSuiteDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Test Suite</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Suite Name *</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name *</label>
               <Input
                 value={newSuiteName}
                 onChange={(e) => setNewSuiteName(e.target.value)}
                 placeholder="e.g., Login Flow Tests, Checkout Regression"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Description</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
               <Input
                 value={newSuiteDescription}
                 onChange={(e) => setNewSuiteDescription(e.target.value)}
                 placeholder="Brief description of this test suite"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                 Link Test Cases ({newSuiteTestCases.length} selected)
               </label>
-              <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+              <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                 {testCases.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">No test cases available</p>
                 ) : (
@@ -5284,7 +5283,7 @@ export default function TestRepository() {
                             setNewSuiteTestCases(prev => prev.filter(id => id !== tc.id));
                           }
                         }}
-                        className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                        className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">{tc.name}</p>
@@ -5295,7 +5294,7 @@ export default function TestRepository() {
                           "text-xs",
                           tc.lastResult === 'passed' ? "bg-green-500/10 text-green-400" :
                           tc.lastResult === 'failed' ? "bg-red-500/10 text-red-400" :
-                          "bg-gray-500/10 text-gray-400"
+                          "bg-gray-500/10 text-gray-500 dark:text-gray-400"
                         )}>
                           {tc.lastResult}
                         </Badge>
@@ -5337,54 +5336,54 @@ export default function TestRepository() {
 
       {/* Create Release Dialog with Suite Linking */}
       <Dialog open={showCreateReleaseDialog} onOpenChange={setShowCreateReleaseDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Release</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Release Name *</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name *</label>
               <Input
                 value={newReleaseName}
                 onChange={(e) => setNewReleaseName(e.target.value)}
                 placeholder="e.g., Sprint 1.0, Q1 2024 Release"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Description</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
               <Input
                 value={newReleaseDescription}
                 onChange={(e) => setNewReleaseDescription(e.target.value)}
                 placeholder="Brief description of this release"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Start Date</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
                 <Input
                   type="date"
                   value={newReleaseStartDate}
                   onChange={(e) => setNewReleaseStartDate(e.target.value)}
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">End Date</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
                 <Input
                   type="date"
                   value={newReleaseEndDate}
                   onChange={(e) => setNewReleaseEndDate(e.target.value)}
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                 Link Test Suites ({newReleaseSuites.length} selected)
               </label>
-              <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+              <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                 {suites.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">No test suites available. Create suites first.</p>
                 ) : (
@@ -5408,7 +5407,7 @@ export default function TestRepository() {
                             setNewReleaseSuites(prev => prev.filter(id => id !== suite.id));
                           }
                         }}
-                        className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                        className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">{suite.name}</p>
@@ -5457,37 +5456,37 @@ export default function TestRepository() {
 
       {/* Edit Plan Dialog */}
       <Dialog open={showEditPlanDialog} onOpenChange={setShowEditPlanDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Test Plan</DialogTitle>
           </DialogHeader>
           {editingPlan && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Plan Name *</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Plan Name *</label>
                 <Input
                   value={editingPlan.name}
                   onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })}
                   placeholder="Enter plan name"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
                 <Input
                   value={editingPlan.description || ''}
                   onChange={(e) => setEditingPlan({ ...editingPlan, description: e.target.value })}
                   placeholder="Enter description"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Status</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
                   <select
                     value={editingPlan.status}
                     onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as any })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                   >
                     <option value="draft">Draft</option>
                     <option value="ready">Ready</option>
@@ -5496,20 +5495,20 @@ export default function TestRepository() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Environment</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Environment</label>
                   <Input
                     value={editingPlan.environment || ''}
                     onChange={(e) => setEditingPlan({ ...editingPlan, environment: e.target.value })}
                     placeholder="e.g., QA, Staging, Prod"
-                    className="bg-gray-800 border-gray-700"
+                    className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                   Link Test Suites ({editingPlan.suiteIds.length} selected)
                 </label>
-                <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+                <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                   {suites.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-2">No test suites available</p>
                   ) : (
@@ -5533,7 +5532,7 @@ export default function TestRepository() {
                               setEditingPlan({ ...editingPlan, suiteIds: editingPlan.suiteIds.filter(id => id !== suite.id) });
                             }
                           }}
-                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                          className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-white truncate">{suite.name}</p>
@@ -5545,10 +5544,10 @@ export default function TestRepository() {
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                   Link Individual Test Cases ({editingPlan.testCaseIds.length} selected)
                 </label>
-                <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+                <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                   {testCases.length === 0 ? (
                     <p className="text-gray-500 text-sm text-center py-2">No test cases available</p>
                   ) : (
@@ -5572,7 +5571,7 @@ export default function TestRepository() {
                               setEditingPlan({ ...editingPlan, testCaseIds: editingPlan.testCaseIds.filter(id => id !== tc.id) });
                             }
                           }}
-                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                          className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
                         <span className="text-sm text-white truncate">{tc.name}</span>
                       </label>
@@ -5608,7 +5607,7 @@ export default function TestRepository() {
 
       {/* Run Details Dialog */}
       <Dialog open={showRunDetailsDialog} onOpenChange={setShowRunDetailsDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[500px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Test Run Details</DialogTitle>
           </DialogHeader>
@@ -5617,23 +5616,23 @@ export default function TestRepository() {
               <div className="flex items-center gap-3">
                 {selectedRun.status === 'passed' && <CheckCircle className="w-8 h-8 text-green-500" />}
                 {selectedRun.status === 'failed' && <AlertCircle className="w-8 h-8 text-red-500" />}
-                {selectedRun.status === 'running' && <Clock className="w-8 h-8 text-amber-500 animate-pulse" />}
+                {selectedRun.status === 'running' && <Clock className="w-8 h-8 text-blue-600 dark:text-amber-500 animate-pulse" />}
                 {selectedRun.status === 'pending' && <Clock className="w-8 h-8 text-gray-500" />}
                 {selectedRun.status === 'blocked' && <AlertCircle className="w-8 h-8 text-yellow-500" />}
                 <div>
                   <h3 className="font-semibold text-lg">{selectedRun.name}</h3>
-                  <p className="text-sm text-gray-400">{selectedRun.mode} execution</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedRun.mode} execution</p>
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-800/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Status</p>
                   <Badge className={cn(
                     selectedRun.status === 'passed' && "bg-green-500/10 text-green-400",
                     selectedRun.status === 'failed' && "bg-red-500/10 text-red-400",
-                    selectedRun.status === 'running' && "bg-amber-500/10 text-amber-400",
-                    selectedRun.status === 'pending' && "bg-gray-500/10 text-gray-400",
+                    selectedRun.status === 'running' && "bg-amber-500/10 text-blue-600 dark:text-amber-400",
+                    selectedRun.status === 'pending' && "bg-gray-500/10 text-gray-500 dark:text-gray-400",
                     selectedRun.status === 'blocked' && "bg-yellow-500/10 text-yellow-400"
                   )}>
                     {selectedRun.status}
@@ -5642,7 +5641,7 @@ export default function TestRepository() {
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Mode</p>
                   <Badge className={cn(
-                    selectedRun.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-amber-400"
+                    selectedRun.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-amber-400"
                   )}>
                     {selectedRun.mode}
                   </Badge>
@@ -5658,8 +5657,8 @@ export default function TestRepository() {
               </div>
               
               {selectedRun.results && (
-                <div className="p-4 bg-gray-800/50 rounded-lg">
-                  <p className="text-sm text-gray-400 mb-3">Results</p>
+                <div className="p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Results</p>
                   <div className="flex items-center justify-around">
                     <div className="text-center">
                       <p className="text-2xl font-bold text-green-400">{selectedRun.results.passed}</p>
@@ -5670,7 +5669,7 @@ export default function TestRepository() {
                       <p className="text-xs text-gray-500">Failed</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-gray-400">{selectedRun.results.skipped}</p>
+                      <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">{selectedRun.results.skipped}</p>
                       <p className="text-xs text-gray-500">Skipped</p>
                     </div>
                   </div>
@@ -5678,13 +5677,13 @@ export default function TestRepository() {
               )}
               
               {selectedRun.planId && (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                   <Target className="w-4 h-4" />
                   Plan: {testPlans.find(p => p.id === selectedRun.planId)?.name || 'Unknown'}
                 </div>
               )}
               {selectedRun.releaseId && (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                   <Rocket className="w-4 h-4" />
                   Release: {releases.find(r => r.id === selectedRun.releaseId)?.name || 'Unknown'}
                 </div>
@@ -5729,13 +5728,13 @@ export default function TestRepository() {
 
       {/* Link Plan to Release Dialog */}
       <Dialog open={showLinkPlanToReleaseDialog} onOpenChange={setShowLinkPlanToReleaseDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[400px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Link Plan to Release</DialogTitle>
           </DialogHeader>
           {editingPlan && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Select a release to link <strong>{editingPlan.name}</strong> to:
               </p>
               <div className="space-y-2">
@@ -5765,7 +5764,7 @@ export default function TestRepository() {
                         "w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
                         editingPlan.releaseId === release.id
                           ? "bg-amber-500/10 border-amber-500/30"
-                          : "bg-gray-800/50 border-gray-700 hover:border-amber-500/30"
+                          : "bg-gray-100 dark:bg-gray-800/50 border-gray-700 hover:border-blue-500/50 dark:hover:border-amber-500/30"
                       )}
                     >
                       <Rocket className="w-5 h-5 text-purple-400" />
@@ -5774,7 +5773,7 @@ export default function TestRepository() {
                         <p className="text-xs text-gray-500">{release.status} • {release.suiteIds.length} suites</p>
                       </div>
                       {editingPlan.releaseId === release.id && (
-                        <CheckCircle className="w-5 h-5 text-amber-400" />
+                        <CheckCircle className="w-5 h-5 text-blue-600 dark:text-amber-400" />
                       )}
                     </button>
                   ))
@@ -5784,7 +5783,7 @@ export default function TestRepository() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full border-gray-700 text-gray-400"
+                  className="w-full border-gray-700 text-gray-500 dark:text-gray-400"
                   onClick={() => {
                     setTestPlans(prev => {
                       const updated = prev.map(p => 
@@ -5815,37 +5814,37 @@ export default function TestRepository() {
 
       {/* Create Test Case Dialog */}
       <Dialog open={showCreateTestDialog} onOpenChange={setShowCreateTestDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[500px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Create Test Case</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Test Name *</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label>
               <Input
                 value={newTestName}
                 onChange={(e) => setNewTestName(e.target.value)}
                 placeholder="e.g., User Login with Valid Credentials"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Description</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
               <Input
                 value={newTestDescription}
                 onChange={(e) => setNewTestDescription(e.target.value)}
                 placeholder="Brief description of what this test validates"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Priority</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
                 <select
                   value={newTestPriority}
                   onChange={(e) => setNewTestPriority(e.target.value as any)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="critical">Critical</option>
                   <option value="high">High</option>
@@ -5854,11 +5853,11 @@ export default function TestRepository() {
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Folder</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label>
                 <select
                   value={newTestFolder}
                   onChange={(e) => setNewTestFolder(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="root">Test Repository (Root)</option>
                   {folders.filter(f => f.id !== 'root').map(folder => (
@@ -5916,13 +5915,13 @@ export default function TestRepository() {
 
       {/* Run Test Dialog - Add to existing run or create new */}
       <Dialog open={showRunTestDialog} onOpenChange={setShowRunTestDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[500px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Run Test Case</DialogTitle>
           </DialogHeader>
           {testCaseToRun && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 How would you like to run <strong className="text-white">{testCaseToRun.name}</strong>?
               </p>
               
@@ -5948,7 +5947,7 @@ export default function TestRepository() {
                   // Navigate to builder with autoRun to actually execute
                   navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}&autoRun=true&runId=${runId}`);
                 }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-100 dark:bg-gray-800/50 hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
               >
                 <div className="p-2 rounded-lg bg-green-600">
                   <Play className="w-5 h-5 text-white" />
@@ -5965,7 +5964,7 @@ export default function TestRepository() {
                   navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
                   setShowRunTestDialog(false);
                 }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-amber-500/50 hover:bg-gray-800 transition-all text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-100 dark:bg-gray-800/50 hover:border-amber-500/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all text-left"
               >
                 <div className="p-2 rounded-lg bg-blue-600">
                   <Pencil className="w-5 h-5 text-white" />
@@ -5985,7 +5984,7 @@ export default function TestRepository() {
                   setNewRunName(`Test Run: ${testCaseToRun.name}`);
                   setShowCreateRunDialog(true);
                 }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left"
+                className="w-full flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-100 dark:bg-gray-800/50 hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left"
               >
                 <div className="p-2 rounded-lg bg-purple-600">
                   <Plus className="w-5 h-5 text-white" />
@@ -6007,23 +6006,23 @@ export default function TestRepository() {
 
       {/* Create Test Run Dialog */}
       <Dialog open={showCreateRunDialog} onOpenChange={setShowCreateRunDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Test Run</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Run Name *</label>
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Run Name *</label>
               <Input
                 value={newRunName}
                 onChange={(e) => setNewRunName(e.target.value)}
                 placeholder="e.g., Smoke Test - Sprint 1"
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-100 dark:bg-gray-800 border-gray-700"
               />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Test Mode</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Mode</label>
                 <select
                   value={newRunMode}
                   onChange={(e) => {
@@ -6034,18 +6033,18 @@ export default function TestRepository() {
                       setNewRunExecutionMode('sequential');
                     }
                   }}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="automated">Automated (Playwright)</option>
                   <option value="manual">Manual (Step-by-Step)</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Execution Order</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Execution Order</label>
                 <select
                   value={newRunExecutionMode}
                   onChange={(e) => setNewRunExecutionMode(e.target.value as any)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                   disabled={newRunMode === 'manual'} // No parallel for manual
                 >
                   <option value="sequential">Sequential (one by one)</option>
@@ -6058,11 +6057,11 @@ export default function TestRepository() {
                 )}
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Link to Release</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link to Release</label>
                 <select
                   value={newRunReleaseId}
                   onChange={(e) => setNewRunReleaseId(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="">No Release</option>
                   {releases.map(r => (
@@ -6072,13 +6071,13 @@ export default function TestRepository() {
               </div>
             </div>
             {newRunExecutionMode === 'parallel' && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-400">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-blue-600 dark:text-amber-400">
                 <strong>Note:</strong> Parallel execution runs tests in headless mode. 
                 Best for independent tests that don't share state.
               </div>
             )}
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">
+              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
                 Select Test Cases ({newRunTestCases.length} selected)
               </label>
               {/* Search input for test cases */}
@@ -6088,10 +6087,10 @@ export default function TestRepository() {
                   value={newRunTestSearch}
                   onChange={(e) => setNewRunTestSearch(e.target.value)}
                   placeholder="Search by test ID or name..."
-                  className="pl-10 bg-gray-800 border-gray-700 text-white"
+                  className="pl-10 bg-gray-100 dark:bg-gray-800 border-gray-700 text-white"
                 />
               </div>
-              <div className="max-h-56 overflow-y-auto border border-gray-700 rounded-md bg-gray-800/50 p-2 space-y-1">
+              <div className="max-h-56 overflow-y-auto border border-gray-700 rounded-md bg-gray-100 dark:bg-gray-800/50 p-2 space-y-1">
                 {testCases.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">No test cases available</p>
                 ) : (
@@ -6132,7 +6131,7 @@ export default function TestRepository() {
                               setNewRunTestCases(prev => prev.filter(id => id !== tc.id));
                             }
                           }}
-                          className="rounded border-gray-600 text-amber-500 focus:ring-amber-500"
+                          className="rounded border-gray-600 text-blue-600 dark:text-amber-500 focus:ring-amber-500"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -6314,45 +6313,45 @@ export default function TestRepository() {
 
       {/* Edit Test Case Configuration Dialog */}
       <Dialog open={showEditTestConfigDialog} onOpenChange={setShowEditTestConfigDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-[500px]">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit Test Case Configuration</DialogTitle>
           </DialogHeader>
           {editingTestCase && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Test Name *</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label>
                 <textarea
                   value={editingTestCase.name}
                   onChange={(e) => setEditingTestCase({ ...editingTestCase, name: e.target.value })}
                   placeholder="Test case name"
                   rows={2}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
                   style={{ minHeight: '42px', maxHeight: '100px' }}
                 />
                 {editingTestCase.name?.length > 50 && (
-                  <p className="text-xs text-amber-400 mt-1">
+                  <p className="text-xs text-blue-600 dark:text-amber-400 mt-1">
                     {editingTestCase.name.length} characters - Consider shortening for better readability
                   </p>
                 )}
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Description</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
                 <textarea
                   value={editingTestCase.description || ''}
                   onChange={(e) => setEditingTestCase({ ...editingTestCase, description: e.target.value })}
                   placeholder="Brief description of what this test case validates"
                   rows={2}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Priority</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
                   <select
                     value={editingTestCase.priority || 'medium'}
                     onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as any })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                   >
                     <option value="critical">Critical</option>
                     <option value="high">High</option>
@@ -6361,11 +6360,11 @@ export default function TestRepository() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">Status</label>
+                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
                   <select
                     value={editingTestCase.status || 'draft'}
                     onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as any })}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                    className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                   >
                     <option value="draft">Draft</option>
                     <option value="ready">Ready</option>
@@ -6375,11 +6374,11 @@ export default function TestRepository() {
                 </div>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Folder</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label>
                 <select
                   value={editingTestCase.folderId || 'root'}
                   onChange={(e) => setEditingTestCase({ ...editingTestCase, folderId: e.target.value === 'root' ? null : e.target.value })}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+                  className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
                 >
                   <option value="root">Test Repository (Root)</option>
                   {folders.filter(f => f.id !== 'root').map(folder => (
@@ -6388,7 +6387,7 @@ export default function TestRepository() {
                 </select>
               </div>
               <div>
-                <label className="text-sm text-gray-400 mb-1 block">Tags (comma separated)</label>
+                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Tags (comma separated)</label>
                 <Input
                   value={editingTestCase.tags?.join(', ') || ''}
                   onChange={(e) => setEditingTestCase({ 
@@ -6396,7 +6395,7 @@ export default function TestRepository() {
                     tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) 
                   })}
                   placeholder="e.g., smoke, regression, login"
-                  className="bg-gray-800 border-gray-700"
+                  className="bg-gray-100 dark:bg-gray-800 border-gray-700"
                 />
               </div>
             </div>
@@ -6480,7 +6479,7 @@ export default function TestRepository() {
 
       {/* Create Defect Dialog */}
       <Dialog open={showCreateDefectDialog} onOpenChange={setShowCreateDefectDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bug className="w-5 h-5 text-red-400" />
@@ -6506,10 +6505,10 @@ export default function TestRepository() {
 
       {/* Edit Defect Dialog */}
       <Dialog open={showEditDefectDialog} onOpenChange={setShowEditDefectDialog}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Bug className="w-5 h-5 text-amber-400" />
+              <Bug className="w-5 h-5 text-blue-600 dark:text-amber-400" />
               Edit Defect - {editingDefect?.id}
             </DialogTitle>
           </DialogHeader>
@@ -6608,34 +6607,34 @@ function CreateDefectForm({
     <div className="space-y-4">
       {/* Title */}
       <div>
-        <label className="text-sm text-gray-400 mb-1 block">Title *</label>
+        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Title *</label>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Brief description of the defect"
-          className="bg-gray-800 border-gray-700"
+          className="bg-gray-100 dark:bg-gray-800 border-gray-700"
         />
       </div>
 
       {/* Description */}
       <div>
-        <label className="text-sm text-gray-400 mb-1 block">Description</label>
+        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Detailed description of the issue..."
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
+          className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
         />
       </div>
 
       {/* Row 1: Severity, Priority, Status, Type */}
       <div className="grid grid-cols-4 gap-3">
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Severity</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Severity</label>
           <select
             value={severity}
             onChange={(e) => setSeverity(e.target.value as any)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
             <option value="critical">S1 - Critical</option>
             <option value="major">S2 - Major</option>
@@ -6644,11 +6643,11 @@ function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Priority</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as any)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
             <option value="critical">P1 - Critical</option>
             <option value="high">P2 - High</option>
@@ -6657,11 +6656,11 @@ function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Status</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as any)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
             <option value="new">New</option>
             <option value="open">Open</option>
@@ -6674,11 +6673,11 @@ function CreateDefectForm({
           </select>
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Type</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Type</label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as any)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white"
           >
             <option value="bug">Bug</option>
             <option value="enhancement">Enhancement</option>
@@ -6693,30 +6692,30 @@ function CreateDefectForm({
       {/* Row 2: Environment, Component, Assigned To */}
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Environment</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Environment</label>
           <Input
             value={environment}
             onChange={(e) => setEnvironment(e.target.value)}
             placeholder="e.g., Production, Staging"
-            className="bg-gray-800 border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-700"
           />
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Component</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Component</label>
           <Input
             value={component}
             onChange={(e) => setComponent(e.target.value)}
             placeholder="e.g., Login, Checkout"
-            className="bg-gray-800 border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-700"
           />
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Assigned To</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Assigned To</label>
           <Input
             value={assignedTo}
             onChange={(e) => setAssignedTo(e.target.value)}
             placeholder="Developer name"
-            className="bg-gray-800 border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-700"
           />
         </div>
       </div>
@@ -6724,62 +6723,62 @@ function CreateDefectForm({
       {/* Row 3: Versions */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Affected Version</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Affected Version</label>
           <Input
             value={affectedVersion}
             onChange={(e) => setAffectedVersion(e.target.value)}
             placeholder="e.g., 1.2.3"
-            className="bg-gray-800 border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-700"
           />
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Fix Version</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Fix Version</label>
           <Input
             value={fixVersion}
             onChange={(e) => setFixVersion(e.target.value)}
             placeholder="e.g., 1.2.4"
-            className="bg-gray-800 border-gray-700"
+            className="bg-gray-100 dark:bg-gray-800 border-gray-700"
           />
         </div>
       </div>
 
       {/* Steps to Reproduce */}
       <div>
-        <label className="text-sm text-gray-400 mb-1 block">Steps to Reproduce</label>
+        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Steps to Reproduce</label>
         <textarea
           value={stepsToReproduce}
           onChange={(e) => setStepsToReproduce(e.target.value)}
           placeholder="1. Go to...\n2. Click on...\n3. Observe..."
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
+          className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[80px] resize-y"
         />
       </div>
 
       {/* Expected vs Actual */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Expected Result</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Expected Result</label>
           <textarea
             value={expectedResult}
             onChange={(e) => setExpectedResult(e.target.value)}
             placeholder="What should happen..."
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
           />
         </div>
         <div>
-          <label className="text-sm text-gray-400 mb-1 block">Actual Result</label>
+          <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Actual Result</label>
           <textarea
             value={actualResult}
             onChange={(e) => setActualResult(e.target.value)}
             placeholder="What actually happens..."
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
+            className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-white min-h-[60px] resize-y"
           />
         </div>
       </div>
 
       {/* Linked Test Cases */}
       <div>
-        <label className="text-sm text-gray-400 mb-1 block">Linked Test Cases</label>
-        <div className="max-h-32 overflow-y-auto bg-gray-800 border border-gray-700 rounded-md p-2">
+        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Linked Test Cases</label>
+        <div className="max-h-32 overflow-y-auto bg-gray-100 dark:bg-gray-800 border border-gray-700 rounded-md p-2">
           {testCases.slice(0, 20).map(tc => (
             <label key={tc.id} className="flex items-center gap-2 p-1 hover:bg-gray-700 rounded cursor-pointer">
               <input
@@ -6792,7 +6791,7 @@ function CreateDefectForm({
                     setLinkedTestCaseIds(prev => prev.filter(id => id !== tc.id));
                   }
                 }}
-                className="rounded border-gray-600 text-amber-500"
+                className="rounded border-gray-600 text-blue-600 dark:text-amber-500"
               />
               <span className="text-sm truncate">{tc.name}</span>
             </label>
@@ -6805,12 +6804,12 @@ function CreateDefectForm({
 
       {/* Tags */}
       <div>
-        <label className="text-sm text-gray-400 mb-1 block">Tags (comma separated)</label>
+        <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Tags (comma separated)</label>
         <Input
           value={tags}
           onChange={(e) => setTags(e.target.value)}
           placeholder="e.g., regression, critical, sprint-5"
-          className="bg-gray-800 border-gray-700"
+          className="bg-gray-100 dark:bg-gray-800 border-gray-700"
         />
       </div>
 

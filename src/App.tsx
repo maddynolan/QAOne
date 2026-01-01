@@ -28,6 +28,9 @@ import { useEffect } from "react";
 // Layout
 import { StreamlinedLayout } from "./components/StreamlinedLayout";
 
+// Theme Provider
+import { ThemeProvider } from "./contexts/ThemeContext";
+
 // Core Pages
 import PlaywrightRecorderPage from "./pages/PlaywrightRecorderPage";
 import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
@@ -91,167 +94,169 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* ═══════════════════════════════════════════════════════════
-                  PUBLIC ROUTES
-                  ═══════════════════════════════════════════════════════════ */}
-              <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
-              
-              {/* ═══════════════════════════════════════════════════════════
-                  MAIN APPLICATION - Streamlined Layout
-                  ═══════════════════════════════════════════════════════════ */}
-              <Route element={<StreamlinedLayout />}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AuthProvider>
+            <BrowserRouter>
+              <Routes>
+                {/* ═══════════════════════════════════════════════════════════
+                    PUBLIC ROUTES
+                    ═══════════════════════════════════════════════════════════ */}
+                <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
                 
-                {/* Default: Redirect to Recorder */}
-                <Route path="/" element={<Navigate to="/recorder" replace />} />
-                
-                {/* ─────────────────────────────────────────────────────────
-                    1. RECORDER MODULE
-                    Browser test recording, playback, and automation
-                    ───────────────────────────────────────────────────────── */}
-                <Route path="/recorder" element={<PlaywrightRecorderPage />} />
-                <Route path="/playwright-recorder" element={<Navigate to="/recorder" replace />} />
-                
-                {/* ─────────────────────────────────────────────────────────
-                    2. TEST CASES MODULE
-                    Unified test case management (manual + automated)
-                    ───────────────────────────────────────────────────────── */}
-                <Route path="/test-cases" element={<TestRepository />} />
-                <Route path="/test-cases/list" element={<TestCases />} />
-                <Route path="/test-cases/create" element={<CreateTestCase />} />
-                <Route path="/test-cases/edit/:id" element={<EditTestCase />} />
-                <Route path="/test-cases/builder" element={<UnifiedWorkflowEditor />} />
-                <Route path="/test-cases/builder/:id" element={<UnifiedWorkflowEditor />} />
-                {/* Step-level manual execution with evidence/screenshots/defects */}
-                <Route path="/test-cases/execute/:testCaseId" element={<TestCaseExecution />} />
-                <Route path="/execution/run/:runId/:testCaseId" element={<TestCaseExecution />} />
-                <Route path="/repository" element={<TestRepository />} />
-                <Route path="/enterprise" element={<EnterpriseTestRepository />} />
-                <Route path="/test-runs" element={<TestRuns />} />
-                
-                {/* Legacy routes - redirect to new paths */}
-                <Route path="/builder" element={<Navigate to="/test-cases/builder" replace />} />
-                <Route path="/cases" element={<Navigate to="/test-cases" replace />} />
-                <Route path="/cases/create" element={<Navigate to="/test-cases/create" replace />} />
-                <Route path="/execution" element={<Navigate to="/test-cases/execute" replace />} />
-                
-                {/* ─────────────────────────────────────────────────────────
-                    3. API TESTING MODULE
-                    REST, GraphQL, and API endpoint testing
-                    ───────────────────────────────────────────────────────── */}
-                <Route path="/api" element={<EnhancedAPITesting />} />
-                <Route path="/api/collections" element={<EnhancedAPITesting />} />
-                <Route path="/api/history" element={<EnhancedAPITesting />} />
-                <Route path="/api/environments" element={<EnhancedAPITesting />} />
-                
-                {/* Legacy routes */}
-                <Route path="/enhanced-api-testing" element={<Navigate to="/api" replace />} />
-                <Route path="/api-import" element={<Navigate to="/api" replace />} />
-                
-                {/* ─────────────────────────────────────────────────────────
-                    4. PERFORMANCE MODULE
-                    Load testing, stress testing, virtual users
-                    ───────────────────────────────────────────────────────── */}
-                <Route path="/performance" element={<VirtualUserGenerator />} />
-                <Route path="/performance/load-test" element={<VirtualUserGenerator />} />
-                <Route path="/performance/stress-test" element={<VirtualUserGenerator />} />
-                <Route path="/performance/reports" element={<VirtualUserGenerator />} />
-                
-                {/* Legacy routes */}
-                <Route path="/virtual-users" element={<Navigate to="/performance" replace />} />
-                <Route path="/load-testing" element={<Navigate to="/performance" replace />} />
-                
-                {/* ─────────────────────────────────────────────────────────
-                    5. SALESFORCE MODULE
-                    Salesforce-specific testing tools
-                    ───────────────────────────────────────────────────────── */}
-                <Route path="/salesforce" element={<SalesforceToolsPage />} />
-                <Route path="/salesforce/metadata" element={<SalesforceToolsPage />} />
-                <Route path="/salesforce/apex" element={<SalesforceToolsPage />} />
-                <Route path="/salesforce/validation" element={<SalesforceToolsPage />} />
-                
-                {/* Legacy routes */}
-                <Route path="/salesforce-tools" element={<Navigate to="/salesforce" replace />} />
+                {/* ═══════════════════════════════════════════════════════════
+                    MAIN APPLICATION - Streamlined Layout
+                    ═══════════════════════════════════════════════════════════ */}
+                <Route element={<StreamlinedLayout />}>
+                  
+                  {/* Default: Redirect to Recorder */}
+                  <Route path="/" element={<Navigate to="/recorder" replace />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      1. RECORDER MODULE
+                      Browser test recording, playback, and automation
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/recorder" element={<PlaywrightRecorderPage />} />
+                  <Route path="/playwright-recorder" element={<Navigate to="/recorder" replace />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      2. TEST CASES MODULE
+                      Unified test case management (manual + automated)
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/test-cases" element={<TestRepository />} />
+                  <Route path="/test-cases/list" element={<TestCases />} />
+                  <Route path="/test-cases/create" element={<CreateTestCase />} />
+                  <Route path="/test-cases/edit/:id" element={<EditTestCase />} />
+                  <Route path="/test-cases/builder" element={<UnifiedWorkflowEditor />} />
+                  <Route path="/test-cases/builder/:id" element={<UnifiedWorkflowEditor />} />
+                  {/* Step-level manual execution with evidence/screenshots/defects */}
+                  <Route path="/test-cases/execute/:testCaseId" element={<TestCaseExecution />} />
+                  <Route path="/execution/run/:runId/:testCaseId" element={<TestCaseExecution />} />
+                  <Route path="/repository" element={<TestRepository />} />
+                  <Route path="/enterprise" element={<EnterpriseTestRepository />} />
+                  <Route path="/test-runs" element={<TestRuns />} />
+                  
+                  {/* Legacy routes - redirect to new paths */}
+                  <Route path="/builder" element={<Navigate to="/test-cases/builder" replace />} />
+                  <Route path="/cases" element={<Navigate to="/test-cases" replace />} />
+                  <Route path="/cases/create" element={<Navigate to="/test-cases/create" replace />} />
+                  <Route path="/execution" element={<Navigate to="/test-cases/execute" replace />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      3. API TESTING MODULE
+                      REST, GraphQL, and API endpoint testing
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/api" element={<EnhancedAPITesting />} />
+                  <Route path="/api/collections" element={<EnhancedAPITesting />} />
+                  <Route path="/api/history" element={<EnhancedAPITesting />} />
+                  <Route path="/api/environments" element={<EnhancedAPITesting />} />
+                  
+                  {/* Legacy routes */}
+                  <Route path="/enhanced-api-testing" element={<Navigate to="/api" replace />} />
+                  <Route path="/api-import" element={<Navigate to="/api" replace />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      4. PERFORMANCE MODULE
+                      Load testing, stress testing, virtual users
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/performance" element={<VirtualUserGenerator />} />
+                  <Route path="/performance/load-test" element={<VirtualUserGenerator />} />
+                  <Route path="/performance/stress-test" element={<VirtualUserGenerator />} />
+                  <Route path="/performance/reports" element={<VirtualUserGenerator />} />
+                  
+                  {/* Legacy routes */}
+                  <Route path="/virtual-users" element={<Navigate to="/performance" replace />} />
+                  <Route path="/load-testing" element={<Navigate to="/performance" replace />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      5. SALESFORCE MODULE
+                      Salesforce-specific testing tools
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/salesforce" element={<SalesforceToolsPage />} />
+                  <Route path="/salesforce/metadata" element={<SalesforceToolsPage />} />
+                  <Route path="/salesforce/apex" element={<SalesforceToolsPage />} />
+                  <Route path="/salesforce/validation" element={<SalesforceToolsPage />} />
+                  
+                  {/* Legacy routes */}
+                  <Route path="/salesforce-tools" element={<Navigate to="/salesforce" replace />} />
+
+                  {/* ═══════════════════════════════════════════════════════════
+                      WEB-ONLY ADDITIONAL FEATURES
+                      These are available on web but not shown in desktop nav
+                      ═══════════════════════════════════════════════════════════ */}
+                  
+                  {/* Dashboard & Analytics */}
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/results" element={<Results />} />
+                  <Route path="/results-dashboard" element={<Results />} />
+                  
+                  {/* Test Suites & Plans (linked to Repository) */}
+                  <Route path="/suites" element={<TestSuites />} />
+                  <Route path="/test-suites" element={<TestSuites />} />
+                  <Route path="/plans" element={<TestPlans />} />
+                  <Route path="/plans/create" element={<CreateTestPlan />} />
+                  <Route path="/plans/:id" element={<TestPlanDetail />} />
+                  <Route path="/runs" element={<TestRuns />} />
+                  
+                  {/* Requirements & Traceability */}
+                  <Route path="/requirements" element={<Requirements />} />
+                  <Route path="/requirements/create" element={<CreateRequirement />} />
+                  <Route path="/traceability" element={<Traceability />} />
+                  
+                  {/* Defects */}
+                  <Route path="/defects" element={<Defects />} />
+                  <Route path="/defects/create" element={<CreateDefect />} />
+                  
+                  {/* Tools & Utilities */}
+                  <Route path="/accessibility" element={<Accessibility />} />
+                  <Route path="/framework-analyzer" element={<FrameworkAnalyzer />} />
+                  <Route path="/elements" element={<ElementRepository />} />
+                  <Route path="/self-healing" element={<SelfHealing />} />
+                  <Route path="/scheduled-runs" element={<ScheduledRuns />} />
+                  
+                  {/* Integrations */}
+                  <Route path="/integrations" element={<Integrations />} />
+                  <Route path="/cicd" element={<CICDIntegration />} />
+                  
+                  {/* Project Management */}
+                  <Route path="/projects" element={<ProjectManagement />} />
+                  <Route path="/project-boards" element={<ProjectManagement />} />
+                  
+                  {/* Settings */}
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
 
                 {/* ═══════════════════════════════════════════════════════════
-                    WEB-ONLY ADDITIONAL FEATURES
-                    These are available on web but not shown in desktop nav
+                    LEGACY REDIRECTS
+                    Keep for backward compatibility with old URLs
                     ═══════════════════════════════════════════════════════════ */}
+                <Route path="/flowstral" element={<Navigate to="/recorder" replace />} />
+                <Route path="/flowstral/*" element={<Navigate to="/recorder" replace />} />
+                <Route path="/trace" element={<Navigate to="/recorder" replace />} />
+                <Route path="/nexus" element={<Navigate to="/recorder" replace />} />
+                <Route path="/blaze" element={<Navigate to="/recorder" replace />} />
+                <Route path="/exploration" element={<Navigate to="/recorder" replace />} />
+                <Route path="/cdp-recorder" element={<Navigate to="/recorder" replace />} />
+                <Route path="/desktop-recorder" element={<Navigate to="/recorder" replace />} />
+                <Route path="/test-builder" element={<Navigate to="/test-cases/builder" replace />} />
+                <Route path="/workflow-editor" element={<Navigate to="/test-cases/builder" replace />} />
+                <Route path="/gherkin" element={<Navigate to="/test-cases" replace />} />
+                <Route path="/triage" element={<Navigate to="/test-cases" replace />} />
+                {/* /projects handled in main routes */}
+                <Route path="/onboarding" element={<Navigate to="/recorder" replace />} />
                 
-                {/* Dashboard & Analytics */}
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/results" element={<Results />} />
-                <Route path="/results-dashboard" element={<Results />} />
-                
-                {/* Test Suites & Plans (linked to Repository) */}
-                <Route path="/suites" element={<TestSuites />} />
-                <Route path="/test-suites" element={<TestSuites />} />
-                <Route path="/plans" element={<TestPlans />} />
-                <Route path="/plans/create" element={<CreateTestPlan />} />
-                <Route path="/plans/:id" element={<TestPlanDetail />} />
-                <Route path="/runs" element={<TestRuns />} />
-                
-                {/* Requirements & Traceability */}
-                <Route path="/requirements" element={<Requirements />} />
-                <Route path="/requirements/create" element={<CreateRequirement />} />
-                <Route path="/traceability" element={<Traceability />} />
-                
-                {/* Defects */}
-                <Route path="/defects" element={<Defects />} />
-                <Route path="/defects/create" element={<CreateDefect />} />
-                
-                {/* Tools & Utilities */}
-                <Route path="/accessibility" element={<Accessibility />} />
-                <Route path="/framework-analyzer" element={<FrameworkAnalyzer />} />
-                <Route path="/elements" element={<ElementRepository />} />
-                <Route path="/self-healing" element={<SelfHealing />} />
-                <Route path="/scheduled-runs" element={<ScheduledRuns />} />
-                
-                {/* Integrations */}
-                <Route path="/integrations" element={<Integrations />} />
-                <Route path="/cicd" element={<CICDIntegration />} />
-                
-                {/* Project Management */}
-                <Route path="/projects" element={<ProjectManagement />} />
-                <Route path="/project-boards" element={<ProjectManagement />} />
-                
-                {/* Settings */}
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-
-              {/* ═══════════════════════════════════════════════════════════
-                  LEGACY REDIRECTS
-                  Keep for backward compatibility with old URLs
-                  ═══════════════════════════════════════════════════════════ */}
-              <Route path="/flowstral" element={<Navigate to="/recorder" replace />} />
-              <Route path="/flowstral/*" element={<Navigate to="/recorder" replace />} />
-              <Route path="/trace" element={<Navigate to="/recorder" replace />} />
-              <Route path="/nexus" element={<Navigate to="/recorder" replace />} />
-              <Route path="/blaze" element={<Navigate to="/recorder" replace />} />
-              <Route path="/exploration" element={<Navigate to="/recorder" replace />} />
-              <Route path="/cdp-recorder" element={<Navigate to="/recorder" replace />} />
-              <Route path="/desktop-recorder" element={<Navigate to="/recorder" replace />} />
-              <Route path="/test-builder" element={<Navigate to="/test-cases/builder" replace />} />
-              <Route path="/workflow-editor" element={<Navigate to="/test-cases/builder" replace />} />
-              <Route path="/gherkin" element={<Navigate to="/test-cases" replace />} />
-              <Route path="/triage" element={<Navigate to="/test-cases" replace />} />
-              {/* /projects handled in main routes */}
-              <Route path="/onboarding" element={<Navigate to="/recorder" replace />} />
-              
-              {/* ═══════════════════════════════════════════════════════════
-                  404 - CATCH ALL
-                  ═══════════════════════════════════════════════════════════ */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
-      </TooltipProvider>
+                {/* ═══════════════════════════════════════════════════════════
+                    404 - CATCH ALL
+                    ═══════════════════════════════════════════════════════════ */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

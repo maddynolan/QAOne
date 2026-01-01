@@ -1100,16 +1100,16 @@ export default function VirtualUserGenerator() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950">
+    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-              <Gauge className="w-6 h-6 text-white" />
+              <Gauge className="w-6 h-6 text-gray-900 dark:text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Performance Testing</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Performance Testing</h1>
               <p className="text-sm text-gray-400">
                 Load testing • Virtual users • Browser flow simulation
               </p>
@@ -1128,7 +1128,7 @@ export default function VirtualUserGenerator() {
                 </Button>
               </>
             ) : (
-              <Button onClick={startLoadTest} disabled={config.steps.length === 0} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400">
+              <Button onClick={startLoadTest} disabled={config.steps.length === 0} className="bg-gradient-to-r from-amber-500 to-orange-500 text-gray-900 dark:text-white hover:from-amber-400 hover:to-orange-400">
                 <Play className="w-4 h-4 mr-2" />
                 Start Load Test
               </Button>
@@ -1229,7 +1229,7 @@ export default function VirtualUserGenerator() {
           {/* Quick Start Scenarios - API Testing */}
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg text-white">
+              <CardTitle className="flex items-center gap-2 text-lg text-gray-900 dark:text-white">
                 <Zap className="w-5 h-5 text-amber-500" />
                 API Performance Tests
               </CardTitle>
@@ -1247,7 +1247,7 @@ export default function VirtualUserGenerator() {
                     <CardContent className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{scenario.icon}</span>
-                        <span className="font-medium text-sm text-white">{scenario.name}</span>
+                        <span className="font-medium text-sm text-gray-900 dark:text-white">{scenario.name}</span>
                       </div>
                       <p className="text-xs text-gray-400">{scenario.description}</p>
                       <div className="flex items-center gap-2 text-xs">
@@ -1261,7 +1261,7 @@ export default function VirtualUserGenerator() {
                       <Button 
                         size="sm"
                         onClick={() => runApiTest(scenario)}
-                        className="w-full mt-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white"
+                        className="w-full mt-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white"
                         disabled={isRunning}
                       >
                         <Play className="w-3 h-3 mr-1" />
@@ -1277,7 +1277,7 @@ export default function VirtualUserGenerator() {
           {/* Browser Flow Testing - Separate Section */}
           <Card className="bg-gray-900 border-gray-700 border-dashed">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg text-white">
+              <CardTitle className="flex items-center gap-2 text-lg text-gray-900 dark:text-white">
                 <Globe className="w-5 h-5 text-amber-500" />
                 Browser Flow Testing
               </CardTitle>
@@ -1293,11 +1293,11 @@ export default function VirtualUserGenerator() {
                     This tests actual user flows (clicks, typing, navigation) not just API endpoints.
                   </p>
                 </div>
-                <Button onClick={() => setShowImportDialog(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white">
+                <Button onClick={() => setShowImportDialog(true)} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white">
                   <Upload className="w-4 h-4 mr-2" />
                   Import Recording
                 </Button>
-                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-gray-400 hover:text-white hover:bg-gray-800">
+                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-gray-400 hover:text-gray-900 dark:text-white hover:bg-gray-800">
                   <FileCode className="w-4 h-4 mr-2" />
                   View Steps
                 </Button>
@@ -2320,7 +2320,7 @@ export default function VirtualUserGenerator() {
                               : 'border-muted-foreground/50'
                           }`}>
                             {selectedTestCases.includes(tc.id) && (
-                              <CheckCircle2 className="w-4 h-4 text-white" />
+                              <CheckCircle2 className="w-4 h-4 text-gray-900 dark:text-white" />
                             )}
                           </div>
                           <div className="flex-1">

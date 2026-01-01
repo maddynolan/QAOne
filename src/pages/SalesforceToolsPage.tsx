@@ -756,17 +756,17 @@ export function SalesforceToolsPage() {
   // ========== RENDER ==========
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950">
+    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
         {/* Header */}
         <div className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-40">
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-                  <Cloud className="w-5 h-5 text-white" />
+                  <Cloud className="w-5 h-5 text-gray-900 dark:text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Salesforce Tools</h1>
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">Salesforce Tools</h1>
                   <p className="text-xs text-gray-400">API • Data • Development</p>
                 </div>
               </div>
@@ -779,7 +779,7 @@ export function SalesforceToolsPage() {
                     style={{ backgroundColor: currentOrg.color }}
                   />
                   <div className="text-right">
-                    <div className="text-sm font-medium text-white">{currentOrg.name}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-white">{currentOrg.name}</div>
                     <div className="text-xs text-slate-400">{currentOrg.username}</div>
                   </div>
                   <Badge 
@@ -806,97 +806,97 @@ export function SalesforceToolsPage() {
             {/* Compact wrapping tabs */}
             <div className="mb-4">
               <TabsList className="bg-gray-900 border border-gray-700 p-1 h-auto flex flex-wrap gap-0.5">
-                <TabsTrigger value="orgs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="orgs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Orgs</span>
                 </TabsTrigger>
-                <TabsTrigger value="soql" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="soql" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Search className="w-3.5 h-3.5" />
                   <span>SOQL</span>
                 </TabsTrigger>
-                <TabsTrigger value="bulk" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="bulk" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Upload className="w-3.5 h-3.5" />
                   <span>Bulk</span>
                 </TabsTrigger>
-                <TabsTrigger value="api" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="api" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Code className="w-3.5 h-3.5" />
                   <span>API</span>
                 </TabsTrigger>
-                <TabsTrigger value="schema" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="schema" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Database className="w-3.5 h-3.5" />
                   <span>Schema</span>
                 </TabsTrigger>
-                <TabsTrigger value="inspect" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="inspect" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Eye className="w-3.5 h-3.5" />
                   <span>Inspector</span>
                 </TabsTrigger>
-                <TabsTrigger value="tests" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="tests" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Play className="w-3.5 h-3.5" />
                   <span>Tests</span>
                 </TabsTrigger>
-                <TabsTrigger value="permissions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="permissions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Shield className="w-3.5 h-3.5" />
                   <span>Perms</span>
                 </TabsTrigger>
-                <TabsTrigger value="datafactory" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="datafactory" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Layers className="w-3.5 h-3.5" />
                   <span>Factory</span>
                 </TabsTrigger>
-                <TabsTrigger value="relationships" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="relationships" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Globe className="w-3.5 h-3.5" />
                   <span>Relations</span>
                 </TabsTrigger>
-                <TabsTrigger value="logs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="logs" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <FileJson className="w-3.5 h-3.5" />
                   <span>Logs</span>
                 </TabsTrigger>
-                <TabsTrigger value="assertions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="assertions" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Assert</span>
                 </TabsTrigger>
-                <TabsTrigger value="cloner" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="cloner" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Copy className="w-3.5 h-3.5" />
                   <span>Clone</span>
                 </TabsTrigger>
-                <TabsTrigger value="diff" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="diff" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <ArrowRight className="w-3.5 h-3.5" />
                   <span>Diff</span>
                 </TabsTrigger>
-                <TabsTrigger value="create" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="create" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create</span>
                 </TabsTrigger>
-                <TabsTrigger value="apex" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="apex" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Terminal className="w-3.5 h-3.5" />
                   <span>Apex</span>
                 </TabsTrigger>
-                <TabsTrigger value="fieldanalysis" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="fieldanalysis" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Hash className="w-3.5 h-3.5" />
                   <span>Fields</span>
                 </TabsTrigger>
-                <TabsTrigger value="reports" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="reports" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Table className="w-3.5 h-3.5" />
                   <span>Reports</span>
                 </TabsTrigger>
                 {/* Testing Tabs */}
-                <TabsTrigger value="functional" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-blue-500/30 data-[state=active]:text-blue-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="functional" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-blue-500/30 data-[state=active]:text-blue-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Shield className="w-3.5 h-3.5" />
                   <span>Functional</span>
                 </TabsTrigger>
-                <TabsTrigger value="integration" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-green-500/30 data-[state=active]:text-green-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="integration" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-green-500/30 data-[state=active]:text-green-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Globe className="w-3.5 h-3.5" />
                   <span>Integration</span>
                 </TabsTrigger>
-                <TabsTrigger value="regression" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-yellow-500/30 data-[state=active]:text-yellow-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="regression" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-yellow-500/30 data-[state=active]:text-yellow-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <GitBranch className="w-3.5 h-3.5" />
                   <span>Regression</span>
                 </TabsTrigger>
-                <TabsTrigger value="uat" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-pink-500/30 data-[state=active]:text-pink-400 hover:bg-gray-800 hover:text-white">
+                <TabsTrigger value="uat" className="gap-1 px-2 py-1 text-xs text-gray-400 data-[state=active]:bg-pink-500/30 data-[state=active]:text-pink-400 hover:bg-gray-800 hover:text-gray-900 dark:text-white">
                   <Users className="w-3.5 h-3.5" />
                   <span>UAT</span>
                 </TabsTrigger>
                 {/* Orchestrator - Main Hub */}
-                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-gray-300 bg-gradient-to-r from-amber-600/30 to-orange-600/30 data-[state=active]:from-amber-500/50 data-[state=active]:to-orange-500/50 data-[state=active]:text-amber-300 hover:from-amber-500/40 hover:to-orange-500/40 hover:text-white border border-amber-500/30">
+                <TabsTrigger value="orchestrator" className="gap-1 px-2 py-1 text-xs text-gray-300 bg-gradient-to-r from-amber-600/30 to-orange-600/30 data-[state=active]:from-amber-500/50 data-[state=active]:to-orange-500/50 data-[state=active]:text-amber-300 hover:from-amber-500/40 hover:to-orange-500/40 hover:text-gray-900 dark:text-white border border-amber-500/30">
                   <Rocket className="w-3.5 h-3.5" />
                   <span>Orchestrator</span>
                 </TabsTrigger>
@@ -911,7 +911,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-white">Connected Orgs</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white">Connected Orgs</CardTitle>
                         <Button onClick={() => setShowAddOrgDialog(true)} size="sm" className="gap-2">
                           <Plus className="w-4 h-4" />
                           Add Org
@@ -923,7 +923,7 @@ export function SalesforceToolsPage() {
                       {orgs.length === 0 ? (
                         <div className="text-center py-12">
                           <Cloud className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                          <h3 className="text-lg font-medium text-white mb-2">No orgs connected</h3>
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No orgs connected</h3>
                           <p className="text-slate-400 mb-4">Connect a Salesforce org to get started</p>
                           <Button onClick={() => setShowAddOrgDialog(true)} className="gap-2">
                             <Plus className="w-4 h-4" />
@@ -951,7 +951,7 @@ export function SalesforceToolsPage() {
                                     <Cloud className="w-5 h-5" style={{ color: org.color }} />
                                   </div>
                                   <div>
-                                    <div className="font-medium text-white flex items-center gap-2">
+                                    <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                       {org.name}
                                       {currentOrg?.id === org.id && (
                                         <Badge className="bg-green-500/20 text-green-400 border-green-500/50 text-xs">
@@ -995,7 +995,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-white">API Limits</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white">API Limits</CardTitle>
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -1017,7 +1017,7 @@ export function SalesforceToolsPage() {
                               <div key={key}>
                                 <div className="flex justify-between text-sm mb-1">
                                   <span className="text-slate-400">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                  <span className="text-white">{value.Remaining.toLocaleString()} / {value.Max.toLocaleString()}</span>
+                                  <span className="text-gray-900 dark:text-white">{value.Remaining.toLocaleString()} / {value.Max.toLocaleString()}</span>
                                 </div>
                                 <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                                   <div
@@ -1077,7 +1077,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader className="py-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-white text-sm flex items-center gap-2">
+                        <CardTitle className="text-gray-900 dark:text-white text-sm flex items-center gap-2">
                           <Table className="w-4 h-4" />
                           Results ({queryResults.length} records)
                         </CardTitle>
@@ -1094,7 +1094,7 @@ export function SalesforceToolsPage() {
                             navigator.clipboard.writeText(csv);
                             toast.success('Copied as CSV');
                           }}
-                          className="gap-1.5 text-slate-300 border-slate-600 hover:text-white hover:bg-slate-700"
+                          className="gap-1.5 text-slate-300 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           Copy CSV
@@ -1151,7 +1151,7 @@ export function SalesforceToolsPage() {
                 <div className="lg:col-span-2">
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white">Bulk Data Loader</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white">Bulk Data Loader</CardTitle>
                       <CardDescription>Insert, update, or delete thousands of records</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1160,7 +1160,7 @@ export function SalesforceToolsPage() {
                           <div>
                             <Label>Operation</Label>
                             <Select value={bulkOperation} onValueChange={(v: any) => setBulkOperation(v)}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1177,7 +1177,7 @@ export function SalesforceToolsPage() {
                               value={bulkObjectName}
                               onChange={(e) => setBulkObjectName(e.target.value)}
                               placeholder="e.g., Account, Contact"
-                              className="bg-slate-900 border-slate-700 text-white"
+                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
                             />
                           </div>
                         </div>
@@ -1189,7 +1189,7 @@ export function SalesforceToolsPage() {
                               value={bulkExternalIdField}
                               onChange={(e) => setBulkExternalIdField(e.target.value)}
                               placeholder="e.g., External_Id__c"
-                              className="bg-slate-900 border-slate-700 text-white"
+                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
                             />
                           </div>
                         )}
@@ -1200,7 +1200,7 @@ export function SalesforceToolsPage() {
                             value={bulkCsvData}
                             onChange={(e) => setBulkCsvData(e.target.value)}
                             placeholder="Name,Phone,Website&#10;Acme Corp,(555) 123-4567,www.acme.com"
-                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[200px] text-white placeholder:text-slate-500"
+                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[200px] text-gray-900 dark:text-white placeholder:text-slate-500"
                           />
                         </div>
 
@@ -1217,7 +1217,7 @@ export function SalesforceToolsPage() {
                             )}
                             Start Bulk Job
                           </Button>
-                          <Button variant="outline" asChild className="text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                          <Button variant="outline" asChild className="text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
                             <label className="cursor-pointer gap-2">
                               <FolderOpen className="w-4 h-4" />
                               Upload CSV
@@ -1248,7 +1248,7 @@ export function SalesforceToolsPage() {
                 <div>
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white text-sm">Job Status</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-sm">Job Status</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {bulkJobStatus ? (
@@ -1265,7 +1265,7 @@ export function SalesforceToolsPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Processed</span>
-                            <span className="text-white">{bulkJobStatus.numberRecordsProcessed}</span>
+                            <span className="text-gray-900 dark:text-white">{bulkJobStatus.numberRecordsProcessed}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Failed</span>
@@ -1273,7 +1273,7 @@ export function SalesforceToolsPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Job ID</span>
-                            <span className="text-white font-mono text-xs">{bulkJobStatus.id}</span>
+                            <span className="text-gray-900 dark:text-white font-mono text-xs">{bulkJobStatus.id}</span>
                           </div>
                         </div>
                       ) : (
@@ -1291,7 +1291,7 @@ export function SalesforceToolsPage() {
                 {/* API Reference Browser */}
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-white text-sm">API Reference</CardTitle>
+                    <CardTitle className="text-gray-900 dark:text-white text-sm">API Reference</CardTitle>
                     <CardDescription className="text-xs">Click any endpoint to load it</CardDescription>
                   </CardHeader>
                   <CardContent className="p-3">
@@ -1309,13 +1309,13 @@ export function SalesforceToolsPage() {
                 {/* Request Builder */}
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-white text-sm">Request Builder</CardTitle>
+                    <CardTitle className="text-gray-900 dark:text-white text-sm">Request Builder</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       <div className="flex gap-2">
                         <Select value={apiMethod} onValueChange={(v: any) => setApiMethod(v)}>
-                          <SelectTrigger className="w-[100px] bg-slate-900 border-slate-700 text-white">
+                          <SelectTrigger className="w-[100px] bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1329,7 +1329,7 @@ export function SalesforceToolsPage() {
                           value={apiEndpoint}
                           onChange={(e) => setApiEndpoint(e.target.value)}
                           placeholder="/sobjects/Account/describe"
-                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-sm text-white placeholder:text-slate-500"
+                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-sm text-gray-900 dark:text-white placeholder:text-slate-500"
                         />
                       </div>
 
@@ -1340,7 +1340,7 @@ export function SalesforceToolsPage() {
                             value={apiBody}
                             onChange={(e) => setApiBody(e.target.value)}
                             placeholder='{"Name": "Test Account"}'
-                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[150px] text-white placeholder:text-slate-500 mt-1"
+                            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[150px] text-gray-900 dark:text-white placeholder:text-slate-500 mt-1"
                           />
                         </div>
                       )}
@@ -1366,7 +1366,7 @@ export function SalesforceToolsPage() {
                             setApiResponse(null);
                             setApiError(null);
                           }}
-                          className="text-slate-300 border-slate-600 hover:text-white hover:bg-slate-700"
+                          className="text-slate-300 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700"
                         >
                           Clear
                         </Button>
@@ -1389,7 +1389,7 @@ export function SalesforceToolsPage() {
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader className="py-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-white text-sm">Response</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-sm">Response</CardTitle>
                       {apiResponse && (
                         <Button
                           variant="ghost"
@@ -1433,7 +1433,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-white text-sm">Objects</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white text-sm">Objects</CardTitle>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1450,7 +1450,7 @@ export function SalesforceToolsPage() {
                           value={objectFilter}
                           onChange={(e) => setObjectFilter(e.target.value)}
                           placeholder="Filter objects..."
-                          className="bg-slate-900 border-slate-700 text-white"
+                          className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
                         />
                         <div className="flex items-center gap-2">
                           <Checkbox
@@ -1495,7 +1495,7 @@ export function SalesforceToolsPage() {
                 <div className="lg:col-span-3">
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white">
+                      <CardTitle className="text-gray-900 dark:text-white">
                         {objectDescribe ? `${objectDescribe.label} (${objectDescribe.name})` : 'Select an Object'}
                       </CardTitle>
                     </CardHeader>
@@ -1525,7 +1525,7 @@ export function SalesforceToolsPage() {
                               <tbody>
                                 {objectDescribe.fields.map(field => (
                                   <tr key={field.name} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                    <td className="px-4 py-2 text-white">{field.label}</td>
+                                    <td className="px-4 py-2 text-gray-900 dark:text-white">{field.label}</td>
                                     <td className="px-4 py-2 text-slate-300 font-mono text-xs">{field.name}</td>
                                     <td className="px-4 py-2">
                                       <Badge variant="outline" className="text-xs text-cyan-300 border-cyan-500/50 bg-cyan-900/20">
@@ -1561,7 +1561,7 @@ export function SalesforceToolsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-white">Record Inspector</CardTitle>
+                    <CardTitle className="text-gray-900 dark:text-white">Record Inspector</CardTitle>
                     <CardDescription>View any Salesforce record by ID</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1571,7 +1571,7 @@ export function SalesforceToolsPage() {
                           value={inspectRecordId}
                           onChange={(e) => setInspectRecordId(e.target.value)}
                           placeholder="Enter Record ID (e.g., 001xx...)"
-                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-white placeholder:text-slate-500"
+                          className="flex-1 bg-slate-900 border-slate-700 font-mono text-gray-900 dark:text-white placeholder:text-slate-500"
                         />
                         <Button
                           onClick={handleInspectRecord}
@@ -1587,7 +1587,7 @@ export function SalesforceToolsPage() {
                           value={inspectObjectType}
                           onChange={(e) => setInspectObjectType(e.target.value)}
                           placeholder="Account, Contact, etc."
-                          className="bg-slate-900 border-slate-700 text-white"
+                          className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
                         />
                       </div>
                     </div>
@@ -1597,7 +1597,7 @@ export function SalesforceToolsPage() {
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-white">Record Details</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white">Record Details</CardTitle>
                       {inspectedRecord && (
                         <Button
                           variant="ghost"
@@ -1620,7 +1620,7 @@ export function SalesforceToolsPage() {
                           .map(([key, value]) => (
                             <div key={key} className="flex justify-between p-2 rounded bg-slate-900/50">
                               <span className="text-slate-400 text-sm">{key}</span>
-                              <span className="text-white text-sm font-mono">
+                              <span className="text-gray-900 dark:text-white text-sm font-mono">
                                 {typeof value === 'object' ? JSON.stringify(value) : String(value ?? 'null')}
                               </span>
                             </div>
@@ -1641,7 +1641,7 @@ export function SalesforceToolsPage() {
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-white text-sm">Test Classes</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-sm">Test Classes</CardTitle>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1700,7 +1700,7 @@ export function SalesforceToolsPage() {
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-white">Test Results</CardTitle>
+                        <CardTitle className="text-gray-900 dark:text-white">Test Results</CardTitle>
                         {testRunStatus !== 'idle' && (
                           <Badge className={
                             testRunStatus === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -1730,7 +1730,7 @@ export function SalesforceToolsPage() {
                                   ) : (
                                     <X className="w-4 h-4 text-red-400" />
                                   )}
-                                  <span className="text-white font-medium">
+                                  <span className="text-gray-900 dark:text-white font-medium">
                                     {result.apexClass?.name}.{result.methodName}
                                   </span>
                                 </div>
@@ -1756,7 +1756,7 @@ export function SalesforceToolsPage() {
               <div className="space-y-6">
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-white">Permission Analyzer</CardTitle>
+                    <CardTitle className="text-gray-900 dark:text-white">Permission Analyzer</CardTitle>
                     <CardDescription>Check user permissions on objects and fields</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1765,7 +1765,7 @@ export function SalesforceToolsPage() {
                         value={permissionUserId}
                         onChange={(e) => setPermissionUserId(e.target.value)}
                         placeholder="User ID (leave blank for current user)"
-                        className="max-w-md bg-slate-900 border-slate-700 font-mono text-white placeholder:text-slate-500"
+                        className="max-w-md bg-slate-900 border-slate-700 font-mono text-gray-900 dark:text-white placeholder:text-slate-500"
                       />
                       <Button
                         onClick={handleAnalyzePermissions}
@@ -1786,7 +1786,7 @@ export function SalesforceToolsPage() {
                 {objectPermissions.length > 0 && (
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white">Object Permissions</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white">Object Permissions</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="overflow-auto max-h-[400px] rounded-lg border border-slate-700">
@@ -1805,7 +1805,7 @@ export function SalesforceToolsPage() {
                           <tbody>
                             {objectPermissions.map((perm, idx) => (
                               <tr key={idx} className="border-t border-slate-700/50 hover:bg-slate-800/50">
-                                <td className="px-4 py-2 text-white">{perm.objectName}</td>
+                                <td className="px-4 py-2 text-gray-900 dark:text-white">{perm.objectName}</td>
                                 <td className="px-4 py-2 text-center">
                                   {perm.canCreate ? <Check className="w-4 h-4 text-green-400 mx-auto" /> : <X className="w-4 h-4 text-slate-600 mx-auto" />}
                                 </td>
@@ -1842,7 +1842,7 @@ export function SalesforceToolsPage() {
                 <div className="lg:col-span-2">
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white">Test Data Factory</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white">Test Data Factory</CardTitle>
                       <CardDescription>Generate realistic Salesforce test data</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1851,7 +1851,7 @@ export function SalesforceToolsPage() {
                           <div>
                             <Label>Object</Label>
                             <Select value={selectedDataObject} onValueChange={setSelectedDataObject}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1871,13 +1871,13 @@ export function SalesforceToolsPage() {
                               max={1000}
                               value={dataRecordCount}
                               onChange={(e) => setDataRecordCount(parseInt(e.target.value) || 10)}
-                              className="bg-slate-900 border-slate-700 text-white"
+                              className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white"
                             />
                           </div>
                           <div>
                             <Label>Industry</Label>
                             <Select value={dataIndustry} onValueChange={(v: any) => setDataIndustry(v)}>
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                              <SelectTrigger className="bg-slate-900 border-slate-700 text-gray-900 dark:text-white">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1901,11 +1901,11 @@ export function SalesforceToolsPage() {
                           </Button>
                           {generatedRecords.length > 0 && (
                             <>
-                              <Button variant="outline" onClick={handleExportTestDataCSV} className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                              <Button variant="outline" onClick={handleExportTestDataCSV} className="gap-2 text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
                                 <Download className="w-4 h-4" />
                                 Export CSV
                               </Button>
-                              <Button variant="outline" onClick={handleCopyTestDataJSON} className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                              <Button variant="outline" onClick={handleCopyTestDataJSON} className="gap-2 text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
                                 <Copy className="w-4 h-4" />
                                 Copy JSON
                               </Button>
@@ -1929,7 +1929,7 @@ export function SalesforceToolsPage() {
                           <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-blue-400">Inserting records...</span>
-                              <span className="text-white">{seedingProgress.current} / {seedingProgress.total}</span>
+                              <span className="text-gray-900 dark:text-white">{seedingProgress.current} / {seedingProgress.total}</span>
                             </div>
                             <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                               <div
@@ -1981,7 +1981,7 @@ export function SalesforceToolsPage() {
                 <div>
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader>
-                      <CardTitle className="text-white text-sm">Data Seeding Templates</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-sm">Data Seeding Templates</CardTitle>
                       <CardDescription>Pre-built data sets for common scenarios</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1996,7 +1996,7 @@ export function SalesforceToolsPage() {
                             }`}
                             onClick={() => handleApplySeedTemplate(template.name)}
                           >
-                            <div className="font-medium text-white text-sm">{template.name}</div>
+                            <div className="font-medium text-gray-900 dark:text-white text-sm">{template.name}</div>
                             <div className="text-xs text-slate-400 mt-1">{template.description}</div>
                             <div className="flex flex-wrap gap-1 mt-2">
                               {template.objects.map(obj => (
@@ -2014,7 +2014,7 @@ export function SalesforceToolsPage() {
                   {/* Object Fields Preview */}
                   <Card className="bg-slate-800/50 border-slate-700 mt-4">
                     <CardHeader>
-                      <CardTitle className="text-white text-sm">
+                      <CardTitle className="text-gray-900 dark:text-white text-sm">
                         {selectedDataObject} Fields
                       </CardTitle>
                     </CardHeader>
@@ -2114,7 +2114,7 @@ export function SalesforceToolsPage() {
         <Dialog open={showAddOrgDialog} onOpenChange={setShowAddOrgDialog}>
           <DialogContent className="bg-slate-900 border-slate-700 max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-white">Connect Salesforce Org</DialogTitle>
+              <DialogTitle className="text-gray-900 dark:text-white">Connect Salesforce Org</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {/* Browser OAuth Option - Recommended */}
@@ -2132,7 +2132,7 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.orgType} 
                       onValueChange={(v) => setNewOrgForm({ ...newOrgForm, orgType: v })}
                     >
-                      <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700 text-white">
+                      <SelectTrigger className="w-[140px] bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
                         <SelectValue placeholder="Org Type" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2145,14 +2145,14 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.name}
                       onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
                       placeholder="Org nickname (for display)"
-                      className="flex-1 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                      className="flex-1 bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                     />
                   </div>
                   <Input
                     value={newOrgForm.loginUrl}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, loginUrl: e.target.value })}
                     placeholder="Paste your Salesforce URL (e.g., https://orgfarm-xxx-dev-ed.develop.my.salesforce.com)"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-xs"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
                   />
                   <p className="text-xs text-slate-500">
                     Paste your full Salesforce login URL, or leave empty to use standard login
@@ -2308,12 +2308,12 @@ export function SalesforceToolsPage() {
                 <div className="space-y-2">
                   <Input
                     placeholder="Instance URL (e.g., https://orgfarm-xxx.develop.my.salesforce.com)"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-xs"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
                     id="session-instance-url"
                   />
                   <Input
                     placeholder="Session ID (from browser cookies)"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-xs"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500 text-xs"
                     id="session-id-input"
                   />
                   <Button 
@@ -2383,13 +2383,13 @@ export function SalesforceToolsPage() {
                     value={newOrgForm.name}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
                     placeholder="My Production Org"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div>
                   <Label className="text-slate-300">Org Type</Label>
                   <Select value={newOrgForm.orgType} onValueChange={(v) => setNewOrgForm({ ...newOrgForm, orgType: v })}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2403,7 +2403,7 @@ export function SalesforceToolsPage() {
                 <div>
                   <Label className="text-slate-300">Color</Label>
                   <Select value={newOrgForm.color} onValueChange={(v) => setNewOrgForm({ ...newOrgForm, color: v })}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -2430,7 +2430,7 @@ export function SalesforceToolsPage() {
                         }
                       }}
                     >
-                      <SelectTrigger className="w-[200px] bg-slate-800 border-slate-700 text-white">
+                      <SelectTrigger className="w-[200px] bg-slate-800 border-slate-700 text-gray-900 dark:text-white">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -2443,7 +2443,7 @@ export function SalesforceToolsPage() {
                       value={newOrgForm.loginUrl}
                       onChange={(e) => setNewOrgForm({ ...newOrgForm, loginUrl: e.target.value })}
                       placeholder="https://orgfam.my.salesforce.com"
-                      className="flex-1 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                      className="flex-1 bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -2456,7 +2456,7 @@ export function SalesforceToolsPage() {
                     value={newOrgForm.username}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, username: e.target.value })}
                     placeholder="user@example.com"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div className="col-span-2">
@@ -2466,7 +2466,7 @@ export function SalesforceToolsPage() {
                     value={newOrgForm.password}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, password: e.target.value })}
                     placeholder="Your password"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                   />
                 </div>
                 <div className="col-span-2">
@@ -2475,7 +2475,7 @@ export function SalesforceToolsPage() {
                     value={newOrgForm.securityToken}
                     onChange={(e) => setNewOrgForm({ ...newOrgForm, securityToken: e.target.value })}
                     placeholder="Security token from Salesforce"
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    className="bg-slate-800 border-slate-700 text-gray-900 dark:text-white placeholder:text-slate-500"
                   />
                   <p className="text-xs text-slate-500 mt-1">
                     Required if IP restrictions are enabled. Get from: Setup → My Personal Information → Reset Security Token
@@ -2484,7 +2484,7 @@ export function SalesforceToolsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddOrgDialog(false)} className="text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+              <Button variant="outline" onClick={() => setShowAddOrgDialog(false)} className="text-slate-200 border-slate-600 hover:text-gray-900 dark:text-white hover:bg-slate-700">
                 Cancel
               </Button>
               <Button onClick={handleAddOrg} disabled={isLoading} className="gap-2">

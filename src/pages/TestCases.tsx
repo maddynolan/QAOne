@@ -110,7 +110,7 @@ function StatCard({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-gray-400">{label}</p>
-          <p className="text-2xl font-bold text-white mt-1">{value}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
         </div>
         <div className={cn(
           "w-10 h-10 rounded-lg flex items-center justify-center",
@@ -172,7 +172,7 @@ function TestCaseCard({
             {/* Title row */}
             <div className="flex items-center gap-2">
               {getStatusIcon()}
-              <h3 className="font-semibold text-white truncate">
+              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
                 {testCase.name || testCase.title || 'Untitled'}
               </h3>
             </div>
@@ -242,7 +242,7 @@ function TestCaseCard({
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-white">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-900 dark:text-white">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -300,7 +300,7 @@ function ExecutionHistoryPanel({
             {run.status === 'running' && <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />}
             {run.status === 'skipped' && <Clock className="w-4 h-4 text-gray-500" />}
             <div>
-              <p className="text-sm font-medium text-white truncate max-w-48">{run.testCaseName}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-48">{run.testCaseName}</p>
               <p className="text-xs text-gray-500">
                 {new Date(run.startTime).toLocaleString()} • {run.mode}
               </p>
@@ -347,7 +347,7 @@ function RunResultsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-gray-900 border-gray-700 text-white">
+      <DialogContent className="max-w-2xl bg-gray-900 border-gray-700 text-gray-900 dark:text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {run.status === 'passed' && <CheckCircle className="w-5 h-5 text-green-500" />}
@@ -360,7 +360,7 @@ function RunResultsDialog({
           {/* Summary */}
           <div className="grid grid-cols-4 gap-3">
             <div className="p-3 bg-gray-800 rounded-lg text-center">
-              <p className="text-2xl font-bold text-white">{passRate}%</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{passRate}%</p>
               <p className="text-xs text-gray-400">Pass Rate</p>
             </div>
             <div className="p-3 bg-gray-800 rounded-lg text-center">
@@ -381,7 +381,7 @@ function RunResultsDialog({
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">Progress</span>
-              <span className="text-white">{run.passedSteps}/{run.totalSteps} steps</span>
+              <span className="text-gray-900 dark:text-white">{run.passedSteps}/{run.totalSteps} steps</span>
             </div>
             <Progress value={passRate} className="h-2 bg-gray-800" />
           </div>
@@ -402,7 +402,7 @@ function RunResultsDialog({
                   {step.status === 'passed' && <CheckCircle className="w-4 h-4 text-green-500" />}
                   {step.status === 'failed' && <XCircle className="w-4 h-4 text-red-500" />}
                   {step.status === 'skipped' && <Clock className="w-4 h-4 text-gray-500" />}
-                  <span className="text-sm text-white">Step {step.step}: {step.name}</span>
+                  <span className="text-sm text-gray-900 dark:text-white">Step {step.step}: {step.name}</span>
                 </div>
                 {step.duration && (
                   <span className="text-xs text-gray-500">{step.duration}ms</span>
@@ -430,7 +430,7 @@ function RunResultsDialog({
               navigator.clipboard.writeText(text);
               toast.success('Results copied to clipboard');
             }}
-            className="bg-gray-800 text-white hover:bg-gray-700"
+            className="bg-gray-800 text-gray-900 dark:text-white hover:bg-gray-700"
           >
             <Copy className="w-4 h-4 mr-2" />
             Copy Results
@@ -681,7 +681,7 @@ export default function TestCases() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950">
+    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         
         {/* ─────────────────────────────────────────────────────────────────
@@ -689,7 +689,7 @@ export default function TestCases() {
             ───────────────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <FileText className="w-7 h-7 text-amber-500" />
               Test Cases
             </h1>
@@ -707,7 +707,7 @@ export default function TestCases() {
             </Button>
             <Button 
               onClick={() => navigate('/test-cases/builder')}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400"
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-gray-900 dark:text-white hover:from-amber-400 hover:to-orange-400"
             >
               <Plus className="h-4 w-4 mr-2" />
               New Test Case
@@ -735,7 +735,7 @@ export default function TestCases() {
               placeholder="Search test cases..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-900/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-amber-500/50 focus:ring-amber-500/20"
+              className="pl-10 bg-gray-900/50 border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 focus:border-amber-500/50 focus:ring-amber-500/20"
             />
           </div>
           <div className="flex items-center gap-1 bg-gray-900/50 rounded-lg p-1 border border-gray-800">
@@ -749,7 +749,7 @@ export default function TestCases() {
                     ? f === 'passed' ? "bg-green-500/10 text-green-500"
                     : f === 'failed' ? "bg-red-500/10 text-red-500"
                     : "bg-amber-500/10 text-amber-500" 
-                    : "text-gray-400 hover:text-white"
+                    : "text-gray-400 hover:text-gray-900 dark:text-white"
                 )}
               >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -762,7 +762,7 @@ export default function TestCases() {
             onClick={() => setShowHistoryPanel(!showHistoryPanel)}
             className={cn(
               "border-gray-700",
-              showHistoryPanel ? "bg-amber-500/10 text-amber-500 border-amber-500/30" : "text-gray-400 hover:text-white"
+              showHistoryPanel ? "bg-amber-500/10 text-amber-500 border-amber-500/30" : "text-gray-400 hover:text-gray-900 dark:text-white"
             )}
           >
             <History className="w-4 h-4 mr-2" />
@@ -779,7 +779,7 @@ export default function TestCases() {
         {showHistoryPanel && (
           <Card className="bg-gray-900/50 border-gray-800">
             <CardHeader className="py-3 border-b border-gray-800">
-              <CardTitle className="text-sm flex items-center gap-2 text-white">
+              <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-white">
                 <History className="w-4 h-4 text-amber-500" />
                 Recent Executions
               </CardTitle>
@@ -813,7 +813,7 @@ export default function TestCases() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-800 flex items-center justify-center">
                 <FileText className="w-8 h-8 text-gray-600" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">No test cases found</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No test cases found</h3>
               <p className="text-gray-400 mb-6">
                 {searchTerm 
                   ? 'Try adjusting your search criteria' 

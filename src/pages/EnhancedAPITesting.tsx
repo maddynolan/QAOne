@@ -1155,16 +1155,16 @@ export default function EnhancedAPITesting() {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950">
+    <div className="h-full overflow-y-auto bg-white dark:bg-gray-950">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-              <Globe className="w-6 h-6 text-white" />
+              <Globe className="w-6 h-6 text-gray-900 dark:text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">API Testing</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">API Testing</h1>
               <p className="text-sm text-gray-400">
                 Multi-protocol support • Database connectivity • Comprehensive reporting
               </p>
@@ -1177,7 +1177,7 @@ export default function EnhancedAPITesting() {
         </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8 bg-gray-900 border border-gray-700 p-1">
+        <TabsList className="grid w-full grid-cols-8 bg-white dark:bg-gray-900 border border-gray-700 p-1">
           <TabsTrigger value="templates" className="data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
             <Rocket className="w-4 h-4 mr-1" />
             Templates
@@ -1196,18 +1196,18 @@ export default function EnhancedAPITesting() {
 
         {/* Templates Tab - Quick Start */}
         <TabsContent value="templates" className="space-y-4">
-          <Alert className="bg-gray-900 border-gray-700 text-gray-300">
+          <Alert className="bg-white dark:bg-gray-900 border-gray-700 text-gray-300">
             <Rocket className="h-4 w-4 text-amber-500" />
             <AlertDescription>
-              <strong className="text-white">Quick Start:</strong> Load pre-configured protocol templates for the e-commerce test site at <code className="bg-gray-800 px-1 rounded text-amber-400">{ECOMMERCE_TEST_URL}</code>
+              <strong className="text-gray-900 dark:text-white">Quick Start:</strong> Load pre-configured protocol templates for the e-commerce test site at <code className="bg-gray-800 px-1 rounded text-amber-400">{ECOMMERCE_TEST_URL}</code>
             </AlertDescription>
           </Alert>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(PROTOCOL_TEMPLATES).map(([key, template]) => (
-              <Card key={key} className="bg-gray-900 border-gray-700 cursor-pointer hover:border-amber-500/50 transition-all">
+              <Card key={key} className="bg-white dark:bg-gray-900 border-gray-700 cursor-pointer hover:border-amber-500/50 transition-all">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg text-white">
+                  <CardTitle className="flex items-center gap-2 text-lg text-gray-900 dark:text-white">
                     <span className="text-2xl">{template.icon}</span>
                     {template.name}
                   </CardTitle>
@@ -1230,7 +1230,7 @@ export default function EnhancedAPITesting() {
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white"
+                      className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-gray-900 dark:text-white"
                       onClick={async () => {
                         setProtocol(template.protocol);
                         setSpecFormat(template.format);
