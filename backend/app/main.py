@@ -91,6 +91,24 @@ async def lifespan(app: FastAPI):
         from app.services.storage.database_service import init_database
         await init_database()
         logger.info("QA AI Backend started (SQLite ready)")
+        
+        # Auto-connect to Salesforce if credentials are saved
+        try:
+            from app.routers.salesforce_api import auto_connect_salesforce
+            sf_result = await auto_connect_salesforce()
+            if sf_result.get("connected"):
+                logger.info(f"[OK] Salesforce auto-connected: {sf_result.get('instance_url')} ({sf_result.get('username', 'unknown')})")
+            else:
+                reason = sf_result.get("reason", "unknown")
+                if reason == "no_credentials":
+                    logger.info("Salesforce: No saved credentials - connect via OAuth when needed")
+                elif reason == "refresh_token_expired":
+                    logger.warning("[WARN] Salesforce refresh token expired - please re-authenticate via OAuth")
+                else:
+                    logger.warning(f"Salesforce auto-connect skipped: {reason}")
+        except Exception as e:
+            logger.warning(f"Salesforce auto-connect failed: {e}")
+        
         yield
     except asyncio.CancelledError:
         # Gracefully handle cancellation during shutdown

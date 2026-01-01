@@ -6,6 +6,7 @@ Endpoints for:
 - Fetching metadata
 - Validating objects, fields, selectors
 - Workflow validation
+- Auto-reconnect on startup using saved credentials
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -13,10 +14,156 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
+import json
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/salesforce", tags=["salesforce"])
+
+# Path to saved credentials
+CREDENTIALS_FILE = Path(__file__).parent.parent.parent / "config" / "salesforce_credentials.json"
+
+
+# ============================================================================
+# Auto-Reconnect Functions (Persist across restarts)
+# ============================================================================
+
+async def auto_connect_salesforce() -> dict:
+    """
+    Automatically connect to Salesforce using saved credentials.
+    Called on backend startup to restore connection after restart.
+    
+    Uses refresh token to get a new access token if available.
+    """
+    import httpx
+    
+    if not CREDENTIALS_FILE.exists():
+        logger.info("No saved Salesforce credentials found - skipping auto-connect")
+        return {"connected": False, "reason": "no_credentials"}
+    
+    try:
+        with open(CREDENTIALS_FILE, "r") as f:
+            creds = json.load(f)
+        
+        refresh_token = creds.get("refresh_token")
+        client_id = creds.get("client_id")
+        client_secret = creds.get("client_secret")
+        instance_url = creds.get("instance_url", "")
+        
+        if not refresh_token or not client_id:
+            logger.warning("Missing refresh_token or client_id in saved credentials")
+            return {"connected": False, "reason": "incomplete_credentials"}
+        
+        # Determine token endpoint from instance URL
+        # For custom domains like orgfarm-xxx.develop.my.salesforce.com
+        if ".develop.my.salesforce.com" in instance_url:
+            # Developer edition - use login.salesforce.com for token refresh
+            token_url = "https://login.salesforce.com/services/oauth2/token"
+        elif ".sandbox.my.salesforce.com" in instance_url or "test.salesforce.com" in instance_url:
+            token_url = "https://test.salesforce.com/services/oauth2/token"
+        else:
+            token_url = "https://login.salesforce.com/services/oauth2/token"
+        
+        logger.info(f"Attempting Salesforce auto-connect using refresh token...")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                token_url,
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": client_id,
+                    "client_secret": client_secret or "",
+                }
+            )
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                new_access_token = token_data.get("access_token", "")
+                new_instance_url = token_data.get("instance_url", instance_url)
+                
+                # Store in environment variables
+                os.environ["SF_SESSION_ID"] = new_access_token
+                os.environ["SF_INSTANCE_URL"] = new_instance_url
+                os.environ["SF_USERNAME"] = creds.get("username", "")
+                
+                # Update saved credentials with new access token
+                creds["access_token"] = new_access_token
+                creds["instance_url"] = new_instance_url
+                
+                # If new refresh token was issued, update it too
+                if token_data.get("refresh_token"):
+                    creds["refresh_token"] = token_data["refresh_token"]
+                
+                with open(CREDENTIALS_FILE, "w") as f:
+                    json.dump(creds, f, indent=4)
+                
+                logger.info(f"[OK] Salesforce auto-connect successful! Instance: {new_instance_url}")
+                return {
+                    "connected": True,
+                    "instance_url": new_instance_url,
+                    "username": creds.get("username", ""),
+                    "org_name": creds.get("org_name", "")
+                }
+            else:
+                error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"error": response.text}
+                logger.warning(f"Refresh token failed: {error_data}")
+                
+                # If refresh token is invalid, clear the session
+                if "invalid_grant" in str(error_data).lower():
+                    logger.warning("Refresh token expired - you'll need to re-authenticate via OAuth")
+                    return {"connected": False, "reason": "refresh_token_expired", "error": str(error_data)}
+                
+                return {"connected": False, "reason": "token_refresh_failed", "error": str(error_data)}
+                
+    except Exception as e:
+        logger.error(f"Salesforce auto-connect error: {str(e)}")
+        return {"connected": False, "reason": "error", "error": str(e)}
+
+
+def save_credentials_to_file(
+    access_token: str,
+    instance_url: str,
+    refresh_token: str = None,
+    username: str = None,
+    org_name: str = None,
+    client_id: str = None,
+    client_secret: str = None
+):
+    """Save credentials to file for persistence across restarts."""
+    try:
+        # Load existing credentials if any
+        existing = {}
+        if CREDENTIALS_FILE.exists():
+            with open(CREDENTIALS_FILE, "r") as f:
+                existing = json.load(f)
+        
+        # Update with new values (keep existing if not provided)
+        creds = {
+            "org_name": org_name or existing.get("org_name", "Default Org"),
+            "instance_url": instance_url,
+            "access_token": access_token,
+            "refresh_token": refresh_token or existing.get("refresh_token"),
+            "client_id": client_id or existing.get("client_id"),
+            "client_secret": client_secret or existing.get("client_secret"),
+            "username": username or existing.get("username", ""),
+            "created_at": existing.get("created_at", ""),
+            "notes": "OAuth tokens. Access token expires in 2 hours, use refresh_token to get new one."
+        }
+        
+        # Ensure config directory exists
+        CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(CREDENTIALS_FILE, "w") as f:
+            json.dump(creds, f, indent=4)
+        
+        logger.info(f"Saved Salesforce credentials to {CREDENTIALS_FILE}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save credentials: {e}")
+        return False
 
 
 # ============================================================================
@@ -122,6 +269,16 @@ async def get_connection_status():
         "username": username if is_connected else None,
         "domain": domain if is_connected else None,
     }
+
+
+@router.post("/auto-connect")
+async def trigger_auto_connect():
+    """
+    Manually trigger auto-connect using saved credentials.
+    Useful if auto-connect on startup failed or you want to reconnect.
+    """
+    result = await auto_connect_salesforce()
+    return result
 
 
 @router.post("/connect", response_model=SalesforceConnectionResponse)
@@ -479,7 +636,7 @@ async def oauth_callback(code: str = None, state: str = None, error: str = None,
             
             token_data = response.json()
             
-            # Store credentials
+            # Store credentials in environment variables
             os.environ["SF_SESSION_ID"] = token_data.get("access_token", "")
             os.environ["SF_INSTANCE_URL"] = token_data.get("instance_url", "")
             
@@ -492,6 +649,35 @@ async def oauth_callback(code: str = None, state: str = None, error: str = None,
                 "id": token_data.get("id"),
                 "completed": True
             }
+            
+            # Save credentials to file for persistence across restarts
+            # Extract username from ID URL if available
+            username_from_id = ""
+            if token_data.get("id"):
+                try:
+                    # ID URL format: https://login.salesforce.com/id/00Dxxxx/005xxxx
+                    id_url = token_data.get("id", "")
+                    if id_url:
+                        # Get user info to extract username
+                        async with httpx.AsyncClient(timeout=30.0) as user_client:
+                            user_response = await user_client.get(
+                                id_url,
+                                headers={"Authorization": f"Bearer {token_data.get('access_token')}"}
+                            )
+                            if user_response.status_code == 200:
+                                user_info = user_response.json()
+                                username_from_id = user_info.get("username", "")
+                except Exception as e:
+                    logger.warning(f"Could not extract username from ID: {e}")
+            
+            save_credentials_to_file(
+                access_token=token_data.get("access_token", ""),
+                instance_url=token_data.get("instance_url", ""),
+                refresh_token=token_data.get("refresh_token"),
+                username=username_from_id,
+                client_id=OAUTH_CLIENT_ID,
+                client_secret=OAUTH_CLIENT_SECRET
+            )
             
             logger.info(f"OAuth successful! Instance: {token_data.get('instance_url')}")
             
