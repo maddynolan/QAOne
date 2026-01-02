@@ -14,6 +14,7 @@ import Editor, { OnMount, Monaco } from '@monaco-editor/react';
 import { editor, languages, Position, IRange } from 'monaco-editor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useTheme } from '@/contexts/ThemeContext';
 import {
   Play, History, Wand2, Copy, Download, Clock, ChevronDown, ChevronUp,
   Loader2, Table, Code, X
@@ -114,6 +115,7 @@ export function SoqlEditor({
   queryHistory = [],
   disabled = false,
 }: SoqlEditorProps) {
+  const { theme } = useTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -154,7 +156,7 @@ export function SoqlEditor({
       },
     });
 
-    // Define theme
+    // Define dark theme
     monaco.editor.defineTheme('soql-dark', {
       base: 'vs-dark',
       inherit: true,
@@ -178,8 +180,29 @@ export function SoqlEditor({
       },
     });
 
-    // Set theme
-    monaco.editor.setTheme('soql-dark');
+    // Define light theme
+    monaco.editor.defineTheme('soql-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '0000FF', fontStyle: 'bold' },
+        { token: 'string', foreground: 'A31515' },
+        { token: 'number', foreground: '098658' },
+        { token: 'comment', foreground: '008000' },
+        { token: 'identifier', foreground: '001080' },
+        { token: 'operator', foreground: '000000' },
+      ],
+      colors: {
+        'editor.background': '#FFFFFF',
+        'editor.foreground': '#1F2937',
+        'editor.lineHighlightBackground': '#F3F4F6',
+        'editorCursor.foreground': '#2563EB',
+        'editor.selectionBackground': '#BFDBFE',
+        'editorSuggestWidget.background': '#FFFFFF',
+        'editorSuggestWidget.border': '#E5E7EB',
+        'editorSuggestWidget.selectedBackground': '#DBEAFE',
+      },
+    });
 
     // Register completion provider
     monaco.languages.registerCompletionItemProvider('soql', {
@@ -351,6 +374,13 @@ export function SoqlEditor({
     });
   }, [objects, disabled, isLoading, onExecute]);
 
+  // Switch theme when app theme changes
+  useEffect(() => {
+    if (monacoRef.current) {
+      monacoRef.current.editor.setTheme(theme === 'dark' ? 'soql-dark' : 'soql-light');
+    }
+  }, [theme]);
+
   // Format SOQL query
   const formatQuery = useCallback(() => {
     if (!editorRef.current) return;
@@ -473,6 +503,7 @@ export function SoqlEditor({
           value={value}
           onChange={(val) => onChange(val || '')}
           onMount={handleEditorMount}
+          theme={theme === 'dark' ? 'soql-dark' : 'soql-light'}
           options={{
             minimap: { enabled: false },
             fontSize: 14,

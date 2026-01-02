@@ -458,7 +458,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
       case 'POST': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'PATCH': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       case 'DELETE': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+      default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
 
@@ -474,18 +474,18 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
       {/* Search and Object Selector */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search APIs..."
-            className="pl-9 bg-slate-900 border-slate-700 text-white"
+            className="pl-9 bg-input border-input text-foreground"
           />
         </div>
         <select
           value={selectedObject}
           onChange={(e) => setSelectedObject(e.target.value)}
-          className="px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-white text-sm"
+          className="px-3 py-2 rounded-md bg-input border border-border text-foreground text-sm"
         >
           <optgroup label="Standard Objects">
             {['Account', 'Contact', 'Lead', 'Opportunity', 'Case', 'Task', 'Event', 'User'].map(obj => (
@@ -509,47 +509,47 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
           const isExpanded = expandedCategories.has(category.name);
           
           return (
-            <div key={category.name} className="rounded-lg border border-slate-700 bg-slate-800/30 overflow-hidden">
+            <div key={category.name} className="rounded-lg border border-border bg-card overflow-hidden">
               {/* Category Header */}
               <button
                 onClick={() => toggleCategory(category.name)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700/30 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors"
               >
                 <Icon className={`w-5 h-5 text-${category.color}-400`} />
                 <div className="flex-1 text-left">
-                  <div className="font-medium text-white">{category.name}</div>
-                  <div className="text-xs text-slate-500">{category.description}</div>
+                  <div className="font-medium text-foreground">{category.name}</div>
+                  <div className="text-xs text-muted-foreground">{category.description}</div>
                 </div>
-                <Badge variant="outline" className="text-slate-400 border-slate-600">
+                <Badge variant="outline" className="text-muted-foreground border-border">
                   {category.endpoints.length}
                 </Badge>
                 {isExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
                 )}
               </button>
 
               {/* Endpoints */}
               {isExpanded && (
-                <div className="border-t border-slate-700">
+                <div className="border-t border-border">
                   {category.endpoints.map((endpoint, idx) => (
                     <div
                       key={idx}
-                      className="flex items-start gap-3 px-4 py-2.5 hover:bg-slate-700/30 cursor-pointer border-b border-slate-700/50 last:border-0"
+                      className="flex items-start gap-3 px-4 py-2.5 hover:bg-accent cursor-pointer border-b border-border/50 last:border-0"
                       onClick={() => handleSelect(endpoint)}
                     >
                       <Badge className={`${getMethodColor(endpoint.method)} text-xs font-mono mt-0.5`}>
                         {endpoint.method}
                       </Badge>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-slate-200">{endpoint.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{endpoint.description}</div>
-                        <code className="text-xs text-slate-400 font-mono mt-1 block truncate">
+                        <div className="font-medium text-sm text-foreground">{endpoint.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{endpoint.description}</div>
+                        <code className="text-xs text-muted-foreground font-mono mt-1 block truncate">
                           {endpoint.path}
                         </code>
                       </div>
-                      <Play className="w-4 h-4 text-slate-500 hover:text-green-400 flex-shrink-0 mt-1" />
+                      <Play className="w-4 h-4 text-muted-foreground hover:text-green-400 flex-shrink-0 mt-1" />
                     </div>
                   ))}
                 </div>
@@ -560,7 +560,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
       </div>
 
       {/* Help Links */}
-      <div className="flex items-center gap-4 pt-2 border-t border-slate-700">
+      <div className="flex items-center gap-4 pt-2 border-t border-border">
         <a
           href="https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
           target="_blank"
@@ -585,6 +585,7 @@ export function SalesforceApiReference({ onSelectEndpoint, objects = [] }: Sales
     </div>
   );
 }
+
 
 
 
