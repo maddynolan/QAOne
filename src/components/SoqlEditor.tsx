@@ -386,9 +386,9 @@ export function SoqlEditor({
   }, [value]);
 
   return (
-    <div className="flex flex-col h-full border border-slate-700 rounded-lg overflow-hidden bg-slate-900">
+    <div className="flex flex-col h-full border border-border rounded-lg overflow-hidden bg-card">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-800/50 border-b border-slate-700">
+      <div className="flex items-center justify-between px-3 py-2 bg-secondary border-b border-border">
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -408,7 +408,7 @@ export function SoqlEditor({
             size="sm"
             variant="outline"
             onClick={formatQuery}
-            className="gap-1.5 text-slate-300 border-slate-600 hover:text-white hover:bg-slate-700"
+            className="gap-1.5 text-foreground border-border hover:bg-accent"
           >
             <Wand2 className="w-3.5 h-3.5" />
             Format
@@ -418,7 +418,7 @@ export function SoqlEditor({
             size="sm"
             variant="outline"
             onClick={copyQuery}
-            className="gap-1.5 text-slate-300 border-slate-600 hover:text-white hover:bg-slate-700"
+            className="gap-1.5 text-foreground border-border hover:bg-accent"
           >
             <Copy className="w-3.5 h-3.5" />
           </Button>
@@ -427,7 +427,7 @@ export function SoqlEditor({
             size="sm"
             variant="outline"
             onClick={() => setShowHistory(!showHistory)}
-            className={`gap-1.5 text-slate-300 border-slate-600 hover:text-white hover:bg-slate-700 ${showHistory ? 'bg-slate-700' : ''}`}
+            className={`gap-1.5 text-foreground border-border hover:bg-accent ${showHistory ? 'bg-accent' : ''}`}
           >
             <History className="w-3.5 h-3.5" />
             History
@@ -435,9 +435,9 @@ export function SoqlEditor({
           </Button>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
-          <Badge variant="outline" className="text-slate-400 border-slate-600">
+          <Badge variant="outline" className="text-muted-foreground border-border">
             Ctrl+Enter to Run
           </Badge>
         </div>
@@ -445,17 +445,17 @@ export function SoqlEditor({
 
       {/* History Panel */}
       {showHistory && queryHistory.length > 0 && (
-        <div className="max-h-48 overflow-y-auto border-b border-slate-700 bg-slate-800/30">
+        <div className="max-h-48 overflow-y-auto border-b border-border bg-secondary/50">
           {queryHistory.slice(0, 10).map((item, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between px-3 py-2 hover:bg-slate-700/50 cursor-pointer border-b border-slate-700/50 last:border-0"
+              className="flex items-center justify-between px-3 py-2 hover:bg-accent cursor-pointer border-b border-border/50 last:border-0"
               onClick={() => insertFromHistory(item.query)}
             >
-              <code className="text-xs text-slate-300 truncate flex-1 font-mono">
+              <code className="text-xs text-foreground truncate flex-1 font-mono">
                 {item.query.length > 80 ? item.query.slice(0, 80) + '...' : item.query}
               </code>
-              <span className="text-xs text-slate-500 ml-3 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground ml-3 flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 {new Date(item.timestamp).toLocaleTimeString()}
               </span>
@@ -502,13 +502,14 @@ export function SoqlEditor({
       </div>
 
       {/* Help bar */}
-      <div className="px-3 py-1.5 bg-slate-800/30 border-t border-slate-700 text-xs text-slate-500 flex items-center gap-4">
-        <span>💡 Type <code className="text-slate-400">FROM</code> for objects, fields auto-complete after object selection</span>
+      <div className="px-3 py-1.5 bg-secondary/50 border-t border-border text-xs text-muted-foreground flex items-center gap-4">
+        <span>💡 Type <code className="text-muted-foreground">FROM</code> for objects, fields auto-complete after object selection</span>
         <span className="ml-auto">Shift+Alt+F to format</span>
       </div>
     </div>
   );
 }
+
 
 
 

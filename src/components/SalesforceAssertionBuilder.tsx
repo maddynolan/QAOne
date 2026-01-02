@@ -333,9 +333,9 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
   return (
     <div className="space-y-4">
       {/* Assertion Builder */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white">Build Assertion</CardTitle>
+          <CardTitle className="text-foreground">Build Assertion</CardTitle>
           <CardDescription>Create database assertions for test validation</CardDescription>
         </CardHeader>
         <CardContent>
@@ -344,7 +344,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
             <div>
               <Label>Assertion Type</Label>
               <Select value={assertionType} onValueChange={(v: any) => setAssertionType(v)}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-input text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -358,7 +358,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {assertionTypes.find(t => t.value === assertionType)?.description}
               </p>
             </div>
@@ -367,7 +367,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
             <div>
               <Label>Object</Label>
               <Select value={selectedObject} onValueChange={setSelectedObject}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-input text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -385,7 +385,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
               <div>
                 <Label>Field</Label>
                 <Select value={selectedField} onValueChange={setSelectedField}>
-                  <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                  <SelectTrigger className="bg-input border-input text-foreground">
                     <SelectValue placeholder="Select field" />
                   </SelectTrigger>
                   <SelectContent>
@@ -404,7 +404,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
               <div>
                 <Label>Operator</Label>
                 <Select value={operator} onValueChange={(v: any) => setOperator(v)}>
-                  <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                  <SelectTrigger className="bg-input border-input text-foreground">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -426,7 +426,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                   value={expectedValue}
                   onChange={(e) => setExpectedValue(e.target.value)}
                   placeholder={assertionType === 'count' ? 'e.g., 10' : 'e.g., Acme Corp'}
-                  className="bg-slate-900 border-slate-700 text-white"
+                  className="bg-input border-input text-foreground"
                 />
               </div>
             )}
@@ -438,7 +438,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                 value={whereClause}
                 onChange={(e) => setWhereClause(e.target.value)}
                 placeholder="e.g., CreatedDate = TODAY AND Status = 'Active'"
-                className="bg-slate-900 border-slate-700 text-white"
+                className="bg-input border-input text-foreground"
               />
             </div>
 
@@ -449,7 +449,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={generateDefaultDescription()}
-                className="bg-slate-900 border-slate-700 text-white"
+                className="bg-input border-input text-foreground"
               />
             </div>
           </div>
@@ -463,16 +463,16 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
 
       {/* Assertions List */}
       {assertions.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white">Assertions ({assertions.length})</CardTitle>
+              <CardTitle className="text-foreground">Assertions ({assertions.length})</CardTitle>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={exportToPlaywright}
-                  className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700"
+                  className="gap-2 text-foreground border-border hover:bg-accent"
                 >
                   <Code className="w-4 h-4" />
                   Export to Playwright
@@ -528,7 +528,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                               {result.message}
                             </div>
                           )}
-                          <div className="text-xs text-slate-500 mt-1 font-mono">
+                          <div className="text-xs text-muted-foreground mt-1 font-mono">
                             {generateSOQL(assertion)}
                           </div>
                         </div>
