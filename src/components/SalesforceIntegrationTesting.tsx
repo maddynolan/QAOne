@@ -353,7 +353,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <ArrowLeftRight className="w-5 h-5 text-green-400" />
             Integration Testing
           </h3>
@@ -365,7 +365,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-slate-800/50">
+        <TabsList className="bg-card">
           <TabsTrigger value="api" className="gap-1.5 text-xs data-[state=active]:bg-green-600">
             <Globe className="w-3.5 h-3.5" />
             API Tests
@@ -388,10 +388,10 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
         <TabsContent value="api" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Test List */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Test Suite</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Test Suite</CardTitle>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={addApiTest} className="h-7 px-2">
                       <Plus className="w-3.5 h-3.5" />
@@ -413,7 +413,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         className={`p-2 rounded cursor-pointer transition-colors ${
                           selectedTest?.id === test.id
                             ? 'bg-slate-700 border border-slate-600'
-                            : 'bg-slate-900/50 hover:bg-slate-800'
+                            : 'bg-secondary hover:bg-slate-800'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -440,7 +440,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                             <Play className="w-3 h-3" />
                           </Button>
                         </div>
-                        <p className="text-sm text-white mt-1">{test.name}</p>
+                        <p className="text-sm text-foreground mt-1">{test.name}</p>
                         <p className="text-xs text-slate-500 font-mono truncate">{test.endpoint}</p>
                         {result && (
                           <p className="text-xs text-slate-400 mt-1">{result.duration}ms</p>
@@ -450,7 +450,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                   })}
                 </div>
                 
-                <div className="mt-3 pt-3 border-t border-slate-700">
+                <div className="mt-3 pt-3 border-t border-border">
                   <Button
                     onClick={runAllApiTests}
                     disabled={isLoading || !isConnected}
@@ -468,9 +468,9 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
             </Card>
 
             {/* Test Editor */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
-                <CardTitle className="text-white text-sm">Test Configuration</CardTitle>
+                <CardTitle className="text-foreground text-sm">Test Configuration</CardTitle>
               </CardHeader>
               <CardContent>
                 {selectedTest ? (
@@ -480,7 +480,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                       <Input
                         value={selectedTest.name}
                         onChange={(e) => updateApiTest({ ...selectedTest, name: e.target.value })}
-                        className="bg-slate-900 border-slate-700 text-white mt-1"
+                        className="bg-input border-border text-foreground mt-1"
                       />
                     </div>
                     <div className="flex gap-2">
@@ -489,7 +489,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         <select
                           value={selectedTest.method}
                           onChange={(e) => updateApiTest({ ...selectedTest, method: e.target.value as any })}
-                          className="w-full mt-1 px-2 py-2 rounded bg-slate-900 border border-slate-700 text-white text-sm"
+                          className="w-full mt-1 px-2 py-2 rounded bg-input border border-border text-foreground text-sm"
                         >
                           <option value="GET">GET</option>
                           <option value="POST">POST</option>
@@ -502,7 +502,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         <Input
                           value={selectedTest.endpoint}
                           onChange={(e) => updateApiTest({ ...selectedTest, endpoint: e.target.value })}
-                          className="bg-slate-900 border-slate-700 text-white font-mono text-sm mt-1"
+                          className="bg-input border-border text-foreground font-mono text-sm mt-1"
                         />
                       </div>
                     </div>
@@ -513,7 +513,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                           value={selectedTest.body || ''}
                           onChange={(e) => updateApiTest({ ...selectedTest, body: e.target.value })}
                           placeholder="{}"
-                          className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[80px] text-white mt-1"
+                          className="font-mono text-sm bg-input border-border min-h-[80px] text-foreground mt-1"
                         />
                       </div>
                     )}
@@ -530,7 +530,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                                 updateApiTest({ ...selectedTest, assertions: newAssertions });
                               }}
                               placeholder="response.path"
-                              className="bg-slate-900 border-slate-700 text-white font-mono text-xs flex-1"
+                              className="bg-input border-border text-foreground font-mono text-xs flex-1"
                             />
                             <select
                               value={assertion.operator}
@@ -539,7 +539,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                                 newAssertions[idx] = { ...assertion, operator: e.target.value as any };
                                 updateApiTest({ ...selectedTest, assertions: newAssertions });
                               }}
-                              className="px-2 py-2 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                              className="px-2 py-2 rounded bg-input border border-border text-foreground text-xs"
                             >
                               <option value="exists">exists</option>
                               <option value="equals">equals</option>
@@ -566,7 +566,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                             const newAssertions = [...selectedTest.assertions, { path: '', operator: 'exists' as const }];
                             updateApiTest({ ...selectedTest, assertions: newAssertions });
                           }}
-                          className="w-full text-slate-400 border-slate-700"
+                          className="w-full text-slate-400 border-border"
                         >
                           <Plus className="w-3 h-3 mr-1" />
                           Add Assertion
@@ -592,9 +592,9 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
             </Card>
 
             {/* Test Results */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
-                <CardTitle className="text-white text-sm">Results</CardTitle>
+                <CardTitle className="text-foreground text-sm">Results</CardTitle>
               </CardHeader>
               <CardContent>
                 {selectedTest && apiTestResults.find(r => r.testId === selectedTest.id) ? (
@@ -609,7 +609,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         }`}>
                           <div className="flex items-center gap-2">
                             {getStatusIcon(result.status)}
-                            <span className="text-sm font-medium text-white">
+                            <span className="text-sm font-medium text-foreground">
                               {result.status.toUpperCase()}
                             </span>
                             <span className="text-xs text-slate-400 ml-auto">
@@ -652,7 +652,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         {result.response && (
                           <div>
                             <Label className="text-slate-400 text-xs">Response</Label>
-                            <pre className="p-2 mt-1 rounded bg-slate-900 border border-slate-700 text-xs text-slate-300 overflow-auto max-h-[200px] font-mono">
+                            <pre className="p-2 mt-1 rounded bg-input border border-border text-xs text-slate-300 overflow-auto max-h-[200px] font-mono">
                               {JSON.stringify(result.response, null, 2)}
                             </pre>
                           </div>
@@ -672,9 +672,9 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
 
         {/* Data Sync Tab */}
         <TabsContent value="sync" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
-              <CardTitle className="text-white text-sm">Data Synchronization Testing</CardTitle>
+              <CardTitle className="text-foreground text-sm">Data Synchronization Testing</CardTitle>
               <CardDescription>Verify data flows between Salesforce and external systems</CardDescription>
             </CardHeader>
             <CardContent>
@@ -693,7 +693,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                       <Button
                         key={idx}
                         variant="outline"
-                        className="w-full justify-start gap-2 text-slate-300 border-slate-700"
+                        className="w-full justify-start gap-2 text-slate-300 border-border"
                       >
                         <scenario.icon className="w-4 h-4" />
                         {scenario.name}
@@ -703,13 +703,13 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                 </div>
                 <div className="space-y-3">
                   <Label className="text-slate-400">Sync Validation</Label>
-                  <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="p-4 rounded-lg bg-secondary border border-border">
                     <p className="text-sm text-slate-400 mb-3">
                       Configure external system endpoint to test bidirectional sync:
                     </p>
                     <Input
                       placeholder="https://external-system.com/api/endpoint"
-                      className="bg-slate-900 border-slate-700 text-white mb-2"
+                      className="bg-input border-border text-foreground mb-2"
                     />
                     <Button disabled className="w-full gap-2">
                       <Play className="w-4 h-4" />
@@ -725,10 +725,10 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
         {/* Events Tab */}
         <TabsContent value="events" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Platform Events</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Platform Events</CardTitle>
                   <Button
                     size="sm"
                     onClick={loadPlatformEvents}
@@ -749,8 +749,8 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                     </div>
                   ) : (
                     platformEvents.map((event, idx) => (
-                      <div key={idx} className="p-2 rounded bg-slate-900/50 border border-slate-700">
-                        <span className="text-white text-sm">{event.MasterLabel || event.DeveloperName}</span>
+                      <div key={idx} className="p-2 rounded bg-secondary border border-border">
+                        <span className="text-foreground text-sm">{event.MasterLabel || event.DeveloperName}</span>
                       </div>
                     ))
                   )}
@@ -758,10 +758,10 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
               </CardContent>
             </Card>
 
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Change Data Capture</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Change Data Capture</CardTitle>
                   <Button
                     size="sm"
                     onClick={loadChangeDataCapture}
@@ -785,10 +785,10 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
 
         {/* Webhooks Tab */}
         <TabsContent value="webhooks" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Outbound Messages & Callouts</CardTitle>
+                <CardTitle className="text-foreground text-sm">Outbound Messages & Callouts</CardTitle>
                 <Button
                   size="sm"
                   onClick={loadOutboundMessages}
@@ -809,8 +809,8 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                   </div>
                 ) : (
                   outboundMessages.map((msg, idx) => (
-                    <div key={idx} className="p-2 rounded bg-slate-900/50 border border-slate-700">
-                      <span className="text-white text-sm">{msg.Name}</span>
+                    <div key={idx} className="p-2 rounded bg-secondary border border-border">
+                      <span className="text-foreground text-sm">{msg.Name}</span>
                     </div>
                   ))
                 )}
@@ -822,6 +822,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
     </div>
   );
 }
+
 
 
 

@@ -144,10 +144,10 @@ export function SalesforceContextPanel({
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-slate-700 shrink-0">
+      <div className="flex items-center justify-between p-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-purple-400" />
-          <span className="font-medium text-white text-sm">SF Context</span>
+          <span className="font-medium text-foreground text-sm">SF Context</span>
         </div>
         <Button
           size="sm"
@@ -183,7 +183,7 @@ export function SalesforceContextPanel({
                   {context.currentPage && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Page:</span>
-                      <Badge variant="outline" className="text-slate-300 border-slate-600">
+                      <Badge variant="outline" className="text-slate-300 border-border">
                         {context.currentPage}
                       </Badge>
                     </div>
@@ -191,7 +191,7 @@ export function SalesforceContextPanel({
                   {context.currentRecordId && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Record:</span>
-                      <code className="text-xs text-slate-400">
+                      <code className="text-xs text-muted-foreground">
                         {context.currentRecordId.slice(0, 10)}...
                       </code>
                     </div>
@@ -199,7 +199,7 @@ export function SalesforceContextPanel({
                   {context.fields && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Fields:</span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-muted-foreground">
                         {context.fields.length} ({context.fields.filter(f => f.required).length} required)
                       </span>
                     </div>
@@ -300,20 +300,20 @@ export function SalesforceContextPanel({
                   </div>
                   
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 rounded bg-slate-800/50">
-                      <div className="text-sm font-medium text-white">
+                    <div className="p-2 rounded bg-secondary">
+                      <div className="text-sm font-medium text-foreground">
                         {coverage.validationRulesCovered}/{coverage.validationRulesTotal}
                       </div>
                       <div className="text-xs text-slate-500">Rules</div>
                     </div>
-                    <div className="p-2 rounded bg-slate-800/50">
-                      <div className="text-sm font-medium text-white">
+                    <div className="p-2 rounded bg-secondary">
+                      <div className="text-sm font-medium text-foreground">
                         {coverage.flowsCovered}/{coverage.flowsTotal}
                       </div>
                       <div className="text-xs text-slate-500">Flows</div>
                     </div>
-                    <div className="p-2 rounded bg-slate-800/50">
-                      <div className="text-sm font-medium text-white">
+                    <div className="p-2 rounded bg-secondary">
+                      <div className="text-sm font-medium text-foreground">
                         {coverage.fieldsCovered}/{coverage.fieldsTotal}
                       </div>
                       <div className="text-xs text-slate-500">Fields</div>
@@ -324,14 +324,14 @@ export function SalesforceContextPanel({
             )}
 
             {/* Quick Actions */}
-            <div className="pt-2 border-t border-slate-700">
+            <div className="pt-2 border-t border-border">
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={generateTestData}
                   disabled={!context?.currentObject}
-                  className="text-xs text-slate-300 border-slate-700 h-8"
+                  className="text-xs text-slate-300 border-border h-8"
                 >
                   <Database className="w-3 h-3 mr-1" />
                   Gen Data
@@ -346,7 +346,7 @@ export function SalesforceContextPanel({
                     }
                   }}
                   disabled={!context?.currentObject}
-                  className="text-xs text-slate-300 border-slate-700 h-8"
+                  className="text-xs text-slate-300 border-border h-8"
                 >
                   <Code className="w-3 h-3 mr-1" />
                   Assertions
@@ -380,10 +380,10 @@ function CollapsibleSection({
   children
 }: CollapsibleSectionProps) {
   return (
-    <div className="rounded-lg bg-slate-800/50 border border-slate-700 overflow-hidden">
+    <div className="rounded-lg bg-secondary border border-border overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-2 hover:bg-slate-700/30 transition-colors"
+        className="w-full flex items-center justify-between p-2 hover:bg-accent transition-colors"
       >
         <div className="flex items-center gap-2">
           {icon}
@@ -397,7 +397,7 @@ function CollapsibleSection({
         )}
       </button>
       {isExpanded && (
-        <div className="p-2 pt-0 border-t border-slate-700/50">
+        <div className="p-2 pt-0 border-t border-border/50">
           {children}
         </div>
       )}
@@ -412,10 +412,10 @@ interface RuleCardProps {
 
 function RuleCard({ rule, onGenerateTest }: RuleCardProps) {
   return (
-    <div className="p-2 rounded bg-slate-900/50 border border-slate-700">
+    <div className="p-2 rounded bg-secondary border border-border">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white truncate">{rule.name}</p>
+          <p className="text-xs font-medium text-foreground truncate">{rule.name}</p>
           {rule.errorMessage && (
             <p className="text-xs text-slate-500 truncate mt-0.5">
               {rule.errorMessage}
@@ -426,7 +426,7 @@ function RuleCard({ rule, onGenerateTest }: RuleCardProps) {
           size="sm"
           variant="ghost"
           onClick={onGenerateTest}
-          className="h-6 px-1.5 text-slate-400 hover:text-white shrink-0"
+          className="h-6 px-1.5 text-muted-foreground hover:text-foreground shrink-0"
           title="Generate test for this rule"
         >
           <Plus className="w-3 h-3" />
@@ -442,10 +442,10 @@ interface FlowCardProps {
 
 function FlowCard({ flow }: FlowCardProps) {
   return (
-    <div className="p-2 rounded bg-slate-900/50 border border-slate-700">
+    <div className="p-2 rounded bg-secondary border border-border">
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white truncate">{flow.name}</p>
+          <p className="text-xs font-medium text-foreground truncate">{flow.name}</p>
           <p className="text-xs text-slate-500">{flow.type}</p>
         </div>
         <Badge variant="outline" className="text-green-400 border-green-400/30 text-xs shrink-0">
@@ -474,17 +474,17 @@ function SuggestionCard({ suggestion, onAdd, onCopy }: SuggestionCardProps) {
   const priorityColors = {
     high: 'text-red-400',
     medium: 'text-yellow-400',
-    low: 'text-slate-400',
+    low: 'text-muted-foreground',
   };
 
   return (
-    <div className="p-2 rounded bg-slate-900/50 border border-slate-700 hover:border-slate-600 transition-colors">
+    <div className="p-2 rounded bg-secondary border border-border hover:border-border transition-colors">
       <div className="flex items-start gap-2">
         <Badge className={cn("text-xs shrink-0", typeColors[suggestion.type])}>
           {suggestion.type}
         </Badge>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white">{suggestion.title}</p>
+          <p className="text-xs font-medium text-foreground">{suggestion.title}</p>
           <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">
             {suggestion.description}
           </p>
@@ -496,7 +496,7 @@ function SuggestionCard({ suggestion, onAdd, onCopy }: SuggestionCardProps) {
             size="sm"
             variant="ghost"
             onClick={onCopy}
-            className="h-6 px-1.5 text-slate-400 hover:text-white"
+            className="h-6 px-1.5 text-muted-foreground hover:text-foreground"
           >
             <Copy className="w-3 h-3" />
           </Button>
@@ -513,6 +513,7 @@ function SuggestionCard({ suggestion, onAdd, onCopy }: SuggestionCardProps) {
     </div>
   );
 }
+
 
 
 

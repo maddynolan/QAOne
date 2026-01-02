@@ -254,11 +254,11 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
   return (
     <div className="space-y-4">
       {/* Log List */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-white">Debug Logs</CardTitle>
+              <CardTitle className="text-foreground">Debug Logs</CardTitle>
               <CardDescription>Analyze Apex debug logs from your org</CardDescription>
             </div>
             <Button
@@ -289,7 +289,7 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
                     selectedLogId === log.Id
                       ? 'bg-blue-500/20 border border-blue-500/50'
-                      : 'bg-slate-900/50 hover:bg-slate-800/50'
+                      : 'bg-secondary hover:bg-card'
                   }`}
                   onClick={() => loadLogContent(log.Id)}
                 >
@@ -297,7 +297,7 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-slate-400" />
                       <div>
-                        <div className="text-sm text-white font-medium">
+                        <div className="text-sm text-foreground font-medium">
                           {log.Operation}
                         </div>
                         <div className="text-xs text-slate-400">
@@ -323,9 +323,9 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
 
       {/* Governor Limits Stats */}
       {logStats && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm flex items-center gap-2">
+            <CardTitle className="text-foreground text-sm flex items-center gap-2">
               <BarChart className="w-4 h-4" />
               Governor Limits Usage
             </CardTitle>
@@ -367,19 +367,19 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
 
       {/* Log Content Viewer */}
       {selectedLogId && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white text-sm">Log Entries</CardTitle>
+              <CardTitle className="text-foreground text-sm">Log Entries</CardTitle>
               <div className="flex items-center gap-3">
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search log..."
-                  className="w-40 h-8 bg-slate-900 border-slate-700 text-sm text-white"
+                  className="w-40 h-8 bg-input border-border text-sm text-foreground"
                 />
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-[140px] h-8 bg-slate-900 border-slate-700 text-sm text-white">
+                  <SelectTrigger className="w-[140px] h-8 bg-input border-border text-sm text-foreground">
                     <SelectValue placeholder="Category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -411,7 +411,7 @@ export function SalesforceDebugLogAnalyzer({ isConnected }: SalesforceDebugLogAn
                 filteredEntries.map((entry, idx) => (
                   <div
                     key={idx}
-                    className={`p-2 rounded hover:bg-slate-800/50 ${getEntryColor(entry.category)}`}
+                    className={`p-2 rounded hover:bg-card ${getEntryColor(entry.category)}`}
                   >
                     <span className="text-slate-500">[{entry.timestamp}]</span>
                     <span className="text-slate-400 mx-2">{entry.category}</span>

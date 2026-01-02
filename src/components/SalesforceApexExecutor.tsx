@@ -266,18 +266,18 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
   return (
     <div className="space-y-4">
       {/* Code Editor */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-white">Anonymous Apex Executor</CardTitle>
+              <CardTitle className="text-foreground">Anonymous Apex Executor</CardTitle>
               <CardDescription>Execute Apex code directly in your org</CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowSnippets(!showSnippets)}
-              className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700"
+              className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-accent"
             >
               <BookOpen className="w-4 h-4" />
               Snippets
@@ -287,9 +287,9 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
         <CardContent>
           {/* Snippets Panel */}
           {showSnippets && (
-            <div className="mb-4 p-4 bg-slate-900/50 rounded-lg">
+            <div className="mb-4 p-4 bg-secondary rounded-lg">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm text-slate-400">Categories:</span>
+                <span className="text-sm text-muted-foreground">Categories:</span>
                 <Badge
                   variant={selectedCategory === null ? 'default' : 'outline'}
                   className="cursor-pointer"
@@ -312,11 +312,11 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
                 {filteredSnippets.map(snippet => (
                   <div
                     key={snippet.name}
-                    className="p-2 rounded bg-slate-800/50 cursor-pointer hover:bg-slate-700/50"
+                    className="p-2 rounded bg-card cursor-pointer hover:bg-accent"
                     onClick={() => loadSnippet(snippet)}
                   >
-                    <div className="text-sm text-white font-medium">{snippet.name}</div>
-                    <div className="text-xs text-slate-400">{snippet.description}</div>
+                    <div className="text-sm text-foreground font-medium">{snippet.name}</div>
+                    <div className="text-xs text-muted-foreground">{snippet.description}</div>
                   </div>
                 ))}
               </div>
@@ -327,7 +327,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="// Enter your Apex code here&#10;System.debug('Hello, World!');"
-            className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[300px] text-white placeholder:text-slate-500"
+            className="font-mono text-sm bg-input border-border min-h-[300px] text-foreground placeholder:text-muted-foreground"
           />
 
           <div className="flex items-center gap-2 mt-4">
@@ -343,10 +343,10 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
               )}
               Execute
             </Button>
-            <Button variant="outline" onClick={copyCode} disabled={!code} className="text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+            <Button variant="outline" onClick={copyCode} disabled={!code} className="text-muted-foreground border-border hover:text-foreground hover:bg-accent">
               <Copy className="w-4 h-4" />
             </Button>
-            <Button variant="outline" onClick={() => setCode('')} className="text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+            <Button variant="outline" onClick={() => setCode('')} className="text-muted-foreground border-border hover:text-foreground hover:bg-accent">
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
@@ -372,10 +372,10 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             {result.compileProblem && (
               <div className="mb-3">
                 <div className="text-sm text-red-400 font-medium">Compile Error:</div>
-                <div className="text-sm text-slate-300 font-mono bg-slate-900/50 p-2 rounded mt-1">
+                <div className="text-sm text-foreground font-mono bg-secondary p-2 rounded mt-1">
                   {result.compileProblem}
                   {result.line && result.column && (
-                    <span className="text-slate-500 ml-2">
+                    <span className="text-muted-foreground ml-2">
                       (Line {result.line}, Column {result.column})
                     </span>
                   )}
@@ -386,7 +386,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             {result.exceptionMessage && (
               <div className="mb-3">
                 <div className="text-sm text-red-400 font-medium">Exception:</div>
-                <div className="text-sm text-slate-300 font-mono bg-slate-900/50 p-2 rounded mt-1">
+                <div className="text-sm text-foreground font-mono bg-secondary p-2 rounded mt-1">
                   {result.exceptionMessage}
                 </div>
               </div>
@@ -395,7 +395,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
             {result.exceptionStackTrace && (
               <div>
                 <div className="text-sm text-red-400 font-medium">Stack Trace:</div>
-                <pre className="text-xs text-slate-400 font-mono bg-slate-900/50 p-2 rounded mt-1 overflow-auto max-h-[200px]">
+                <pre className="text-xs text-muted-foreground font-mono bg-secondary p-2 rounded mt-1 overflow-auto max-h-[200px]">
                   {result.exceptionStackTrace}
                 </pre>
               </div>
@@ -412,10 +412,10 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
 
       {/* Execution History */}
       {history.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white text-sm">Execution History</CardTitle>
+              <CardTitle className="text-foreground text-sm">Execution History</CardTitle>
               <Button variant="ghost" size="sm" onClick={clearHistory}>
                 Clear
               </Button>
@@ -426,7 +426,7 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
               {history.map(item => (
                 <div
                   key={item.id}
-                  className={`p-2 rounded cursor-pointer hover:bg-slate-700/50 ${
+                  className={`p-2 rounded cursor-pointer hover:bg-accent ${
                     item.success ? 'bg-green-500/5' : 'bg-red-500/5'
                   }`}
                   onClick={() => loadFromHistory(item)}
@@ -438,12 +438,12 @@ export function SalesforceApexExecutor({ isConnected }: SalesforceApexExecutorPr
                       ) : (
                         <AlertCircle className="w-3 h-3 text-red-400" />
                       )}
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-muted-foreground">
                         {new Date(item.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
-                  <div className="text-xs text-slate-300 font-mono truncate mt-1">
+                  <div className="text-xs text-foreground font-mono truncate mt-1">
                     {item.code.split('\n')[0]}
                   </div>
                   {item.error && (

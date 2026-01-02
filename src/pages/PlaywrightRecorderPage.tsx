@@ -2460,7 +2460,7 @@ Recorded Test
                       value={soqlQuery}
                       onChange={(e) => setSoqlQuery(e.target.value)}
                       placeholder="SELECT Id, Name FROM Account LIMIT 10"
-                      className="h-8 text-xs bg-input border-blue-500/20 text-white font-mono"
+                      className="h-8 text-xs bg-input border-blue-500/20 text-foreground font-mono"
                       onKeyDown={(e) => e.key === 'Enter' && e.ctrlKey && executeSOQL()}
                     />
                     <Button
@@ -2557,7 +2557,7 @@ Recorded Test
                       value={inspectRecordId}
                       onChange={(e) => setInspectRecordId(e.target.value)}
                       placeholder="Enter Record ID (e.g., 001...)"
-                      className="h-7 text-xs bg-input border-purple-500/20 text-white font-mono"
+                      className="h-7 text-xs bg-input border-purple-500/20 text-foreground font-mono"
                     />
                     <Button
                       size="sm"
@@ -2944,7 +2944,7 @@ Recorded Test
 
                 {/* Full SF Tools Link */}
                 <div className="pt-1">
-                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-muted-foreground hover:text-white hover:bg-accent"
+                  <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent"
                     onClick={() => navigate('/salesforce')}>
                     <ExternalLink className="h-3 w-3 mr-1" />Open Full SF Tools<ChevronRight className="h-3 w-3 ml-auto" />
                   </Button>
@@ -2982,7 +2982,7 @@ Recorded Test
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
         <DialogContent className="max-w-4xl h-[85vh] bg-card border-border flex flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center justify-between">
+            <DialogTitle className="text-foreground flex items-center justify-between">
               <span>Select Test Case to Automate</span>
               <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">
                 {filteredTestCases.length} of {allTestCases.length} tests
@@ -2999,7 +2999,7 @@ Recorded Test
                 value={testSearchQuery}
                 onChange={(e) => setTestSearchQuery(e.target.value)}
                 placeholder="Search by name, ID, description, or tags..."
-                className="pl-10 bg-secondary border-border text-white"
+                className="pl-10 bg-secondary border-border text-foreground"
               />
             </div>
             
@@ -3075,7 +3075,7 @@ Recorded Test
                     setTestFolderFilter('all');
                     setTestTagFilter('all');
                   }}
-                  className="h-8 text-xs text-muted-foreground hover:text-white"
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Clear
@@ -3127,7 +3127,7 @@ Recorded Test
                         
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm text-white truncate">{tc.name || tc.title}</span>
+                            <span className="font-medium text-sm text-foreground truncate">{tc.name || tc.title}</span>
                             {status === 'full' && (
                               <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5">Automated</Badge>
                             )}
@@ -3208,7 +3208,7 @@ Recorded Test
       <Dialog open={showTestResultModal} onOpenChange={setShowTestResultModal}>
         <DialogContent className="max-w-2xl bg-card border-border overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
+            <DialogTitle className="text-foreground flex items-center gap-2">
               {testExecutionResult?.status === 'running' && (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
@@ -3360,7 +3360,7 @@ Recorded Test
       <Dialog open={showMergePreview} onOpenChange={setShowMergePreview}>
         <DialogContent className="max-w-3xl h-[80vh] bg-card border-border flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
-            <DialogTitle className="text-white flex items-center gap-2">
+            <DialogTitle className="text-foreground flex items-center gap-2">
               <Merge className="h-5 w-5 text-purple-400" />
               Merge Preview - {selectedTestCase?.name}
             </DialogTitle>
@@ -3402,7 +3402,7 @@ Recorded Test
                     <span className="text-sm text-muted-foreground w-6 shrink-0">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-white text-sm truncate">
+                        <span className="font-medium text-foreground text-sm truncate">
                           {step.name || step.description || `${step.qword} ${step.args?.[0] || ''}`}
                         </span>
                         {step._merged && (
@@ -3452,7 +3452,7 @@ Recorded Test
       <Dialog open={showSFToolDialog} onOpenChange={setShowSFToolDialog}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
+            <DialogTitle className="text-foreground flex items-center gap-2">
               {sfToolType === 'soql' && <><Database className="h-5 w-5 text-blue-400" /> Add SOQL Query Step</>}
               {sfToolType === 'apex' && <><Zap className="h-5 w-5 text-emerald-400" /> Add Apex Execution Step</>}
               {sfToolType === 'clone' && <><Copy className="h-5 w-5 text-purple-400" /> Add Clone Record Step</>}
@@ -3477,7 +3477,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="SELECT Id, Name FROM Account WHERE..."
-                    className="w-full h-24 bg-secondary border border-border rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-blue-500 focus:outline-none"
+                    className="w-full h-24 bg-secondary border border-border rounded-lg p-3 text-foreground text-sm font-mono resize-none focus:border-blue-500 focus:outline-none"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">The query result will be stored and can be used in later steps</p>
                 </div>
@@ -3504,7 +3504,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="// Your Apex code here&#10;System.debug('Hello');"
-                    className="w-full h-32 bg-secondary border border-border rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-emerald-500 focus:outline-none"
+                    className="w-full h-32 bg-secondary border border-border rounded-lg p-3 text-foreground text-sm font-mono resize-none focus:border-emerald-500 focus:outline-none"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">Execute anonymous Apex during test - useful for data setup/cleanup</p>
                 </div>
@@ -3534,7 +3534,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Opportunity..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3543,7 +3543,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="001XXXXXXXXXXXX or leave empty"
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Clone will duplicate the record with a new ID, copying all cloneable fields</p>
@@ -3558,7 +3558,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="e.g., Account_Name_Required"
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3567,7 +3567,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="e.g., Account Name is required"
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Asserts that the expected validation error appears when triggered</p>
@@ -3582,7 +3582,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="/services/data/v59.0/sobjects/Account"
-                    className="bg-secondary border-border text-white font-mono text-sm"
+                    className="bg-secondary border-border text-foreground font-mono text-sm"
                   />
                 </div>
                 <div>
@@ -3602,7 +3602,7 @@ Recorded Test
                       value={sfToolInput3}
                       onChange={(e) => setSfToolInput3(e.target.value)}
                       placeholder='{"Name": "Test Account"}'
-                      className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
+                      className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-foreground text-sm font-mono resize-none"
                     />
                   </div>
                 )}
@@ -3618,7 +3618,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Lead..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3628,7 +3628,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="5"
-                    className="bg-secondary border-border text-white w-24"
+                    className="bg-secondary border-border text-foreground w-24"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Generate test records with random data - great for bulk testing</p>
@@ -3643,7 +3643,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Sales_Cloud_Admin, Service_User..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3669,7 +3669,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="My_Automation_Flow"
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3678,7 +3678,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"recordId": "001XXXXXXXXXXXX"}'
-                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-foreground text-sm font-mono resize-none"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Manually trigger a Flow to test automation logic</p>
@@ -3693,7 +3693,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="AccountTriggerTest, ContactServiceTest..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3702,7 +3702,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="testInsertAccount"
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Run Apex tests as part of your test flow - validates backend logic</p>
@@ -3717,7 +3717,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Opportunity..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3726,7 +3726,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"Name": "Test Account", "Industry": "Technology"}'
-                    className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-20 bg-secondary border border-border rounded-lg p-2 text-foreground text-sm font-mono resize-none"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Create a single record via API - the record ID will be stored for later use</p>
@@ -3741,7 +3741,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Account, Contact, Lead..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3750,7 +3750,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder="./test-data/accounts.csv or ${csvData}"
-                    className="bg-secondary border-border text-white font-mono text-sm"
+                    className="bg-secondary border-border text-foreground font-mono text-sm"
                   />
                 </div>
                 <div>
@@ -3775,7 +3775,7 @@ Recorded Test
                     value={sfToolInput}
                     onChange={(e) => setSfToolInput(e.target.value)}
                     placeholder="Monthly_Sales_Report or 00O..."
-                    className="bg-secondary border-border text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div>
@@ -3784,7 +3784,7 @@ Recorded Test
                     value={sfToolInput2}
                     onChange={(e) => setSfToolInput2(e.target.value)}
                     placeholder='{"column": "ACCOUNT_NAME", "operator": "contains", "value": "Test"}'
-                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-white text-sm font-mono resize-none"
+                    className="w-full h-16 bg-secondary border border-border rounded-lg p-2 text-foreground text-sm font-mono resize-none"
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground">Run a Salesforce report and store results for assertions</p>
@@ -3836,7 +3836,7 @@ Recorded Test
                 setSfToolInput3('');
               }}
               className={cn(
-                "text-white",
+                "text-foreground",
                 sfToolType === 'soql' && "bg-blue-600 hover:bg-blue-700",
                 sfToolType === 'apex' && "bg-emerald-600 hover:bg-emerald-700",
                 sfToolType === 'clone' && "bg-purple-600 hover:bg-purple-700",
@@ -3882,7 +3882,7 @@ function SuggestionItem({
     <div className="flex items-center gap-2 p-2 rounded-lg bg-card hover:bg-accent border border-transparent hover:border-border group">
       {getIcon()}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white truncate">{suggestion.element || suggestion.args?.[0] || suggestion.description}</p>
+        <p className="text-sm text-foreground truncate">{suggestion.element || suggestion.args?.[0] || suggestion.description}</p>
               </div>
       {suggestion.count && suggestion.count > 1 && (
         <Badge className="bg-amber-500/20 text-primary text-[10px] px-1.5">

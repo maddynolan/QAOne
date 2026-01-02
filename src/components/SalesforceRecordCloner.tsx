@@ -287,9 +287,9 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
   return (
     <div className="space-y-4">
       {/* Source Record Selector */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white">Record Cloner</CardTitle>
+          <CardTitle className="text-foreground">Record Cloner</CardTitle>
           <CardDescription>Clone Salesforce records with modifications</CardDescription>
         </CardHeader>
         <CardContent>
@@ -306,13 +306,13 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                   if (detected) setObjectType(detected);
                 }}
                 placeholder="e.g., 001xx000003DGbYAAW"
-                className="bg-slate-900 border-slate-700 text-white font-mono"
+                className="bg-input border-border text-foreground font-mono"
               />
             </div>
             <div>
               <Label>Object Type</Label>
               <Select value={objectType} onValueChange={setObjectType}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue placeholder="Auto-detected" />
                 </SelectTrigger>
                 <SelectContent>
@@ -332,7 +332,7 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                 max={100}
                 value={cloneCount}
                 onChange={(e) => setCloneCount(parseInt(e.target.value) || 1)}
-                className="bg-slate-900 border-slate-700 text-white"
+                className="bg-input border-border text-foreground"
               />
             </div>
           </div>
@@ -367,7 +367,7 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
 
           {/* Related Relationships Selector */}
           {includeRelated && objectDescribe?.childRelationships && (
-            <div className="mt-4 p-3 bg-slate-900/50 rounded-lg">
+            <div className="mt-4 p-3 bg-secondary rounded-lg">
               <Label className="text-sm text-slate-400">Select relationships to clone:</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {objectDescribe.childRelationships
@@ -379,8 +379,8 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                       variant={selectedRelationships.includes(rel.relationshipName) ? 'default' : 'outline'}
                       className={`cursor-pointer ${
                         selectedRelationships.includes(rel.relationshipName) 
-                          ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                          : 'border-slate-500 text-slate-200 hover:bg-slate-700 hover:text-white'
+                          ? 'bg-blue-600 text-foreground hover:bg-blue-700' 
+                          : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
                       }`}
                       onClick={() => {
                         setSelectedRelationships(prev =>
@@ -401,11 +401,11 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
 
       {/* Field Overrides */}
       {sourceRecord && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white text-sm">Field Values</CardTitle>
+                <CardTitle className="text-foreground text-sm">Field Values</CardTitle>
                 <CardDescription>Modify values before cloning</CardDescription>
               </div>
               {modifiedFields.length > 0 && (
@@ -425,14 +425,14 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                   <div
                     key={field.name}
                     className={`flex items-center gap-3 p-2 rounded ${
-                      isModified ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-slate-900/50'
+                      isModified ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-secondary'
                     }`}
                   >
                     <div className="w-40 text-sm text-slate-400 truncate">{field.label}</div>
                     <Input
                       value={override?.newValue ?? ''}
                       onChange={(e) => updateFieldOverride(field.name, e.target.value)}
-                      className="flex-1 bg-slate-800 border-slate-700 text-sm"
+                      className="flex-1 bg-input border-border text-sm"
                     />
                     {isModified && (
                       <Button
@@ -470,9 +470,9 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
 
       {/* Clone Results */}
       {cloneResults.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm">Clone Results</CardTitle>
+            <CardTitle className="text-foreground text-sm">Clone Results</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -491,7 +491,7 @@ export function SalesforceRecordCloner({ isConnected }: SalesforceRecordClonerPr
                     ) : (
                       <X className="w-4 h-4 text-red-400" />
                     )}
-                    <span className="text-white font-mono text-sm">
+                    <span className="text-foreground font-mono text-sm">
                       {result.originalId} → {result.newId || 'Failed'}
                     </span>
                   </div>

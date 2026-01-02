@@ -232,11 +232,11 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-white">Report Runner</CardTitle>
+              <CardTitle className="text-foreground">Report Runner</CardTitle>
               <CardDescription>Execute Salesforce reports and export results</CardDescription>
             </div>
             <Button
@@ -261,11 +261,11 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search reports..."
-                className="pl-9 bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+                className="pl-9 bg-input border-border text-foreground placeholder:text-muted-foreground"
               />
             </div>
             <Select value={selectedFolder || 'all'} onValueChange={(v) => setSelectedFolder(v === 'all' ? null : v)}>
-              <SelectTrigger className="w-[200px] bg-slate-900 border-slate-700">
+              <SelectTrigger className="w-[200px] bg-input border-border">
                 <SelectValue placeholder="All Folders" />
               </SelectTrigger>
               <SelectContent>
@@ -283,9 +283,9 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
 
       <div className="grid grid-cols-3 gap-4">
         {/* Report List */}
-        <Card className="bg-slate-800/50 border-slate-700 col-span-1">
+        <Card className="bg-card border-border col-span-1">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm">
+            <CardTitle className="text-foreground text-sm">
               Reports ({filteredReports.length})
             </CardTitle>
           </CardHeader>
@@ -300,7 +300,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                 {Object.entries(groupedReports).map(([folder, folderReports]) => (
                   <div key={folder}>
                     <div
-                      className="flex items-center gap-2 p-2 cursor-pointer hover:bg-slate-700/50 rounded"
+                      className="flex items-center gap-2 p-2 cursor-pointer hover:bg-accent rounded"
                       onClick={() => toggleFolder(folder)}
                     >
                       {expandedFolders.has(folder) ? (
@@ -310,7 +310,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                       )}
                       <FolderOpen className="w-4 h-4 text-yellow-400" />
                       <span className="text-sm text-slate-300">{folder}</span>
-                      <Badge variant="outline" className="text-[10px] ml-auto text-slate-300 border-slate-600">
+                      <Badge variant="outline" className="text-[10px] ml-auto text-slate-300 border-border">
                         {folderReports.length}
                       </Badge>
                     </div>
@@ -323,12 +323,12 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                             className={`p-2 rounded cursor-pointer transition-colors ${
                               selectedReportId === report.Id
                                 ? 'bg-blue-500/20 border border-blue-500/50'
-                                : 'hover:bg-slate-700/50'
+                                : 'hover:bg-accent'
                             }`}
                             onClick={() => runReport(report.Id)}
                           >
-                            <div className="text-sm text-white">{report.Name}</div>
-                            <div className="text-xs text-slate-500">{report.Format}</div>
+                            <div className="text-sm text-foreground">{report.Name}</div>
+                            <div className="text-xs text-muted-foreground">{report.Format}</div>
                           </div>
                         ))}
                       </div>
@@ -341,11 +341,11 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
         </Card>
 
         {/* Report Results */}
-        <Card className="bg-slate-800/50 border-slate-700 col-span-2">
+        <Card className="bg-card border-border col-span-2">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white text-sm">
+                <CardTitle className="text-foreground text-sm">
                   {reportResult ? reportResult.reportName : 'Report Results'}
                 </CardTitle>
                 {reportResult && (
@@ -355,7 +355,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                 )}
               </div>
               {reportResult && (
-                <Button variant="outline" size="sm" onClick={exportToCsv} className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                <Button variant="outline" size="sm" onClick={exportToCsv} className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-slate-700">
                   <Download className="w-4 h-4" />
                   Export CSV
                 </Button>
@@ -368,10 +368,10 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                 <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
               </div>
             ) : reportResult ? (
-              <div className="overflow-auto max-h-[500px] rounded-lg border border-slate-700">
+              <div className="overflow-auto max-h-[500px] rounded-lg border border-border">
                 {reportResult.hasDetailRows ? (
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-800 sticky top-0">
+                    <thead className="bg-secondary sticky top-0">
                       <tr>
                         {reportResult.columns.map((col, idx) => (
                           <th key={idx} className="px-4 py-2 text-left text-slate-300 font-medium whitespace-nowrap">
@@ -382,7 +382,7 @@ export function SalesforceReportRunner({ isConnected }: SalesforceReportRunnerPr
                     </thead>
                     <tbody>
                       {reportResult.rows.map((row, rowIdx) => (
-                        <tr key={rowIdx} className="border-t border-slate-700/50 hover:bg-slate-800/50">
+                        <tr key={rowIdx} className="border-t border-border/50 hover:bg-card">
                           {row.map((cell, cellIdx) => (
                             <td key={cellIdx} className="px-4 py-2 text-slate-300 whitespace-nowrap">
                               {cell}

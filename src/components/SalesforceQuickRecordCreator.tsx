@@ -265,9 +265,9 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
   return (
     <div className="space-y-4">
       {/* Object Selector */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white">Quick Record Creator</CardTitle>
+          <CardTitle className="text-foreground">Quick Record Creator</CardTitle>
           <CardDescription>Create records quickly with smart defaults</CardDescription>
         </CardHeader>
         <CardContent>
@@ -275,7 +275,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
             <div>
               <Label>Object</Label>
               <Select value={selectedObject} onValueChange={setSelectedObject}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -295,7 +295,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                 max={100}
                 value={createCount}
                 onChange={(e) => setCreateCount(parseInt(e.target.value) || 1)}
-                className="bg-slate-900 border-slate-700 text-white"
+                className="bg-input border-border text-foreground"
               />
             </div>
             <div className="flex items-end gap-2">
@@ -315,7 +315,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                 variant="outline"
                 onClick={autoFillFields}
                 disabled={!objectDescribe}
-                className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700"
+                className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-accent"
               >
                 <Zap className="w-4 h-4" />
                 Auto-Fill
@@ -327,9 +327,9 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
 
       {/* Templates */}
       {templates.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm">Saved Templates</CardTitle>
+            <CardTitle className="text-foreground text-sm">Saved Templates</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -337,7 +337,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                 <Badge
                   key={template.id}
                   variant="outline"
-                  className="cursor-pointer flex items-center gap-1 px-3 py-1 text-slate-200 border-slate-500 hover:bg-slate-700"
+                  className="cursor-pointer flex items-center gap-1 px-3 py-1 text-muted-foreground border-border hover:bg-accent"
                 >
                   <span onClick={() => loadTemplate(template)}>
                     {template.name} ({template.objectName})
@@ -358,11 +358,11 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
 
       {/* Field Values */}
       {fieldValues.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white text-sm">Field Values</CardTitle>
+                <CardTitle className="text-foreground text-sm">Field Values</CardTitle>
                 <CardDescription>
                   {fieldValues.filter(f => f.value).length} of {fieldValues.length} fields set
                 </CardDescription>
@@ -374,7 +374,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                     checked={showOnlyRequired}
                     onCheckedChange={(c) => setShowOnlyRequired(!!c)}
                   />
-                  <Label htmlFor="showRequired" className="text-xs text-slate-400">
+                  <Label htmlFor="showRequired" className="text-xs text-muted-foreground">
                     Required only
                   </Label>
                 </div>
@@ -389,7 +389,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
               {filteredFields.map(field => (
                 <div key={field.name} className="flex items-center gap-3">
                   <div className="w-40 flex items-center gap-1">
-                    <span className={`text-sm ${field.isRequired ? 'text-white' : 'text-slate-400'}`}>
+                    <span className={`text-sm ${field.isRequired ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {field.label}
                     </span>
                     {field.isRequired && (
@@ -406,14 +406,14 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                       <Textarea
                         value={field.value || ''}
                         onChange={(e) => updateFieldValue(field.name, e.target.value)}
-                        className="bg-slate-900 border-slate-700 text-white text-sm min-h-[60px]"
+                        className="bg-input border-border text-foreground text-sm min-h-[60px]"
                       />
                     ) : field.type === 'picklist' ? (
                       <Select
                         value={field.value || ''}
                         onValueChange={(v) => updateFieldValue(field.name, v)}
                       >
-                        <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                        <SelectTrigger className="bg-input border-border text-foreground">
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -433,7 +433,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                         value={field.value || ''}
                         onChange={(e) => updateFieldValue(field.name, e.target.value)}
                         type={field.type === 'currency' || field.type === 'number' || field.type === 'percent' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                        className="bg-slate-900 border-slate-700 text-white text-sm"
+                        className="bg-input border-border text-foreground text-sm"
                       />
                     )}
                   </div>
@@ -444,7 +444,7 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
               ))}
             </div>
 
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
               <Button
                 onClick={createRecords}
                 disabled={!isConnected || isLoading}
@@ -462,13 +462,13 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
                 value={templateName}
                 onChange={(e) => setTemplateName(e.target.value)}
                 placeholder="Template name"
-                className="w-40 bg-slate-900 border-slate-700 text-sm"
+                className="w-40 bg-input border-border text-sm"
               />
               <Button
                 variant="outline"
                 onClick={saveAsTemplate}
                 disabled={!templateName}
-                className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700"
+                className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-accent"
               >
                 <Star className="w-4 h-4" />
                 Save Template
@@ -480,10 +480,10 @@ export function SalesforceQuickRecordCreator({ isConnected }: SalesforceQuickRec
 
       {/* Results */}
       {results.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white text-sm">
+              <CardTitle className="text-foreground text-sm">
                 Results ({results.filter(r => r.success).length}/{results.length} successful)
               </CardTitle>
               <Button variant="ghost" size="sm" onClick={copyResultIds} className="gap-2">

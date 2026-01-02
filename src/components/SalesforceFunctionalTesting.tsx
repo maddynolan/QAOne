@@ -312,7 +312,7 @@ ${testRecord}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-400" />
             Functional Testing
           </h3>
@@ -325,7 +325,7 @@ ${testRecord}
           <select
             value={selectedObject}
             onChange={(e) => setSelectedObject(e.target.value)}
-            className="px-3 py-1.5 rounded bg-slate-800 border border-slate-700 text-white text-sm"
+            className="px-3 py-1.5 rounded bg-slate-800 border border-border text-foreground text-sm"
           >
             {objects.map(obj => (
               <option key={obj} value={obj}>{obj}</option>
@@ -336,7 +336,7 @@ ${testRecord}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-slate-800/50">
+        <TabsList className="bg-card">
           <TabsTrigger value="validation" className="gap-1.5 text-xs data-[state=active]:bg-blue-600">
             <FileText className="w-3.5 h-3.5" />
             Validation Rules
@@ -359,10 +359,10 @@ ${testRecord}
         <TabsContent value="validation" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Rules List */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Validation Rules</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Validation Rules</CardTitle>
                   <Button
                     size="sm"
                     onClick={loadValidationRules}
@@ -386,12 +386,12 @@ ${testRecord}
                       return (
                         <div
                           key={rule.Id}
-                          className="p-3 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-slate-600"
+                          className="p-3 rounded-lg bg-secondary border border-border hover:border-slate-600"
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium text-white text-sm">{rule.ValidationName}</span>
+                                <span className="font-medium text-foreground text-sm">{rule.ValidationName}</span>
                                 <Badge variant={rule.Active ? "default" : "outline"} className={rule.Active ? "bg-green-600" : ""}>
                                   {rule.Active ? 'Active' : 'Inactive'}
                                 </Badge>
@@ -424,9 +424,9 @@ ${testRecord}
             </Card>
 
             {/* Test Panel */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
-                <CardTitle className="text-white text-sm">Test Validation Rules</CardTitle>
+                <CardTitle className="text-foreground text-sm">Test Validation Rules</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -435,7 +435,7 @@ ${testRecord}
                     value={testRecord}
                     onChange={(e) => setTestRecord(e.target.value)}
                     placeholder='{"Name": "Test Account", "Phone": "invalid"}'
-                    className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[100px] text-white mt-1"
+                    className="font-mono text-sm bg-input border-border min-h-[100px] text-foreground mt-1"
                   />
                 </div>
                 
@@ -486,10 +486,10 @@ ${testRecord}
 
         {/* Workflow Rules Tab */}
         <TabsContent value="workflow" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Workflow Rules</CardTitle>
+                <CardTitle className="text-foreground text-sm">Workflow Rules</CardTitle>
                 <Button
                   size="sm"
                   onClick={loadWorkflowRules}
@@ -513,11 +513,11 @@ ${testRecord}
                   workflowRules.map(rule => (
                     <div
                       key={rule.Id}
-                      className="p-3 rounded-lg bg-slate-900/50 border border-slate-700"
+                      className="p-3 rounded-lg bg-secondary border border-border"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="font-medium text-white text-sm">{rule.Name}</span>
+                          <span className="font-medium text-foreground text-sm">{rule.Name}</span>
                           <p className="text-xs text-slate-400 mt-1">
                             Trigger: {rule.TriggerType}
                           </p>
@@ -536,10 +536,10 @@ ${testRecord}
 
         {/* Flows Tab */}
         <TabsContent value="flows" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Flows & Process Builder</CardTitle>
+                <CardTitle className="text-foreground text-sm">Flows & Process Builder</CardTitle>
                 <Button
                   size="sm"
                   onClick={loadFlows}
@@ -562,11 +562,11 @@ ${testRecord}
                   flows.map(flow => (
                     <div
                       key={flow.Id}
-                      className="p-3 rounded-lg bg-slate-900/50 border border-slate-700"
+                      className="p-3 rounded-lg bg-secondary border border-border"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <span className="font-medium text-white text-sm">{flow.MasterLabel}</span>
+                          <span className="font-medium text-foreground text-sm">{flow.MasterLabel}</span>
                           <p className="text-xs text-slate-400 mt-1">{flow.DeveloperName}</p>
                           {flow.Description && (
                             <p className="text-xs text-slate-500 mt-1">{flow.Description}</p>
@@ -586,16 +586,16 @@ ${testRecord}
 
         {/* Field Level Security Tab */}
         <TabsContent value="fls" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Field-Level Security</CardTitle>
+                <CardTitle className="text-foreground text-sm">Field-Level Security</CardTitle>
                 <div className="flex items-center gap-2">
                   <select
                     value={selectedProfile}
                     onChange={(e) => setSelectedProfile(e.target.value)}
                     onClick={() => profiles.length === 0 && loadProfiles()}
-                    className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs"
+                    className="px-2 py-1 rounded bg-input border border-border text-foreground text-xs"
                   >
                     <option value="">Select Profile</option>
                     {profiles.map(p => (
@@ -632,8 +632,8 @@ ${testRecord}
                     </thead>
                     <tbody>
                       {fieldPermissions.map((fp, idx) => (
-                        <tr key={idx} className="border-t border-slate-700/50">
-                          <td className="px-3 py-2 text-white font-mono text-xs">
+                        <tr key={idx} className="border-t border-border/50">
+                          <td className="px-3 py-2 text-foreground font-mono text-xs">
                             {fp.Field.replace(`${selectedObject}.`, '')}
                           </td>
                           <td className="px-3 py-2 text-center">

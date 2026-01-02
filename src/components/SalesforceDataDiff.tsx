@@ -229,9 +229,9 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
   return (
     <div className="space-y-4">
       {/* Snapshot Creator */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white">Data Diff Tool</CardTitle>
+          <CardTitle className="text-foreground">Data Diff Tool</CardTitle>
           <CardDescription>Take snapshots and compare data changes</CardDescription>
         </CardHeader>
         <CardContent>
@@ -242,7 +242,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                 setSelectedObject(v);
                 setCustomQuery('');
               }}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -260,7 +260,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                 value={snapshotName}
                 onChange={(e) => setSnapshotName(e.target.value)}
                 placeholder="e.g., Before test, After update"
-                className="bg-slate-900 border-slate-700 text-white"
+                className="bg-input border-border text-foreground"
               />
             </div>
           </div>
@@ -271,7 +271,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
               value={customQuery}
               onChange={(e) => setCustomQuery(e.target.value)}
               placeholder={getDefaultQuery(selectedObject)}
-              className="bg-slate-900 border-slate-700 text-white font-mono text-sm min-h-[80px]"
+              className="bg-input border-border text-foreground font-mono text-sm min-h-[80px]"
             />
           </div>
 
@@ -292,21 +292,21 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
 
       {/* Snapshots List */}
       {snapshots.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white text-sm">Snapshots ({snapshots.length})</CardTitle>
+            <CardTitle className="text-foreground text-sm">Snapshots ({snapshots.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-[200px] overflow-y-auto">
               {snapshots.map(snapshot => (
                 <div
                   key={snapshot.id}
-                  className="p-3 rounded-lg bg-slate-900/50 flex items-center justify-between"
+                  className="p-3 rounded-lg bg-secondary flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
                     <Clock className="w-4 h-4 text-slate-400" />
                     <div>
-                      <div className="text-sm text-white">{snapshot.name}</div>
+                      <div className="text-sm text-foreground">{snapshot.name}</div>
                       <div className="text-xs text-slate-400">
                         {snapshot.objectName} • {snapshot.recordCount} records • {new Date(snapshot.timestamp).toLocaleString()}
                       </div>
@@ -352,11 +352,11 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
 
       {/* Diff Results */}
       {diffResult && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white">Comparison Results</CardTitle>
+                <CardTitle className="text-foreground">Comparison Results</CardTitle>
                 <CardDescription>
                   {snapshots.find(s => s.id === leftSnapshotId)?.name} vs {snapshots.find(s => s.id === rightSnapshotId)?.name}
                 </CardDescription>
@@ -372,7 +372,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                     Changes only
                   </Label>
                 </div>
-                <Button variant="outline" size="sm" onClick={exportDiff} className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                <Button variant="outline" size="sm" onClick={exportDiff} className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-accent">
                   <Download className="w-4 h-4" />
                   Export
                 </Button>
@@ -394,7 +394,7 @@ export function SalesforceDataDiff({ isConnected }: SalesforceDataDiffProps) {
                 <div className="text-2xl font-bold text-yellow-400">{diffResult.modified.length}</div>
                 <div className="text-xs text-yellow-400">Modified</div>
               </div>
-              <div className="p-3 rounded-lg bg-slate-500/10 border border-slate-500/30 text-center">
+              <div className="p-3 rounded-lg bg-secondary border border-border text-center">
                 <div className="text-2xl font-bold text-slate-400">{diffResult.unchanged}</div>
                 <div className="text-xs text-slate-400">Unchanged</div>
               </div>

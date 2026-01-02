@@ -270,13 +270,13 @@ export function SalesforceTemplates({
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-slate-900 to-slate-950 overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-slate-700/50">
+      <div className="p-4 border-b border-border/50">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
+            <Sparkles className="w-4 h-4 text-foreground" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">Salesforce Templates</h3>
+            <h3 className="text-sm font-semibold text-foreground">Salesforce Templates</h3>
             <p className="text-xs text-slate-400">Pre-built test cases for standard objects</p>
           </div>
         </div>
@@ -288,7 +288,7 @@ export function SalesforceTemplates({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search templates..."
-            className="pl-9 bg-slate-800/50 border-slate-700 text-slate-200 text-sm"
+            className="pl-9 bg-card border-border text-muted-foreground text-sm"
           />
         </div>
         
@@ -353,7 +353,7 @@ export function SalesforceTemplates({
                   return (
                     <Card
                       key={template.apiName}
-                      className="bg-slate-800/50 border-slate-700/50 hover:border-blue-500/50 transition-all cursor-pointer group"
+                      className="bg-card border-border/50 hover:border-blue-500/50 transition-all cursor-pointer group"
                       onClick={() => handleSelectTemplate(template)}
                     >
                       <CardContent className="p-3">
@@ -364,7 +364,7 @@ export function SalesforceTemplates({
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h5 className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
+                              <h5 className="text-sm font-medium text-foreground group-hover:text-blue-400 transition-colors">
                                 Create {template.label}
                               </h5>
                               <ArrowRight className="w-3 h-3 text-slate-500 group-hover:text-blue-400 transition-colors" />
@@ -373,7 +373,7 @@ export function SalesforceTemplates({
                               {template.description}
                             </p>
                             <div className="flex items-center gap-2 mt-2">
-                              <Badge variant="outline" className="text-[10px] h-5 border-slate-600 text-slate-400">
+                              <Badge variant="outline" className="text-[10px] h-5 border-border text-slate-400">
                                 {template.fields.length} fields
                               </Badge>
                               <Badge variant="outline" className="text-[10px] h-5 border-orange-600/50 text-orange-400">
@@ -401,7 +401,7 @@ export function SalesforceTemplates({
       </div>
 
       {/* Quick Actions */}
-      <div className="p-3 border-t border-slate-700/50 bg-slate-900/50">
+      <div className="p-3 border-t border-border/50 bg-secondary">
         <div className="text-xs text-slate-400 mb-2">Quick Create:</div>
         <div className="flex gap-2 flex-wrap">
           {['Account', 'Contact', 'Opportunity', 'Case'].map(objName => {
@@ -425,11 +425,11 @@ export function SalesforceTemplates({
 
       {/* Configuration Dialog */}
       <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] bg-slate-900 border-slate-700">
+        <DialogContent className="max-w-3xl max-h-[90vh] bg-input border-border">
           {selectedTemplate && (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-3 text-white">
+                <DialogTitle className="flex items-center gap-3 text-foreground">
                   <span className="text-2xl">{selectedTemplate.icon}</span>
                   <div>
                     <div>Create {selectedTemplate.label}</div>
@@ -471,7 +471,7 @@ export function SalesforceTemplates({
                           className={`p-3 rounded-lg border transition-colors ${
                             config.selectedFields.includes(field.apiName)
                               ? 'bg-slate-800/80 border-blue-500/50'
-                              : 'bg-slate-800/30 border-slate-700/50'
+                              : 'bg-slate-800/30 border-border/50'
                           }`}
                         >
                           <div className="flex items-start gap-3">
@@ -486,7 +486,7 @@ export function SalesforceTemplates({
                               <div className="flex items-center gap-2 mb-1">
                                 <Label
                                   htmlFor={field.apiName}
-                                  className="text-sm text-white font-medium cursor-pointer"
+                                  className="text-sm text-foreground font-medium cursor-pointer"
                                 >
                                   {field.label}
                                 </Label>
@@ -506,7 +506,7 @@ export function SalesforceTemplates({
                                     value={config.testData[field.apiName] || ''}
                                     onChange={(e) => handleUpdateFieldValue(field.apiName, e.target.value)}
                                     placeholder={`Enter ${field.label}...`}
-                                    className="flex-1 h-8 text-sm bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
+                                    className="flex-1 h-8 text-sm bg-input border-border text-foreground placeholder:text-slate-500"
                                   />
                                   <Button
                                     size="sm"
@@ -529,9 +529,9 @@ export function SalesforceTemplates({
                 
                 <TabsContent value="options" className="mt-4">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-card border border-border">
                       <div>
-                        <div className="text-sm font-medium text-white">Include Navigation Steps</div>
+                        <div className="text-sm font-medium text-foreground">Include Navigation Steps</div>
                         <div className="text-xs text-slate-400 mt-0.5">
                           App Launcher → Search → Select Object → New Button
                         </div>
@@ -544,9 +544,9 @@ export function SalesforceTemplates({
                       />
                     </div>
                     
-                    <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                    <div className="flex items-center justify-between p-4 rounded-lg bg-card border border-border">
                       <div>
-                        <div className="text-sm font-medium text-white">Include Verification Steps</div>
+                        <div className="text-sm font-medium text-foreground">Include Verification Steps</div>
                         <div className="text-xs text-slate-400 mt-0.5">
                           Verify toast message and record creation
                         </div>
@@ -577,7 +577,7 @@ export function SalesforceTemplates({
                       {previewSteps.map((step, idx) => (
                         <div
                           key={step.id}
-                          className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700"
+                          className="flex items-start gap-3 p-3 rounded-lg bg-card border border-border"
                         >
                           <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0 text-xs font-medium text-slate-300">
                             {idx + 1}
@@ -595,7 +595,7 @@ export function SalesforceTemplates({
                               >
                                 {step.type.toUpperCase()}
                               </Badge>
-                              <span className="text-sm text-white truncate">
+                              <span className="text-sm text-foreground truncate">
                                 {step.name}
                               </span>
                             </div>

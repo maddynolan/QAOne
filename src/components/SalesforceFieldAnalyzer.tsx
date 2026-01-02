@@ -227,9 +227,9 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
   return (
     <div className="space-y-4">
       {/* Configuration */}
-      <Card className="bg-slate-800/50 border-slate-700">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white">Field Usage Analyzer</CardTitle>
+          <CardTitle className="text-foreground">Field Usage Analyzer</CardTitle>
           <CardDescription>Analyze field population and data quality</CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,7 +237,7 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
             <div>
               <Label>Object</Label>
               <Select value={selectedObject} onValueChange={setSelectedObject}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -252,7 +252,7 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
             <div>
               <Label>Sample Size</Label>
               <Select value={String(sampleSize)} onValueChange={(v) => setSampleSize(parseInt(v))}>
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                <SelectTrigger className="bg-input border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -285,15 +285,15 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
       {/* Summary Stats */}
       {analysisResult && summaryStats && (
         <div className="grid grid-cols-5 gap-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardContent className="pt-4 text-center">
-              <div className="text-2xl font-bold text-white">{analysisResult.totalRecords.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-foreground">{analysisResult.totalRecords.toLocaleString()}</div>
               <div className="text-xs text-slate-400">Total Records</div>
             </CardContent>
           </Card>
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardContent className="pt-4 text-center">
-              <div className="text-2xl font-bold text-white">{analysisResult.fields.length}</div>
+              <div className="text-2xl font-bold text-foreground">{analysisResult.fields.length}</div>
               <div className="text-xs text-slate-400">Fields Analyzed</div>
             </CardContent>
           </Card>
@@ -320,18 +320,18 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
 
       {/* Field Analysis Results */}
       {analysisResult && (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-white text-sm">Field Analysis Results</CardTitle>
+                <CardTitle className="text-foreground text-sm">Field Analysis Results</CardTitle>
                 <CardDescription>
                   Analyzed {analysisResult.analyzedRecords.toLocaleString()} of {analysisResult.totalRecords.toLocaleString()} records
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Select value={filterType} onValueChange={(v: any) => setFilterType(v)}>
-                  <SelectTrigger className="w-[130px] bg-slate-900 border-slate-700">
+                  <SelectTrigger className="w-[130px] bg-input border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -342,7 +342,7 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                  <SelectTrigger className="w-[130px] bg-slate-900 border-slate-700">
+                  <SelectTrigger className="w-[130px] bg-input border-border">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -351,7 +351,7 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
                     <SelectItem value="type">By Type</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" onClick={exportAnalysis} className="gap-2 text-slate-200 border-slate-600 hover:text-white hover:bg-slate-700">
+                <Button variant="outline" size="sm" onClick={exportAnalysis} className="gap-2 text-muted-foreground border-border hover:text-foreground hover:bg-secondary">
                   <Download className="w-4 h-4" />
                   Export
                 </Button>
@@ -363,11 +363,11 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
               {sortedAndFilteredFields.map(field => (
                 <div
                   key={field.fieldName}
-                  className="p-3 rounded-lg bg-slate-900/50 hover:bg-slate-800/50"
+                  className="p-3 rounded-lg bg-secondary hover:bg-card"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-white font-medium">{field.fieldLabel}</span>
+                      <span className="text-foreground font-medium">{field.fieldLabel}</span>
                       <span className="text-slate-500 text-xs font-mono">{field.fieldName}</span>
                       {field.isRequired && (
                         <Badge variant="outline" className="text-[10px] border-red-500/50 text-red-400">
@@ -390,7 +390,7 @@ export function SalesforceFieldAnalyzer({ isConnected }: SalesforceFieldAnalyzer
                     </div>
                   </div>
                   
-                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
                     <div
                       className={`h-full ${getPopulationBgColor(field.populationRate)}`}
                       style={{ width: `${field.populationRate}%` }}

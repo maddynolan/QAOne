@@ -430,7 +430,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <GitBranch className="w-5 h-5 text-yellow-400" />
             Regression Testing
           </h3>
@@ -442,7 +442,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-slate-800/50">
+        <TabsList className="bg-card">
           <TabsTrigger value="suites" className="gap-1.5 text-xs data-[state=active]:bg-yellow-600">
             <Layers className="w-3.5 h-3.5" />
             Test Suites
@@ -465,10 +465,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
         <TabsContent value="suites" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Suite List */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Test Suites</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Test Suites</CardTitle>
                   <Button size="sm" variant="ghost" onClick={addTestSuite} className="h-7 px-2">
                     <Plus className="w-3.5 h-3.5" />
                   </Button>
@@ -483,11 +483,11 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                       className={`p-3 rounded cursor-pointer transition-colors ${
                         selectedSuite?.id === suite.id
                           ? 'bg-slate-700 border border-slate-600'
-                          : 'bg-slate-900/50 hover:bg-slate-800'
+                          : 'bg-secondary hover:bg-slate-800'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-white text-sm">{suite.name}</span>
+                        <span className="font-medium text-foreground text-sm">{suite.name}</span>
                         {suite.lastResult && (
                           <Badge className={
                             suite.lastResult === 'pass' ? 'bg-green-600' :
@@ -507,10 +507,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
             </Card>
 
             {/* Suite Details */}
-            <Card className="bg-slate-800/50 border-slate-700 lg:col-span-2">
+            <Card className="bg-card border-border lg:col-span-2">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">
+                  <CardTitle className="text-foreground text-sm">
                     {selectedSuite?.name || 'Select a suite'}
                   </CardTitle>
                   {selectedSuite && (
@@ -546,12 +546,12 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                       {selectedSuite.tests.map(test => (
                         <div
                           key={test.id}
-                          className="p-3 rounded bg-slate-900/50 border border-slate-700"
+                          className="p-3 rounded bg-secondary border border-border"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               {getStatusIcon(test.status)}
-                              <span className="text-sm text-white">{test.name}</span>
+                              <span className="text-sm text-foreground">{test.name}</span>
                               <Badge variant="outline" className="text-xs text-slate-400 border-slate-600">
                                 {test.type}
                               </Badge>
@@ -580,17 +580,17 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
 
         {/* Change Detection Tab */}
         <TabsContent value="changes" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Metadata Change Detection</CardTitle>
+                <CardTitle className="text-foreground text-sm">Metadata Change Detection</CardTitle>
                 <div className="flex items-center gap-2">
                   <Label className="text-slate-400 text-xs">Since:</Label>
                   <Input
                     type="date"
                     value={baselineDate}
                     onChange={(e) => setBaselineDate(e.target.value)}
-                    className="w-40 bg-slate-900 border-slate-700 text-white text-sm"
+                    className="w-40 bg-input border-border text-foreground text-sm"
                   />
                   <Button
                     size="sm"
@@ -619,14 +619,14 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                   {metadataChanges.map((change, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded bg-slate-900/50 border border-slate-700 flex items-center justify-between"
+                      className="p-3 rounded bg-secondary border border-border flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
                         <Badge className={getChangeTypeColor(change.changeType)}>
                           {change.changeType}
                         </Badge>
                         <div>
-                          <span className="text-sm text-white font-medium">{change.name}</span>
+                          <span className="text-sm text-foreground font-medium">{change.name}</span>
                           <span className="text-xs text-slate-400 ml-2">({change.type})</span>
                         </div>
                       </div>
@@ -643,10 +643,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
 
         {/* Baselines Tab */}
         <TabsContent value="baselines" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm">Environment Baselines</CardTitle>
+                <CardTitle className="text-foreground text-sm">Environment Baselines</CardTitle>
                 <Button
                   size="sm"
                   onClick={createBaseline}
@@ -673,10 +673,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                   {baselines.map(baseline => (
                     <div
                       key={baseline.id}
-                      className="p-3 rounded bg-slate-900/50 border border-slate-700"
+                      className="p-3 rounded bg-secondary border border-border"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-white text-sm">{baseline.name}</span>
+                        <span className="font-medium text-foreground text-sm">{baseline.name}</span>
                         <span className="text-xs text-slate-400">
                           {new Date(baseline.timestamp).toLocaleString()}
                         </span>
@@ -684,19 +684,19 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                       <div className="grid grid-cols-4 gap-2 text-xs">
                         <div className="text-center p-2 rounded bg-slate-800">
                           <div className="text-slate-400">Apex Classes</div>
-                          <div className="text-white font-medium">{baseline.apexClasses}</div>
+                          <div className="text-foreground font-medium">{baseline.apexClasses}</div>
                         </div>
                         <div className="text-center p-2 rounded bg-slate-800">
                           <div className="text-slate-400">Flows</div>
-                          <div className="text-white font-medium">{baseline.flows}</div>
+                          <div className="text-foreground font-medium">{baseline.flows}</div>
                         </div>
                         <div className="text-center p-2 rounded bg-slate-800">
                           <div className="text-slate-400">Validations</div>
-                          <div className="text-white font-medium">{baseline.validationRules}</div>
+                          <div className="text-foreground font-medium">{baseline.validationRules}</div>
                         </div>
                         <div className="text-center p-2 rounded bg-slate-800">
                           <div className="text-slate-400">Objects</div>
-                          <div className="text-white font-medium">{baseline.objects.length}</div>
+                          <div className="text-foreground font-medium">{baseline.objects.length}</div>
                         </div>
                       </div>
                     </div>
@@ -711,10 +711,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
         <TabsContent value="apex" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Test Classes */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Apex Test Classes</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Apex Test Classes</CardTitle>
                   <div className="flex gap-1">
                     <Button
                       size="sm"
@@ -745,11 +745,11 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                     apexTestClasses.map(cls => (
                       <div
                         key={cls.Id}
-                        className="flex items-center gap-2 p-2 rounded bg-slate-900/50 hover:bg-slate-800 cursor-pointer"
+                        className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-slate-800 cursor-pointer"
                         onClick={() => toggleApexTest(cls.Id)}
                       >
                         <Checkbox checked={selectedApexTests.has(cls.Id)} />
-                        <span className="text-sm text-white">{cls.Name}</span>
+                        <span className="text-sm text-foreground">{cls.Name}</span>
                       </div>
                     ))
                   )}
@@ -771,10 +771,10 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
             </Card>
 
             {/* Test Results */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Test Results</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Test Results</CardTitle>
                   {apexTestResults.length > 0 && (
                     <div className="flex gap-2 text-xs">
                       <Badge className="bg-green-600">{apexTestStats.passed} Pass</Badge>
@@ -807,7 +807,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                       >
                         <div className="flex items-center gap-2">
                           {getStatusIcon(result.Outcome)}
-                          <span className="text-sm text-white font-medium">
+                          <span className="text-sm text-foreground font-medium">
                             {result.ApexClass?.Name || 'Unknown'}.{result.MethodName}
                           </span>
                           <span className="text-xs text-slate-400 ml-auto">
@@ -834,6 +834,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
     </div>
   );
 }
+
 
 
 

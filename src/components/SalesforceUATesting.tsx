@@ -464,7 +464,7 @@ ${report.map(r => `
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-purple-400" />
             User Acceptance Testing
           </h3>
@@ -483,7 +483,7 @@ ${report.map(r => `
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-slate-800/50">
+        <TabsList className="bg-card">
           <TabsTrigger value="tests" className="gap-1.5 text-xs data-[state=active]:bg-purple-600">
             <ListChecks className="w-3.5 h-3.5" />
             Test Cases
@@ -506,10 +506,10 @@ ${report.map(r => `
         <TabsContent value="tests" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Test List */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">Test Cases</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Test Cases</CardTitle>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={addTestCase} className="h-7 px-2">
                       <Plus className="w-3.5 h-3.5" />
@@ -529,13 +529,13 @@ ${report.map(r => `
                       className={`p-3 rounded cursor-pointer transition-colors ${
                         selectedTest?.id === test.id
                           ? 'bg-slate-700 border border-slate-600'
-                          : 'bg-slate-900/50 hover:bg-slate-800'
+                          : 'bg-secondary hover:bg-slate-800'
                       }`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(test.status)}
-                          <span className="font-medium text-white text-sm">{test.title}</span>
+                          <span className="font-medium text-foreground text-sm">{test.title}</span>
                         </div>
                         <Badge variant="outline" className={getPriorityColor(test.priority)}>
                           {test.priority}
@@ -550,10 +550,10 @@ ${report.map(r => `
             </Card>
 
             {/* Test Details */}
-            <Card className="bg-slate-800/50 border-slate-700 lg:col-span-2">
+            <Card className="bg-card border-border lg:col-span-2">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm">
+                  <CardTitle className="text-foreground text-sm">
                     {selectedTest?.title || 'Select a test case'}
                   </CardTitle>
                   {selectedTest && (
@@ -595,12 +595,12 @@ ${report.map(r => `
                         {selectedTest.steps.map((step, idx) => (
                           <div
                             key={step.id}
-                            className="p-3 rounded bg-slate-900/50 border border-slate-700"
+                            className="p-3 rounded bg-secondary border border-border"
                           >
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-slate-500 mt-0.5">{idx + 1}.</span>
                               <div className="flex-1">
-                                <p className="text-sm text-white">{step.description}</p>
+                                <p className="text-sm text-foreground">{step.description}</p>
                                 <p className="text-xs text-slate-400 mt-1">
                                   Expected: {step.expectedBehavior}
                                 </p>
@@ -629,9 +629,9 @@ ${report.map(r => `
 
         {/* Natural Language Tab */}
         <TabsContent value="natural" className="space-y-4">
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-card border-border">
             <CardHeader className="py-3">
-              <CardTitle className="text-white text-sm flex items-center gap-2">
+              <CardTitle className="text-foreground text-sm flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 Create Tests from Natural Language
               </CardTitle>
@@ -654,7 +654,7 @@ Select the stage
 Enter the close date
 Click Save
 Verify the opportunity was created`}
-                  className="font-mono text-sm bg-slate-900 border-slate-700 min-h-[200px] text-white mt-1"
+                  className="font-mono text-sm bg-input border-border min-h-[200px] text-foreground mt-1"
                 />
               </div>
               
@@ -673,8 +673,8 @@ Verify the opportunity was created`}
                 </Button>
               </div>
               
-              <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700">
-                <h4 className="text-sm font-medium text-white mb-2">💡 Tips</h4>
+              <div className="p-4 rounded-lg bg-secondary border border-border">
+                <h4 className="text-sm font-medium text-foreground mb-2">💡 Tips</h4>
                 <ul className="text-xs text-slate-400 space-y-1">
                   <li>• First line becomes the test title</li>
                   <li>• Each subsequent line becomes a test step</li>
@@ -694,7 +694,7 @@ Verify the opportunity was created`}
               return (
                 <Card
                   key={template.id}
-                  className="bg-slate-800/50 border-slate-700 hover:border-purple-500/50 cursor-pointer transition-colors"
+                  className="bg-card border-border hover:border-purple-500/50 cursor-pointer transition-colors"
                   onClick={() => setSelectedTemplate(template)}
                 >
                   <CardHeader className="py-3">
@@ -704,7 +704,7 @@ Verify the opportunity was created`}
                           <Icon className="w-5 h-5 text-purple-400" />
                         </div>
                         <div>
-                          <CardTitle className="text-white text-sm">{template.name}</CardTitle>
+                          <CardTitle className="text-foreground text-sm">{template.name}</CardTitle>
                           <Badge variant="outline" className="text-xs text-slate-400 border-slate-600 mt-1">
                             {template.category}
                           </Badge>
@@ -720,7 +720,7 @@ Verify the opportunity was created`}
                     </div>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {template.objects.map(obj => (
-                        <Badge key={obj} variant="outline" className="text-xs text-slate-400 border-slate-700">
+                        <Badge key={obj} variant="outline" className="text-xs text-slate-400 border-border">
                           {obj}
                         </Badge>
                       ))}
@@ -747,10 +747,10 @@ Verify the opportunity was created`}
         {/* Execute Tab */}
         <TabsContent value="execute" className="space-y-4">
           {selectedTest && executionMode ? (
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <CardTitle className="text-foreground text-sm flex items-center gap-2">
                     <Play className="w-4 h-4 text-green-400" />
                     Executing: {selectedTest.title}
                   </CardTitle>
@@ -780,7 +780,7 @@ Verify the opportunity was created`}
                           ? 'bg-green-500/10 border-green-500/30'
                           : step.status === 'fail'
                           ? 'bg-red-500/10 border-red-500/30'
-                          : 'bg-slate-900/50 border-slate-700'
+                          : 'bg-secondary border-border'
                       }`}
                     >
                       <div className="flex items-start justify-between">
@@ -791,7 +791,7 @@ Verify the opportunity was created`}
                             {idx + 1}
                           </span>
                           <div>
-                            <p className="text-white font-medium">{step.description}</p>
+                            <p className="text-foreground font-medium">{step.description}</p>
                             <p className="text-sm text-slate-400 mt-1">
                               Expected: {step.expectedBehavior}
                             </p>
@@ -835,11 +835,11 @@ Verify the opportunity was created`}
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border-border">
               <CardContent className="py-12">
                 <div className="text-center text-slate-500">
                   <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-lg font-medium text-white mb-2">Ready to Execute?</p>
+                  <p className="text-lg font-medium text-foreground mb-2">Ready to Execute?</p>
                   <p className="text-sm mb-4">Select a test case and start execution</p>
                   {selectedTest ? (
                     <Button onClick={startExecution} className="gap-2">
@@ -870,6 +870,7 @@ Verify the opportunity was created`}
     </div>
   );
 }
+
 
 
 

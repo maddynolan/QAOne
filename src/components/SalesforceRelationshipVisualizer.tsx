@@ -254,16 +254,16 @@ export function SalesforceRelationshipVisualizer({ isConnected }: SalesforceRela
   }, [selectedNode, objectDescriptions]);
 
   return (
-    <Card className="bg-slate-800/50 border-slate-700 h-full">
+    <Card className="bg-card border-border h-full">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-white">Object Relationship Visualizer</CardTitle>
+          <CardTitle className="text-foreground">Object Relationship Visualizer</CardTitle>
           <div className="flex items-center gap-2">
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter objects..."
-              className="w-40 h-8 bg-slate-900 border-slate-700 text-sm"
+              className="w-40 h-8 bg-input border-border text-sm"
             />
             <Button
               variant="ghost"
@@ -290,12 +290,12 @@ export function SalesforceRelationshipVisualizer({ isConnected }: SalesforceRela
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="relative h-[500px] overflow-hidden bg-slate-900/50 rounded-lg mx-4 mb-4">
+        <div className="relative h-[500px] overflow-hidden bg-input/50 rounded-lg mx-4 mb-4">
           {nodes.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Circle className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">No relationships loaded</h3>
+                <h3 className="text-lg font-medium text-foreground mb-2">No relationships loaded</h3>
                 <p className="text-slate-400 mb-4">Click refresh to load object relationships</p>
                 <Button
                   onClick={loadRelationships}
@@ -365,28 +365,28 @@ export function SalesforceRelationshipVisualizer({ isConnected }: SalesforceRela
 
         {/* Selected Object Details */}
         {selectedNode && objectDescriptions.has(selectedNode) && (
-          <div className="mx-4 mb-4 p-4 bg-slate-900/50 rounded-lg">
-            <h4 className="text-white font-medium mb-2">
+          <div className="mx-4 mb-4 p-4 bg-input/50 rounded-lg">
+            <h4 className="text-foreground font-medium mb-2">
               {objectDescriptions.get(selectedNode)?.label} Details
             </h4>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-slate-400">API Name:</span>
-                <span className="text-white ml-2">{selectedNode}</span>
+                <span className="text-foreground ml-2">{selectedNode}</span>
               </div>
               <div>
                 <span className="text-slate-400">Fields:</span>
-                <span className="text-white ml-2">{objectDescriptions.get(selectedNode)?.fields.length}</span>
+                <span className="text-foreground ml-2">{objectDescriptions.get(selectedNode)?.fields.length}</span>
               </div>
               <div>
                 <span className="text-slate-400">Child Relationships:</span>
-                <span className="text-white ml-2">
+                <span className="text-foreground ml-2">
                   {objectDescriptions.get(selectedNode)?.childRelationships?.length || 0}
                 </span>
               </div>
               <div>
                 <span className="text-slate-400">Key Prefix:</span>
-                <span className="text-white ml-2 font-mono">
+                <span className="text-foreground ml-2 font-mono">
                   {objectDescriptions.get(selectedNode)?.keyPrefix}
                 </span>
               </div>

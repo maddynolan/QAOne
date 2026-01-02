@@ -615,20 +615,20 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Rocket className="w-6 h-6 text-purple-400" />
             Test Orchestrator
           </h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted-foreground">
             Auto-discover, generate, and manage comprehensive Salesforce tests
           </p>
         </div>
       </div>
 
       {/* Step 1: Discovery */}
-      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-slate-700">
+      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <Search className="w-5 h-5 text-blue-400" />
             Step 1: Discover Testable Items
           </CardTitle>
@@ -654,7 +654,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
             {isScanning && (
               <div className="flex-1">
                 <Progress value={scanProgress} className="h-2" />
-                <p className="text-xs text-slate-400 mt-1">{scanProgress}% complete</p>
+                <p className="text-xs text-muted-foreground mt-1">{scanProgress}% complete</p>
               </div>
             )}
             
@@ -683,9 +683,9 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
       </Card>
 
       {/* Step 2: Configure & Generate */}
-      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-slate-700">
+      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-white flex items-center gap-2">
+          <CardTitle className="text-foreground flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-400" />
             Step 2: Generate Test Suite
           </CardTitle>
@@ -696,11 +696,11 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
         <CardContent className="space-y-4">
           {/* Object Selection */}
           <div className="flex items-center gap-4">
-            <Label className="text-slate-400">Target Object:</Label>
+            <Label className="text-muted-foreground">Target Object:</Label>
             <select
               value={selectedObject}
               onChange={(e) => setSelectedObject(e.target.value)}
-              className="px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-white"
+              className="px-3 py-2 rounded-md bg-input border border-border text-foreground"
             >
               {objects.map(obj => (
                 <option key={obj} value={obj}>{obj}</option>
@@ -722,7 +722,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           </div>
           
           {/* Options */}
-          <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+          <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-secondary border border-border">
             <div className="space-y-2">
               <Label className="text-slate-300 text-sm font-medium">Test Types</Label>
               {[
@@ -737,7 +737,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                       setOptions(prev => ({ ...prev, [opt.key]: checked }))
                     }
                   />
-                  <span className="text-sm text-slate-400">{opt.label}</span>
+                  <span className="text-sm text-muted-foreground">{opt.label}</span>
                 </div>
               ))}
             </div>
@@ -755,7 +755,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                       setOptions(prev => ({ ...prev, [opt.key]: checked }))
                     }
                   />
-                  <span className="text-sm text-slate-400">{opt.label}</span>
+                  <span className="text-sm text-muted-foreground">{opt.label}</span>
                 </div>
               ))}
             </div>
@@ -773,7 +773,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                       setOptions(prev => ({ ...prev, [opt.key]: checked }))
                     }
                   />
-                  <span className="text-sm text-slate-400">{opt.label}</span>
+                  <span className="text-sm text-muted-foreground">{opt.label}</span>
                 </div>
               ))}
             </div>
@@ -783,19 +783,19 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
 
       {/* Step 3: Generated Tests */}
       {generatedSuite && (
-        <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-slate-700">
+        <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-green-400" />
                 Step 3: Review & Execute ({generatedSuite.tests.length} Tests)
               </CardTitle>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={copyAsMarkdown} className="gap-1.5 text-slate-300 border-slate-600">
+                <Button size="sm" variant="outline" onClick={copyAsMarkdown} className="gap-1.5 text-slate-300 border-border">
                   <Copy className="w-3.5 h-3.5" />
                   Copy MD
                 </Button>
-                <Button size="sm" variant="outline" onClick={exportSuite} className="gap-1.5 text-slate-300 border-slate-600">
+                <Button size="sm" variant="outline" onClick={exportSuite} className="gap-1.5 text-slate-300 border-border">
                   <Download className="w-3.5 h-3.5" />
                   Export
                 </Button>
@@ -807,9 +807,9 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
             {testStats && (
               <div className="grid grid-cols-5 gap-3 mb-4">
                 {Object.entries(testStats.byCategory).map(([cat, count]) => (
-                  <div key={cat} className="p-3 rounded-lg bg-slate-900/50 border border-slate-700 text-center">
-                    <div className="text-lg font-bold text-white">{count}</div>
-                    <div className="text-xs text-slate-400">{cat}</div>
+                  <div key={cat} className="p-3 rounded-lg bg-secondary border border-border text-center">
+                    <div className="text-lg font-bold text-foreground">{count}</div>
+                    <div className="text-xs text-muted-foreground">{cat}</div>
                   </div>
                 ))}
               </div>
@@ -820,13 +820,13 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
               {generatedSuite.tests.map((test, idx) => (
                 <div
                   key={test.id}
-                  className="p-3 rounded-lg bg-slate-900/50 border border-slate-700 hover:border-slate-600 transition-colors"
+                  className="p-3 rounded-lg bg-secondary border border-border hover:border-border transition-colors"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500">{idx + 1}.</span>
-                        <span className="font-medium text-white">{test.name}</span>
+                        <span className="font-medium text-foreground">{test.name}</span>
                         <Badge className={
                           test.type === 'positive' ? 'bg-green-600' :
                           test.type === 'negative' ? 'bg-red-600' :
@@ -836,13 +836,13 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                         }>
                           {test.type}
                         </Badge>
-                        <Badge variant="outline" className="text-slate-400 border-slate-600">
+                        <Badge variant="outline" className="text-muted-foreground border-border">
                           {test.category}
                         </Badge>
                       </div>
                       <div className="mt-2 text-xs text-slate-500">
-                        <span className="text-slate-400">Steps:</span> {test.steps.length} |{' '}
-                        <span className="text-slate-400">Assertions:</span> {test.assertions.length}
+                        <span className="text-muted-foreground">Steps:</span> {test.steps.length} |{' '}
+                        <span className="text-muted-foreground">Assertions:</span> {test.assertions.length}
                       </div>
                     </div>
                     <div className="flex gap-1">
@@ -850,7 +850,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                         size="sm"
                         variant="ghost"
                         onClick={() => onRecordTest?.(test)}
-                        className="h-7 px-2 text-slate-400 hover:text-white"
+                        className="h-7 px-2 text-muted-foreground hover:text-foreground"
                         title="Record this test"
                       >
                         <TestTube className="w-3.5 h-3.5" />
@@ -859,7 +859,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                         size="sm"
                         variant="ghost"
                         onClick={() => onRunTest?.(test)}
-                        className="h-7 px-2 text-slate-400 hover:text-green-400"
+                        className="h-7 px-2 text-muted-foreground hover:text-green-400"
                         title="Run this test"
                       >
                         <Play className="w-3.5 h-3.5" />
@@ -885,7 +885,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
             key={idx}
             variant="outline"
             onClick={action.action}
-            className={`h-16 flex-col gap-1 text-slate-300 border-slate-700 hover:border-${action.color}-500/50 hover:bg-${action.color}-500/10`}
+            className={`h-16 flex-col gap-1 text-slate-300 border-border hover:border-${action.color}-500/50 hover:bg-${action.color}-500/10`}
           >
             <action.icon className={`w-5 h-5 text-${action.color}-400`} />
             <span className="text-xs">{action.label}</span>
@@ -895,6 +895,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
     </div>
   );
 }
+
 
 
 
