@@ -303,7 +303,7 @@ ${testRecord}
       case 'pass': return 'bg-green-500/20 text-green-400 border-green-500/30';
       case 'fail': return 'bg-red-500/20 text-red-400 border-red-500/30';
       case 'warning': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+      default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
 
@@ -325,7 +325,7 @@ ${testRecord}
           <select
             value={selectedObject}
             onChange={(e) => setSelectedObject(e.target.value)}
-            className="px-3 py-1.5 rounded bg-slate-800 border border-border text-foreground text-sm"
+            className="px-3 py-1.5 rounded bg-input border border-border text-foreground text-sm"
           >
             {objects.map(obj => (
               <option key={obj} value={obj}>{obj}</option>
@@ -572,7 +572,7 @@ ${testRecord}
                             <p className="text-xs text-slate-500 mt-1">{flow.Description}</p>
                           )}
                         </div>
-                        <Badge className={flow.IsActive ? 'bg-green-600' : 'bg-slate-600'}>
+                        <Badge className={flow.IsActive ? 'bg-green-600' : 'bg-secondary'}>
                           {flow.ProcessType}
                         </Badge>
                       </div>
@@ -623,7 +623,7 @@ ${testRecord}
                   </div>
                 ) : (
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-800">
+                    <thead className="bg-secondary">
                       <tr>
                         <th className="px-3 py-2 text-left text-slate-400">Field</th>
                         <th className="px-3 py-2 text-center text-slate-400">Read</th>

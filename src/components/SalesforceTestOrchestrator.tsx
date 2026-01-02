@@ -626,7 +626,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
       </div>
 
       {/* Step 1: Discovery */}
-      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-foreground flex items-center gap-2">
             <Search className="w-5 h-5 text-blue-400" />
@@ -683,7 +683,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
       </Card>
 
       {/* Step 2: Configure & Generate */}
-      <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
+      <Card className="bg-card border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-foreground flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-400" />
@@ -724,7 +724,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           {/* Options */}
           <div className="grid grid-cols-3 gap-4 p-4 rounded-lg bg-secondary border border-border">
             <div className="space-y-2">
-              <Label className="text-slate-300 text-sm font-medium">Test Types</Label>
+              <Label className="text-foreground text-sm font-medium">Test Types</Label>
               {[
                 { key: 'includeCrudTests', label: 'CRUD Tests' },
                 { key: 'includeValidationTests', label: 'Validation Rules' },
@@ -742,7 +742,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
               ))}
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-300 text-sm font-medium">Coverage</Label>
+              <Label className="text-foreground text-sm font-medium">Coverage</Label>
               {[
                 { key: 'includeFieldTests', label: 'Field Validation' },
                 { key: 'includeSecurityTests', label: 'Security Tests' },
@@ -760,7 +760,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
               ))}
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-300 text-sm font-medium">Advanced</Label>
+              <Label className="text-foreground text-sm font-medium">Advanced</Label>
               {[
                 { key: 'includeNegativeTests', label: 'Negative Tests' },
                 { key: 'includeBoundaryTests', label: 'Boundary Tests' },
@@ -783,7 +783,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
 
       {/* Step 3: Generated Tests */}
       {generatedSuite && (
-        <Card className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border-border">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-foreground flex items-center gap-2">
@@ -791,11 +791,11 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                 Step 3: Review & Execute ({generatedSuite.tests.length} Tests)
               </CardTitle>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={copyAsMarkdown} className="gap-1.5 text-slate-300 border-border">
+                <Button size="sm" variant="outline" onClick={copyAsMarkdown} className="gap-1.5 text-foreground border-border">
                   <Copy className="w-3.5 h-3.5" />
                   Copy MD
                 </Button>
-                <Button size="sm" variant="outline" onClick={exportSuite} className="gap-1.5 text-slate-300 border-border">
+                <Button size="sm" variant="outline" onClick={exportSuite} className="gap-1.5 text-foreground border-border">
                   <Download className="w-3.5 h-3.5" />
                   Export
                 </Button>
@@ -825,7 +825,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{idx + 1}.</span>
+                        <span className="text-xs text-muted-foreground">{idx + 1}.</span>
                         <span className="font-medium text-foreground">{test.name}</span>
                         <Badge className={
                           test.type === 'positive' ? 'bg-green-600' :
@@ -840,7 +840,7 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
                           {test.category}
                         </Badge>
                       </div>
-                      <div className="mt-2 text-xs text-slate-500">
+                      <div className="mt-2 text-xs text-muted-foreground">
                         <span className="text-muted-foreground">Steps:</span> {test.steps.length} |{' '}
                         <span className="text-muted-foreground">Assertions:</span> {test.assertions.length}
                       </div>
@@ -879,13 +879,13 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
           { icon: Target, label: 'Run All Tests', color: 'green', action: () => toast.info('Coming soon!') },
           { icon: TestTube, label: 'Record Tests', color: 'blue', action: () => toast.info('Coming soon!') },
           { icon: BarChart, label: 'View Report', color: 'purple', action: () => toast.info('Coming soon!') },
-          { icon: Settings, label: 'Configure', color: 'slate', action: () => toast.info('Coming soon!') },
+          { icon: Settings, label: 'Configure', color: 'primary', action: () => toast.info('Coming soon!') },
         ].map((action, idx) => (
           <Button
             key={idx}
             variant="outline"
             onClick={action.action}
-            className={`h-16 flex-col gap-1 text-slate-300 border-border hover:border-${action.color}-500/50 hover:bg-${action.color}-500/10`}
+            className={`h-16 flex-col gap-1 text-foreground border-border hover:border-${action.color}-500/50 hover:bg-${action.color}-500/10`}
           >
             <action.icon className={`w-5 h-5 text-${action.color}-400`} />
             <span className="text-xs">{action.label}</span>

@@ -438,7 +438,7 @@ ${report.map(r => `
       case 'fail': return 'bg-red-600';
       case 'running': return 'bg-blue-600';
       case 'blocked': return 'bg-yellow-600';
-      default: return 'bg-slate-600';
+      default: return 'bg-secondary';
     }
   };
 
@@ -476,7 +476,7 @@ ${report.map(r => `
           <div className="flex gap-2 text-xs">
             <Badge className="bg-green-600">{stats.passed} Passed</Badge>
             <Badge className="bg-red-600">{stats.failed} Failed</Badge>
-            <Badge className="bg-slate-600">{stats.pending} Pending</Badge>
+            <Badge className="bg-secondary">{stats.pending} Pending</Badge>
           </div>
         </div>
       </div>
@@ -528,8 +528,8 @@ ${report.map(r => `
                       onClick={() => setSelectedTest(test)}
                       className={`p-3 rounded cursor-pointer transition-colors ${
                         selectedTest?.id === test.id
-                          ? 'bg-slate-700 border border-slate-600'
-                          : 'bg-secondary hover:bg-slate-800'
+                          ? 'bg-primary/10 border border-primary/30'
+                          : 'bg-secondary hover:bg-accent'
                       }`}
                     >
                       <div className="flex items-start justify-between">

@@ -404,7 +404,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       case 'running': return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
       case 'skipped':
       case 'Skip': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
-      default: return <Clock className="w-4 h-4 text-slate-400" />;
+      default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -413,7 +413,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
       case 'added': return 'bg-green-500/20 text-green-400 border-green-500/30';
       case 'modified': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       case 'deleted': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+      default: return 'bg-secondary text-muted-foreground border-border';
     }
   };
 
@@ -434,7 +434,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
             <GitBranch className="w-5 h-5 text-yellow-400" />
             Regression Testing
           </h3>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted-foreground">
             Detect changes and ensure modifications don't break functionality
           </p>
         </div>
@@ -482,8 +482,8 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                       onClick={() => setSelectedSuite(suite)}
                       className={`p-3 rounded cursor-pointer transition-colors ${
                         selectedSuite?.id === suite.id
-                          ? 'bg-slate-700 border border-slate-600'
-                          : 'bg-secondary hover:bg-slate-800'
+                          ? 'bg-primary/10 border border-primary/30'
+                          : 'bg-secondary hover:bg-accent'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -498,7 +498,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">{suite.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{suite.description}</p>
                       <p className="text-xs text-slate-500 mt-1">{suite.tests.length} tests</p>
                     </div>
                   ))}
@@ -536,7 +536,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                     {runProgress && (
                       <div className="space-y-2">
                         <Progress value={(runProgress.current / runProgress.total) * 100} />
-                        <p className="text-xs text-slate-400 text-center">
+                        <p className="text-xs text-muted-foreground text-center">
                           Running {runProgress.current}/{runProgress.total} tests
                         </p>
                       </div>
@@ -552,14 +552,14 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                             <div className="flex items-center gap-2">
                               {getStatusIcon(test.status)}
                               <span className="text-sm text-foreground">{test.name}</span>
-                              <Badge variant="outline" className="text-xs text-slate-400 border-slate-600">
+                              <Badge variant="outline" className="text-xs text-muted-foreground border-slate-600">
                                 {test.type}
                               </Badge>
                             </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1">
                             {test.steps.map((step, idx) => (
-                              <span key={idx} className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+                              <span key={idx} className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded">
                                 {idx + 1}. {step}
                               </span>
                             ))}
@@ -585,7 +585,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
               <div className="flex items-center justify-between">
                 <CardTitle className="text-foreground text-sm">Metadata Change Detection</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Label className="text-slate-400 text-xs">Since:</Label>
+                  <Label className="text-muted-foreground text-xs">Since:</Label>
                   <Input
                     type="date"
                     value={baselineDate}
@@ -627,7 +627,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                         </Badge>
                         <div>
                           <span className="text-sm text-foreground font-medium">{change.name}</span>
-                          <span className="text-xs text-slate-400 ml-2">({change.type})</span>
+                          <span className="text-xs text-muted-foreground ml-2">({change.type})</span>
                         </div>
                       </div>
                       <span className="text-xs text-slate-500">
@@ -677,25 +677,25 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium text-foreground text-sm">{baseline.name}</span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-muted-foreground">
                           {new Date(baseline.timestamp).toLocaleString()}
                         </span>
                       </div>
                       <div className="grid grid-cols-4 gap-2 text-xs">
-                        <div className="text-center p-2 rounded bg-slate-800">
-                          <div className="text-slate-400">Apex Classes</div>
+                        <div className="text-center p-2 rounded bg-secondary">
+                          <div className="text-muted-foreground">Apex Classes</div>
                           <div className="text-foreground font-medium">{baseline.apexClasses}</div>
                         </div>
-                        <div className="text-center p-2 rounded bg-slate-800">
-                          <div className="text-slate-400">Flows</div>
+                        <div className="text-center p-2 rounded bg-secondary">
+                          <div className="text-muted-foreground">Flows</div>
                           <div className="text-foreground font-medium">{baseline.flows}</div>
                         </div>
-                        <div className="text-center p-2 rounded bg-slate-800">
-                          <div className="text-slate-400">Validations</div>
+                        <div className="text-center p-2 rounded bg-secondary">
+                          <div className="text-muted-foreground">Validations</div>
                           <div className="text-foreground font-medium">{baseline.validationRules}</div>
                         </div>
-                        <div className="text-center p-2 rounded bg-slate-800">
-                          <div className="text-slate-400">Objects</div>
+                        <div className="text-center p-2 rounded bg-secondary">
+                          <div className="text-muted-foreground">Objects</div>
                           <div className="text-foreground font-medium">{baseline.objects.length}</div>
                         </div>
                       </div>
@@ -745,7 +745,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                     apexTestClasses.map(cls => (
                       <div
                         key={cls.Id}
-                        className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-slate-800 cursor-pointer"
+                        className="flex items-center gap-2 p-2 rounded bg-secondary hover:bg-secondary cursor-pointer"
                         onClick={() => toggleApexTest(cls.Id)}
                       >
                         <Checkbox checked={selectedApexTests.has(cls.Id)} />
@@ -810,7 +810,7 @@ export function SalesforceRegressionTesting({ isConnected }: SalesforceRegressio
                           <span className="text-sm text-foreground font-medium">
                             {result.ApexClass?.Name || 'Unknown'}.{result.MethodName}
                           </span>
-                          <span className="text-xs text-slate-400 ml-auto">
+                          <span className="text-xs text-muted-foreground ml-auto">
                             {result.RunTime}ms
                           </span>
                         </div>

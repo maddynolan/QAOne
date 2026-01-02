@@ -412,8 +412,8 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
                         onClick={() => setSelectedTest(test)}
                         className={`p-2 rounded cursor-pointer transition-colors ${
                           selectedTest?.id === test.id
-                            ? 'bg-slate-700 border border-slate-600'
-                            : 'bg-secondary hover:bg-slate-800'
+                            ? 'bg-primary/10 border border-primary/30'
+                            : 'bg-secondary hover:bg-accent'
                         }`}
                       >
                         <div className="flex items-center justify-between">
