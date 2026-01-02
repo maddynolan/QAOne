@@ -375,3 +375,4 @@ export const selectTotalReleases = (state: TestDataStore) => state.summary.relea
 export const selectAutomatedCount = (state: TestDataStore) => state.summary.automated;
 export const selectManualCount = (state: TestDataStore) => state.summary.manual;
 
+

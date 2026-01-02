@@ -1178,6 +1178,127 @@ class SalesforceApiService {
   clearQueryHistory(): void {
     localStorage.removeItem(STORAGE_KEYS.QUERY_HISTORY);
   }
+
+  // ========== ORCHESTRATOR API ==========
+  
+  /**
+   * Scan the connected org for testable metadata
+   * Returns validation rules, flows, triggers, apex classes, custom objects
+   */
+  async orchestratorScan(): Promise<{
+    validation_rules: any[];
+    flows: any[];
+    triggers: any[];
+    apex_classes: any[];
+    custom_objects: any[];
+    summary: {
+      total_items: number;
+      by_type: Record<string, number>;
+    };
+  }> {
+    const response = await fetch(`${this.getBackendUrl()}/api/salesforce/orchestrator/scan`);
+    if (!response.ok) {
+      throw new Error(`Orchestrator scan failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Generate test suite for a specific object
+   */
+  async orchestratorGenerateTests(options: {
+    object_name: string;
+    test_types?: string[];
+    include_negative_tests?: boolean;
+    include_boundary_tests?: boolean;
+  }): Promise<{
+    object: string;
+    testCount: number;
+    tests: any[];
+    summary: Record<string, number>;
+  }> {
+    const response = await fetch(`${this.getBackendUrl()}/api/salesforce/orchestrator/generate-tests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) {
+      throw new Error(`Test generation failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // ========== INTEGRATION TESTING API ==========
+
+  /**
+   * Execute an API integration test
+   */
+  async executeIntegrationTest(config: {
+    method: string;
+    endpoint: string;
+    body?: any;
+    assertions?: Array<{
+      path: string;
+      condition: 'exists' | 'notEmpty' | 'equals' | 'contains' | 'greaterThan' | 'lessThan';
+      expected?: any;
+    }>;
+  }): Promise<{
+    success: boolean;
+    method: string;
+    endpoint: string;
+    statusCode?: number;
+    response: any;
+    assertions: Array<{
+      path: string;
+      condition: string;
+      expected?: any;
+      actual?: any;
+      passed: boolean;
+      error?: string;
+    }>;
+    error?: string;
+  }> {
+    const response = await fetch(`${this.getBackendUrl()}/api/salesforce/integration/execute-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      throw new Error(`Integration test failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Run a full CRUD test cycle on an object
+   */
+  async runCrudTest(objectName: string = 'Account'): Promise<{
+    object: string;
+    steps: Array<{
+      action: string;
+      success: boolean;
+      recordId?: string;
+      data?: any;
+      updatedFields?: string[];
+      error?: string;
+    }>;
+    success: boolean;
+    recordId?: string;
+    error?: string;
+  }> {
+    const response = await fetch(`${this.getBackendUrl()}/api/salesforce/integration/run-crud-test?object_name=${objectName}`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error(`CRUD test failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Helper to get backend URL
+  private getBackendUrl(): string {
+    return import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+  }
 }
 
 // Export singleton instance

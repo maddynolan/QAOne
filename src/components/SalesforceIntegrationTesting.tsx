@@ -159,6 +159,103 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
         }
       }
       
+      // Convert assertions to backend format
+      const backendAssertions = test.assertions.map(a => ({
+        path: a.path,
+        condition: a.operator === 'notEmpty' ? 'notEmpty' : 
+                   a.operator === 'exists' ? 'exists' : 
+                   a.operator === 'equals' ? 'equals' : 'contains',
+        expected: a.value,
+      }));
+      
+      // Use the new backend integration test endpoint
+      const result = await salesforceApi.executeIntegrationTest({
+        method: test.method,
+        endpoint: endpoint,
+        body: test.body ? JSON.parse(test.body) : undefined,
+        assertions: backendAssertions,
+      });
+      
+      const duration = Date.now() - startTime;
+      
+      // Convert backend results to our format
+      const assertionResults = result.assertions?.map(a => ({
+        path: a.path,
+        expected: a.expected?.toString() || '',
+        actual: a.actual?.toString() || '',
+        passed: a.passed,
+      })) || [];
+      
+      const allPassed = result.success && assertionResults.every(a => a.passed);
+      
+      const testResult: TestResult = {
+        testId: test.id,
+        testName: test.name,
+        status: allPassed ? 'pass' : 'fail',
+        duration,
+        request: {
+          method: test.method,
+          endpoint: endpoint,
+          body: test.body,
+        },
+        response: result.response,
+        assertions: assertionResults,
+        error: result.error,
+      };
+      
+      setApiTestResults(prev => [...prev.filter(r => r.testId !== test.id), testResult]);
+      
+      if (allPassed) {
+        toast.success(`Test "${test.name}" passed!`);
+      } else {
+        toast.error(`Test "${test.name}" failed`);
+      }
+      
+      return testResult;
+      
+    } catch (error: any) {
+      const duration = Date.now() - startTime;
+      
+      const testResult: TestResult = {
+        testId: test.id,
+        testName: test.name,
+        status: 'error',
+        duration,
+        request: {
+          method: test.method,
+          endpoint: test.endpoint,
+          body: test.body,
+        },
+        response: null,
+        assertions: [],
+        error: error.message,
+      };
+      
+      setApiTestResults(prev => [...prev.filter(r => r.testId !== test.id), testResult]);
+      
+      toast.error(`Test "${test.name}" error: ${error.message}`);
+      return testResult;
+    }
+  }, [isConnected]);
+
+  // Legacy local assertion runner (fallback)
+  const runApiTestLocal = useCallback(async (test: ApiTest) => {
+    if (!isConnected) {
+      toast.error('Please connect to a Salesforce org first');
+      return;
+    }
+    
+    const startTime = Date.now();
+    
+    try {
+      let endpoint = test.endpoint;
+      if (endpoint.includes('{accountId}')) {
+        const accounts = await salesforceApi.query('SELECT Id FROM Account LIMIT 1');
+        if (accounts.records.length > 0) {
+          endpoint = endpoint.replace('{accountId}', accounts.records[0].Id);
+        }
+      }
+      
       const response = await salesforceApi.request(endpoint, {
         method: test.method,
         body: test.body,
@@ -166,7 +263,7 @@ export function SalesforceIntegrationTesting({ isConnected }: SalesforceIntegrat
       
       const duration = Date.now() - startTime;
       
-      // Run assertions
+      // Run assertions locally
       const assertionResults = test.assertions.map(assertion => {
         const actualValue = getNestedValue(response, assertion.path);
         let passed = false;

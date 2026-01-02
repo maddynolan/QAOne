@@ -27,6 +27,48 @@ CREDENTIALS_FILE = Path(__file__).parent.parent.parent / "config" / "salesforce_
 
 
 # ============================================================================
+# Salesforce Client Helper
+# ============================================================================
+
+def get_salesforce_client():
+    """
+    Get a connected Salesforce client using stored credentials.
+    Returns None if not connected.
+    """
+    from simple_salesforce import Salesforce
+    
+    session_id = os.environ.get("SF_SESSION_ID")
+    instance_url = os.environ.get("SF_INSTANCE_URL")
+    
+    if not session_id or not instance_url:
+        # Try to load from credentials file
+        if CREDENTIALS_FILE.exists():
+            try:
+                with open(CREDENTIALS_FILE, "r") as f:
+                    creds = json.load(f)
+                session_id = creds.get("access_token")
+                instance_url = creds.get("instance_url")
+            except Exception as e:
+                logger.error(f"Failed to load credentials: {e}")
+                return None
+    
+    if not session_id or not instance_url:
+        logger.warning("No Salesforce credentials available")
+        return None
+    
+    try:
+        # Ensure instance_url is properly formatted
+        if not instance_url.startswith("https://"):
+            instance_url = f"https://{instance_url}"
+        
+        sf = Salesforce(instance_url=instance_url, session_id=session_id)
+        return sf
+    except Exception as e:
+        logger.error(f"Failed to create Salesforce client: {e}")
+        return None
+
+
+# ============================================================================
 # Auto-Reconnect Functions (Persist across restarts)
 # ============================================================================
 
@@ -1215,6 +1257,561 @@ async def generate_soql_code(request: SOQLAssertionRequest):
         "java": service.generate_assertion_code(request.query, request.expected_count, "java"),
         "typescript": service.generate_assertion_code(request.query, request.expected_count, "typescript")
     }
+
+
+# ============================================================================
+# Orchestrator Endpoints - Test Discovery & Generation
+# ============================================================================
+
+@router.get("/orchestrator/scan")
+async def orchestrator_scan_org():
+    """
+    Scan the connected Salesforce org for testable metadata:
+    - Validation Rules
+    - Flows (Process Builder, Flow Builder)
+    - Apex Triggers
+    - Apex Test Classes
+    - Custom Objects
+    
+    Returns discovered items that can be used to generate tests.
+    """
+    sf = get_salesforce_client()
+    if not sf:
+        raise HTTPException(status_code=400, detail="Not connected to Salesforce")
+    
+    results = {
+        "validation_rules": [],
+        "flows": [],
+        "triggers": [],
+        "apex_classes": [],
+        "custom_objects": [],
+        "summary": {
+            "total_items": 0,
+            "by_type": {}
+        }
+    }
+    
+    # Scan Validation Rules
+    try:
+        vr_result = sf.toolingexecute(
+            "query/?q=SELECT+Id,ValidationName,EntityDefinition.QualifiedApiName,Active,ErrorMessage,Description+FROM+ValidationRule+WHERE+Active=true"
+        )
+        for rule in vr_result.get('records', []):
+            results["validation_rules"].append({
+                "id": rule['Id'],
+                "name": rule['ValidationName'],
+                "object": rule['EntityDefinition']['QualifiedApiName'],
+                "type": "validation",
+                "active": rule.get('Active', True),
+                "errorMessage": rule.get('ErrorMessage', ''),
+                "description": rule.get('Description', '')
+            })
+    except Exception as e:
+        logger.warning(f"Error scanning validation rules: {e}")
+    
+    # Scan Flows via Tooling API
+    try:
+        flow_result = sf.toolingexecute(
+            "query/?q=SELECT+Id,MasterLabel,ProcessType,Status,Description+FROM+Flow+WHERE+Status='Active'"
+        )
+        for flow in flow_result.get('records', []):
+            results["flows"].append({
+                "id": flow['Id'],
+                "name": flow['MasterLabel'],
+                "type": "flow",
+                "processType": flow.get('ProcessType', 'Unknown'),
+                "status": flow.get('Status', ''),
+                "description": flow.get('Description', '')
+            })
+    except Exception as e:
+        logger.warning(f"Error scanning flows: {e}")
+    
+    # Scan Apex Triggers
+    try:
+        trigger_result = sf.query(
+            "SELECT Id, Name, TableEnumOrId, Status, IsValid FROM ApexTrigger WHERE Status = 'Active'"
+        )
+        for trigger in trigger_result.get('records', []):
+            results["triggers"].append({
+                "id": trigger['Id'],
+                "name": trigger['Name'],
+                "object": trigger['TableEnumOrId'],
+                "type": "trigger",
+                "valid": trigger.get('IsValid', True)
+            })
+    except Exception as e:
+        logger.warning(f"Error scanning triggers: {e}")
+    
+    # Scan Apex Test Classes
+    try:
+        class_result = sf.query(
+            "SELECT Id, Name, Status, IsValid FROM ApexClass WHERE (Name LIKE '%Test%' OR Name LIKE '%test%') AND Status = 'Active'"
+        )
+        for cls in class_result.get('records', []):
+            results["apex_classes"].append({
+                "id": cls['Id'],
+                "name": cls['Name'],
+                "type": "apex_test",
+                "valid": cls.get('IsValid', True)
+            })
+    except Exception as e:
+        logger.warning(f"Error scanning apex classes: {e}")
+    
+    # Scan Custom Objects
+    try:
+        obj_result = sf.query(
+            "SELECT Id, DeveloperName, QualifiedApiName, Label FROM EntityDefinition WHERE IsCustomizable = true AND QualifiedApiName LIKE '%__c' LIMIT 50"
+        )
+        for obj in obj_result.get('records', []):
+            results["custom_objects"].append({
+                "id": obj['Id'],
+                "name": obj['QualifiedApiName'],
+                "label": obj.get('Label', obj['DeveloperName']),
+                "type": "custom_object",
+                "developerName": obj['DeveloperName']
+            })
+    except Exception as e:
+        logger.warning(f"Error scanning custom objects: {e}")
+    
+    # Calculate summary
+    results["summary"]["by_type"] = {
+        "validation_rules": len(results["validation_rules"]),
+        "flows": len(results["flows"]),
+        "triggers": len(results["triggers"]),
+        "apex_classes": len(results["apex_classes"]),
+        "custom_objects": len(results["custom_objects"])
+    }
+    results["summary"]["total_items"] = sum(results["summary"]["by_type"].values())
+    
+    return results
+
+
+class TestGenerationRequest(BaseModel):
+    object_name: str = Field(default="Account", description="Object to generate tests for")
+    test_types: List[str] = Field(default=["crud", "validation", "api"], description="Types of tests to generate")
+    include_negative_tests: bool = Field(default=True)
+    include_boundary_tests: bool = Field(default=True)
+
+
+@router.post("/orchestrator/generate-tests")
+async def orchestrator_generate_tests(request: TestGenerationRequest):
+    """
+    Generate test cases based on object schema and discovered metadata.
+    
+    Returns a test suite with:
+    - CRUD tests (Create, Read, Update, Delete)
+    - Validation rule tests (positive and negative)
+    - API endpoint tests
+    - Field validation tests
+    """
+    sf = get_salesforce_client()
+    if not sf:
+        raise HTTPException(status_code=400, detail="Not connected to Salesforce")
+    
+    tests = []
+    test_id = 1
+    
+    try:
+        # Get object describe
+        obj_describe = getattr(sf, request.object_name).describe()
+        fields = obj_describe.get('fields', [])
+        required_fields = [f for f in fields if not f.get('nillable', True) and f.get('createable', True)]
+        
+        # Get validation rules for this object
+        vr_result = sf.toolingexecute(
+            f"query/?q=SELECT+Id,ValidationName,ErrorMessage,Description+FROM+ValidationRule+WHERE+EntityDefinition.QualifiedApiName='{request.object_name}'+AND+Active=true"
+        )
+        validation_rules = vr_result.get('records', [])
+        
+    except Exception as e:
+        logger.error(f"Error describing object: {e}")
+        raise HTTPException(status_code=400, detail=f"Could not describe object {request.object_name}: {str(e)}")
+    
+    # Generate CRUD Tests
+    if "crud" in request.test_types:
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"Create {request.object_name} - Valid Data",
+            "category": "CRUD",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "create",
+            "description": f"Verify that a valid {request.object_name} record can be created",
+            "steps": [
+                f"Create {request.object_name} with all required fields",
+                "Verify record is created successfully",
+                "Verify all field values are saved correctly"
+            ],
+            "expectedResult": "Record created successfully with valid ID"
+        })
+        test_id += 1
+        
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"Read {request.object_name} by ID",
+            "category": "CRUD",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "read",
+            "description": f"Verify that a {request.object_name} record can be retrieved by ID",
+            "steps": [
+                f"Query {request.object_name} by ID",
+                "Verify record data is returned",
+                "Verify all fields are accessible"
+            ],
+            "expectedResult": "Record data returned correctly"
+        })
+        test_id += 1
+        
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"Update {request.object_name}",
+            "category": "CRUD",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "update",
+            "description": f"Verify that a {request.object_name} record can be updated",
+            "steps": [
+                f"Retrieve existing {request.object_name}",
+                "Update field values",
+                "Save changes",
+                "Verify updates are persisted"
+            ],
+            "expectedResult": "Record updated successfully"
+        })
+        test_id += 1
+        
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"Delete {request.object_name}",
+            "category": "CRUD",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "delete",
+            "description": f"Verify that a {request.object_name} record can be deleted",
+            "steps": [
+                f"Create test {request.object_name}",
+                "Delete the record",
+                "Verify record no longer exists"
+            ],
+            "expectedResult": "Record deleted successfully"
+        })
+        test_id += 1
+    
+    # Generate Validation Rule Tests
+    if "validation" in request.test_types:
+        for vr in validation_rules:
+            # Positive test (valid data should pass)
+            tests.append({
+                "id": f"test_{test_id}",
+                "name": f"Validation: {vr['ValidationName']} - Valid Data",
+                "category": "Validation",
+                "type": "positive",
+                "object": request.object_name,
+                "action": "validate",
+                "validationRule": vr['ValidationName'],
+                "description": f"Verify valid data passes validation: {vr.get('Description', vr['ValidationName'])}",
+                "steps": [
+                    "Prepare valid data that satisfies validation rule",
+                    f"Create/Update {request.object_name}",
+                    "Verify operation succeeds"
+                ],
+                "expectedResult": "Record saved successfully (validation passes)"
+            })
+            test_id += 1
+            
+            # Negative test (invalid data should fail)
+            if request.include_negative_tests:
+                tests.append({
+                    "id": f"test_{test_id}",
+                    "name": f"Validation: {vr['ValidationName']} - Invalid Data",
+                    "category": "Validation",
+                    "type": "negative",
+                    "object": request.object_name,
+                    "action": "validate",
+                    "validationRule": vr['ValidationName'],
+                    "description": f"Verify invalid data triggers validation error",
+                    "steps": [
+                        "Prepare invalid data that violates validation rule",
+                        f"Attempt to Create/Update {request.object_name}",
+                        "Verify validation error is returned"
+                    ],
+                    "expectedResult": f"Validation error: {vr.get('ErrorMessage', 'Validation failed')}"
+                })
+                test_id += 1
+    
+    # Generate API Tests
+    if "api" in request.test_types:
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"API: GET /sobjects/{request.object_name}/describe",
+            "category": "API Tests",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "api_call",
+            "method": "GET",
+            "endpoint": f"/sobjects/{request.object_name}/describe",
+            "description": f"Verify {request.object_name} describe endpoint returns metadata",
+            "steps": [
+                f"Call GET /sobjects/{request.object_name}/describe",
+                "Verify response status is 200",
+                "Verify fields array is returned"
+            ],
+            "expectedResult": "Metadata returned with fields and record types"
+        })
+        test_id += 1
+        
+        tests.append({
+            "id": f"test_{test_id}",
+            "name": f"API: POST /sobjects/{request.object_name}",
+            "category": "API Tests",
+            "type": "positive",
+            "object": request.object_name,
+            "action": "api_call",
+            "method": "POST",
+            "endpoint": f"/sobjects/{request.object_name}",
+            "description": f"Verify {request.object_name} can be created via REST API",
+            "steps": [
+                "Prepare valid JSON payload with required fields",
+                f"POST to /sobjects/{request.object_name}",
+                "Verify response contains new record ID"
+            ],
+            "expectedResult": "201 Created with record ID"
+        })
+        test_id += 1
+    
+    # Generate Boundary Tests
+    if request.include_boundary_tests:
+        for field in required_fields[:5]:  # Limit to first 5 required fields
+            if field['type'] == 'string':
+                tests.append({
+                    "id": f"test_{test_id}",
+                    "name": f"Boundary: {field['name']} - Max Length",
+                    "category": "Boundary Tests",
+                    "type": "boundary",
+                    "object": request.object_name,
+                    "field": field['name'],
+                    "action": "boundary_test",
+                    "description": f"Verify {field['name']} handles max length ({field.get('length', 'N/A')} chars)",
+                    "steps": [
+                        f"Create {request.object_name} with {field['name']} at max length",
+                        "Verify record is created",
+                        "Verify value is truncated or saved correctly"
+                    ],
+                    "expectedResult": "Field handles max length appropriately"
+                })
+                test_id += 1
+    
+    return {
+        "object": request.object_name,
+        "testCount": len(tests),
+        "tests": tests,
+        "summary": {
+            "crud": len([t for t in tests if t["category"] == "CRUD"]),
+            "validation": len([t for t in tests if t["category"] == "Validation"]),
+            "api": len([t for t in tests if t["category"] == "API Tests"]),
+            "boundary": len([t for t in tests if t["category"] == "Boundary Tests"])
+        }
+    }
+
+
+# ============================================================================
+# Integration Testing Endpoints - Execute API Tests
+# ============================================================================
+
+class IntegrationTestRequest(BaseModel):
+    method: str = Field(description="HTTP method (GET, POST, PATCH, DELETE)")
+    endpoint: str = Field(description="API endpoint path")
+    body: Optional[Dict[str, Any]] = Field(default=None, description="Request body for POST/PATCH")
+    assertions: List[Dict[str, Any]] = Field(default=[], description="Assertions to validate response")
+
+
+@router.post("/integration/execute-test")
+async def execute_integration_test(request: IntegrationTestRequest):
+    """
+    Execute an API test against the connected Salesforce org.
+    
+    Supports:
+    - GET, POST, PATCH, DELETE methods
+    - Response validation with assertions
+    - Field path checking (e.g., response.Id exists)
+    """
+    sf = get_salesforce_client()
+    if not sf:
+        raise HTTPException(status_code=400, detail="Not connected to Salesforce")
+    
+    result = {
+        "success": False,
+        "method": request.method,
+        "endpoint": request.endpoint,
+        "response": None,
+        "assertions": [],
+        "error": None
+    }
+    
+    try:
+        # Build full URL
+        base_url = f"https://{sf.sf_instance}/services/data/v59.0"
+        full_url = f"{base_url}{request.endpoint}"
+        
+        # Execute request based on method
+        import httpx
+        headers = {
+            "Authorization": f"Bearer {sf.session_id}",
+            "Content-Type": "application/json"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            if request.method.upper() == "GET":
+                response = await client.get(full_url, headers=headers)
+            elif request.method.upper() == "POST":
+                response = await client.post(full_url, headers=headers, json=request.body or {})
+            elif request.method.upper() == "PATCH":
+                response = await client.patch(full_url, headers=headers, json=request.body or {})
+            elif request.method.upper() == "DELETE":
+                response = await client.delete(full_url, headers=headers)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported method: {request.method}")
+        
+        result["statusCode"] = response.status_code
+        
+        # Parse response
+        try:
+            result["response"] = response.json()
+        except:
+            result["response"] = response.text
+        
+        # Run assertions
+        for assertion in request.assertions:
+            assertion_result = {
+                "path": assertion.get("path"),
+                "condition": assertion.get("condition"),
+                "expected": assertion.get("expected"),
+                "passed": False,
+                "actual": None
+            }
+            
+            # Get value at path
+            try:
+                value = result["response"]
+                for key in assertion.get("path", "").split("."):
+                    if key and isinstance(value, dict):
+                        value = value.get(key)
+                assertion_result["actual"] = value
+                
+                # Evaluate condition
+                condition = assertion.get("condition", "exists")
+                if condition == "exists":
+                    assertion_result["passed"] = value is not None
+                elif condition == "notEmpty":
+                    assertion_result["passed"] = bool(value)
+                elif condition == "equals":
+                    assertion_result["passed"] = value == assertion.get("expected")
+                elif condition == "contains":
+                    assertion_result["passed"] = assertion.get("expected") in str(value)
+                elif condition == "greaterThan":
+                    assertion_result["passed"] = float(value) > float(assertion.get("expected", 0))
+                elif condition == "lessThan":
+                    assertion_result["passed"] = float(value) < float(assertion.get("expected", 0))
+                    
+            except Exception as e:
+                assertion_result["error"] = str(e)
+            
+            result["assertions"].append(assertion_result)
+        
+        # Overall success
+        result["success"] = response.status_code < 400 and all(a.get("passed") for a in result["assertions"])
+        
+    except Exception as e:
+        result["error"] = str(e)
+        logger.error(f"Integration test error: {e}")
+    
+    return result
+
+
+@router.post("/integration/run-crud-test")
+async def run_crud_test(object_name: str = "Account"):
+    """
+    Run a full CRUD test cycle on an object.
+    Creates, reads, updates, and deletes a test record.
+    """
+    sf = get_salesforce_client()
+    if not sf:
+        raise HTTPException(status_code=400, detail="Not connected to Salesforce")
+    
+    results = {
+        "object": object_name,
+        "steps": [],
+        "success": True,
+        "recordId": None
+    }
+    
+    test_data = {
+        "Account": {"Name": f"CRUD Test {__import__('time').time()}", "Industry": "Technology", "Website": "https://crudtest.example.com"},
+        "Contact": {"FirstName": "Test", "LastName": f"Contact {__import__('time').time()}", "Email": "test@example.com"},
+        "Lead": {"Company": f"Test Company {__import__('time').time()}", "LastName": "Lead"},
+        "Opportunity": {"Name": f"Test Opp {__import__('time').time()}", "StageName": "Prospecting", "CloseDate": "2025-12-31"}
+    }
+    
+    data = test_data.get(object_name, {"Name": f"Test {__import__('time').time()}"})
+    
+    try:
+        # CREATE
+        sf_object = getattr(sf, object_name)
+        create_result = sf_object.create(data)
+        record_id = create_result.get('id')
+        results["recordId"] = record_id
+        results["steps"].append({
+            "action": "CREATE",
+            "success": bool(record_id),
+            "recordId": record_id
+        })
+        
+        # READ
+        if record_id:
+            read_result = sf_object.get(record_id)
+            results["steps"].append({
+                "action": "READ",
+                "success": bool(read_result.get('Id')),
+                "data": {k: v for k, v in read_result.items() if not k.startswith('attributes')}
+            })
+        
+        # UPDATE
+        if record_id:
+            update_data = {"Description": f"Updated at {__import__('time').time()}"}
+            sf_object.update(record_id, update_data)
+            results["steps"].append({
+                "action": "UPDATE",
+                "success": True,
+                "updatedFields": list(update_data.keys())
+            })
+        
+        # DELETE
+        if record_id:
+            sf_object.delete(record_id)
+            results["steps"].append({
+                "action": "DELETE",
+                "success": True
+            })
+            results["recordId"] = None  # Cleared after delete
+            
+    except Exception as e:
+        results["success"] = False
+        results["error"] = str(e)
+        results["steps"].append({
+            "action": "ERROR",
+            "success": False,
+            "error": str(e)
+        })
+        
+        # Cleanup on error
+        if results.get("recordId"):
+            try:
+                getattr(sf, object_name).delete(results["recordId"])
+            except:
+                pass
+    
+    return results
 
 
 

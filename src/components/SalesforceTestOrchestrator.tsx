@@ -105,8 +105,7 @@ export function SalesforceTestOrchestrator({
   // ========== DISCOVERY ==========
   
   const scanOrg = useCallback(async () => {
-    const currentOrg = salesforceApi.getCurrentOrg();
-    if (!currentOrg) {
+    if (!isConnected) {
       toast.error('Please connect to a Salesforce org first');
       return;
     }
@@ -115,91 +114,87 @@ export function SalesforceTestOrchestrator({
     setScanProgress(0);
     setDiscoveredItems([]);
     
-    const items: DiscoveredItem[] = [];
-    
     try {
-      // Scan Validation Rules
-      setScanProgress(10);
-      toast.info('Scanning validation rules...');
-      try {
-        const validationQuery = `SELECT Id, ValidationName, EntityDefinition.QualifiedApiName, Active, Description FROM ValidationRule LIMIT 100`;
-        const validationResult = await salesforceApi.toolingQuery(validationQuery);
-        (validationResult.records || []).forEach((rule: any) => {
-          items.push({
-            type: 'validation',
-            id: rule.Id,
-            name: rule.ValidationName,
-            object: rule.EntityDefinition?.QualifiedApiName,
-            description: rule.Description,
-            active: rule.Active,
-            testable: true,
-          });
+      setScanProgress(20);
+      toast.info('Scanning org metadata via backend...');
+      
+      // Call the new backend orchestrator scan endpoint
+      const scanResult = await salesforceApi.orchestratorScan();
+      
+      setScanProgress(80);
+      
+      // Convert backend results to DiscoveredItem format
+      const items: DiscoveredItem[] = [];
+      
+      // Validation Rules
+      for (const rule of scanResult.validation_rules || []) {
+        items.push({
+          type: 'validation',
+          id: rule.id,
+          name: rule.name,
+          object: rule.object,
+          description: rule.description || rule.errorMessage,
+          active: rule.active,
+          testable: true,
         });
-      } catch (e) {
-        console.warn('Could not scan validation rules:', e);
       }
       
-      // Scan Flows
-      setScanProgress(30);
-      toast.info('Scanning flows...');
-      try {
-        const flowQuery = `SELECT Id, DeveloperName, MasterLabel, ProcessType, Description FROM FlowDefinition WHERE ProcessType IN ('Workflow', 'AutoLaunchedFlow', 'Flow') LIMIT 100`;
-        const flowResult = await salesforceApi.toolingQuery(flowQuery);
-        (flowResult.records || []).forEach((flow: any) => {
-          items.push({
-            type: 'flow',
-            id: flow.Id,
-            name: flow.MasterLabel || flow.DeveloperName,
-            description: flow.Description,
-            active: true,
-            testable: true,
-          });
+      // Flows
+      for (const flow of scanResult.flows || []) {
+        items.push({
+          type: 'flow',
+          id: flow.id,
+          name: flow.name,
+          description: flow.description,
+          active: true,
+          testable: true,
         });
-      } catch (e) {
-        console.warn('Could not scan flows:', e);
       }
       
-      // Scan Apex Test Classes
-      setScanProgress(50);
-      toast.info('Scanning Apex classes...');
-      try {
-        const apexQuery = `SELECT Id, Name FROM ApexClass WHERE Status = 'Active' AND (Name LIKE '%Test%' OR Name LIKE '%test%') LIMIT 50`;
-        const apexResult = await salesforceApi.toolingQuery(apexQuery);
-        (apexResult.records || []).forEach((cls: any) => {
-          items.push({
-            type: 'apex',
-            id: cls.Id,
-            name: cls.Name,
-            testable: true,
-          });
+      // Triggers
+      for (const trigger of scanResult.triggers || []) {
+        items.push({
+          type: 'trigger',
+          id: trigger.id,
+          name: trigger.name,
+          object: trigger.object,
+          active: trigger.valid,
+          testable: true,
         });
-      } catch (e) {
-        console.warn('Could not scan Apex classes:', e);
       }
       
-      // Scan Triggers
-      setScanProgress(70);
-      toast.info('Scanning triggers...');
-      try {
-        const triggerQuery = `SELECT Id, Name, TableEnumOrId FROM ApexTrigger WHERE Status = 'Active' LIMIT 50`;
-        const triggerResult = await salesforceApi.toolingQuery(triggerQuery);
-        (triggerResult.records || []).forEach((trigger: any) => {
-          items.push({
-            type: 'trigger',
-            id: trigger.Id,
-            name: trigger.Name,
-            object: trigger.TableEnumOrId,
-            active: true,
-            testable: true,
-          });
+      // Apex Test Classes
+      for (const cls of scanResult.apex_classes || []) {
+        items.push({
+          type: 'apex',
+          id: cls.id,
+          name: cls.name,
+          active: cls.valid,
+          testable: true,
         });
-      } catch (e) {
-        console.warn('Could not scan triggers:', e);
+      }
+      
+      // Custom Objects
+      for (const obj of scanResult.custom_objects || []) {
+        items.push({
+          type: 'object',
+          id: obj.id,
+          name: obj.name,
+          description: obj.label,
+          testable: true,
+        });
       }
       
       setScanProgress(100);
       setDiscoveredItems(items);
-      toast.success(`Discovery complete! Found ${items.length} testable items`);
+      
+      toast.success(
+        `Discovery complete! Found ${scanResult.summary.total_items} testable items: ` +
+        `${scanResult.summary.by_type.validation_rules || 0} validation rules, ` +
+        `${scanResult.summary.by_type.flows || 0} flows, ` +
+        `${scanResult.summary.by_type.triggers || 0} triggers, ` +
+        `${scanResult.summary.by_type.apex_classes || 0} apex classes`
+      );
       
     } catch (error: any) {
       console.error('Scan error:', error);
@@ -207,168 +202,102 @@ export function SalesforceTestOrchestrator({
     } finally {
       setIsScanning(false);
     }
-  }, []);
+  }, [isConnected]);
 
   // ========== TEST GENERATION ==========
   
   const generateTestSuite = useCallback(async () => {
-    const currentOrg = salesforceApi.getCurrentOrg();
-    if (!currentOrg) {
+    if (!isConnected) {
       toast.error('Please connect to a Salesforce org first');
       return;
     }
     
     setIsGenerating(true);
-    const tests: GeneratedTest[] = [];
     
     try {
-      // Get object metadata
-      toast.info(`Analyzing ${selectedObject}...`);
-      let objectDescribe: any = null;
-      try {
-        objectDescribe = await salesforceApi.describeSObject(selectedObject);
-      } catch (e) {
-        console.warn('Could not describe object:', e);
-      }
+      toast.info(`Generating test suite for ${selectedObject}...`);
       
-      // CRUD Tests
-      if (options.includeCrudTests) {
-        tests.push({
-          id: `crud-create-${Date.now()}`,
-          name: `Create ${selectedObject}`,
-          type: 'positive',
-          category: 'CRUD',
-          sourceItem: selectedObject,
-          steps: [
-            `Navigate to ${selectedObject} tab`,
-            'Click New button',
-            'Fill required fields',
-            'Click Save',
-            `Verify ${selectedObject} record is created`,
-          ],
-          assertions: [
-            'Record ID is generated',
-            'All fields are saved correctly',
-            'Record appears in list view',
-          ],
-          status: 'ready',
-        });
-        
-        tests.push({
-          id: `crud-read-${Date.now()}`,
-          name: `View ${selectedObject}`,
-          type: 'positive',
-          category: 'CRUD',
-          sourceItem: selectedObject,
-          steps: [
-            `Navigate to ${selectedObject} list`,
-            'Click on a record',
-            'Verify record details page loads',
-          ],
-          assertions: [
-            'Record details are displayed',
-            'All fields are visible',
-            'Related lists load correctly',
-          ],
-          status: 'ready',
-        });
-        
-        tests.push({
-          id: `crud-update-${Date.now()}`,
-          name: `Edit ${selectedObject}`,
-          type: 'positive',
-          category: 'CRUD',
-          sourceItem: selectedObject,
-          steps: [
-            `Open ${selectedObject} record`,
-            'Click Edit',
-            'Modify fields',
-            'Click Save',
-            'Verify changes are saved',
-          ],
-          assertions: [
-            'Edit mode is activated',
-            'Fields are editable',
-            'Changes are persisted',
-          ],
-          status: 'ready',
-        });
-        
-        tests.push({
-          id: `crud-delete-${Date.now()}`,
-          name: `Delete ${selectedObject}`,
-          type: 'positive',
-          category: 'CRUD',
-          sourceItem: selectedObject,
-          steps: [
-            `Open ${selectedObject} record`,
-            'Click Delete',
-            'Confirm deletion',
-            'Verify record is deleted',
-          ],
-          assertions: [
-            'Confirmation dialog appears',
-            'Record is removed',
-            'Record in Recycle Bin',
-          ],
-          status: 'ready',
-        });
-      }
+      // Determine which test types to include
+      const testTypes: string[] = [];
+      if (options.includeCrudTests) testTypes.push('crud');
+      if (options.includeValidationTests) testTypes.push('validation');
+      if (options.includeApiTests) testTypes.push('api');
       
-      // Validation Rule Tests
+      // Call backend to generate tests
+      const result = await salesforceApi.orchestratorGenerateTests({
+        object_name: selectedObject,
+        test_types: testTypes,
+        include_negative_tests: options.includeNegativeTests,
+        include_boundary_tests: options.includeBoundaryTests,
+      });
+      
+      // Convert backend tests to our format
+      const tests: GeneratedTest[] = result.tests.map((test: any) => ({
+        id: test.id,
+        name: test.name,
+        type: test.type as GeneratedTest['type'],
+        category: test.category,
+        sourceItem: test.validationRule || test.object || selectedObject,
+        steps: test.steps || [],
+        assertions: [test.expectedResult || 'Test passes'],
+        status: 'ready' as const,
+        testData: test.testData,
+      }));
+      
+      // Also add local validation/flow tests from discovered items
       if (options.includeValidationTests) {
         const validationItems = discoveredItems.filter(
           item => item.type === 'validation' && item.object === selectedObject
         );
         
         for (const rule of validationItems) {
-          // Positive test (valid data)
-          tests.push({
-            id: `val-pos-${rule.id}`,
-            name: `${rule.name} - Valid Data`,
-            type: 'positive',
-            category: 'Validation Rules',
-            sourceItem: rule.name,
-            steps: [
-              `Create ${selectedObject} with valid data`,
-              'Ensure all validation criteria are met',
-              'Save the record',
-            ],
-            assertions: [
-              'Record saves successfully',
-              'No validation errors',
-            ],
-            status: 'ready',
-          });
-          
-          // Negative test (invalid data)
-          if (options.includeNegativeTests) {
+          // Check if we already have tests for this rule
+          const hasTest = tests.some(t => t.sourceItem === rule.name);
+          if (!hasTest) {
             tests.push({
-              id: `val-neg-${rule.id}`,
-              name: `${rule.name} - Invalid Data`,
-              type: 'negative',
+              id: `val-pos-${rule.id}`,
+              name: `${rule.name} - Valid Data`,
+              type: 'positive',
               category: 'Validation Rules',
               sourceItem: rule.name,
               steps: [
-                `Create ${selectedObject} with invalid data`,
-                'Violate the validation rule criteria',
-                'Attempt to save',
+                `Create ${selectedObject} with valid data`,
+                'Ensure all validation criteria are met',
+                'Save the record',
               ],
               assertions: [
-                'Validation error is displayed',
-                'Record is NOT saved',
-                'Error message matches rule message',
+                'Record saves successfully',
+                'No validation errors',
               ],
               status: 'ready',
             });
+            
+            if (options.includeNegativeTests) {
+              tests.push({
+                id: `val-neg-${rule.id}`,
+                name: `${rule.name} - Invalid Data`,
+                type: 'negative',
+                category: 'Validation Rules',
+                sourceItem: rule.name,
+                steps: [
+                  `Create ${selectedObject} with invalid data`,
+                  `Violate: ${rule.description || rule.name}`,
+                  'Attempt to save',
+                ],
+                assertions: [
+                  'Validation error is displayed',
+                  'Record is NOT saved',
+                ],
+                status: 'ready',
+              });
+            }
           }
         }
       }
       
-      // Flow Tests
+      // Add flow tests from discovered items
       if (options.includeFlowTests) {
         const flowItems = discoveredItems.filter(item => item.type === 'flow');
-        
         for (const flow of flowItems.slice(0, 5)) {
           tests.push({
             id: `flow-${flow.id}`,
@@ -385,100 +314,6 @@ export function SalesforceTestOrchestrator({
               'Flow is triggered',
               'Expected actions are performed',
               'Data is updated correctly',
-            ],
-            status: 'ready',
-          });
-        }
-      }
-      
-      // API Tests
-      if (options.includeApiTests) {
-        tests.push({
-          id: `api-query-${Date.now()}`,
-          name: `API: Query ${selectedObject}`,
-          type: 'integration',
-          category: 'API Tests',
-          sourceItem: 'REST API',
-          steps: [
-            `Send GET request to /query?q=SELECT+Id,Name+FROM+${selectedObject}`,
-            'Verify response status 200',
-            'Verify records returned',
-          ],
-          assertions: [
-            'HTTP 200 response',
-            'Response contains records array',
-            'totalSize is present',
-          ],
-          status: 'ready',
-        });
-        
-        tests.push({
-          id: `api-create-${Date.now()}`,
-          name: `API: Create ${selectedObject}`,
-          type: 'integration',
-          category: 'API Tests',
-          sourceItem: 'REST API',
-          steps: [
-            `Send POST request to /sobjects/${selectedObject}`,
-            'Include required fields in body',
-            'Verify response status 201',
-          ],
-          assertions: [
-            'HTTP 201 response',
-            'Response contains id',
-            'success is true',
-          ],
-          status: 'ready',
-        });
-      }
-      
-      // Field Tests
-      if (options.includeFieldTests && objectDescribe) {
-        const requiredFields = objectDescribe.fields?.filter(
-          (f: any) => !f.nillable && f.createable && f.name !== 'Id'
-        ) || [];
-        
-        for (const field of requiredFields.slice(0, 3)) {
-          tests.push({
-            id: `field-req-${field.name}`,
-            name: `Required Field: ${field.label}`,
-            type: 'negative',
-            category: 'Field Validation',
-            sourceItem: field.name,
-            steps: [
-              `Create ${selectedObject} without ${field.label}`,
-              'Attempt to save',
-            ],
-            assertions: [
-              'Required field error is shown',
-              'Record is NOT saved',
-            ],
-            status: 'ready',
-          });
-        }
-      }
-      
-      // Boundary Tests
-      if (options.includeBoundaryTests && objectDescribe) {
-        const textFields = objectDescribe.fields?.filter(
-          (f: any) => f.type === 'string' && f.length > 0 && f.createable
-        ) || [];
-        
-        for (const field of textFields.slice(0, 2)) {
-          tests.push({
-            id: `boundary-${field.name}`,
-            name: `Boundary: ${field.label} Max Length`,
-            type: 'boundary',
-            category: 'Boundary Tests',
-            sourceItem: field.name,
-            steps: [
-              `Enter ${field.length} characters in ${field.label}`,
-              `Enter ${field.length + 1} characters`,
-              'Verify behavior',
-            ],
-            assertions: [
-              `${field.length} chars accepted`,
-              `${field.length + 1} chars rejected or truncated`,
             ],
             status: 'ready',
           });
@@ -513,7 +348,7 @@ export function SalesforceTestOrchestrator({
         coverage: {
           validationRules: tests.filter(t => t.category === 'Validation Rules').length / 2,
           flows: tests.filter(t => t.category === 'Flows & Automation').length,
-          fields: tests.filter(t => t.category === 'Field Validation').length,
+          fields: tests.filter(t => t.category === 'Field Validation' || t.category === 'Boundary Tests').length,
           crud: options.includeCrudTests,
         },
         createdAt: new Date().toISOString(),
@@ -528,7 +363,68 @@ export function SalesforceTestOrchestrator({
     } finally {
       setIsGenerating(false);
     }
-  }, [selectedObject, options, discoveredItems]);
+  }, [selectedObject, options, discoveredItems, isConnected]);
+
+  // ========== TEST EXECUTION ==========
+  
+  const [isRunningCrud, setIsRunningCrud] = useState(false);
+  const [crudResults, setCrudResults] = useState<any>(null);
+  
+  const runCrudTest = useCallback(async () => {
+    if (!isConnected) {
+      toast.error('Please connect to a Salesforce org first');
+      return;
+    }
+    
+    setIsRunningCrud(true);
+    setCrudResults(null);
+    
+    try {
+      toast.info(`Running CRUD test on ${selectedObject}...`);
+      const result = await salesforceApi.runCrudTest(selectedObject);
+      setCrudResults(result);
+      
+      if (result.success) {
+        toast.success(`CRUD test passed for ${selectedObject}!`);
+      } else {
+        toast.error(`CRUD test failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      toast.error('CRUD test failed: ' + error.message);
+      setCrudResults({ success: false, error: error.message, steps: [] });
+    } finally {
+      setIsRunningCrud(false);
+    }
+  }, [selectedObject, isConnected]);
+
+  const runApiTest = useCallback(async (method: string, endpoint: string) => {
+    if (!isConnected) {
+      toast.error('Please connect to a Salesforce org first');
+      return;
+    }
+    
+    try {
+      toast.info(`Running API test: ${method} ${endpoint}...`);
+      const result = await salesforceApi.executeIntegrationTest({
+        method,
+        endpoint,
+        assertions: [
+          { path: 'Id', condition: 'exists' },
+        ],
+      });
+      
+      if (result.success) {
+        toast.success(`API test passed!`);
+      } else {
+        toast.error(`API test failed: ${result.error || 'Assertion failed'}`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      toast.error('API test failed: ' + error.message);
+      return null;
+    }
+  }, [isConnected]);
 
   // ========== EXPORT ==========
   
@@ -873,24 +769,104 @@ ${test.assertions.map(a => `- ${a}`).join('\n')}
         </Card>
       )}
 
+      {/* CRUD Test Results */}
+      {crudResults && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-foreground flex items-center gap-2">
+              {crudResults.success ? (
+                <CheckCircle className="w-5 h-5 text-green-400" />
+              ) : (
+                <XCircle className="w-5 h-5 text-red-400" />
+              )}
+              CRUD Test Results - {selectedObject}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {crudResults.steps?.map((step: any, idx: number) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-lg border ${
+                    step.success
+                      ? 'bg-green-500/10 border-green-500/30'
+                      : 'bg-red-500/10 border-red-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {step.success ? (
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-400" />
+                    )}
+                    <span className="font-medium text-foreground">{step.action}</span>
+                    {step.recordId && (
+                      <Badge variant="outline" className="text-xs">
+                        ID: {step.recordId}
+                      </Badge>
+                    )}
+                  </div>
+                  {step.error && (
+                    <p className="text-sm text-red-400 mt-1">{step.error}</p>
+                  )}
+                  {step.data && (
+                    <pre className="text-xs text-muted-foreground mt-2 overflow-x-auto">
+                      {JSON.stringify(step.data, null, 2).slice(0, 200)}...
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
-        {[
-          { icon: Target, label: 'Run All Tests', color: 'green', action: () => toast.info('Coming soon!') },
-          { icon: TestTube, label: 'Record Tests', color: 'blue', action: () => toast.info('Coming soon!') },
-          { icon: BarChart, label: 'View Report', color: 'purple', action: () => toast.info('Coming soon!') },
-          { icon: Settings, label: 'Configure', color: 'primary', action: () => toast.info('Coming soon!') },
-        ].map((action, idx) => (
-          <Button
-            key={idx}
-            variant="outline"
-            onClick={action.action}
-            className={`h-16 flex-col gap-1 text-foreground border-border hover:border-${action.color}-500/50 hover:bg-${action.color}-500/10`}
-          >
-            <action.icon className={`w-5 h-5 text-${action.color}-400`} />
-            <span className="text-xs">{action.label}</span>
-          </Button>
-        ))}
+        <Button
+          variant="outline"
+          onClick={runCrudTest}
+          disabled={isRunningCrud || !isConnected}
+          className="h-16 flex-col gap-1 text-foreground border-border hover:border-green-500/50 hover:bg-green-500/10"
+        >
+          {isRunningCrud ? (
+            <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
+          ) : (
+            <Target className="w-5 h-5 text-green-400" />
+          )}
+          <span className="text-xs">Run CRUD Test</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => runApiTest('GET', `/sobjects/${selectedObject}/describe`)}
+          disabled={!isConnected}
+          className="h-16 flex-col gap-1 text-foreground border-border hover:border-blue-500/50 hover:bg-blue-500/10"
+        >
+          <TestTube className="w-5 h-5 text-blue-400" />
+          <span className="text-xs">Test API</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={exportSuite}
+          disabled={!generatedSuite}
+          className="h-16 flex-col gap-1 text-foreground border-border hover:border-purple-500/50 hover:bg-purple-500/10"
+        >
+          <Download className="w-5 h-5 text-purple-400" />
+          <span className="text-xs">Export Suite</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setDiscoveredItems([]);
+            setGeneratedSuite(null);
+            setCrudResults(null);
+            toast.info('Cleared all results');
+          }}
+          className="h-16 flex-col gap-1 text-foreground border-border hover:border-primary/50 hover:bg-primary/10"
+        >
+          <RefreshCw className="w-5 h-5 text-primary" />
+          <span className="text-xs">Reset</span>
+        </Button>
       </div>
     </div>
   );
