@@ -1,0 +1,123 @@
+{
+  "validation_rules": [
+    {
+      "attributes": {
+        "type": "ValidationRule",
+        "url": "/services/data/v59.0/tooling/sobjects/ValidationRule/03dg5000000AsVNAA0"
+      },
+      "Id": "03dg5000000AsVNAA0",
+      "ValidationName": "Phone_Required_For_Hot_Accounts",
+      "EntityDefinition": {
+        "attributes": {
+          "type": "EntityDefinition",
+          "url": "/services/data/v59.0/tooling/sobjects/EntityDefinition/Account"
+        },
+        "QualifiedApiName": "Account"
+      },
+      "Active": true,
+      "ErrorMessage": "Hot accounts must have a phone number\r\nField (Phone)"
+    },
+    {
+      "attributes": {
+        "type": "ValidationRule",
+        "url": "/services/data/v59.0/tooling/sobjects/ValidationRule/03dg5000000BAFNAA4"
+      },
+      "Id": "03dg5000000BAFNAA4",
+      "ValidationName": "Flowstral_Website_Required_Tech",
+      "EntityDefinition": {
+        "attributes": {
+          "type": "EntityDefinition",
+          "url": "/services/data/v59.0/tooling/sobjects/EntityDefinition/Account"
+        },
+        "QualifiedApiName": "Account"
+      },
+      "Active": true,
+      "ErrorMessage": "Website is required for Technology industry accounts"
+    },
+    {
+      "attributes": {
+        "type": "ValidationRule",
+        "url": "/services/data/v59.0/tooling/sobjects/ValidationRule/03dg5000000BAGzAAO"
+      },
+      "Id": "03dg5000000BAGzAAO",
+      "ValidationName": "Flowstral_Email_Format",
+      "EntityDefinition": {
+        "attributes": {
+          "type": "EntityDefinition",
+          "url": "/services/data/v59.0/tooling/sobjects/EntityDefinition/Contact"
+        },
+        "QualifiedApiName": "Contact"
+      },
+      "Active": true,
+      "ErrorMessage": "Please enter a valid email address"
+    },
+    {
+      "attributes": {
+        "type": "ValidationRule",
+        "url": "/services/data/v59.0/tooling/sobjects/ValidationRule/03dg5000000BAIbAAO"
+      },
+      "Id": "03dg5000000BAIbAAO",
+      "ValidationName": "Flowstral_Min_Amount",
+      "EntityDefinition": {
+        "attributes": {
+          "type": "EntityDefinition",
+          "url": "/services/data/v59.0/tooling/sobjects/EntityDefinition/Opportunity"
+        },
+        "QualifiedApiName": "Opportunity"
+      },
+      "Active": true,
+      "ErrorMessage": "Opportunity amount must be at least ,000"
+    }
+  ],
+  "flows": [
+    {
+      "attributes": {
+        "type": "Flow",
+        "url": "/services/data/v59.0/tooling/sobjects/Flow/301g5000005so0AAAQ"
+      },
+      "Id": "301g5000005so0AAAQ",
+      "MasterLabel": "Flowstral Test Account Flow",
+      "ProcessType": "AutoLaunchedFlow",
+      "Status": "Active"
+    }
+  ],
+  "triggers": [],
+  "apex_classes": [
+    {
+      "attributes": {
+        "type": "ApexClass",
+        "url": "/services/data/v59.0/sobjects/ApexClass/01pg5000001HKL8AAO"
+      },
+      "Id": "01pg5000001HKL8AAO",
+      "Name": "DeveloperEditionUtilsTest"
+    },
+    {
+      "attributes": {
+        "type": "ApexClass",
+        "url": "/services/data/v59.0/sobjects/ApexClass/01pg5000001HKLAAA4"
+      },
+      "Id": "01pg5000001HKLAAA4",
+      "Name": "PostInstallScriptTest"
+    }
+  ],
+  "custom_objects": [
+    {
+      "attributes": {
+        "type": "EntityDefinition",
+        "url": "/services/data/v59.0/sobjects/EntityDefinition/ScorecardMetric"
+      },
+      "Id": "000000000000000AAA",
+      "DeveloperName": "ScorecardMetric",
+      "QualifiedApiName": "ScorecardMetric"
+    },
+    {
+      "attributes": {
+        "type": "EntityDefinition",
+        "url": "/services/data/v59.0/sobjects/EntityDefinition/ShiftWorkTopic"
+      },
+      "Id": "000000000000000AAA",
+      "DeveloperName": "ShiftWorkTopic",
+      "QualifiedApiName": "ShiftWorkTopic"
+    }
+  ]
+}

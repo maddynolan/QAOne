@@ -1,0 +1,140 @@
+{
+  "accounts": [
+    {
+      "id": "001g5000005wLkLAAU",
+      "name": "QA Tech Enterprise",
+      "industry": "Technology"
+    },
+    {
+      "id": "001g5000005wKhqAAE",
+      "name": "QA Healthcare Solutions",
+      "industry": "Healthcare"
+    },
+    {
+      "id": "001g5000005wIeWAAU",
+      "name": "QA Finance Corp",
+      "industry": "Finance"
+    },
+    {
+      "id": "001g5000005wFVGAA2",
+      "name": "QA Retail Stores",
+      "industry": "Retail"
+    },
+    {
+      "id": "001g5000005wKd0AAE",
+      "name": "QA Manufacturing Inc",
+      "industry": "Manufacturing"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "003g50000028gKHAAY",
+      "name": "John QA-CEO",
+      "email": "john.ceo@qatechenterprise.com"
+    },
+    {
+      "id": "003g50000028fXuAAI",
+      "name": "Sarah QA-CTO",
+      "email": "sarah.cto@qatechenterprise.com"
+    },
+    {
+      "id": "003g50000028gLtAAI",
+      "name": "Mike QA-Sales",
+      "email": "mike.sales@qahealthcare.com"
+    },
+    {
+      "id": "003g50000028gDqAAI",
+      "name": "Emily QA-Finance",
+      "email": "emily.finance@qafinance.com"
+    },
+    {
+      "id": "003g50000028gNVAAY",
+      "name": "Alex QA-Support",
+      "email": "alex.support@qaretail.com"
+    }
+  ],
+  "opportunities": [
+    {
+      "id": "006g5000000oGKvAAM",
+      "name": "QA Enterprise Deal - Large",
+      "stage": "Proposal/Price Quote",
+      "amount": 250000
+    },
+    {
+      "id": "006g5000000oGMXAA2",
+      "name": "QA Healthcare Expansion",
+      "stage": "Qualification",
+      "amount": 75000
+    },
+    {
+      "id": "006g5000000oGO9AAM",
+      "name": "QA Finance Platform",
+      "stage": "Negotiation/Review",
+      "amount": 500000
+    },
+    {
+      "id": "006g5000000oGPlAAM",
+      "name": "QA Retail Pilot",
+      "stage": "Prospecting",
+      "amount": 15000
+    }
+  ],
+  "leads": [
+    {
+      "id": "00Qg5000000jJhdEAE",
+      "name": "Lead QA-Tech-Hot",
+      "company": "QA Potential Tech Corp",
+      "status": "Open - Not Contacted"
+    },
+    {
+      "id": "00Qg5000000jJ3MEAU",
+      "name": "Lead QA-Healthcare-Warm",
+      "company": "QA Potential Healthcare",
+      "status": "Working - Contacted"
+    },
+    {
+      "id": "00Qg5000000jJjFEAU",
+      "name": "Lead QA-Finance-Cold",
+      "company": "QA Potential Finance",
+      "status": "Open - Not Contacted"
+    }
+  ],
+  "cases": [
+    {
+      "id": "500g5000004WCyDAAW",
+      "subject": "QA Test Case - High Priority Bug",
+      "status": "New",
+      "priority": "High"
+    },
+    {
+      "id": "500g5000004WCzpAAG",
+      "subject": "QA Test Case - Feature Request",
+      "status": "Working",
+      "priority": "Medium"
+    },
+    {
+      "id": "500g5000004WD1RAAW",
+      "subject": "QA Test Case - General Inquiry",
+      "status": "New",
+      "priority": "Low"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "00Tg5000000PEfhEAG",
+      "subject": "QA Follow-up Call",
+      "status": "Not Started"
+    },
+    {
+      "id": "00Tg5000000PEhJEAW",
+      "subject": "QA Send Proposal",
+      "status": "In Progress"
+    }
+  ],
+  "events": [
+    {
+      "id": "00Ug50000007Jh3EAE",
+      "subject": "QA Demo Meeting"
+    }
+  ]
+}
