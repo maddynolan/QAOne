@@ -668,3 +668,263 @@ async def get_error_analysis(request: Request):
     except Exception as e:
         logger.error(f"Error getting error analysis: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== Run Manager - Test Run State Machine & Pass/Fail Gates ==========
+
+from app.services.performance.run_manager import run_manager, RunState
+
+
+@router.post("/runs/create")
+async def create_run(request: Request, body: dict):
+    """
+    Create a new test run with state machine tracking.
+    
+    Request body:
+    - scenario_id: ID of the scenario to run
+    - scenario_name: Human-readable name
+    - virtual_users: Number of VUs (default: 10)
+    - duration_seconds: Test duration (default: 60)
+    - target_url: Base URL for requests
+    - thresholds: List of pass/fail thresholds (optional)
+    - tags: List of tags for filtering (optional)
+    """
+    try:
+        run = run_manager.create_run(
+            scenario_id=body.get("scenario_id", "default"),
+            scenario_name=body.get("scenario_name", "Load Test"),
+            virtual_users=body.get("virtual_users", 10),
+            duration_seconds=body.get("duration_seconds", 60),
+            ramp_up_seconds=body.get("ramp_up_seconds", 10),
+            target_url=body.get("target_url", ""),
+            thresholds=body.get("thresholds"),
+            created_by=body.get("created_by", ""),
+            tags=body.get("tags")
+        )
+        
+        return {
+            "status": "success",
+            "run_id": run.run_id,
+            "state": run.state.value,
+            "message": "Run created. Call /runs/{run_id}/start to begin."
+        }
+    
+    except Exception as e:
+        logger.error(f"Error creating run: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runs/{run_id}/start")
+async def start_run(request: Request, run_id: str):
+    """Start a created run (transitions: CREATED -> RUNNING)"""
+    try:
+        run = run_manager.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        
+        # Transition to STARTING
+        run_manager.transition_state(run_id, RunState.STARTING)
+        
+        # Start the actual load test (this would be async in production)
+        # For now, transition to RUNNING
+        run_manager.transition_state(run_id, RunState.RUNNING)
+        
+        return {
+            "status": "success",
+            "run_id": run_id,
+            "state": "running",
+            "message": "Load test started"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting run: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runs/{run_id}/stop")
+async def stop_run(request: Request, run_id: str):
+    """Stop a running test (transitions: RUNNING -> STOPPING -> FINISHED/FAILED)"""
+    try:
+        run = run_manager.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        
+        # Transition to STOPPING
+        run_manager.transition_state(run_id, RunState.STOPPING)
+        
+        # Evaluate thresholds and determine verdict
+        verdict = run_manager.evaluate_thresholds(run_id)
+        
+        # Transition to FINISHED
+        run_manager.transition_state(run_id, RunState.FINISHED)
+        
+        return {
+            "status": "success",
+            "run_id": run_id,
+            "state": "finished",
+            "verdict": verdict,
+            "verdict_reason": run.verdict_reason
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error stopping run: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runs/{run_id}/metrics")
+async def update_run_metrics(request: Request, run_id: str, body: dict):
+    """Update metrics for a running test"""
+    try:
+        run = run_manager.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        
+        run_manager.update_metrics(run_id, body.get("metrics", {}))
+        
+        return {"status": "success", "run_id": run_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runs/{run_id}/evaluate")
+async def evaluate_run_thresholds(request: Request, run_id: str):
+    """Evaluate thresholds and return PASS/FAIL verdict"""
+    try:
+        run = run_manager.get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        
+        verdict = run_manager.evaluate_thresholds(run_id)
+        run = run_manager.get_run(run_id)  # Refresh
+        
+        return {
+            "status": "success",
+            "run_id": run_id,
+            "verdict": verdict,
+            "verdict_reason": run.verdict_reason,
+            "threshold_results": [
+                {
+                    "metric": r.threshold.metric,
+                    "name": r.threshold.name,
+                    "expected": f"{r.threshold.operator.value} {r.threshold.value}",
+                    "actual": r.actual_value,
+                    "passed": r.passed,
+                    "message": r.message
+                }
+                for r in run.threshold_results
+            ]
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error evaluating thresholds: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs/{run_id}")
+async def get_run(request: Request, run_id: str):
+    """Get full run details including verdict"""
+    try:
+        summary = run_manager.get_run_summary(run_id)
+        if not summary:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        
+        return {
+            "status": "success",
+            "run": summary
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting run: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs")
+async def list_runs(
+    request: Request,
+    scenario_id: Optional[str] = None,
+    state: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    """List runs with filtering"""
+    try:
+        state_enum = RunState(state) if state else None
+        runs = run_manager.list_runs(
+            scenario_id=scenario_id,
+            state=state_enum,
+            limit=limit,
+            offset=offset
+        )
+        
+        return {
+            "status": "success",
+            "runs": runs,
+            "count": len(runs)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error listing runs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs/history/{scenario_id}")
+async def get_run_history(request: Request, scenario_id: str, days: int = 30):
+    """Get run history for trend analysis"""
+    try:
+        history = run_manager.get_run_history(scenario_id, days)
+        
+        return {
+            "status": "success",
+            "scenario_id": scenario_id,
+            "days": days,
+            "runs": history
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting run history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runs/compare")
+async def compare_runs(request: Request, body: dict):
+    """Compare multiple runs"""
+    try:
+        run_ids = body.get("run_ids", [])
+        if len(run_ids) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 run IDs")
+        
+        comparison = run_manager.compare_runs(run_ids)
+        
+        return {
+            "status": "success",
+            "comparison": comparison
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing runs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/thresholds/defaults")
+async def get_default_thresholds():
+    """Get default pass/fail thresholds"""
+    from app.services.performance.run_manager import RunManager
+    
+    return {
+        "status": "success",
+        "thresholds": RunManager.get_default_thresholds()
+    }

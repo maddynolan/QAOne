@@ -1124,6 +1124,79 @@ export default function VirtualUserGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  // ========== PASS/FAIL Verdict Calculation ==========
+  const getVerdict = () => {
+    // Default thresholds (same as backend)
+    const thresholds = [
+      { metric: 'p95', name: 'P95 Response Time', operator: '<', value: 800, critical: false },
+      { metric: 'p99', name: 'P99 Response Time', operator: '<', value: 2000, critical: false },
+      { metric: 'errorRate', name: 'Error Rate', operator: '<', value: 0.01, critical: true },
+      { metric: 'rps', name: 'Throughput', operator: '>', value: 10, critical: false }
+    ];
+    
+    const getMetricValue = (metric: string): number => {
+      switch (metric) {
+        case 'p95': return metrics.p95ResponseTime;
+        case 'p99': return metrics.p99ResponseTime;
+        case 'errorRate': return metrics.totalRequests > 0 ? metrics.failedRequests / metrics.totalRequests : 0;
+        case 'rps': return metrics.requestsPerSecond;
+        default: return 0;
+      }
+    };
+    
+    const evaluate = (actual: number, operator: string, expected: number): boolean => {
+      switch (operator) {
+        case '<': return actual < expected;
+        case '<=': return actual <= expected;
+        case '>': return actual > expected;
+        case '>=': return actual >= expected;
+        case '==': return Math.abs(actual - expected) < 0.001;
+        default: return false;
+      }
+    };
+    
+    const results = thresholds.map(t => {
+      const actual = getMetricValue(t.metric);
+      const passed = evaluate(actual, t.operator, t.value);
+      return { ...t, actual, passed };
+    });
+    
+    const passedCount = results.filter(r => r.passed).length;
+    const criticalFailures = results.filter(r => !r.passed && r.critical);
+    
+    let verdict = 'PENDING';
+    let reason = '';
+    
+    if (metrics.totalRequests === 0) {
+      verdict = 'PENDING';
+      reason = 'No test data yet';
+    } else if (criticalFailures.length > 0) {
+      verdict = 'FAIL';
+      reason = `Critical: ${criticalFailures.map(f => f.name).join(', ')} failed`;
+    } else if (passedCount === thresholds.length) {
+      verdict = 'PASS';
+      reason = `All ${thresholds.length} thresholds passed`;
+    } else {
+      verdict = 'FAIL';
+      reason = `${thresholds.length - passedCount} of ${thresholds.length} thresholds failed`;
+    }
+    
+    return {
+      verdict,
+      reason,
+      passed: passedCount,
+      total: thresholds.length,
+      details: results.map(r => ({
+        name: r.name,
+        actual: r.actual,
+        expected: r.value,
+        operator: r.operator,
+        passed: r.passed,
+        critical: r.critical
+      }))
+    };
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -2162,6 +2235,69 @@ export default function VirtualUserGenerator() {
 
         {/* Results Tab */}
         <TabsContent value="results" className="space-y-4">
+          {/* ========== PASS/FAIL VERDICT BANNER ========== */}
+          {metrics.totalRequests > 0 && (
+            <Card className={`border-2 ${
+              getVerdict().verdict === 'PASS' 
+                ? 'border-green-500 bg-green-500/10' 
+                : getVerdict().verdict === 'FAIL' 
+                  ? 'border-red-500 bg-red-500/10'
+                  : 'border-yellow-500 bg-yellow-500/10'
+            }`}>
+              <CardContent className="py-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className={`text-6xl font-black ${
+                      getVerdict().verdict === 'PASS' 
+                        ? 'text-green-500' 
+                        : getVerdict().verdict === 'FAIL' 
+                          ? 'text-red-500'
+                          : 'text-yellow-500'
+                    }`}>
+                      {getVerdict().verdict === 'PASS' ? '✅' : getVerdict().verdict === 'FAIL' ? '❌' : '⏳'}
+                    </div>
+                    <div>
+                      <div className={`text-4xl font-black ${
+                        getVerdict().verdict === 'PASS' 
+                          ? 'text-green-500' 
+                          : getVerdict().verdict === 'FAIL' 
+                            ? 'text-red-500'
+                            : 'text-yellow-500'
+                      }`}>
+                        {getVerdict().verdict}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {getVerdict().reason}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-muted-foreground">Thresholds</div>
+                    <div className="text-2xl font-bold">
+                      {getVerdict().passed}/{getVerdict().total}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Threshold Results */}
+                <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  {getVerdict().details.map((result, i) => (
+                    <div key={i} className={`p-2 rounded text-xs ${
+                      result.passed ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span>{result.passed ? '✓' : '✗'} {result.name}</span>
+                      </div>
+                      <div className="font-mono mt-1">
+                        {result.actual.toFixed(2)} {result.operator} {result.expected}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium">Test Results Summary</h3>
             <Button variant="outline" onClick={exportResults}>

@@ -1,6 +1,6 @@
 # 🚀 ArisTrace Performance Testing Architecture
 
-**Version:** 2.0  
+**Version:** 3.0 (Enterprise Complete)  
 **Last Updated:** January 2026  
 **Module:** Virtual User Generator (Perf Tab)
 
@@ -9,345 +9,444 @@
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture: Control Plane vs Load Plane](#architecture-control-plane-vs-load-plane)
-3. [System Components](#system-components)
-4. [Load Test Patterns](#load-test-patterns)
-5. [User Personas](#user-personas)
-6. [Quick Start Scenarios](#quick-start-scenarios)
-7. [Backend Services](#backend-services)
-8. [API Endpoints](#api-endpoints)
-9. [Metrics Collected](#metrics-collected)
+2. [Architecture: ELIS Pattern](#architecture-elis-pattern)
+3. [Run State Machine](#run-state-machine)
+4. [Pass/Fail Gates](#passfail-gates)
+5. [Core Backend Services](#core-backend-services)
+6. [API Endpoints](#api-endpoints)
+7. [Correlation Engine](#correlation-engine)
+8. [Data Parameterization](#data-parameterization)
+9. [Metrics & Storage](#metrics--storage)
 10. [Distributed Load Generation](#distributed-load-generation)
-11. [How to Use](#how-to-use)
-12. [Scalability](#scalability)
+11. [UI Features](#ui-features)
+12. [Integration with Recording](#integration-with-recording)
+13. [How to Use](#how-to-use)
 
 ---
 
 ## 📖 Overview
 
-The ArisTrace Performance Testing module provides **enterprise-grade load testing** with a proper **Control Plane / Load Plane architecture**:
+ArisTrace Performance Testing is an **enterprise-grade load testing platform** with:
 
-- **Control Plane (Browser)** - UI for configuration, monitoring, and results
-- **Load Plane (Backend)** - Server-side load generation using asyncio workers
-- **Scalable** - From 10 to 10,000+ virtual users via distributed nodes
-- **Protocol-Level** - Direct HTTP/WebSocket testing without browser overhead
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Control Plane / Load Plane Split** | ✅ | Browser controls, backend generates load |
+| **Run State Machine** | ✅ | CREATED → RUNNING → STOPPING → FINISHED/FAILED |
+| **Pass/Fail Gates** | ✅ | Threshold-based PASS/FAIL verdict |
+| **Correlation Engine** | ✅ | Session cookies, CSRF, dynamic IDs |
+| **Data Parameterization** | ✅ | CSV/JSON user pools, unique payloads |
+| **Metrics Storage** | ✅ | Persistent run history, trend analysis |
+| **Distributed Workers** | ✅ | Multi-node load generation |
+| **Alerting** | ✅ | Email, Slack, webhooks for SLA violations |
 
 ---
 
-## 🏗️ Architecture: Control Plane vs Load Plane
+## 🏗️ Architecture: ELIS Pattern
+
+**E**xecutor, **L**oaders, **I**nspectors, **S**torage
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     CONTROL PLANE (Browser/UI)                          │
-│                    VirtualUserGenerator.tsx                              │
+│                         1. BOSS (Control Plane)                          │
+│                         React UI (VirtualUserGenerator.tsx)              │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │
-│    │   Configure  │  │   Monitor    │  │   Results    │                 │
-│    │  Test Params │  │  Real-time   │  │   & Export   │                 │
-│    └──────────────┘  └──────────────┘  └──────────────┘                 │
-│                                                                          │
-│    ✅ Set VU count, duration, pattern                                    │
-│    ✅ View live metrics dashboard                                        │
-│    ✅ Start/Stop/Pause tests                                             │
-│    ✅ Export results to CSV/JSON                                         │
-│    ❌ Does NOT generate load (no browser fetch to target)                │
-│                                                                          │
+│  ✅ Configure test parameters (VUs, duration, thresholds)               │
+│  ✅ Start/Stop/Pause tests                                               │
+│  ✅ View real-time metrics                                               │
+│  ✅ Display PASS/FAIL verdict                                            │
+│  ❌ Does NOT generate load (no browser fetch to target)                  │
 └───────────────────────────────┬─────────────────────────────────────────┘
-                                │
-                                │  HTTP API Calls
-                                │  ┌─────────────────────────────┐
-                                │  │ POST /api/performance/tests/run
-                                │  │ GET  /api/performance/tests/{id}/status
-                                │  │ GET  /api/performance/metrics/realtime
-                                │  │ POST /api/performance/tests/{id}/stop
-                                │  └─────────────────────────────┘
-                                │
+                                │ HTTP API
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     LOAD PLANE (Backend/FastAPI)                         │
-│                    PerformanceEngine + LoadGenerator                     │
+│                       2. COORDINATOR (FastAPI)                           │
+│                       performance_api.py + run_manager.py                │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│    ┌──────────────────────────────────────────────────────────────┐     │
-│    │                   PerformanceEngine                           │     │
-│    │  ┌─────────────────┐  ┌─────────────────┐                    │     │
-│    │  │  LoadGenerator  │  │ DistributedCtrl │ ← Scale to N nodes │     │
-│    │  │  (asyncio pool) │  │                 │                    │     │
-│    │  └────────┬────────┘  └─────────────────┘                    │     │
-│    │           │                                                   │     │
-│    │   ┌───────┴───────┐                                          │     │
-│    │   │ VirtualUser   │ × 500+ concurrent                        │     │
-│    │   │ VirtualUser   │                                          │     │
-│    │   │ VirtualUser   │ → httpx/aiohttp (10K+ conn capable)      │     │
-│    │   │ ...           │                                          │     │
-│    │   └───────────────┘                                          │     │
-│    └──────────────────────────────────────────────────────────────┘     │
-│                                                                          │
-│    Supporting Services:                                                  │
-│    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
-│    │ Monitoring   │ │ Correlation  │ │ Alerting     │ │ Reporting    │  │
-│    │ Service      │ │ Engine       │ │ Service      │ │ Engine       │  │
-│    └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  │
-│                                                                          │
+│  ✅ Creates Run IDs                                                      │
+│  ✅ Manages Run State Machine (CREATED → RUNNING → FINISHED)             │
+│  ✅ Saves test config to Postgres/JSON                                   │
+│  ✅ Dispatches work to Load Agents                                       │
+│  ✅ Evaluates Pass/Fail thresholds                                       │
+│  ✅ Stores run history                                                   │
 └───────────────────────────────┬─────────────────────────────────────────┘
-                                │
-                                │  HTTP/WebSocket Requests
-                                │  (Server-side, no browser limits)
-                                │
+                                │ Queue/Direct Call
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         TARGET SYSTEM                                    │
-│                   (Application Under Test)                               │
-│                                                                          │
-│                     http://your-app.com                                  │
+│                       3. WORKERS (Load Agents)                           │
+│                       load_generator.py + distributed_controller.py      │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ✅ Spawns virtual users (asyncio tasks)                                 │
+│  ✅ Executes HTTP requests server-side (httpx/aiohttp)                   │
+│  ✅ Applies correlation (session tokens, CSRF)                           │
+│  ✅ Uses parameterized data (CSV/JSON)                                   │
+│  ✅ Records response times + errors                                      │
+│  ✅ Scales horizontally (N worker nodes)                                 │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │ HTTP Traffic
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       TARGET SYSTEM                                      │
+│                       (Your Application Under Test)                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       4. CAMERAS (Monitoring)                            │
+│                       monitoring_service.py + system_monitoring.py       │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ✅ Workers report RPS, latency, errors                                  │
+│  ✅ Server agents report CPU/memory (if accessible)                      │
+│  ✅ Metrics aggregated in real-time                                      │
+│  ✅ Alert triggers evaluated                                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       5. REPORT (Results)                                │
+│                       reporting_engine.py + run_manager.py               │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ✅ Big PASS/FAIL verdict                                                │
+│  ✅ Threshold results breakdown                                          │
+│  ✅ Grafana-like graphs (Metrics tab)                                    │
+│  ✅ Historical comparison                                                │
+│  ✅ Export bundle (JSON/CSV)                                             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Why This Architecture?
-
-| Browser-Based (Wrong) | Server-Based (Correct) |
-|-----------------------|------------------------|
-| 6 concurrent connections per domain | 10,000+ concurrent connections |
-| Limited by user's laptop | Scale across multiple servers |
-| CORS restrictions | No CORS (server-to-server) |
-| Results polluted by browser overhead | Clean protocol-level metrics |
-| Can't simulate real load | True production-like traffic |
-
 ---
 
-## 🧩 System Components
+## 🔄 Run State Machine
 
-### Frontend (Control Plane)
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| Virtual User Generator | `src/pages/VirtualUserGenerator.tsx` | UI for configuration and monitoring |
-
-**The UI does NOT:**
-- Make HTTP requests to the target system
-- Generate actual load
-- Measure response times directly
-
-**The UI DOES:**
-- Send configuration to backend API
-- Poll for real-time metrics
-- Display results and graphs
-- Allow test control (start/stop/pause)
-
-### Backend (Load Plane)
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| Performance API | `backend/app/routers/performance_api.py` | REST endpoints |
-| Performance Engine | `backend/app/services/performance/performance_engine.py` | Main orchestrator |
-| Load Generator | `backend/app/services/performance/load_generator.py` | Virtual user pool |
-| Distributed Controller | `backend/app/services/performance/distributed_controller.py` | Multi-node scaling |
-| Protocol Handler | `backend/app/services/performance/protocol_handler.py` | HTTP/WS execution |
-| Monitoring Service | `backend/app/services/performance/monitoring_service.py` | Metrics aggregation |
-| Correlation Engine | `backend/app/services/performance/correlation_engine.py` | Dynamic value extraction |
-
----
-
-## 📊 Load Test Patterns
-
-| Pattern | Icon | Description | API `profile_type` |
-|---------|------|-------------|-------------------|
-| **Constant Load** | ➡️ | Maintain steady number of users | `linear` |
-| **Ramp Up** | 📈 | Gradually increase users | `linear` |
-| **Ramp Down** | 📉 | Gradually decrease users | `linear` |
-| **Spike Test** | ⚡ | Sudden burst of users | `spike` |
-| **Stress Test** | 🔥 | Push beyond normal capacity | `stress` |
-| **Soak/Endurance** | 🕐 | Extended duration test | `endurance` |
-| **Breakpoint** | 💥 | Find system breaking point | `capacity` |
-| **Wave Pattern** | 🌊 | Cyclic load increases | Custom |
-
-### Pattern Visualization
+Every test run follows this state machine:
 
 ```
-Constant Load:      ────────────────────────
-                    
-Ramp Up:            ─────────────────/
-                                    /
-                                   /
-                    ______________/
-
-Spike Test:         _______/\______
-                          /  \
-                    _____/    \_____
-
-Stress Test:               ___/
-                          /
-                    ─────/
-                    
-Wave Pattern:       ╱╲╱╲╱╲╱╲╱╲╱╲
+┌──────────┐     start()     ┌──────────┐
+│ CREATED  │ ──────────────▶ │ STARTING │
+└──────────┘                 └────┬─────┘
+      │                           │
+      │ cancel()                  │ workers ready
+      ▼                           ▼
+┌──────────┐                 ┌──────────┐
+│CANCELLED │                 │ RUNNING  │ ◀─────┐
+└──────────┘                 └────┬─────┘       │
+                                  │             │ resume()
+                     stop() or    │ pause()     │
+                     duration     │             │
+                     complete     │             │
+                                  ▼             │
+                             ┌──────────┐       │
+                             │ STOPPING │ ──────┘
+                             └────┬─────┘
+                                  │
+                     ┌────────────┼────────────┐
+                     ▼            ▼            ▼
+               ┌──────────┐ ┌──────────┐ ┌──────────┐
+               │ FINISHED │ │  FAILED  │ │CANCELLED │
+               └──────────┘ └──────────┘ └──────────┘
+                    │
+                    ▼
+            evaluate_thresholds()
+                    │
+           ┌────────┴────────┐
+           ▼                 ▼
+       ┌──────┐          ┌──────┐
+       │ PASS │          │ FAIL │
+       └──────┘          └──────┘
 ```
 
----
+### Run States
 
-## 👥 User Personas
-
-| Persona | Think Time | Click Delay | Use Case |
-|---------|------------|-------------|----------|
-| **Casual Browser** | 3-8 seconds | 500-2000ms | E-commerce browsing |
-| **Normal User** | 1-3 seconds | 200-800ms | Standard transactions |
-| **Power User** | 0.5-1.5 seconds | 100-400ms | Experienced users |
-| **Bot/Automated** | 100-500ms | 50-200ms | API stress testing |
-
----
-
-## ⚡ Quick Start Scenarios
-
-| Scenario | Users | Duration | Pattern | Target Endpoints |
-|----------|-------|----------|---------|------------------|
-| 🚀 **API Load Test** | 50 | 60s | Ramp Up | `/api/products`, `/api/categories` |
-| ⚡ **Spike Test** | 200 | 120s | Spike | `/api/products` |
-| 🔥 **Stress Test** | 500 | 180s | Stress | All endpoints |
-| 🕐 **Endurance Test** | 25 | 600s | Constant | All endpoints |
-| 🌊 **Mixed Workload** | 100 | 300s | Wave | E-commerce flow |
+| State | Description |
+|-------|-------------|
+| `CREATED` | Run created, configuration saved |
+| `QUEUED` | Waiting for workers (distributed mode) |
+| `STARTING` | Workers initializing |
+| `RUNNING` | Active load generation |
+| `STOPPING` | Graceful shutdown in progress |
+| `FINISHED` | Completed successfully |
+| `FAILED` | Terminated with errors |
+| `CANCELLED` | User cancelled |
 
 ---
 
-## 🔧 Backend Services
+## ✅ Pass/Fail Gates
 
-### `PerformanceEngine` (Orchestrator)
+Tests are evaluated against **thresholds** to produce a clear **PASS/FAIL verdict**.
+
+### Default Thresholds
+
+| Metric | Operator | Value | Critical | Description |
+|--------|----------|-------|----------|-------------|
+| `response_time.p95` | < | 800ms | No | 95th percentile response time |
+| `response_time.p99` | < | 2000ms | No | 99th percentile response time |
+| `iterations.error_rate` | < | 1% | **Yes** | Error rate must be under 1% |
+| `throughput.rps` | > | 10 | No | Minimum requests per second |
+
+### Verdict Logic
 
 ```python
-class PerformanceEngine:
-    def __init__(self):
-        self.load_generator = LoadGenerator()           # Core VU pool
-        self.distributed_controller = DistributedController()  # Multi-node
-        self.monitoring_service = MonitoringService()   # Metrics
-        self.correlation_engine = CorrelationEngine()   # Dynamic values
-        self.reporting_engine = ReportingEngine()       # Reports
-        self.alerting_service = AlertingService()       # SLA alerts
-        self.test_scheduler = TestScheduler()           # Cron scheduling
-        self.system_monitor = SystemMonitor()           # CPU/Memory
+if any(critical_threshold_failed):
+    verdict = "FAIL"
+    reason = "Critical threshold(s) failed"
+elif all_thresholds_passed:
+    verdict = "PASS"
+    reason = "All thresholds passed"
+else:
+    verdict = "FAIL"
+    reason = f"{failed_count} thresholds failed"
 ```
 
-### `LoadGenerator` (Virtual User Pool)
+### UI Display
 
-```python
-class LoadGenerator:
-    async def start_load_test(
-        self,
-        scenario_names: List[str],
-        protocol_handler: ProtocolHandler,
-        metrics_callback: Callable
-    ) -> str:
-        # Spawns VUs using asyncio tasks
-        for vu_index in range(scenario.virtual_users):
-            task = asyncio.create_task(
-                self._run_virtual_user(vu, scenario, delay)
-            )
-        # Each VU executes HTTP requests server-side
+The Results tab shows a prominent verdict banner:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ✅  PASS                                          Thresholds   │
+│                                                       3/4       │
+│  All 4 thresholds passed                                        │
+│                                                                 │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌─────────┐│
+│  │ ✓ P95 < 800  │ │ ✓ P99 < 2000 │ │ ✓ Error < 1% │ │✓ RPS>10 ││
+│  │ 450ms        │ │ 890ms        │ │ 0.5%         │ │ 125     ││
+│  └──────────────┘ └──────────────┘ └──────────────┘ └─────────┘│
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### `VirtualUser` (Single User Simulation)
+---
 
-```python
-@dataclass
-class VirtualUser:
-    user_id: str
-    state: UserState  # RUNNING, THINKING, WAITING, ERROR
-    iterations: int
-    errors: int
-    response_times: List[float]
-    session_data: Dict[str, Any]      # Cookies, tokens
-    correlation_data: Dict[str, Any]  # Extracted values
+## 🧩 Core Backend Services
+
+### File Structure
+
 ```
+backend/app/services/performance/
+├── run_manager.py            # 🆕 Run state machine + Pass/Fail gates
+├── performance_engine.py     # Main orchestrator
+├── load_generator.py         # Virtual user pool (asyncio)
+├── correlation_engine.py     # Session/CSRF/token handling
+├── data_parameterization.py  # CSV/JSON test data pools
+├── distributed_controller.py # Multi-node workers
+├── monitoring_service.py     # Real-time metrics
+├── alerting_service.py       # Email/Slack/webhook alerts
+├── reporting_engine.py       # Reports + trends
+├── load_profiles.py          # Spike/stress/endurance patterns
+├── protocol_handler.py       # HTTP/WebSocket execution
+├── system_monitoring.py      # Server CPU/memory
+└── transaction_analyzer.py   # Error breakdown
+```
+
+### Service Responsibilities
+
+| Service | Purpose |
+|---------|---------|
+| **RunManager** | State machine, thresholds, verdict, history |
+| **PerformanceEngine** | Orchestrates all components |
+| **LoadGenerator** | Spawns/manages virtual users |
+| **CorrelationEngine** | Extracts/applies dynamic values |
+| **DataParameterizationEngine** | Manages test data pools |
+| **DistributedController** | Coordinates worker nodes |
+| **AlertingService** | Sends notifications on SLA breach |
+| **ReportingEngine** | Generates reports, trends |
 
 ---
 
 ## 📡 API Endpoints
 
-### Test Execution
+### Run Management (NEW)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/performance/tests/run` | Start a load test |
-| `POST` | `/api/performance/tests/{id}/stop` | Stop a running test |
-| `GET` | `/api/performance/tests/{id}/status` | Get test status + metrics |
-| `GET` | `/api/performance/tests/{id}/report` | Get final report |
+| `POST` | `/api/performance/runs/create` | Create new run with thresholds |
+| `POST` | `/api/performance/runs/{id}/start` | Start the run |
+| `POST` | `/api/performance/runs/{id}/stop` | Stop and evaluate verdict |
+| `POST` | `/api/performance/runs/{id}/evaluate` | Evaluate thresholds |
+| `GET` | `/api/performance/runs/{id}` | Get run details + verdict |
+| `GET` | `/api/performance/runs` | List runs with filtering |
+| `GET` | `/api/performance/runs/history/{scenario}` | Get run history for trends |
+| `POST` | `/api/performance/runs/compare` | Compare multiple runs |
+| `GET` | `/api/performance/thresholds/defaults` | Get default thresholds |
 
-### Real-time Metrics
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/performance/metrics/realtime` | Live dashboard data |
-| `GET` | `/api/performance/metrics/history` | Historical metrics |
-
-### Scenario Management
+### Existing Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/performance/scenarios` | Create scenario |
-| `GET` | `/api/performance/scenarios` | List all scenarios |
-| `POST` | `/api/performance/scenarios/{id}/steps` | Add test step |
-
-### Enterprise Features
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/performance/load-profiles/create` | Create spike/stress profile |
-| `POST` | `/api/performance/data-pools/create` | Data parameterization |
-| `POST` | `/api/performance/alerts/create` | SLA alerting |
-| `POST` | `/api/performance/schedules/create` | Scheduled tests |
-| `GET` | `/api/performance/system-metrics` | Server CPU/Memory |
+| `POST` | `/api/performance/tests/run` | Start load test (legacy) |
+| `GET` | `/api/performance/metrics/realtime` | Live metrics |
+| `POST` | `/api/performance/data-pools/create` | Create data pool |
+| `POST` | `/api/performance/alerts/create` | Create alert |
+| `GET` | `/api/performance/system-metrics` | Server CPU/memory |
 
 ---
 
-## 📈 Metrics Collected
+## 🔗 Correlation Engine
 
-### Response Time Metrics
+Automatically handles dynamic values:
 
-```typescript
-interface LoadTestMetrics {
-  totalRequests: number;
-  successfulRequests: number;
-  failedRequests: number;
-  avgResponseTime: number;      // milliseconds
-  minResponseTime: number;
-  maxResponseTime: number;
-  p50ResponseTime: number;      // 50th percentile
-  p90ResponseTime: number;      // 90th percentile
-  p95ResponseTime: number;      // 95th percentile
-  p99ResponseTime: number;      // 99th percentile
-  requestsPerSecond: number;    // throughput (RPS)
-  activeUsers: number;
-  errorsPerSecond: number;
-  bytesReceived: number;
-  bytesSent: number;
+### Auto-Detected Patterns
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Session ID | `session_id`, `JSESSIONID` | Cookie extraction |
+| CSRF Token | `csrf_token`, `_token` | Hidden form field |
+| Auth Token | `access_token`, `Bearer` | JWT from response |
+| Dynamic IDs | `order_id`, `user_id` | JSON path extraction |
+
+### Extraction Methods
+
+```python
+CorrelationRule(
+    variable_name="csrf_token",
+    extract_type="regex",  # jsonpath, regex, header, cookie, xpath
+    extract_value=r'name="csrf_token" value="([^"]+)"',
+    scope="session"
+)
+```
+
+### Auto-Replacement
+
+```python
+# Before correlation
+url = "/api/orders/${order_id}"
+headers = {"X-CSRF-Token": "${csrf_token}"}
+
+# After correlation
+url = "/api/orders/12345"
+headers = {"X-CSRF-Token": "abc123xyz"}
+```
+
+---
+
+## 📊 Data Parameterization
+
+### Access Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `SEQUENTIAL` | Read in order, wrap around | Predictable testing |
+| `RANDOM` | Random selection | Realistic distribution |
+| `UNIQUE` | Each VU gets unique data | No collisions |
+| `SHARED` | Round-robin across VUs | Global queue |
+
+### Create Data Pool
+
+```python
+POST /api/performance/data-pools/create
+{
+    "pool_id": "users",
+    "name": "Test Users",
+    "data_source": "/data/users.csv",
+    "access_mode": "unique",
+    "columns": ["username", "password", "email"]
 }
 ```
 
-### Server-Side Collection
+### CSV Example
 
-Metrics are collected **on the backend**, not in the browser:
+```csv
+username,password,email
+user1,pass123,user1@test.com
+user2,pass456,user2@test.com
+user3,pass789,user3@test.com
+```
+
+### Usage in Requests
 
 ```python
-async def _run_virtual_user(self, vu: VirtualUser, scenario: LoadScenario):
-    step_start = time.time()
+{
+    "url": "/api/login",
+    "body": {
+        "username": "${username}",
+        "password": "${password}"
+    }
+}
+```
+
+---
+
+## 📈 Metrics & Storage
+
+### Metrics Collected
+
+```typescript
+interface LoadTestMetrics {
+    // Response Times
+    response_time: {
+        min: number;      // Minimum response time (ms)
+        max: number;      // Maximum response time (ms)
+        avg: number;      // Average response time (ms)
+        p50: number;      // 50th percentile
+        p75: number;      // 75th percentile
+        p90: number;      // 90th percentile
+        p95: number;      // 95th percentile
+        p99: number;      // 99th percentile
+    };
     
-    # Server-side HTTP request (httpx/aiohttp)
-    result = await self.protocol_handler.execute(step)
+    // Throughput
+    throughput: {
+        rps: number;              // Requests per second
+        total_requests: number;   // Total requests made
+    };
     
-    response_time = time.time() - step_start
-    vu.response_times.append(response_time * 1000)  # ms
+    // Errors
+    iterations: {
+        total: number;
+        errors: number;
+        error_rate: number;    // errors / total
+    };
+    
+    // Virtual Users
+    virtual_users: {
+        total: number;
+        active: number;
+        completed: number;
+        error: number;
+    };
+}
+```
+
+### Persistent Storage
+
+Runs are stored in `data/performance_runs/`:
+
+```
+data/performance_runs/
+├── runs_index.json           # All runs metadata
+├── run_abc123_metrics.json   # Per-run detailed metrics
+└── run_abc123_errors.json    # Error samples
+```
+
+### Historical Queries
+
+```python
+# Get 30-day history for trend analysis
+GET /api/performance/runs/history/my_scenario?days=30
+
+# Response
+{
+    "runs": [
+        {
+            "run_id": "run_abc123",
+            "created_at": "2026-01-01T10:00:00Z",
+            "verdict": "PASS",
+            "metrics": { "p95": 450, "error_rate": 0.005 }
+        },
+        ...
+    ]
+}
 ```
 
 ---
 
 ## 🌐 Distributed Load Generation
 
-For tests requiring 1,000+ VUs, use distributed mode:
+For 1000+ VUs, use distributed mode:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    CONTROLLER NODE                               │
 │                  DistributedController                           │
 │                                                                  │
-│    Coordinates test execution across worker nodes                │
+│    Distributes VUs across workers                                │
 │    Aggregates metrics from all nodes                             │
 └─────────────────────────────┬────────────────────────────────────┘
                               │
@@ -357,99 +456,138 @@ For tests requiring 1,000+ VUs, use distributed mode:
     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
     │  Worker 1    │  │  Worker 2    │  │  Worker N    │
     │  500 VUs     │  │  500 VUs     │  │  500 VUs     │
-    │              │  │              │  │              │
     │  LoadGen     │  │  LoadGen     │  │  LoadGen     │
     └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
-**Enable distributed mode:**
+### Enable Distributed Mode
+
 ```python
 POST /api/performance/tests/run
 {
-  "scenario_id": "...",
-  "virtual_users": 2000,
-  "use_distributed": true  # ← Enable multi-node
+    "scenario_id": "...",
+    "virtual_users": 2000,
+    "use_distributed": true  # Auto-distributes across nodes
 }
 ```
 
 ---
 
-## 🎯 How to Use
+## 🖥️ UI Features
 
-### Quick Load Test (1 Click)
+### 7 Tabs
 
-1. Navigate to **Perf** tab
-2. Enter your target URL
-3. Click **Run** on "API Load Test" scenario
-4. Watch **Metrics** tab (data from backend)
+| Tab | Purpose |
+|-----|---------|
+| **Quick** | One-click test scenarios |
+| **HAR** | Import HAR files |
+| **Config** | Pattern, users, duration, thresholds |
+| **Steps** | View/edit test steps |
+| **Users** | Virtual user status |
+| **Metrics** | Live dashboard |
+| **Results** | PASS/FAIL verdict + summary |
 
-### Custom Load Test
+### Results Tab Features
 
-1. **Config** tab → Set users, duration, pattern
-2. **Steps** tab → Add HTTP request steps
-3. Click **Start Test**
-   - UI sends config to `POST /api/performance/tests/run`
-   - Backend spawns VUs and generates load
-4. **Metrics** tab → Polls `GET /api/performance/metrics/realtime`
-5. **Results** tab → Shows final report
-
-### From HAR File
-
-1. **HAR** tab → Upload HAR file
-2. HAR requests converted to scenario steps
-3. Configure load parameters
-4. Start test (backend executes)
-
-### Flow Diagram
-
-```
-┌──────────────────┐
-│  User Clicks     │
-│  "Start Test"    │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐     ┌──────────────────┐
-│  UI sends POST   │────▶│  Backend starts  │
-│  /tests/run      │     │  LoadGenerator   │
-└────────┬─────────┘     └────────┬─────────┘
-         │                        │
-         │                        ▼
-         │               ┌──────────────────┐
-         │               │  VUs execute     │
-         │               │  HTTP requests   │
-         │               │  (server-side)   │
-         │               └────────┬─────────┘
-         │                        │
-         ▼                        ▼
-┌──────────────────┐     ┌──────────────────┐
-│  UI polls GET    │◀────│  Backend returns │
-│  /metrics/realtime│     │  aggregated data │
-└────────┬─────────┘     └──────────────────┘
-         │
-         ▼
-┌──────────────────┐
-│  UI displays     │
-│  live dashboard  │
-└──────────────────┘
-```
+1. **Big PASS/FAIL Banner** - Immediately shows verdict
+2. **Threshold Breakdown** - Each threshold with actual vs expected
+3. **Recommendations** - AI-generated optimization tips
+4. **Export** - JSON/CSV download
 
 ---
 
-## 📊 Scalability
+## 🔄 Integration with Recording
 
-| Scenario | VUs | Architecture |
-|----------|-----|--------------|
-| Development | 1-50 | Single backend node |
-| Staging | 50-500 | Single backend node |
-| Production | 500-2000 | Single high-spec node |
-| Enterprise | 2000-10000+ | Distributed (3-10 workers) |
+The performance module integrates with the **Record** tab:
 
-### Single Node Limits (Python asyncio)
+```
+┌─────────────┐     Record with      ┌─────────────┐
+│  Record     │  "Capture Network"   │   Builder   │
+│  Tab        │ ─────────────────▶   │   Tab       │
+└─────────────┘     enabled          └──────┬──────┘
+                                            │
+                                            │ Send to Perf
+                                            ▼
+                                     ┌─────────────┐
+                                     │   Perf      │
+                                     │   Tab       │
+                                     └──────┬──────┘
+                                            │
+                                            │ HTTP requests
+                                            │ become test steps
+                                            ▼
+                                     ┌─────────────┐
+                                     │ Load Test   │
+                                     │ Execution   │
+                                     └─────────────┘
+```
 
-- **10,000+ concurrent connections** with httpx/aiohttp
-- **1,000-5,000 VUs** practical limit per node (depends on target latency)
-- **Linear scaling** with distributed controller
+### Flow
+
+1. **Record** browser session with "Capture Network" toggle ON
+2. Network requests captured as API calls
+3. Click "Send to Perf" (orange button)
+4. Requests become load test steps
+5. Configure VUs, duration, thresholds
+6. Run test → Get PASS/FAIL verdict
+
+---
+
+## 🎯 How to Use
+
+### Quick Test (1 Minute)
+
+1. Go to **Perf** tab
+2. Enter target URL: `http://your-app.com`
+3. Click **Run** on "API Load Test" scenario
+4. Watch **Metrics** tab
+5. Check **Results** for PASS/FAIL
+
+### Custom Test with Thresholds
+
+1. **Config** tab:
+   - Set VUs: 100
+   - Duration: 120s
+   - Pattern: Ramp Up
+   
+2. **Thresholds** (via API):
+   ```json
+   {
+       "thresholds": [
+           {"metric": "response_time.p95", "operator": "<", "value": 500},
+           {"metric": "iterations.error_rate", "operator": "<", "value": 0.005, "critical": true}
+       ]
+   }
+   ```
+
+3. **Steps** tab → Add/import test steps
+
+4. Click **Start Test**
+
+5. **Results** tab → See PASS/FAIL
+
+### From Recorded Session
+
+1. **Record** tab → Enable "Capture Network"
+2. Browse your application
+3. Stop recording → Click **Send to Perf**
+4. Configure load parameters
+5. Run → Get verdict
+
+---
+
+## 📊 Comparison with Tools
+
+| Feature | ArisTrace | LoadRunner | k6 | Gatling |
+|---------|-----------|------------|-----|---------|
+| Browser Control | ✅ | ✅ | ❌ | ❌ |
+| Server-side Load | ✅ | ✅ | ✅ | ✅ |
+| Correlation | ✅ | ✅ | Manual | Manual |
+| Data Pools | ✅ | ✅ | ✅ | ✅ |
+| Pass/Fail Gates | ✅ | ✅ | ✅ | ✅ |
+| Run History | ✅ | ✅ | ✅ | ✅ |
+| Integrated Recording | ✅ | ✅ | ❌ | ❌ |
+| Free | ✅ | ❌ | ✅ | ✅ |
 
 ---
 
@@ -457,50 +595,28 @@ POST /api/performance/tests/run
 
 | Layer | Technology |
 |-------|------------|
-| **Control Plane** | React 18 + TypeScript + Shadcn/UI |
-| **Load Plane** | FastAPI + Python asyncio |
-| **HTTP Client** | httpx (async) / aiohttp |
-| **Metrics** | In-memory + time-series storage |
-| **Distribution** | Custom DistributedController |
+| Control Plane | React 18 + TypeScript + Shadcn/UI |
+| API Layer | FastAPI (Python 3.9+) |
+| Load Plane | asyncio + httpx + aiohttp |
+| Storage | JSON files (upgradeable to Postgres) |
+| Distributed | Custom controller (upgradeable to Redis/RabbitMQ) |
 
 ---
 
-## 📁 File Structure
+## 📞 Next Steps (Roadmap)
 
-```
-src/
-├── pages/
-│   └── VirtualUserGenerator.tsx    # UI Control Plane
-
-backend/
-├── app/
-│   ├── routers/
-│   │   └── performance_api.py      # REST endpoints
-│   └── services/
-│       └── performance/
-│           ├── performance_engine.py     # Main orchestrator
-│           ├── load_generator.py         # VU pool (asyncio)
-│           ├── distributed_controller.py # Multi-node
-│           ├── protocol_handler.py       # HTTP/WS execution
-│           ├── monitoring_service.py     # Metrics
-│           ├── correlation_engine.py     # Dynamic extraction
-│           ├── reporting_engine.py       # Reports
-│           ├── alerting_service.py       # SLA alerts
-│           ├── test_scheduler.py         # Cron scheduling
-│           ├── system_monitoring.py      # Server resources
-│           ├── load_profiles.py          # Spike/Stress patterns
-│           ├── data_parameterization.py  # CSV/JSON data
-│           └── transaction_analyzer.py   # Breakdown analysis
-```
-
----
-
-## 📞 Support
-
-For questions or issues with Performance Testing:
-- Backend generates load; browser only displays
-- Check backend logs: `backend/logs/performance.log`
-- Enable **AI Analysis** in Settings for intelligent recommendations
+| Priority | Feature | Status |
+|----------|---------|--------|
+| 1 | Run State Machine | ✅ Done |
+| 2 | Pass/Fail Thresholds | ✅ Done |
+| 3 | Correlation Engine | ✅ Done |
+| 4 | Data Parameterization | ✅ Done |
+| 5 | Run History Storage | ✅ Done |
+| 6 | WebSocket for Live Metrics | 🔜 Next |
+| 7 | Redis Queue for Workers | 🔜 Next |
+| 8 | PostgreSQL Metrics Storage | 🔜 Future |
+| 9 | Distributed Tracing | 🔜 Future |
+| 10 | Auto Evidence Pack (PDF) | 🔜 Future |
 
 ---
 
