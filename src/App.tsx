@@ -31,6 +31,9 @@ import { StreamlinedLayout } from "./components/StreamlinedLayout";
 // Theme Provider
 import { ThemeProvider } from "./contexts/ThemeContext";
 
+// AI Provider - Global AI settings
+import { AIProvider } from "./contexts/AIContext";
+
 // Core Pages
 import PlaywrightRecorderPage from "./pages/PlaywrightRecorderPage";
 import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
@@ -56,6 +59,7 @@ import TestPlanDetail from "./pages/TestPlanDetail";
 import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import FrameworkAnalyzer from "./pages/FrameworkAnalyzer";
+import CodeAlchemy from "./pages/CodeAlchemy";
 import Traceability from "./pages/Traceability";
 import Accessibility from "./pages/Accessibility";
 import Requirements from "./pages/Requirements";
@@ -70,6 +74,7 @@ import SelfHealing from "./pages/SelfHealing";
 import Integrations from "./pages/Integrations";
 import Results from "./pages/Results";
 import ProjectManagement from "./pages/ProjectManagement";
+import VisualTestingPage from "./pages/VisualTestingPage";
 
 // Auth (keep for future)
 import { AuthProvider } from "./contexts/AuthContext";
@@ -95,11 +100,12 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AuthProvider>
-            <BrowserRouter>
+        <AIProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AuthProvider>
+              <BrowserRouter>
               <Routes>
                 {/* ═══════════════════════════════════════════════════════════
                     PUBLIC ROUTES
@@ -212,7 +218,9 @@ const App = () => {
                   
                   {/* Tools & Utilities */}
                   <Route path="/accessibility" element={<Accessibility />} />
+                  <Route path="/visual-testing" element={<VisualTestingPage />} />
                   <Route path="/framework-analyzer" element={<FrameworkAnalyzer />} />
+                  <Route path="/code-alchemy" element={<CodeAlchemy />} />
                   <Route path="/elements" element={<ElementRepository />} />
                   <Route path="/self-healing" element={<SelfHealing />} />
                   <Route path="/scheduled-runs" element={<ScheduledRuns />} />
@@ -253,9 +261,10 @@ const App = () => {
                     ═══════════════════════════════════════════════════════════ */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </BrowserRouter>
-          </AuthProvider>
-        </TooltipProvider>
+              </BrowserRouter>
+            </AuthProvider>
+          </TooltipProvider>
+        </AIProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

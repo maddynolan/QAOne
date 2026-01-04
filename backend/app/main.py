@@ -7098,6 +7098,14 @@ app.include_router(nexus_exploratory_router)
 from app.routers.blaze_api import router as blaze_router
 app.include_router(blaze_router)
 
+# AI Vision Self-Healing API (GPT-4 Vision powered)
+try:
+    from app.routers.vision_healing_api import router as vision_healing_router
+    app.include_router(vision_healing_router)
+    logger.info("Vision Self-Healing API registered")
+except ImportError as e:
+    logger.warning(f"Vision Self-Healing API not available: {e}")
+
 # Exploration Complete Workflow API
 from app.routers.exploration_workflow_api import router as exploration_workflow_router
 app.include_router(exploration_workflow_router)
@@ -7158,6 +7166,10 @@ app.include_router(salesforce_auth_router)
 from app.routers.framework_analyzer_api import router as framework_analyzer_router
 app.include_router(framework_analyzer_router)
 
+# CodeAlchemy - Transform any repository into executable test cases
+from app.routers.code_alchemy_api import router as code_alchemy_router
+app.include_router(code_alchemy_router)
+
 # Database API - Unified SQLite/PostgreSQL storage with caching
 from app.routers.database_api import router as database_router
 app.include_router(database_router)
@@ -7181,6 +7193,22 @@ app.include_router(scale_api_router)
 # Complex Verifications API - Email, PDF, File verification
 from app.routers.complex_verifications import router as complex_verifications_router
 app.include_router(complex_verifications_router)
+
+# OAuth2 Authentication API - Enterprise-grade OAuth2 support (like ReadyAPI)
+from app.routers.oauth2_api import router as oauth2_router
+app.include_router(oauth2_router)
+
+# Request Chaining API - Like ReadyAPI TestSuites with request chaining
+from app.routers.request_chaining_api import router as request_chaining_router
+app.include_router(request_chaining_router)
+
+# OWASP API Security Testing - Automated security scanning
+from app.routers.owasp_security_api import router as owasp_security_router
+app.include_router(owasp_security_router)
+
+# Visual Testing - Robust visual regression testing with multiple comparison modes
+from app.routers.visual_testing_api import router as visual_testing_router
+app.include_router(visual_testing_router)
 
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility

@@ -14,6 +14,7 @@ import { NavLink, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { isElectron } from '@/lib/electron-bridge';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AIBadge } from '@/contexts/AIContext';
 import {
   Settings,
   Bell,
@@ -97,6 +98,18 @@ const mainNavItems: NavItem[] = [
     label: 'A11y',
     path: '/accessibility',
     description: 'Accessibility testing',
+  },
+  {
+    id: 'visual-testing',
+    label: 'Visual',
+    path: '/visual-testing',
+    description: 'Visual regression testing',
+  },
+  {
+    id: 'code-alchemy',
+    label: 'Alchemy',
+    path: '/code-alchemy',
+    description: 'Import repos as test cases',
   },
   {
     id: 'salesforce',
@@ -321,6 +334,9 @@ function Header() {
       <div className="flex items-center gap-1">
         {/* Theme Toggle */}
         <ThemeToggle />
+        
+        {/* AI Status Badge */}
+        <AIBadge className="mr-2" />
         
         {/* Notifications */}
         <Button
