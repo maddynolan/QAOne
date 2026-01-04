@@ -297,12 +297,25 @@ async def suggest_better_selectors(request: SuggestSelectorsRequest):
 # ============================================================================
 
 # Global storage for AI config (in production, use proper config management)
+# Initialize with environment variable if available
+import os
+_env_api_key = os.getenv("OPENAI_API_KEY", "")
 _ai_config = {
-    "api_key": "",
+    "api_key": _env_api_key,
     "model": "gpt-4o-mini",
     "provider": "openai",
-    "enabled": False
+    "enabled": bool(_env_api_key)
 }
+
+# Initialize the vision service with env key if available
+if _env_api_key:
+    try:
+        from app.services.ai.vision_self_healing import get_vision_healing_service
+        service = get_vision_healing_service()
+        service.set_api_key(_env_api_key)
+        logger.info("Vision service initialized with OPENAI_API_KEY from environment")
+    except Exception as e:
+        logger.warning(f"Could not initialize vision service with env key: {e}")
 
 
 class AIConfigRequest(BaseModel):
@@ -363,6 +376,42 @@ async def get_ai_config():
         model=_ai_config["model"],
         provider=_ai_config["provider"],
         has_api_key=bool(_ai_config["api_key"])
+    )
+
+
+class MaskedKeyResponse(BaseModel):
+    """Response with masked API key"""
+    masked_key: str
+    has_key: bool
+    source: str  # "env" | "manual" | "none"
+
+
+@router.get("/config/key", response_model=MaskedKeyResponse)
+async def get_masked_api_key():
+    """Get masked API key for display in settings (shows first 8 and last 4 chars)"""
+    api_key = _ai_config.get("api_key", "")
+    
+    if not api_key:
+        return MaskedKeyResponse(
+            masked_key="",
+            has_key=False,
+            source="none"
+        )
+    
+    # Mask the key: show first 8 chars and last 4 chars
+    if len(api_key) > 12:
+        masked = f"{api_key[:8]}...{api_key[-4:]}"
+    else:
+        masked = "sk-****"
+    
+    # Determine source
+    env_key = os.getenv("OPENAI_API_KEY", "")
+    source = "env" if api_key == env_key else "manual"
+    
+    return MaskedKeyResponse(
+        masked_key=masked,
+        has_key=True,
+        source=source
     )
 
 

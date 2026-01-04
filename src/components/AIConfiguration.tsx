@@ -4,7 +4,7 @@
  * Allows users to enable/disable AI and set API key
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Sparkles, Settings, CheckCircle, AlertCircle, Eye, EyeOff, Loader2, Zap } from 'lucide-react';
+import { Sparkles, Settings, CheckCircle, AlertCircle, Eye, EyeOff, Loader2, Zap, Key } from 'lucide-react';
 import { useAI, AI_FEATURE_AREAS, type AIFeatureId } from '@/contexts/AIContext';
 import { toast } from 'sonner';
 
@@ -25,6 +25,34 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(config.apiKey);
+  const [maskedKey, setMaskedKey] = useState<string>('');
+  const [keySource, setKeySource] = useState<'env' | 'manual' | 'none'>('none');
+  const [loadingKey, setLoadingKey] = useState(true);
+
+  // Load masked key from backend on mount
+  useEffect(() => {
+    const loadMaskedKey = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/ai/vision/config/key');
+        if (response.ok) {
+          const data = await response.json();
+          setMaskedKey(data.masked_key || '');
+          setKeySource(data.source || 'none');
+          
+          // If key exists in env, auto-enable AI
+          if (data.has_key && data.source === 'env') {
+            updateConfig({ enabled: true, apiKey: '***env***' }); // Marker for env key
+            toast.success('🔑 API key loaded from environment');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load masked key:', error);
+      } finally {
+        setLoadingKey(false);
+      }
+    };
+    loadMaskedKey();
+  }, []);
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -123,30 +151,56 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
             
             {/* API Key Input */}
             <div className="space-y-3">
-              <Label>OpenAI API Key</Label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showApiKey ? 'text' : 'password'}
-                    placeholder="sk-..."
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                  >
-                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+              <Label className="flex items-center gap-2">
+                <Key className="h-4 w-4" />
+                OpenAI API Key
+                {keySource === 'env' && (
+                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
+                    From .env
+                  </Badge>
+                )}
+              </Label>
+              
+              {/* Show masked key if loaded from env */}
+              {keySource === 'env' ? (
+                <div className="space-y-2">
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <p className="text-sm font-mono text-green-500">{maskedKey || 'sk-proj-****'}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ✓ Loaded from OPENAI_API_KEY environment variable
+                    </p>
+                  </div>
+                  <Button onClick={handleTestConnection} variant="outline" disabled={testing} className="w-full">
+                    {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                    Test Connection
+                  </Button>
                 </div>
-                <Button onClick={handleSaveApiKey} variant="outline">
-                  Save
-                </Button>
-                <Button onClick={handleTestConnection} variant="outline" disabled={testing || !apiKeyInput}>
-                  {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                </Button>
-              </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="sk-..."
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button onClick={handleSaveApiKey} variant="outline">
+                    Save
+                  </Button>
+                  <Button onClick={handleTestConnection} variant="outline" disabled={testing || !apiKeyInput}>
+                    {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                  </Button>
+                </div>
+              )}
+              
               <p className="text-xs text-muted-foreground">
                 Model: <span className="font-mono">{config.model}</span> • 
                 {status.latency && ` Latency: ${status.latency}ms`}
