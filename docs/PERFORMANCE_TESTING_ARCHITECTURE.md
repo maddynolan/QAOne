@@ -1,6 +1,6 @@
 # 🚀 ArisTrace Performance Testing Architecture
 
-**Version:** 3.0 (Enterprise Complete)  
+**Version:** 4.0 (Go Runner Integration)  
 **Last Updated:** January 2026  
 **Module:** Virtual User Generator (Perf Tab)
 
@@ -9,18 +9,19 @@
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture: ELIS Pattern](#architecture-elis-pattern)
-3. [Run State Machine](#run-state-machine)
-4. [Pass/Fail Gates](#passfail-gates)
-5. [Core Backend Services](#core-backend-services)
-6. [API Endpoints](#api-endpoints)
-7. [Correlation Engine](#correlation-engine)
-8. [Data Parameterization](#data-parameterization)
-9. [Metrics & Storage](#metrics--storage)
-10. [Distributed Load Generation](#distributed-load-generation)
-11. [UI Features](#ui-features)
-12. [Integration with Recording](#integration-with-recording)
-13. [How to Use](#how-to-use)
+2. [Architecture Diagram](#architecture-diagram)
+3. [Go Runner (NEW)](#go-runner-new)
+4. [Run State Machine](#run-state-machine)
+5. [Pass/Fail Gates](#passfail-gates)
+6. [Scenario Compiler](#scenario-compiler)
+7. [Core Backend Services](#core-backend-services)
+8. [API Endpoints](#api-endpoints)
+9. [Correlation Engine](#correlation-engine)
+10. [Data Parameterization](#data-parameterization)
+11. [Metrics & Storage](#metrics--storage)
+12. [Distributed Load Generation](#distributed-load-generation)
+13. [Integration with Recording](#integration-with-recording)
+14. [How to Use](#how-to-use)
 
 ---
 
@@ -30,86 +31,296 @@ ArisTrace Performance Testing is an **enterprise-grade load testing platform** w
 
 | Feature | Status | Description |
 |---------|--------|-------------|
+| **Go Runner (High Performance)** | ✅ **NEW** | Native Go for 10K+ concurrent VUs |
+| **Scenario Compiler** | ✅ **NEW** | HAR/Recording → Compiled JSON |
 | **Control Plane / Load Plane Split** | ✅ | Browser controls, backend generates load |
 | **Run State Machine** | ✅ | CREATED → RUNNING → STOPPING → FINISHED/FAILED |
 | **Pass/Fail Gates** | ✅ | Threshold-based PASS/FAIL verdict |
 | **Correlation Engine** | ✅ | Session cookies, CSRF, dynamic IDs |
 | **Data Parameterization** | ✅ | CSV/JSON user pools, unique payloads |
 | **Metrics Storage** | ✅ | Persistent run history, trend analysis |
-| **Distributed Workers** | ✅ | Multi-node load generation |
+| **Distributed Workers** | ✅ | Multi-node load generation via gRPC |
 | **Alerting** | ✅ | Email, Slack, webhooks for SLA violations |
 
 ---
 
-## 🏗️ Architecture: ELIS Pattern
-
-**E**xecutor, **L**oaders, **I**nspectors, **S**torage
+## 🏗️ Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         1. BOSS (Control Plane)                          │
-│                         React UI (VirtualUserGenerator.tsx)              │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ✅ Configure test parameters (VUs, duration, thresholds)               │
-│  ✅ Start/Stop/Pause tests                                               │
-│  ✅ View real-time metrics                                               │
-│  ✅ Display PASS/FAIL verdict                                            │
-│  ❌ Does NOT generate load (no browser fetch to target)                  │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ HTTP API
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       2. COORDINATOR (FastAPI)                           │
-│                       performance_api.py + run_manager.py                │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ✅ Creates Run IDs                                                      │
-│  ✅ Manages Run State Machine (CREATED → RUNNING → FINISHED)             │
-│  ✅ Saves test config to Postgres/JSON                                   │
-│  ✅ Dispatches work to Load Agents                                       │
-│  ✅ Evaluates Pass/Fail thresholds                                       │
-│  ✅ Stores run history                                                   │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ Queue/Direct Call
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       3. WORKERS (Load Agents)                           │
-│                       load_generator.py + distributed_controller.py      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ✅ Spawns virtual users (asyncio tasks)                                 │
-│  ✅ Executes HTTP requests server-side (httpx/aiohttp)                   │
-│  ✅ Applies correlation (session tokens, CSRF)                           │
-│  ✅ Uses parameterized data (CSV/JSON)                                   │
-│  ✅ Records response times + errors                                      │
-│  ✅ Scales horizontally (N worker nodes)                                 │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ HTTP Traffic
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       TARGET SYSTEM                                      │
-│                       (Your Application Under Test)                      │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ELECTRON DESKTOP APP                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                      UI (React/Electron)                              │   │
+│  │   Record │ Build │ API │ Performance │ Reports │ Visual │ Admin       │   │
+│  └────────────────────────────────┬─────────────────────────────────────┘   │
+│                                   │ HTTP Calls                              │
+│                                   ▼                                          │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                   PYTHON CONTROLLER (FastAPI)                         │   │
+│  │                                                                       │   │
+│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────────┐  │   │
+│  │   │  Compiler   │  │ Run Manager │  │ Dispatcher  │  │ Aggregator │  │   │
+│  │   │             │  │             │  │             │  │            │  │   │
+│  │   │ HAR → JSON  │  │ State       │  │ Start/Stop  │  │ Metrics    │  │   │
+│  │   │ Record→JSON │  │ Machine     │  │ Go Runners  │  │ Collector  │  │   │
+│  │   │ Steps→JSON  │  │ Thresholds  │  │ gRPC/HTTP   │  │ Reports    │  │   │
+│  │   └─────────────┘  └─────────────┘  └─────────────┘  └────────────┘  │   │
+│  │                                                                       │   │
+│  └───────────────────────────────┬──────────────────────────────────────┘   │
+│                                  │                                           │
+│                    ┌─────────────┼─────────────┐                            │
+│                    ▼             ▼             ▼                            │
+│              ┌──────────┐  ┌──────────┐  ┌───────────────────┐              │
+│              │ SQLite   │  │ Artifacts│  │    GO RUNNER      │              │
+│              │ (Runs)   │  │ (Reports)│  │    (Local)        │ ◄── NEW!     │
+│              └──────────┘  └──────────┘  │                   │              │
+│                                          │  ✓ HTTP/1.1 + H2  │              │
+│                                          │  ✓ 10K+ VUs       │              │
+│                                          │  ✓ Correlation    │              │
+│                                          │  ✓ HdrHistogram   │              │
+│                                          │  ✓ Host Metrics   │              │
+│                                          └───────────────────┘              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       4. CAMERAS (Monitoring)                            │
-│                       monitoring_service.py + system_monitoring.py       │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ✅ Workers report RPS, latency, errors                                  │
-│  ✅ Server agents report CPU/memory (if accessible)                      │
-│  ✅ Metrics aggregated in real-time                                      │
-│  ✅ Alert triggers evaluated                                             │
-└─────────────────────────────────────────────────────────────────────────┘
+                                         │
+                                         │ For > 1K VUs (Distributed)
+                                         ▼
 
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       5. REPORT (Results)                                │
-│                       reporting_engine.py + run_manager.py               │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ✅ Big PASS/FAIL verdict                                                │
-│  ✅ Threshold results breakdown                                          │
-│  ✅ Grafana-like graphs (Metrics tab)                                    │
-│  ✅ Historical comparison                                                │
-│  ✅ Export bundle (JSON/CSV)                                             │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      DISTRIBUTED AGENT POOL (Optional)                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐          │
+│   │  Go Agent 1     │   │  Go Agent 2     │   │  Go Agent N     │          │
+│   │  (500-2K VUs)   │   │  (500-2K VUs)   │   │  (500-2K VUs)   │          │
+│   │                 │   │                 │   │                 │          │
+│   │ • HTTP/1.1+H2   │   │ • HTTP/1.1+H2   │   │ • HTTP/1.1+H2   │          │
+│   │ • Correlation   │   │ • Correlation   │   │ • Correlation   │          │
+│   │ • Variables     │   │ • Variables     │   │ • Variables     │          │
+│   │ • Assertions    │   │ • Assertions    │   │ • Assertions    │          │
+│   │ • Host Metrics  │   │ • Host Metrics  │   │ • Host Metrics  │          │
+│   └────────┬────────┘   └────────┬────────┘   └────────┬────────┘          │
+│            │                     │                     │                    │
+│            └─────────────────────┼─────────────────────┘                    │
+│                                  │                                          │
+│                                  │ gRPC/mTLS Stream                         │
+│                                  ▼                                          │
+│                     ┌─────────────────────────┐                             │
+│                     │   Controller (Python)   │                             │
+│                     │   Aggregate + Report    │                             │
+│                     └─────────────────────────┘                             │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🦫 Go Runner (NEW)
+
+### Why Go?
+
+| Metric | Python (asyncio) | Go Runner |
+|--------|------------------|-----------|
+| **Max VUs per node** | ~500 | ~10,000 |
+| **Memory per VU** | ~1MB | ~10KB |
+| **Startup time** | 2-5s | <100ms |
+| **HTTP/2 support** | Manual | Native |
+| **GC pauses** | Variable | Tunable |
+
+### File Structure
+
+```
+runner/
+├── go.mod                          # Dependencies
+├── proto/
+│   └── runner.proto                # gRPC service definitions
+├── cmd/
+│   └── runner/
+│       └── main.go                 # Entry point
+├── pkg/
+│   └── scenario/
+│       └── types.go                # CompiledScenario format
+└── internal/
+    ├── executor/
+    │   ├── http_client.go          # HTTP/1.1 + HTTP/2 client
+    │   ├── vu.go                   # Virtual user implementation
+    │   └── pool.go                 # VU pool manager
+    ├── correlation/
+    │   └── correlation.go          # Dynamic value extraction
+    ├── metrics/
+    │   └── collector.go            # HdrHistogram metrics
+    ├── scheduler/
+    │   └── scheduler.go            # Ramp up/down logic
+    └── grpcserver/
+        └── server.go               # gRPC service implementation
+```
+
+### Go Runner Features
+
+```go
+// High-performance virtual user
+type VirtualUser struct {
+    ID            string
+    Scenario      *scenario.CompiledScenario
+    HTTPClient    *HTTPClient     // HTTP/1.1 + HTTP/2
+    Correlation   *Engine         // Session tokens, CSRF
+    Metrics       *Collector      // HdrHistogram percentiles
+}
+
+// Runs in a goroutine - 10KB memory each
+func (vu *VirtualUser) Run(ctx context.Context, thinkTimeFn func() time.Duration) {
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        default:
+            vu.runIteration(ctx)
+            time.Sleep(thinkTimeFn())
+        }
+    }
+}
+```
+
+### Running Go Runner
+
+```bash
+# Standalone mode (local testing)
+cd runner
+go build -o runner ./cmd/runner
+./runner --standalone --scenario scenario.json
+
+# gRPC server mode (for controller)
+./runner --port 50051 --max-vus 2000 --agent-id worker-1
+```
+
+---
+
+## 📝 Scenario Compiler
+
+The **Scenario Compiler** converts multiple input formats into a universal **CompiledScenario JSON** that the Go runner can execute.
+
+### Compilation Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  HAR File   │     │  Recording  │     │  Builder    │
+│  (Browser)  │     │  (Network)  │     │  (Manual)   │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                           ▼
+              ┌─────────────────────────┐
+              │    SCENARIO COMPILER    │
+              │    (Python/FastAPI)     │
+              │                         │
+              │  • Parse input format   │
+              │  • Extract HTTP steps   │
+              │  • Auto-detect cookies  │
+              │  • Add think times      │
+              │  • Generate extractors  │
+              └───────────┬─────────────┘
+                          │
+                          ▼
+              ┌─────────────────────────┐
+              │   COMPILED SCENARIO     │
+              │   (Universal JSON)      │
+              └───────────┬─────────────┘
+                          │
+                          ▼
+              ┌─────────────────────────┐
+              │      GO RUNNER          │
+              │   (Load Generation)     │
+              └─────────────────────────┘
+```
+
+### CompiledScenario Format
+
+```json
+{
+  "scenario_id": "uuid",
+  "name": "E-commerce Checkout Flow",
+  "source": "har",
+  "version": "1.0",
+  "created_at": "2026-01-04T12:00:00Z",
+  
+  "config": {
+    "virtual_users": 100,
+    "duration_seconds": 300,
+    "ramp_up_seconds": 60,
+    "ramp_down_seconds": 30,
+    "target_url": "https://shop.example.com",
+    "enable_http2": true,
+    "think_time_min_ms": 1000,
+    "think_time_max_ms": 3000
+  },
+  
+  "thresholds": [
+    {"metric": "response_time.p95", "op": "<", "value": 800, "critical": false},
+    {"metric": "error_rate", "op": "<", "value": 0.01, "critical": true}
+  ],
+  
+  "variables": {
+    "base_url": "https://shop.example.com",
+    "api_version": "v2"
+  },
+  
+  "data_pools": [
+    {
+      "id": "users",
+      "name": "Test Users",
+      "mode": "unique",
+      "columns": ["username", "password"],
+      "inline_data": [
+        {"username": "user1", "password": "pass1"},
+        {"username": "user2", "password": "pass2"}
+      ]
+    }
+  ],
+  
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "GET /api/products",
+      "type": "http",
+      "method": "GET",
+      "url": "${base_url}/api/products",
+      "headers": {"Authorization": "Bearer ${auth_token}"},
+      "extract": [
+        {"name": "product_id", "from": "json", "path": "$.products[0].id"}
+      ],
+      "assertions": [
+        {"type": "status", "expected": 200}
+      ]
+    },
+    {
+      "id": "think_1",
+      "name": "Think Time",
+      "type": "think",
+      "think_time_ms": 2000
+    },
+    {
+      "id": "step_2",
+      "name": "POST /api/cart",
+      "type": "http",
+      "method": "POST",
+      "url": "${base_url}/api/cart",
+      "body": {"product_id": "${product_id}", "quantity": 1}
+    }
+  ]
+}
+```
+
+### Compiler API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/performance/compile/har` | Compile HAR file → Scenario JSON |
+| `POST /api/performance/compile/recording` | Compile recorded session → Scenario JSON |
+| `POST /api/performance/compile/api-requests` | Compile API tab requests → Scenario JSON |
 
 ---
 
@@ -158,7 +369,7 @@ Every test run follows this state machine:
 |-------|-------------|
 | `CREATED` | Run created, configuration saved |
 | `QUEUED` | Waiting for workers (distributed mode) |
-| `STARTING` | Workers initializing |
+| `STARTING` | Go runner initializing |
 | `RUNNING` | Active load generation |
 | `STOPPING` | Graceful shutdown in progress |
 | `FINISHED` | Completed successfully |
@@ -177,7 +388,7 @@ Tests are evaluated against **thresholds** to produce a clear **PASS/FAIL verdic
 |--------|----------|-------|----------|-------------|
 | `response_time.p95` | < | 800ms | No | 95th percentile response time |
 | `response_time.p99` | < | 2000ms | No | 99th percentile response time |
-| `iterations.error_rate` | < | 1% | **Yes** | Error rate must be under 1% |
+| `error_rate` | < | 1% | **Yes** | Error rate must be under 1% |
 | `throughput.rps` | > | 10 | No | Minimum requests per second |
 
 ### Verdict Logic
@@ -196,12 +407,10 @@ else:
 
 ### UI Display
 
-The Results tab shows a prominent verdict banner:
-
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  ✅  PASS                                          Thresholds   │
-│                                                       3/4       │
+│                                                       4/4       │
 │  All 4 thresholds passed                                        │
 │                                                                 │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌─────────┐│
@@ -219,9 +428,11 @@ The Results tab shows a prominent verdict banner:
 
 ```
 backend/app/services/performance/
-├── run_manager.py            # 🆕 Run state machine + Pass/Fail gates
+├── scenario_compiler.py      # 🆕 HAR/Recording → CompiledScenario
+├── go_runner_client.py       # 🆕 Communication with Go runner
+├── run_manager.py            # Run state machine + Pass/Fail gates
 ├── performance_engine.py     # Main orchestrator
-├── load_generator.py         # Virtual user pool (asyncio)
+├── load_generator.py         # Python fallback (asyncio)
 ├── correlation_engine.py     # Session/CSRF/token handling
 ├── data_parameterization.py  # CSV/JSON test data pools
 ├── distributed_controller.py # Multi-node workers
@@ -238,49 +449,51 @@ backend/app/services/performance/
 
 | Service | Purpose |
 |---------|---------|
+| **ScenarioCompiler** | HAR/Recording → CompiledScenario JSON |
+| **GoRunnerClient** | Dispatch to Go runner, fallback to Python |
 | **RunManager** | State machine, thresholds, verdict, history |
 | **PerformanceEngine** | Orchestrates all components |
-| **LoadGenerator** | Spawns/manages virtual users |
+| **LoadGenerator** | Python fallback for small tests |
 | **CorrelationEngine** | Extracts/applies dynamic values |
 | **DataParameterizationEngine** | Manages test data pools |
 | **DistributedController** | Coordinates worker nodes |
-| **AlertingService** | Sends notifications on SLA breach |
-| **ReportingEngine** | Generates reports, trends |
 
 ---
 
 ## 📡 API Endpoints
 
-### Run Management (NEW)
+### Scenario Compilation (NEW)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/performance/compile/har` | Compile HAR → Scenario |
+| `POST` | `/api/performance/compile/recording` | Compile recording → Scenario |
+| `POST` | `/api/performance/compile/api-requests` | Compile API requests → Scenario |
+
+### Go Runner Management (NEW)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/performance/runner/status` | Get Go runner status |
+| `POST` | `/api/performance/runner/start-local` | Start local Go runner |
+| `POST` | `/api/performance/runner/stop-local` | Stop local Go runner |
+
+### Run Management
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/performance/runs/create` | Create new run with thresholds |
 | `POST` | `/api/performance/runs/{id}/start` | Start the run |
 | `POST` | `/api/performance/runs/{id}/stop` | Stop and evaluate verdict |
-| `POST` | `/api/performance/runs/{id}/evaluate` | Evaluate thresholds |
 | `GET` | `/api/performance/runs/{id}` | Get run details + verdict |
-| `GET` | `/api/performance/runs` | List runs with filtering |
 | `GET` | `/api/performance/runs/history/{scenario}` | Get run history for trends |
 | `POST` | `/api/performance/runs/compare` | Compare multiple runs |
-| `GET` | `/api/performance/thresholds/defaults` | Get default thresholds |
-
-### Existing Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/performance/scenarios` | Create scenario |
-| `POST` | `/api/performance/tests/run` | Start load test (legacy) |
-| `GET` | `/api/performance/metrics/realtime` | Live metrics |
-| `POST` | `/api/performance/data-pools/create` | Create data pool |
-| `POST` | `/api/performance/alerts/create` | Create alert |
-| `GET` | `/api/performance/system-metrics` | Server CPU/memory |
 
 ---
 
 ## 🔗 Correlation Engine
 
-Automatically handles dynamic values:
+Both Python and Go have correlation engines with the same patterns:
 
 ### Auto-Detected Patterns
 
@@ -291,27 +504,25 @@ Automatically handles dynamic values:
 | Auth Token | `access_token`, `Bearer` | JWT from response |
 | Dynamic IDs | `order_id`, `user_id` | JSON path extraction |
 
-### Extraction Methods
+### Go Correlation Engine
 
-```python
-CorrelationRule(
-    variable_name="csrf_token",
-    extract_type="regex",  # jsonpath, regex, header, cookie, xpath
-    extract_value=r'name="csrf_token" value="([^"]+)"',
-    scope="session"
-)
+```go
+// Extract values from response
+extracted := engine.Extract(body, headers, statusCode, []Extractor{
+    {Name: "auth_token", From: "json", Path: "$.token"},
+    {Name: "csrf", From: "header", Key: "X-CSRF-Token"},
+})
+
+// Substitute in next request
+url := engine.Substitute("${base_url}/api/orders/${order_id}")
 ```
 
-### Auto-Replacement
+### JSON Export for Go
 
 ```python
-# Before correlation
-url = "/api/orders/${order_id}"
-headers = {"X-CSRF-Token": "${csrf_token}"}
-
-# After correlation
-url = "/api/orders/12345"
-headers = {"X-CSRF-Token": "abc123xyz"}
+# Python → Go
+correlation_engine.export_rules_to_json()
+# Returns: [{"name": "csrf", "from": "header", "key": "X-CSRF-Token"}, ...]
 ```
 
 ---
@@ -327,37 +538,20 @@ headers = {"X-CSRF-Token": "abc123xyz"}
 | `UNIQUE` | Each VU gets unique data | No collisions |
 | `SHARED` | Round-robin across VUs | Global queue |
 
-### Create Data Pool
+### Inline Data in Scenario
 
-```python
-POST /api/performance/data-pools/create
+```json
 {
-    "pool_id": "users",
-    "name": "Test Users",
-    "data_source": "/data/users.csv",
-    "access_mode": "unique",
-    "columns": ["username", "password", "email"]
-}
-```
-
-### CSV Example
-
-```csv
-username,password,email
-user1,pass123,user1@test.com
-user2,pass456,user2@test.com
-user3,pass789,user3@test.com
-```
-
-### Usage in Requests
-
-```python
-{
-    "url": "/api/login",
-    "body": {
-        "username": "${username}",
-        "password": "${password}"
+  "data_pools": [
+    {
+      "id": "users",
+      "mode": "unique",
+      "inline_data": [
+        {"username": "user1", "password": "pass1"},
+        {"username": "user2", "password": "pass2"}
+      ]
     }
+  ]
 }
 ```
 
@@ -365,48 +559,37 @@ user3,pass789,user3@test.com
 
 ## 📈 Metrics & Storage
 
-### Metrics Collected
+### Go Runner Metrics (HdrHistogram)
 
-```typescript
-interface LoadTestMetrics {
-    // Response Times
-    response_time: {
-        min: number;      // Minimum response time (ms)
-        max: number;      // Maximum response time (ms)
-        avg: number;      // Average response time (ms)
-        p50: number;      // 50th percentile
-        p75: number;      // 75th percentile
-        p90: number;      // 90th percentile
-        p95: number;      // 95th percentile
-        p99: number;      // 99th percentile
-    };
-    
-    // Throughput
-    throughput: {
-        rps: number;              // Requests per second
-        total_requests: number;   // Total requests made
-    };
-    
-    // Errors
-    iterations: {
-        total: number;
-        errors: number;
-        error_rate: number;    // errors / total
-    };
-    
+```go
+type Snapshot struct {
     // Virtual Users
-    virtual_users: {
-        total: number;
-        active: number;
-        completed: number;
-        error: number;
-    };
+    ActiveVUs int32
+    PeakVUs   int32
+    
+    // Request counts
+    TotalRequests      int64
+    SuccessfulRequests int64
+    FailedRequests     int64
+    ErrorRate          float64
+    
+    // Response times (HdrHistogram percentiles)
+    ResponseTimeMin float64
+    ResponseTimeMax float64
+    ResponseTimeAvg float64
+    ResponseTimeP50 float64
+    ResponseTimeP95 float64
+    ResponseTimeP99 float64
+    
+    // Host metrics (runner machine)
+    HostCPUPercent    float64
+    HostMemoryPercent float64
+    GoGoroutines      int64
+    GoHeapBytes       int64
 }
 ```
 
 ### Persistent Storage
-
-Runs are stored in `data/performance_runs/`:
 
 ```
 data/performance_runs/
@@ -415,90 +598,49 @@ data/performance_runs/
 └── run_abc123_errors.json    # Error samples
 ```
 
-### Historical Queries
-
-```python
-# Get 30-day history for trend analysis
-GET /api/performance/runs/history/my_scenario?days=30
-
-# Response
-{
-    "runs": [
-        {
-            "run_id": "run_abc123",
-            "created_at": "2026-01-01T10:00:00Z",
-            "verdict": "PASS",
-            "metrics": { "p95": 450, "error_rate": 0.005 }
-        },
-        ...
-    ]
-}
-```
-
 ---
 
 ## 🌐 Distributed Load Generation
 
-For 1000+ VUs, use distributed mode:
+For 1000+ VUs, use distributed Go agents:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CONTROLLER NODE                               │
-│                  DistributedController                           │
-│                                                                  │
-│    Distributes VUs across workers                                │
-│    Aggregates metrics from all nodes                             │
+│                    CONTROLLER (Python)                           │
+│                  Dispatches CompiledScenario                     │
 └─────────────────────────────┬────────────────────────────────────┘
-                              │
+                              │ gRPC StartRun
            ┌──────────────────┼──────────────────┐
            │                  │                  │
            ▼                  ▼                  ▼
     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │  Worker 1    │  │  Worker 2    │  │  Worker N    │
-    │  500 VUs     │  │  500 VUs     │  │  500 VUs     │
-    │  LoadGen     │  │  LoadGen     │  │  LoadGen     │
-    └──────────────┘  └──────────────┘  └──────────────┘
+    │  Go Agent 1  │  │  Go Agent 2  │  │  Go Agent N  │
+    │  2000 VUs    │  │  2000 VUs    │  │  2000 VUs    │
+    └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+           │                  │                  │
+           └──────────────────┴──────────────────┘
+                              │
+                              │ StreamMetrics (gRPC)
+                              ▼
+                    ┌─────────────────────┐
+                    │ Controller Aggregate│
+                    │ → UI Display        │
+                    └─────────────────────┘
 ```
 
-### Enable Distributed Mode
+### gRPC Protocol
 
-```python
-POST /api/performance/tests/run
-{
-    "scenario_id": "...",
-    "virtual_users": 2000,
-    "use_distributed": true  # Auto-distributes across nodes
+```protobuf
+service RunnerService {
+    rpc StartRun(StartRunRequest) returns (StartRunResponse);
+    rpc StopRun(StopRunRequest) returns (StopRunResponse);
+    rpc StreamMetrics(stream MetricsEvent) returns (stream ControllerCommand);
 }
 ```
 
 ---
 
-## 🖥️ UI Features
-
-### 7 Tabs
-
-| Tab | Purpose |
-|-----|---------|
-| **Quick** | One-click test scenarios |
-| **HAR** | Import HAR files |
-| **Config** | Pattern, users, duration, thresholds |
-| **Steps** | View/edit test steps |
-| **Users** | Virtual user status |
-| **Metrics** | Live dashboard |
-| **Results** | PASS/FAIL verdict + summary |
-
-### Results Tab Features
-
-1. **Big PASS/FAIL Banner** - Immediately shows verdict
-2. **Threshold Breakdown** - Each threshold with actual vs expected
-3. **Recommendations** - AI-generated optimization tips
-4. **Export** - JSON/CSV download
-
----
-
 ## 🔄 Integration with Recording
-
-The performance module integrates with the **Record** tab:
 
 ```
 ┌─────────────┐     Record with      ┌─────────────┐
@@ -513,23 +655,20 @@ The performance module integrates with the **Record** tab:
                                      │   Tab       │
                                      └──────┬──────┘
                                             │
-                                            │ HTTP requests
-                                            │ become test steps
+                                            │ Compile
                                             ▼
                                      ┌─────────────┐
-                                     │ Load Test   │
-                                     │ Execution   │
+                                     │ Scenario    │
+                                     │ Compiler    │
+                                     └──────┬──────┘
+                                            │
+                                            │ CompiledScenario JSON
+                                            ▼
+                                     ┌─────────────┐
+                                     │  Go Runner  │
+                                     │  10K+ VUs   │
                                      └─────────────┘
 ```
-
-### Flow
-
-1. **Record** browser session with "Capture Network" toggle ON
-2. Network requests captured as API calls
-3. Click "Send to Perf" (orange button)
-4. Requests become load test steps
-5. Configure VUs, duration, thresholds
-6. Run test → Get PASS/FAIL verdict
 
 ---
 
@@ -543,28 +682,21 @@ The performance module integrates with the **Record** tab:
 4. Watch **Metrics** tab
 5. Check **Results** for PASS/FAIL
 
-### Custom Test with Thresholds
+### With Go Runner (High Load)
 
-1. **Config** tab:
-   - Set VUs: 100
-   - Duration: 120s
-   - Pattern: Ramp Up
-   
-2. **Thresholds** (via API):
-   ```json
-   {
-       "thresholds": [
-           {"metric": "response_time.p95", "operator": "<", "value": 500},
-           {"metric": "iterations.error_rate", "operator": "<", "value": 0.005, "critical": true}
-       ]
-   }
+1. Build Go runner:
+   ```bash
+   cd runner
+   go build -o runner ./cmd/runner
    ```
 
-3. **Steps** tab → Add/import test steps
+2. Start via API:
+   ```bash
+   POST /api/performance/runner/start-local
+   {"max_vus": 5000}
+   ```
 
-4. Click **Start Test**
-
-5. **Results** tab → See PASS/FAIL
+3. Run test normally - Go runner will be used automatically
 
 ### From Recorded Session
 
@@ -576,47 +708,45 @@ The performance module integrates with the **Record** tab:
 
 ---
 
-## 📊 Comparison with Tools
-
-| Feature | ArisTrace | LoadRunner | k6 | Gatling |
-|---------|-----------|------------|-----|---------|
-| Browser Control | ✅ | ✅ | ❌ | ❌ |
-| Server-side Load | ✅ | ✅ | ✅ | ✅ |
-| Correlation | ✅ | ✅ | Manual | Manual |
-| Data Pools | ✅ | ✅ | ✅ | ✅ |
-| Pass/Fail Gates | ✅ | ✅ | ✅ | ✅ |
-| Run History | ✅ | ✅ | ✅ | ✅ |
-| Integrated Recording | ✅ | ✅ | ❌ | ❌ |
-| Free | ✅ | ❌ | ✅ | ✅ |
-
----
-
 ## 🛠️ Technical Stack
 
 | Layer | Technology |
 |-------|------------|
 | Control Plane | React 18 + TypeScript + Shadcn/UI |
 | API Layer | FastAPI (Python 3.9+) |
-| Load Plane | asyncio + httpx + aiohttp |
+| Load Plane | **Go 1.21** (HdrHistogram, gRPC) |
+| Python Fallback | asyncio + httpx + aiohttp |
 | Storage | JSON files (upgradeable to Postgres) |
-| Distributed | Custom controller (upgradeable to Redis/RabbitMQ) |
+| Distributed | gRPC with mTLS |
 
 ---
 
-## 📞 Next Steps (Roadmap)
+## 📊 Comparison with Tools
+
+| Feature | ArisTrace | k6 | Gatling | LoadRunner |
+|---------|-----------|-----|---------|------------|
+| Language | Go + Python | JS | Scala | C |
+| Max VUs/Node | 10K+ | 10K+ | 5K | 5K |
+| Browser Control | ✅ | ❌ | ❌ | ✅ |
+| Correlation | ✅ | Manual | Manual | ✅ |
+| Integrated Recording | ✅ | ❌ | ❌ | ✅ |
+| Pass/Fail Gates | ✅ | ✅ | ✅ | ✅ |
+| Free | ✅ | ✅ | ✅ | ❌ |
+
+---
+
+## 📞 Roadmap
 
 | Priority | Feature | Status |
 |----------|---------|--------|
-| 1 | Run State Machine | ✅ Done |
-| 2 | Pass/Fail Thresholds | ✅ Done |
-| 3 | Correlation Engine | ✅ Done |
-| 4 | Data Parameterization | ✅ Done |
-| 5 | Run History Storage | ✅ Done |
-| 6 | WebSocket for Live Metrics | 🔜 Next |
-| 7 | Redis Queue for Workers | 🔜 Next |
-| 8 | PostgreSQL Metrics Storage | 🔜 Future |
-| 9 | Distributed Tracing | 🔜 Future |
-| 10 | Auto Evidence Pack (PDF) | 🔜 Future |
+| 1 | Go Runner Core | ✅ Done |
+| 2 | Scenario Compiler | ✅ Done |
+| 3 | Controller Integration | ✅ Done |
+| 4 | gRPC Streaming | 🔜 Next |
+| 5 | Distributed Agents | 🔜 Next |
+| 6 | mTLS Security | 🔜 Future |
+| 7 | WebSocket Protocol | 🔜 Future |
+| 8 | Auto Evidence Pack | 🔜 Future |
 
 ---
 

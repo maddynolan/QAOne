@@ -8,6 +8,8 @@ from datetime import datetime
 import logging
 
 from app.services.performance.performance_engine import PerformanceEngine
+from app.services.performance.scenario_compiler import get_scenario_compiler, Config
+from app.services.performance.go_runner_client import get_go_runner_client
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +192,215 @@ async def add_step(request: Request, scenario_id: str, body: dict):
         logger.error(f"Error adding step: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================================================
+# SCENARIO COMPILER ENDPOINTS (For Go Runner)
+# ============================================================================
+
+@router.post("/compile/har")
+async def compile_har(request: Request, body: dict):
+    """
+    Compile HAR file to CompiledScenario JSON for Go runner.
+    
+    Body:
+        har_content: str - Raw HAR file content
+        name: str - Scenario name
+        config: dict - Optional load test configuration
+    """
+    try:
+        har_content = body.get("har_content")
+        if not har_content:
+            raise HTTPException(status_code=400, detail="har_content is required")
+        
+        name = body.get("name", "HAR Import")
+        config_data = body.get("config", {})
+        
+        config = Config(
+            virtual_users=config_data.get("virtual_users", 10),
+            duration_seconds=config_data.get("duration_seconds", 60),
+            ramp_up_seconds=config_data.get("ramp_up_seconds", 10),
+            ramp_down_seconds=config_data.get("ramp_down_seconds", 10),
+            target_url=config_data.get("target_url", "")
+        )
+        
+        compiler = get_scenario_compiler()
+        scenario = compiler.compile_from_har(har_content, name, config)
+        
+        return {
+            "status": "success",
+            "scenario_id": scenario.scenario_id,
+            "compiled_scenario": scenario.to_dict()
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error compiling HAR: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/compile/recording")
+async def compile_recording(request: Request, body: dict):
+    """
+    Compile recorded browser session to CompiledScenario JSON for Go runner.
+    
+    Body:
+        recorded_steps: list - Steps from recorder
+        network_requests: list - Network requests captured during recording
+        name: str - Scenario name
+        config: dict - Optional load test configuration
+    """
+    try:
+        network_requests = body.get("network_requests", [])
+        if not network_requests:
+            raise HTTPException(status_code=400, detail="network_requests are required")
+        
+        recorded_steps = body.get("recorded_steps", [])
+        name = body.get("name", "Recorded Session")
+        config_data = body.get("config", {})
+        
+        config = Config(
+            virtual_users=config_data.get("virtual_users", 10),
+            duration_seconds=config_data.get("duration_seconds", 60),
+            ramp_up_seconds=config_data.get("ramp_up_seconds", 10),
+            target_url=config_data.get("target_url", "")
+        )
+        
+        compiler = get_scenario_compiler()
+        scenario = compiler.compile_from_recording(recorded_steps, network_requests, name, config)
+        
+        return {
+            "status": "success",
+            "scenario_id": scenario.scenario_id,
+            "compiled_scenario": scenario.to_dict()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error compiling recording: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/compile/api-requests")
+async def compile_api_requests(request: Request, body: dict):
+    """
+    Compile API requests (from API tab) to CompiledScenario JSON for Go runner.
+    
+    Body:
+        requests: list - API requests with method, url, headers, body
+        name: str - Scenario name
+        config: dict - Optional load test configuration
+    """
+    try:
+        requests_data = body.get("requests", [])
+        if not requests_data:
+            raise HTTPException(status_code=400, detail="requests are required")
+        
+        name = body.get("name", "API Test")
+        config_data = body.get("config", {})
+        
+        config = Config(
+            virtual_users=config_data.get("virtual_users", 10),
+            duration_seconds=config_data.get("duration_seconds", 60),
+            ramp_up_seconds=config_data.get("ramp_up_seconds", 10),
+            target_url=config_data.get("target_url", "")
+        )
+        
+        compiler = get_scenario_compiler()
+        scenario = compiler.compile_from_api_requests(requests_data, name, config)
+        
+        return {
+            "status": "success",
+            "scenario_id": scenario.scenario_id,
+            "compiled_scenario": scenario.to_dict()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error compiling API requests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# GO RUNNER ENDPOINTS
+# ============================================================================
+
+@router.get("/runner/status")
+async def get_runner_status(request: Request):
+    """Get Go runner status and capacity"""
+    try:
+        client = get_go_runner_client()
+        
+        return {
+            "status": "success",
+            "go_runner_available": client.is_go_runner_available(),
+            "runner_count": client.get_runner_count(),
+            "available_capacity": client.get_available_capacity(),
+            "runners": [
+                {
+                    "agent_id": r.agent_id,
+                    "hostname": r.hostname,
+                    "port": r.port,
+                    "status": r.status,
+                    "max_vus": r.max_vus,
+                    "current_vus": r.current_vus,
+                    "available_vus": r.available_vus,
+                    "active_runs": r.active_runs
+                }
+                for r in client.runners.values()
+            ]
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting runner status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runner/start-local")
+async def start_local_runner(request: Request, body: dict):
+    """Start the local Go runner"""
+    try:
+        max_vus = body.get("max_vus", 1000)
+        
+        client = get_go_runner_client()
+        success = await client.start_local_runner(max_vus)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Local Go runner started",
+                "port": client.local_runner_port
+            }
+        else:
+            return {
+                "status": "fallback",
+                "message": "Go runner not available - using Python fallback",
+                "use_python_engine": True
+            }
+    
+    except Exception as e:
+        logger.error(f"Error starting local runner: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runner/stop-local")
+async def stop_local_runner(request: Request):
+    """Stop the local Go runner"""
+    try:
+        client = get_go_runner_client()
+        await client.stop_local_runner()
+        
+        return {
+            "status": "success",
+            "message": "Local Go runner stopped"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error stopping local runner: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# LOAD TEST ENDPOINTS
+# ============================================================================
 
 @router.post("/tests/run")
 async def run_test(request: Request, body: dict):

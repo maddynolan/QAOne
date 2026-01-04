@@ -328,6 +328,67 @@ class CorrelationEngine:
         # Simplified implementation
         logger.warning("Parameterization data generation not fully implemented")
         return [{} for _ in range(count)]
+    
+    def export_rules_to_json(self) -> List[Dict[str, Any]]:
+        """
+        Export correlation rules to JSON format for Go runner.
+        
+        Returns:
+            List of rule dictionaries compatible with Go runner
+        """
+        rules_json = []
+        for rule in self.rules:
+            rules_json.append({
+                "name": rule.variable_name,
+                "from": rule.extract_type,
+                "path": rule.extract_value if rule.extract_type == "jsonpath" else None,
+                "key": rule.extract_value if rule.extract_type in ["header", "cookie"] else None,
+                "regex": rule.extract_value if rule.extract_type == "regex" else None,
+                "default": ""
+            })
+        return rules_json
+    
+    def export_variables_to_json(self, session_id: str = "default") -> Dict[str, Any]:
+        """
+        Export current variables to JSON for Go runner initialization.
+        
+        Args:
+            session_id: Session to export
+            
+        Returns:
+            Dictionary of variables
+        """
+        return self.correlation_data.get(session_id, {}).copy()
+    
+    def import_rules_from_json(self, rules_json: List[Dict[str, Any]]):
+        """
+        Import correlation rules from JSON (e.g., from Go runner).
+        
+        Args:
+            rules_json: List of rule dictionaries
+        """
+        for rule_data in rules_json:
+            # Determine extract type and value
+            if rule_data.get("path"):
+                extract_type = "jsonpath"
+                extract_value = rule_data["path"]
+            elif rule_data.get("key") and rule_data.get("from") == "header":
+                extract_type = "header"
+                extract_value = rule_data["key"]
+            elif rule_data.get("key") and rule_data.get("from") == "cookie":
+                extract_type = "cookie"
+                extract_value = rule_data["key"]
+            elif rule_data.get("regex"):
+                extract_type = "regex"
+                extract_value = rule_data["regex"]
+            else:
+                continue
+            
+            self.add_rule(CorrelationRule(
+                variable_name=rule_data.get("name", "unknown"),
+                extract_type=extract_type,
+                extract_value=extract_value
+            ))
 
 
 

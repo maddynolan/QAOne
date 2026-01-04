@@ -1,0 +1,337 @@
+syntax = "proto3";
+
+package aristrace.runner;
+
+option go_package = "github.com/aristrace/runner/proto";
+
+// ============================================================================
+// RUNNER SERVICE - Main gRPC service for load generation
+// ============================================================================
+
+service RunnerService {
+    // Controller → Runner: Start a load test run
+    rpc StartRun(StartRunRequest) returns (StartRunResponse);
+    
+    // Controller → Runner: Stop a running test
+    rpc StopRun(StopRunRequest) returns (StopRunResponse);
+    
+    // Controller → Runner: Get current status
+    rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+    
+    // Controller → Runner: Adjust VUs mid-run
+    rpc AdjustVUs(AdjustVUsRequest) returns (AdjustVUsResponse);
+    
+    // Runner → Controller: Stream metrics (bidirectional)
+    rpc StreamMetrics(stream MetricsEvent) returns (stream ControllerCommand);
+}
+
+// ============================================================================
+// AGENT REGISTRY - For distributed mode
+// ============================================================================
+
+service AgentRegistry {
+    // Agent registers with controller
+    rpc Register(RegisterRequest) returns (RegisterResponse);
+    
+    // Agent heartbeat
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // Agent deregisters
+    rpc Deregister(DeregisterRequest) returns (DeregisterResponse);
+    
+    // Controller lists agents
+    rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+}
+
+// ============================================================================
+// START/STOP RUN
+// ============================================================================
+
+message StartRunRequest {
+    string run_id = 1;
+    bytes scenario_json = 2;      // CompiledScenario as JSON bytes
+    RunConfig config = 3;
+}
+
+message RunConfig {
+    int32 virtual_users = 1;
+    int32 duration_seconds = 2;
+    int32 ramp_up_seconds = 3;
+    int32 ramp_down_seconds = 4;
+    string target_url = 5;
+    repeated Threshold thresholds = 6;
+    bool enable_http2 = 7;
+    int32 connection_timeout_ms = 8;
+    int32 request_timeout_ms = 9;
+}
+
+message Threshold {
+    string metric = 1;           // e.g., "http_req_duration_p95"
+    string operator = 2;         // "<", ">", "<=", ">=", "=="
+    double value = 3;
+    bool critical = 4;
+    string name = 5;
+}
+
+message StartRunResponse {
+    bool success = 1;
+    string message = 2;
+    string run_id = 3;
+}
+
+message StopRunRequest {
+    string run_id = 1;
+    bool graceful = 2;           // If true, wait for in-flight requests
+}
+
+message StopRunResponse {
+    bool success = 1;
+    string message = 2;
+    MetricsSummary final_metrics = 3;
+}
+
+message GetStatusRequest {
+    string run_id = 1;
+}
+
+message GetStatusResponse {
+    string run_id = 1;
+    RunState state = 2;
+    int32 active_vus = 3;
+    int32 elapsed_seconds = 4;
+    MetricsSnapshot current_metrics = 5;
+}
+
+message AdjustVUsRequest {
+    string run_id = 1;
+    int32 target_vus = 2;
+}
+
+message AdjustVUsResponse {
+    bool success = 1;
+    int32 current_vus = 2;
+    int32 target_vus = 3;
+}
+
+// ============================================================================
+// RUN STATE
+// ============================================================================
+
+enum RunState {
+    RUN_STATE_UNKNOWN = 0;
+    RUN_STATE_CREATED = 1;
+    RUN_STATE_STARTING = 2;
+    RUN_STATE_RAMPING_UP = 3;
+    RUN_STATE_RUNNING = 4;
+    RUN_STATE_RAMPING_DOWN = 5;
+    RUN_STATE_STOPPING = 6;
+    RUN_STATE_FINISHED = 7;
+    RUN_STATE_FAILED = 8;
+    RUN_STATE_CANCELLED = 9;
+}
+
+// ============================================================================
+// METRICS STREAMING
+// ============================================================================
+
+message MetricsEvent {
+    string run_id = 1;
+    int64 timestamp_ms = 2;
+    string agent_id = 3;         // For distributed mode
+    
+    oneof event {
+        MetricsSnapshot metrics = 4;
+        LogEntry log = 5;
+        StateChange state_change = 6;
+        ErrorEvent error = 7;
+        RequestSample sample = 8;  // Sampled request details
+    }
+}
+
+message MetricsSnapshot {
+    // Virtual Users
+    int32 active_vus = 1;
+    int32 total_vus = 2;
+    
+    // Request counts
+    int64 requests_total = 3;
+    int64 requests_success = 4;
+    int64 requests_failed = 5;
+    
+    // Throughput
+    double requests_per_second = 6;
+    int64 bytes_sent = 7;
+    int64 bytes_received = 8;
+    
+    // Response time percentiles (milliseconds)
+    double response_time_min = 10;
+    double response_time_max = 11;
+    double response_time_avg = 12;
+    double response_time_p50 = 13;
+    double response_time_p75 = 14;
+    double response_time_p90 = 15;
+    double response_time_p95 = 16;
+    double response_time_p99 = 17;
+    
+    // Host metrics (runner machine)
+    double host_cpu_percent = 20;
+    double host_memory_percent = 21;
+    int64 host_open_files = 22;
+    int64 host_open_connections = 23;
+    
+    // Go runtime metrics
+    int64 go_goroutines = 30;
+    int64 go_heap_bytes = 31;
+    int64 go_gc_pause_ns = 32;
+}
+
+message MetricsSummary {
+    int64 total_requests = 1;
+    int64 successful_requests = 2;
+    int64 failed_requests = 3;
+    double error_rate = 4;
+    
+    double avg_response_time = 5;
+    double p50_response_time = 6;
+    double p95_response_time = 7;
+    double p99_response_time = 8;
+    double min_response_time = 9;
+    double max_response_time = 10;
+    
+    double requests_per_second = 11;
+    int64 bytes_sent = 12;
+    int64 bytes_received = 13;
+    
+    int32 duration_seconds = 14;
+    int32 peak_vus = 15;
+}
+
+message LogEntry {
+    string level = 1;            // DEBUG, INFO, WARN, ERROR
+    string message = 2;
+    string vu_id = 3;
+    string step_id = 4;
+    map<string, string> fields = 5;
+}
+
+message StateChange {
+    RunState from_state = 1;
+    RunState to_state = 2;
+    string reason = 3;
+}
+
+message ErrorEvent {
+    string vu_id = 1;
+    string step_id = 2;
+    string error_type = 3;       // "timeout", "connection", "status", "assertion"
+    string message = 4;
+    int32 status_code = 5;
+    string url = 6;
+}
+
+message RequestSample {
+    string vu_id = 1;
+    string step_id = 2;
+    string method = 3;
+    string url = 4;
+    int32 status_code = 5;
+    double response_time_ms = 6;
+    int64 bytes_sent = 7;
+    int64 bytes_received = 8;
+    bool success = 9;
+    string error = 10;
+}
+
+// ============================================================================
+// CONTROLLER COMMANDS (bidirectional streaming)
+// ============================================================================
+
+message ControllerCommand {
+    oneof command {
+        AdjustVUsCommand adjust_vus = 1;
+        PauseCommand pause = 2;
+        ResumeCommand resume = 3;
+        StopCommand stop = 4;
+    }
+}
+
+message AdjustVUsCommand {
+    int32 target_vus = 1;
+    int32 ramp_duration_seconds = 2;
+}
+
+message PauseCommand {}
+
+message ResumeCommand {}
+
+message StopCommand {
+    bool graceful = 1;
+}
+
+// ============================================================================
+// AGENT REGISTRY (Distributed Mode)
+// ============================================================================
+
+message RegisterRequest {
+    string agent_id = 1;
+    string hostname = 2;
+    int32 grpc_port = 3;
+    int32 max_vus = 4;           // Capacity
+    map<string, string> labels = 5;  // e.g., {"region": "us-east", "zone": "a"}
+    string version = 6;
+}
+
+message RegisterResponse {
+    bool accepted = 1;
+    string message = 2;
+    bytes mtls_cert = 3;         // Certificate for mTLS
+    bytes mtls_key = 4;
+    bytes ca_cert = 5;
+}
+
+message HeartbeatRequest {
+    string agent_id = 1;
+    int32 current_vus = 2;
+    int32 available_vus = 3;
+    double cpu_percent = 4;
+    double memory_percent = 5;
+    repeated string active_runs = 6;
+}
+
+message HeartbeatResponse {
+    bool acknowledged = 1;
+    int64 server_time_ms = 2;
+}
+
+message DeregisterRequest {
+    string agent_id = 1;
+    string reason = 2;
+}
+
+message DeregisterResponse {
+    bool success = 1;
+}
+
+message ListAgentsRequest {
+    map<string, string> label_filter = 1;
+    bool only_available = 2;
+}
+
+message ListAgentsResponse {
+    repeated AgentInfo agents = 1;
+}
+
+message AgentInfo {
+    string agent_id = 1;
+    string hostname = 2;
+    int32 grpc_port = 3;
+    int32 max_vus = 4;
+    int32 current_vus = 5;
+    int32 available_vus = 6;
+    double cpu_percent = 7;
+    double memory_percent = 8;
+    map<string, string> labels = 9;
+    int64 last_heartbeat_ms = 10;
+    string status = 11;          // "online", "busy", "offline"
+}
+
