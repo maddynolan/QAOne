@@ -293,6 +293,10 @@ export default function VirtualUserGenerator() {
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   
+  // Protocol Recording state
+  const [isProtocolRecording, setIsProtocolRecording] = useState(false);
+  const [protocolRecordingId, setProtocolRecordingId] = useState<string | null>(null);
+  
   // Refs for closure access (state values captured in closures don't update)
   const isRunningRef = useRef(false);
   const isPausedRef = useRef(false);
@@ -683,6 +687,8 @@ export default function VirtualUserGenerator() {
     // Small delay to let state update, then start
     setTimeout(() => {
       startLoadTest();
+      // Navigate to Live Metrics to show test progress
+      setActiveTab("metrics");
     }, 100);
   };
 
@@ -931,9 +937,12 @@ export default function VirtualUserGenerator() {
       console.log(`[LoadTest] Final results: ${totalRequests} requests, ${successfulRequests} successful, ${failedRequestsCount} failed`);
       
       toast({
-        title: "Load Test Complete",
+        title: "✅ Load Test Complete",
         description: `Completed ${totalRequests} requests: ${successfulRequests} successful, ${failedRequestsCount} failed`,
       });
+      
+      // Auto-navigate to Results tab to show results
+      setActiveTab("results");
     }, duration * 1000);
   };
 
@@ -1058,6 +1067,59 @@ export default function VirtualUserGenerator() {
         setActiveTab("protocol");
       }
     }
+    
+    // Check for pending load test requests from Record tab (Quick Load Test)
+    const pendingRequests = sessionStorage.getItem('pendingLoadTestRequests');
+    const pendingTimestamp = sessionStorage.getItem('pendingLoadTestTimestamp');
+    
+    if (pendingRequests && pendingTimestamp) {
+      // Only process if less than 30 seconds old
+      const age = Date.now() - parseInt(pendingTimestamp);
+      if (age < 30000) {
+        try {
+          const requests = JSON.parse(pendingRequests);
+          if (Array.isArray(requests) && requests.length > 0) {
+            // Convert to load test steps
+            const steps: TestStep[] = requests.map((req: any, index: number) => ({
+              id: `quick-${index}-${Date.now()}`,
+              type: 'api' as const,
+              name: `${req.method} ${new URL(req.url).pathname}`,
+              method: req.method || 'GET',
+              url: req.url,
+              headers: req.headers || {},
+              body: req.body || '',
+              value: '',
+              assertions: [],
+            }));
+            
+            // Get base URL from first request
+            const firstUrl = new URL(requests[0].url);
+            const baseUrl = `${firstUrl.protocol}//${firstUrl.host}`;
+            
+            setConfig(prev => ({
+              ...prev,
+              name: `Quick Load Test - ${new Date().toLocaleTimeString()}`,
+              targetUrl: baseUrl,
+              steps: steps,
+            }));
+            
+            toast({
+              title: "🚀 Load Test Ready",
+              description: `${requests.length} HTTP requests loaded from recording`,
+            });
+            
+            // Switch to Protocol tab to show the requests
+            setActiveTab("protocol");
+          }
+        } catch (e) {
+          console.error('Failed to parse pending load test requests:', e);
+        }
+      }
+      
+      // Clear the pending data
+      sessionStorage.removeItem('pendingLoadTestRequests');
+      sessionStorage.removeItem('pendingLoadTestTimestamp');
+    }
   }, []);
 
   // Export results
@@ -1161,34 +1223,75 @@ export default function VirtualUserGenerator() {
         </Card>
       )}
 
+      {/* Banner: Loaded from Recording */}
+      {config.steps.length > 0 && config.name.includes('Quick Load Test') && !isRunning && (
+        <Card className="border-2 border-orange-500 bg-orange-50 dark:bg-orange-950/30">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-orange-700 dark:text-orange-300">
+                    {config.steps.length} API requests loaded from recording
+                  </p>
+                  <p className="text-sm text-orange-600/70 dark:text-orange-400/70">
+                    Target: {config.targetUrl} • Ready to run load test
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab("steps")}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Steps
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-orange-600 hover:bg-orange-700"
+                  onClick={startLoadTest}
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Run Load Test
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-7 bg-secondary border border-border p-1">
           <TabsTrigger value="quickstart" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Zap className="w-4 h-4 mr-2" />
-            Quick Start
+            <Zap className="w-4 h-4 mr-1" />
+            Quick
           </TabsTrigger>
           <TabsTrigger value="protocol" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Activity className="w-4 h-4 mr-2" />
-            Protocol
+            <Upload className="w-4 h-4 mr-1" />
+            HAR
           </TabsTrigger>
           <TabsTrigger value="configure" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Settings className="w-4 h-4 mr-2" />
-            Configure
+            <Settings className="w-4 h-4 mr-1" />
+            Config
           </TabsTrigger>
           <TabsTrigger value="steps" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <FileCode className="w-4 h-4 mr-2" />
-            Test Steps
+            <FileCode className="w-4 h-4 mr-1" />
+            Steps
           </TabsTrigger>
           <TabsTrigger value="users" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Bot className="w-4 h-4 mr-2" />
-            Virtual Users
+            <Bot className="w-4 h-4 mr-1" />
+            Users
           </TabsTrigger>
           <TabsTrigger value="metrics" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Live Metrics
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Metrics
           </TabsTrigger>
           <TabsTrigger value="results" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <LineChart className="w-4 h-4 mr-2" />
+            <LineChart className="w-4 h-4 mr-1" />
             Results
           </TabsTrigger>
         </TabsList>
@@ -1274,88 +1377,36 @@ export default function VirtualUserGenerator() {
             </CardContent>
           </Card>
 
-          {/* Browser Flow Testing - Separate Section */}
-          <Card className="bg-card border-border border-dashed">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg text-foreground">
-                <Globe className="w-5 h-5 text-primary" />
-                Browser Flow Testing
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Import a Flowstral recording to replay user journeys with multiple virtual users
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">
-                    Record a browser session using Flowstral, then import it here to run as a load test.
-                    This tests actual user flows (clicks, typing, navigation) not just API endpoints.
-                  </p>
-                </div>
-                <Button onClick={() => setShowImportDialog(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import Recording
-                </Button>
-                <Button onClick={() => setActiveTab("steps")} variant="ghost" className="text-muted-foreground hover:text-foreground hover:bg-accent">
-                  <FileCode className="w-4 h-4 mr-2" />
-                  View Steps
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Need Custom Config? */}
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
-            <span>Need custom settings?</span>
-            <Button variant="link" size="sm" onClick={() => setActiveTab("configure")} className="p-0 h-auto">
-              Go to Configure tab →
-            </Button>
-          </div>
         </TabsContent>
 
-        {/* Protocol Recording Tab - NEW! Better than NeoLoad/LoadRunner */}
+        {/* Import HAR Tab (simplified Protocol tab) */}
         <TabsContent value="protocol" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-violet-500" />
-                Protocol-Level Recording & Testing
+                <Upload className="w-5 h-5 text-blue-500" />
+                Import HAR File
               </CardTitle>
               <CardDescription>
-                Capture HTTP/WebSocket traffic during browser sessions for true protocol-level load testing.
-                This is how NeoLoad and LoadRunner achieve massive scale.
+                Import HTTP Archive files from Chrome/Firefox DevTools to create load test scenarios.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Protocol Recording Options */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="p-4 border-dashed hover:border-primary cursor-pointer transition-colors">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
-                      <Activity className="w-5 h-5 text-violet-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium">Record Protocol Traffic</h4>
-                      <p className="text-xs text-muted-foreground">Capture HTTP requests during browser session</p>
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Records all network calls while you interact with the browser.
-                    Auto-detects correlatable values (tokens, session IDs).
-                  </p>
-                  <Button className="w-full" onClick={() => {
-                    toast({
-                      title: "Protocol Recording",
-                      description: "Start recording in Flowstral, network traffic will be captured automatically"
-                    });
-                  }}>
-                    <Activity className="w-4 h-4 mr-2" />
-                    Start Protocol Recording
-                  </Button>
-                </Card>
+              {/* How to capture HAR */}
+              <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200">
+                <AlertDescription>
+                  <strong className="text-blue-700 dark:text-blue-300">How to capture HAR:</strong>
+                  <ol className="list-decimal list-inside mt-2 text-sm text-blue-600 dark:text-blue-400 space-y-1">
+                    <li>Open Chrome DevTools (F12) → Network tab</li>
+                    <li>Browse your application to capture traffic</li>
+                    <li>Right-click → "Save all as HAR with content"</li>
+                    <li>Import the HAR file below</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
 
-                <Card className="p-4 border-dashed hover:border-primary cursor-pointer transition-colors">
+              {/* HAR Import Card */}
+              <Card className="p-6 border-2 border-dashed hover:border-primary cursor-pointer transition-colors">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
                       <Upload className="w-5 h-5 text-blue-600" />
@@ -1452,7 +1503,100 @@ export default function VirtualUserGenerator() {
                     Import HAR File
                   </Button>
                 </Card>
-              </div>
+
+              {/* Recorded Steps Ready - Shows when steps are captured */}
+              {config.steps.length > 0 && (
+                <Card className="border-2 border-green-500 bg-green-50 dark:bg-green-950/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                      <CheckCircle2 className="w-5 h-5" />
+                      {config.steps.length} API Requests Ready for Load Testing
+                    </CardTitle>
+                    <CardDescription>
+                      Target: <span className="font-medium">{config.targetUrl}</span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Quick preview of captured endpoints */}
+                    <div className="max-h-32 overflow-y-auto space-y-1 text-xs bg-muted/50 rounded p-2">
+                      {config.steps.slice(0, 8).map((step, idx) => (
+                        <div key={step.id} className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            {step.method || 'GET'}
+                          </Badge>
+                          <span className="truncate text-muted-foreground">{step.name}</span>
+                        </div>
+                      ))}
+                      {config.steps.length > 8 && (
+                        <div className="text-muted-foreground">... and {config.steps.length - 8} more</div>
+                      )}
+                    </div>
+
+                    {/* Quick config and run */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs">Virtual Users</Label>
+                        <Input
+                          type="number"
+                          value={config.virtualUsers}
+                          onChange={(e) => setConfig(prev => ({ ...prev, virtualUsers: parseInt(e.target.value) || 10 }))}
+                          className="h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Duration (sec)</Label>
+                        <Input
+                          type="number"
+                          value={config.duration}
+                          onChange={(e) => setConfig(prev => ({ ...prev, duration: parseInt(e.target.value) || 60 }))}
+                          className="h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Ramp-up (sec)</Label>
+                        <Input
+                          type="number"
+                          value={config.rampUpTime}
+                          onChange={(e) => setConfig(prev => ({ ...prev, rampUpTime: parseInt(e.target.value) || 10 }))}
+                          className="h-8"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        size="lg"
+                        disabled={isRunning}
+                        onClick={() => {
+                          setActiveTab("metrics");
+                          // Start the load test
+                          setTimeout(() => {
+                            const startBtn = document.querySelector('[data-start-load-test]') as HTMLButtonElement;
+                            if (startBtn) startBtn.click();
+                          }, 100);
+                        }}
+                      >
+                        <Zap className="w-4 h-4 mr-2" />
+                        🚀 Start Load Test ({config.virtualUsers} VUs, {config.duration}s)
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => setActiveTab("steps")}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        View/Edit Steps
+                      </Button>
+                      <Button 
+                        variant="ghost"
+                        onClick={() => setConfig(prev => ({ ...prev, steps: [] }))}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Protocol Execution Modes */}
               <div>
@@ -1539,41 +1683,6 @@ export default function VirtualUserGenerator() {
             </CardContent>
           </Card>
 
-          {/* Comparison with NeoLoad/LoadRunner */}
-          <Card className="border-green-500/30 bg-green-50/30 dark:bg-green-950/10">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-500" />
-                Why This Beats NeoLoad & LoadRunner
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <h4 className="font-medium mb-2">🚀 QAAI Advantages</h4>
-                  <ul className="space-y-1 text-muted-foreground">
-                    <li>✅ Free & Open Source</li>
-                    <li>✅ Integrated with test case management</li>
-                    <li>✅ AI-powered test generation</li>
-                    <li>✅ Browser + Protocol in one tool</li>
-                    <li>✅ Auto-correlation detection</li>
-                    <li>✅ Real-time metrics dashboard</li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">💰 NeoLoad/LoadRunner</h4>
-                  <ul className="space-y-1 text-muted-foreground">
-                    <li>❌ $15,000-50,000+/year licensing</li>
-                    <li>❌ Separate test management tools</li>
-                    <li>❌ Manual script correlation</li>
-                    <li>❌ Complex setup & training</li>
-                    <li>❌ Protocol-only (no browser)</li>
-                    <li>❌ Vendor lock-in</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Configure Tab */}

@@ -180,56 +180,6 @@ type AuthPayload {
   </service>
 </definitions>`
   },
-  websocket: {
-    name: "WebSocket API",
-    icon: "🔌",
-    protocol: "WebSocket",
-    format: "json",
-    description: "Real-time WebSocket messages",
-    baseUrl: `ws://localhost:8002/ws`,
-    spec: {
-      protocol: "WebSocket",
-      endpoints: [{ url: "ws://localhost:8002/ws", description: "Main WebSocket endpoint" }],
-      messages: {
-        ping: { action: "ping" },
-        subscribe: { action: "subscribe", channel: "orders" },
-        message: { action: "message", channel: "test", data: { test: true } }
-      }
-    }
-  },
-  kafka: {
-    name: "Kafka Events",
-    icon: "📡",
-    protocol: "Kafka",
-    format: "avro",
-    description: "Kafka producer/consumer for events",
-    baseUrl: `${ECOMMERCE_TEST_URL}/api/kafka`,
-    spec: {
-      topics: [
-        { name: "orders", description: "Order events" },
-        { name: "products", description: "Product updates" }
-      ],
-      endpoints: {
-        produce: "/api/kafka/produce",
-        consume: "/api/kafka/consume"
-      }
-    }
-  },
-  mqtt: {
-    name: "MQTT Messages",
-    icon: "📻",
-    protocol: "MQTT",
-    format: "json",
-    description: "MQTT pub/sub for IoT-style messages",
-    baseUrl: `${ECOMMERCE_TEST_URL}/api/mqtt`,
-    spec: {
-      topics: ["products/updates", "orders/status", "notifications"],
-      endpoints: {
-        publish: "/api/mqtt/publish",
-        subscribe: "/api/mqtt/subscribe"
-      }
-    }
-  }
 };
 
 export default function EnhancedAPITesting() {
@@ -300,6 +250,102 @@ export default function EnhancedAPITesting() {
   
   // Report state
   const [reports, setReports] = useState<any[]>([]);
+  
+  // Pending API requests from Record tab (Quick API Test)
+  const [pendingApiRequests, setPendingApiRequests] = useState<any[]>([]);
+  const [showPendingBanner, setShowPendingBanner] = useState(false);
+  const [executingRequestId, setExecutingRequestId] = useState<string | null>(null);
+  const [requestResults, setRequestResults] = useState<Record<string, any>>({});
+
+  // Execute a single API request
+  const executeRequest = async (req: any) => {
+    setExecutingRequestId(req.id);
+    const startTime = Date.now();
+    
+    try {
+      // Fix double slashes in URL (e.g., http://localhost:8002//api/cart -> http://localhost:8002/api/cart)
+      const normalizedUrl = req.url.replace(/([^:]\/)\/+/g, '$1');
+      
+      const response = await fetch(normalizedUrl, {
+        method: req.method,
+        headers: req.headers || {},
+        body: req.method !== 'GET' && req.body ? req.body : undefined,
+      });
+      
+      const responseTime = Date.now() - startTime;
+      let responseData;
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType?.includes('application/json')) {
+        responseData = await response.json();
+      } else {
+        responseData = await response.text();
+      }
+      
+      const result = {
+        success: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        responseTime,
+        data: responseData,
+        headers: Object.fromEntries(response.headers.entries()),
+      };
+      
+      setRequestResults(prev => ({ ...prev, [req.id]: result }));
+      
+      toast({
+        title: response.ok ? "✅ Request Successful" : "❌ Request Failed",
+        description: `${req.method} ${req.name} - ${response.status} (${responseTime}ms)`,
+        variant: response.ok ? "default" : "destructive",
+      });
+      
+      return result;
+    } catch (error: any) {
+      const responseTime = Date.now() - startTime;
+      const result = {
+        success: false,
+        status: 0,
+        statusText: 'Network Error',
+        responseTime,
+        error: error.message,
+      };
+      
+      setRequestResults(prev => ({ ...prev, [req.id]: result }));
+      
+      toast({
+        title: "❌ Request Failed",
+        description: `${req.method} ${req.name} - ${error.message}`,
+        variant: "destructive",
+      });
+      
+      return result;
+    } finally {
+      setExecutingRequestId(null);
+    }
+  };
+
+  // Execute all requests sequentially
+  const executeAllRequests = async () => {
+    toast({
+      title: "🚀 Running All Requests",
+      description: `Testing ${pendingApiRequests.length} endpoints...`,
+    });
+    
+    const results: any[] = [];
+    for (const req of pendingApiRequests) {
+      const result = await executeRequest(req);
+      results.push({ ...req, result });
+    }
+    
+    const successful = results.filter(r => r.result.success).length;
+    const failed = results.length - successful;
+    
+    toast({
+      title: "📊 Test Complete",
+      description: `${successful} passed, ${failed} failed`,
+      variant: failed > 0 ? "destructive" : "default",
+    });
+  };
 
   const loadPersistedEnvironments = (): any[] => {
     try {
@@ -571,6 +617,36 @@ export default function EnhancedAPITesting() {
     initialize();
   }, []);
 
+  // Check for pending API test requests from Record tab (Quick API Test)
+  useEffect(() => {
+    const pendingRequests = sessionStorage.getItem('pendingApiTestRequests');
+    const pendingTimestamp = sessionStorage.getItem('pendingApiTestTimestamp');
+    
+    if (pendingRequests && pendingTimestamp) {
+      // Only process if less than 30 seconds old
+      const age = Date.now() - parseInt(pendingTimestamp);
+      if (age < 30000) {
+        try {
+          const requests = JSON.parse(pendingRequests);
+          if (Array.isArray(requests) && requests.length > 0) {
+            setPendingApiRequests(requests);
+            setShowPendingBanner(true);
+            toast({
+              title: "📡 API Requests Loaded",
+              description: `${requests.length} HTTP requests imported from recording`,
+            });
+          }
+        } catch (e) {
+          console.error('Failed to parse pending API test requests:', e);
+        }
+      }
+      
+      // Clear the pending data
+      sessionStorage.removeItem('pendingApiTestRequests');
+      sessionStorage.removeItem('pendingApiTestTimestamp');
+    }
+  }, []);
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -658,7 +734,11 @@ export default function EnhancedAPITesting() {
     setLoading(true);
 
     try {
-      // Parse spec
+      // Parse spec - determine content type based on format
+      let contentType = "json";
+      if (specFormat === "wsdl") contentType = "xml";
+      else if (specFormat === "graphql") contentType = "graphql";
+      
       const parseResponse = await fetch(`${API_BASE_URL}/api/import/spec`, {
         method: "POST",
         headers: {
@@ -667,7 +747,7 @@ export default function EnhancedAPITesting() {
         body: JSON.stringify({
           spec_content: specContent,
           spec_format: specFormat,
-          content_type: specFormat === "wsdl" ? "xml" : "json",
+          content_type: contentType,
         }),
       });
 
@@ -1176,15 +1256,144 @@ export default function EnhancedAPITesting() {
           </Badge>
         </div>
 
+      {/* Banner for pending API requests from Record tab */}
+      {showPendingBanner && pendingApiRequests.length > 0 && (
+        <Alert className="bg-violet-500/10 border-violet-500/30">
+          <Zap className="h-4 w-4 text-violet-500" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              <strong className="text-violet-600 dark:text-violet-400">
+                {pendingApiRequests.length} HTTP requests
+              </strong>{' '}
+              imported from recording. Click to test each endpoint.
+            </span>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setShowPendingBanner(false)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Quick Test Panel - Shows captured requests */}
+      {pendingApiRequests.length > 0 && (
+        <Card className="border-violet-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Activity className="w-5 h-5 text-violet-500" />
+              Captured API Requests ({pendingApiRequests.length})
+            </CardTitle>
+            <CardDescription>
+              HTTP requests captured during recording - click to test
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {pendingApiRequests.map((req, index) => {
+                const result = requestResults[req.id];
+                const isExecuting = executingRequestId === req.id;
+                
+                return (
+                  <div 
+                    key={req.id || index}
+                    className={`p-3 rounded-lg border transition-colors ${
+                      result?.success === true ? 'bg-green-500/10 border-green-500/30' :
+                      result?.success === false ? 'bg-red-500/10 border-red-500/30' :
+                      'bg-secondary/50 border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            req.method === 'GET' ? 'bg-green-500/10 text-green-600 border-green-500/30' :
+                            req.method === 'POST' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' :
+                            req.method === 'PUT' ? 'bg-orange-500/10 text-orange-600 border-orange-500/30' :
+                            req.method === 'DELETE' ? 'bg-red-500/10 text-red-600 border-red-500/30' :
+                            'bg-gray-500/10 text-gray-600 border-gray-500/30'
+                          }
+                        >
+                          {req.method}
+                        </Badge>
+                        <div>
+                          <p className="font-medium text-sm">{req.name || new URL(req.url).pathname}</p>
+                          <p className="text-xs text-muted-foreground truncate max-w-[400px]">{req.url}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {result && (
+                          <Badge variant={result.success ? "default" : "destructive"} className="text-xs">
+                            {result.status} • {result.responseTime}ms
+                          </Badge>
+                        )}
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          disabled={isExecuting}
+                          onClick={() => executeRequest(req)}
+                        >
+                          {isExecuting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Play className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Show response preview */}
+                    {result && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <p className="text-xs text-muted-foreground mb-1">Response:</p>
+                        <pre className="text-xs bg-black/20 p-2 rounded max-h-[100px] overflow-auto">
+                          {typeof result.data === 'object' 
+                            ? JSON.stringify(result.data, null, 2).slice(0, 500) 
+                            : String(result.data || result.error).slice(0, 500)}
+                          {(JSON.stringify(result.data)?.length > 500) && '...'}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-border">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setPendingApiRequests([]);
+                  setShowPendingBanner(false);
+                  setRequestResults({});
+                }}
+              >
+                Clear All
+              </Button>
+              <Button 
+                onClick={executeAllRequests}
+                disabled={executingRequestId !== null}
+              >
+                {executingRequestId ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4 mr-2" />
+                )}
+                Test All
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8 bg-card border border-border p-1">
+        <TabsList className="grid w-full grid-cols-7 bg-card border border-border p-1">
           <TabsTrigger value="templates" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Rocket className="w-4 h-4 mr-1" />
             Templates
-          </TabsTrigger>
-          <TabsTrigger value="flowstral" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Workflow className="w-4 h-4 mr-1" />
-            Flowstral
           </TabsTrigger>
           <TabsTrigger value="import" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
           <TabsTrigger value="database" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Database</TabsTrigger>
@@ -1326,120 +1535,6 @@ export default function EnhancedAPITesting() {
           </Card>
         </TabsContent>
 
-        {/* Flowstral Integration Tab */}
-        <TabsContent value="flowstral" className="space-y-4">
-          <Alert>
-            <Workflow className="h-4 w-4" />
-            <AlertDescription>
-              <strong>Flowstral Integration:</strong> Import recorded browser sessions and convert them to API tests automatically.
-            </AlertDescription>
-          </Alert>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Recorded Sessions</CardTitle>
-                  <CardDescription>Import HTTP requests captured during Flowstral recording sessions</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={loadFlowstralSessions} disabled={loadingFlowstral}>
-                    <RefreshCw className={`w-4 h-4 mr-2 ${loadingFlowstral ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
-                  <Button onClick={() => navigate('/flowstral')}>
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open Flowstral
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {flowstralSessions.length === 0 ? (
-                <div className="text-center py-8">
-                  <Workflow className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">No recorded sessions found</p>
-                  <Button onClick={() => navigate('/flowstral')}>
-                    <Play className="w-4 h-4 mr-2" />
-                    Start Recording
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {flowstralSessions.map((session: any) => (
-                    <Card key={session.session_id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{session.name || `Session ${session.session_id?.substring(0, 8)}`}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {session.nodes?.length || 0} actions • {session.initial_url || 'N/A'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {session.created_at ? new Date(session.created_at).toLocaleString() : 'Unknown date'}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => importFromFlowstral(session.session_id)}
-                            disabled={loading}
-                          >
-                            {loading ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                              <Download className="w-4 h-4 mr-2" />
-                            )}
-                            Import
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>How Flowstral Integration Works</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-4 gap-4 text-sm">
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">1</span>
-                    Record in Flowstral
-                  </div>
-                  <p className="text-muted-foreground">Use Flowstral to record your browser interactions</p>
-                </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">2</span>
-                    Import Session
-                  </div>
-                  <p className="text-muted-foreground">Click Import to extract HTTP requests from the recording</p>
-                </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">3</span>
-                    Generate Tests
-                  </div>
-                  <p className="text-muted-foreground">Auto-generates OpenAPI spec and test cases</p>
-                </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <span className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">4</span>
-                    Execute
-                  </div>
-                  <p className="text-muted-foreground">Run tests against the same or different environment</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Import Tab */}
         <TabsContent value="import" className="space-y-4">
           <Card>
@@ -1461,10 +1556,6 @@ export default function EnhancedAPITesting() {
                       <SelectItem value="REST">REST</SelectItem>
                       <SelectItem value="SOAP">SOAP</SelectItem>
                       <SelectItem value="GraphQL">GraphQL</SelectItem>
-                      <SelectItem value="gRPC">gRPC</SelectItem>
-                      <SelectItem value="Kafka">Kafka</SelectItem>
-                      <SelectItem value="MQTT">MQTT</SelectItem>
-                      <SelectItem value="WebSocket">WebSocket</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

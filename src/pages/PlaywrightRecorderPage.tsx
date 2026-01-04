@@ -20,7 +20,7 @@ import {
   MousePointer, Keyboard, Eye, Target, Cloud, Link,
   Hash, Type, CircleDot, FormInput, Database, Copy,
   Shield, Wand2, CheckSquare, Plus, Circle, Hand,
-  PenLine, LayoutGrid, ArrowRight, Upload
+  PenLine, LayoutGrid, ArrowRight, Upload, Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
 import { SoqlEditor } from "@/components/SoqlEditor";
 import { salesforceApi } from "@/lib/salesforce-api";
@@ -124,8 +126,9 @@ const isPasswordField = (action: RecordedAction): boolean => {
 };
 
 // Helper to detect garbled/corrupted characters from password encoding
-const hasPasswordArtifacts = (str: string): boolean => {
-  if (!str) return false;
+const hasPasswordArtifacts = (str: unknown): boolean => {
+  // Ensure we have a string
+  if (!str || typeof str !== 'string') return false;
   // Detect UTF-8 encoding artifacts common in password recording
   return /[āã口¢Γ¡¥©®°±²³µ¶¹º¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏ]/.test(str) ||
          /[\u0100-\u024F]/.test(str) || // Extended Latin characters
@@ -136,7 +139,10 @@ const hasPasswordArtifacts = (str: string): boolean => {
 // Helper to mask sensitive values and fix corrupted characters
 const maskSensitiveAction = (action: RecordedAction): RecordedAction => {
   const isPwField = isPasswordField(action);
-  const hasArtifacts = hasPasswordArtifacts(action.args?.[1] || '') || 
+  // Safely get args[1] - could be string, object, or undefined
+  const arg1 = action.args?.[1];
+  const arg1Str = typeof arg1 === 'string' ? arg1 : '';
+  const hasArtifacts = hasPasswordArtifacts(arg1Str) || 
                        hasPasswordArtifacts(action.description || '');
   
   // If not a password field and no artifacts, return as-is
@@ -211,6 +217,11 @@ export default function PlaywrightRecorderPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   
+  // Network capture toggles for Load/API testing
+  const [captureForLoadTest, setCaptureForLoadTest] = useState(false);
+  const [captureForApiTest, setCaptureForApiTest] = useState(false);
+  const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
+  
   // Suggestions state
   const [suggestResult, setSuggestResult] = useState<SuggestResult | null>(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -243,6 +254,15 @@ export default function PlaywrightRecorderPage() {
   // Merge preview state
   const [showMergePreview, setShowMergePreview] = useState(false);
   const [mergedSteps, setMergedSteps] = useState<any[]>([]);
+  
+  // Step-by-step automation state (for "Automate Existing" mode)
+  // Tracks which manual step we're currently recording for
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
+  // Maps manual step index -> automation data (recorded action, suggestion, or skipped)
+  const [stepAutomation, setStepAutomation] = useState<Record<number, {
+    type: 'recorded' | 'suggested' | 'skipped';
+    data?: RecordedAction | Suggestion;
+  }>>({});
   
   // Test execution state
   const [showTestResultModal, setShowTestResultModal] = useState(false);
@@ -293,6 +313,16 @@ export default function PlaywrightRecorderPage() {
   // Timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const suggestIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Refs for event listener access to current state
+  const modeRef = useRef(mode);
+  const selectedTestCaseRef = useRef(selectedTestCase);
+  const currentStepIndexRef = useRef(currentStepIndex);
+  
+  // Keep refs in sync with state
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { selectedTestCaseRef.current = selectedTestCase; }, [selectedTestCase]);
+  useEffect(() => { currentStepIndexRef.current = currentStepIndex; }, [currentStepIndex]);
 
   // Detect if current URL is Salesforce
   const isSalesforceUrl = useMemo(() => {
@@ -441,35 +471,78 @@ export default function PlaywrightRecorderPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Load test data on mount
+  // Load test data on mount - includes scale database for enterprise data
   useEffect(() => {
     const loadTestData = async () => {
       try {
-        // Try SQLite first (electron)
+        const allCases: TestCase[] = [];
+        const seenIds = new Set<string>();
+        
+        // 1. Try scale database first (most test cases)
+        try {
+          const response = await fetch('http://localhost:8000/test-cases/scale-data');
+          if (response.ok) {
+            const data = await response.json();
+            console.log('[Recorder] Loaded from scale DB:', data.testCases?.length || 0, 'test cases');
+            for (const tc of (data.testCases || [])) {
+              if (tc.id && !seenIds.has(tc.id)) {
+                seenIds.add(tc.id);
+                allCases.push({
+                  id: tc.id,
+                  name: tc.name,
+                  description: tc.description || '',
+                  folderId: tc.folder_id || null,
+                  folderName: tc.folder_name,
+                  priority: tc.priority || 'medium',
+                  automationStatus: tc.automation_status || 'none',
+                  tags: tc.tags || [],
+                  steps: tc.steps || [],
+                  createdAt: tc.created_at,
+                  updatedAt: tc.updated_at
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[Recorder] Scale DB not available');
+        }
+        
+        // 2. Try Electron storage
         const electronAPI = (window as any).electronAPI;
         if (electronAPI?.localStorage?.getAllTestCases) {
           const cases = await electronAPI.localStorage.getAllTestCases();
-          if (cases?.length > 0) {
-            setAllTestCases(cases);
-            // Extract unique folders
-            const folders = new Map<string, string>();
-            cases.forEach((tc: any) => {
-              if (tc.folderId && tc.folderName) {
-                folders.set(tc.folderId, tc.folderName);
-              }
-            });
-            setAllFolders(Array.from(folders.entries()).map(([id, name]) => ({ id, name })));
-            return;
+          for (const tc of (cases || [])) {
+            if (tc.id && !seenIds.has(tc.id)) {
+              seenIds.add(tc.id);
+              allCases.push(tc);
+            }
           }
         }
         
-        // Fallback to localStorage
+        // 3. Fallback to localStorage
         const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
         const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
-        const allCases = [...localCases];
-        flowstralCases.forEach((tc: TestCase) => {
-          if (!allCases.some(c => c.id === tc.id)) allCases.push(tc);
+        for (const tc of localCases) {
+          if (tc.id && !seenIds.has(tc.id)) {
+            seenIds.add(tc.id);
+            allCases.push(tc);
+          }
+        }
+        for (const tc of flowstralCases) {
+          if (tc.id && !seenIds.has(tc.id)) {
+            seenIds.add(tc.id);
+            allCases.push(tc);
+          }
+        }
+        
+        // Sort by updatedAt descending (newest first)
+        allCases.sort((a, b) => {
+          const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+          return dateB - dateA;
         });
+        
+        console.log('[Recorder] Total test cases loaded:', allCases.length);
         setAllTestCases(allCases);
         
         // Extract folders from localStorage
@@ -521,6 +594,13 @@ export default function PlaywrightRecorderPage() {
       filtered = filtered.filter(tc => tc.tags?.includes(testTagFilter));
     }
     
+    // Sort by updatedAt (newest first) so recently merged/updated tests appear at top
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return dateB - dateA; // Descending (newest first)
+    });
+    
     return filtered;
   }, [allTestCases, testSearchQuery, testStatusFilter, testFolderFilter, testTagFilter]);
 
@@ -543,93 +623,379 @@ export default function PlaywrightRecorderPage() {
     setTestPage(1);
   }, [testSearchQuery, testStatusFilter, testFolderFilter, testTagFilter]);
 
-  // Position-based merge: Action N → Step N
-  const performMerge = useCallback(() => {
-    if (!selectedTestCase || actions.length === 0) return;
+  // Assign a recorded action to the current step
+  const assignRecordedActionToStep = useCallback((action: RecordedAction) => {
+    if (!selectedTestCase || mode !== 'existing') return;
     
     const manualSteps = selectedTestCase.steps || [];
-    const maxLength = Math.max(manualSteps.length, actions.length);
+    if (currentStepIndex >= manualSteps.length) return;
+    
+    setStepAutomation(prev => ({
+      ...prev,
+      [currentStepIndex]: { type: 'recorded', data: action }
+    }));
+    
+    // Auto-advance to next unassigned step
+    const nextIndex = findNextUnassignedStep(currentStepIndex + 1);
+    if (nextIndex !== -1) {
+      setCurrentStepIndex(nextIndex);
+    }
+    
+    toast.success(`Step ${currentStepIndex + 1} automated with recording`);
+  }, [selectedTestCase, mode, currentStepIndex]);
+  
+  // Assign a DOM suggestion to the current step
+  const assignSuggestionToStep = useCallback((suggestion: Suggestion) => {
+    if (!selectedTestCase || mode !== 'existing') {
+      // In 'new' mode, just add as a regular action
+      return false;
+    }
+    
+    const manualSteps = selectedTestCase.steps || [];
+    if (currentStepIndex >= manualSteps.length) return false;
+    
+    setStepAutomation(prev => ({
+      ...prev,
+      [currentStepIndex]: { type: 'suggested', data: suggestion }
+    }));
+    
+    // Auto-advance to next unassigned step
+    const nextIndex = findNextUnassignedStep(currentStepIndex + 1);
+    if (nextIndex !== -1) {
+      setCurrentStepIndex(nextIndex);
+    }
+    
+    toast.success(`Step ${currentStepIndex + 1} automated with suggestion`);
+    return true;
+  }, [selectedTestCase, mode, currentStepIndex]);
+  
+  // Skip the current step (mark as manual)
+  const skipCurrentStep = useCallback(() => {
+    if (!selectedTestCase || mode !== 'existing') return;
+    
+    const manualSteps = selectedTestCase.steps || [];
+    if (currentStepIndex >= manualSteps.length) return;
+    
+    setStepAutomation(prev => ({
+      ...prev,
+      [currentStepIndex]: { type: 'skipped' }
+    }));
+    
+    // Auto-advance to next unassigned step
+    const nextIndex = findNextUnassignedStep(currentStepIndex + 1);
+    if (nextIndex !== -1) {
+      setCurrentStepIndex(nextIndex);
+    }
+    
+    toast.info(`Step ${currentStepIndex + 1} marked as manual`);
+  }, [selectedTestCase, mode, currentStepIndex]);
+  
+  // Find next step that hasn't been assigned yet
+  const findNextUnassignedStep = useCallback((startIndex: number): number => {
+    if (!selectedTestCase) return -1;
+    const manualSteps = selectedTestCase.steps || [];
+    
+    for (let i = startIndex; i < manualSteps.length; i++) {
+      if (!stepAutomation[i]) {
+        return i;
+      }
+    }
+    return -1; // All steps assigned
+  }, [selectedTestCase, stepAutomation]);
+  
+  // Clear automation for a specific step
+  const clearStepAutomation = useCallback((stepIndex: number) => {
+    setStepAutomation(prev => {
+      const updated = { ...prev };
+      delete updated[stepIndex];
+      return updated;
+    });
+  }, []);
+  
+  // Smart merge using stepAutomation mapping instead of position-based
+  const performMerge = useCallback(() => {
+    if (!selectedTestCase) return;
+    
+    const manualSteps = selectedTestCase.steps || [];
     const merged: any[] = [];
     
-    for (let i = 0; i < maxLength; i++) {
-      const manualStep = manualSteps[i];
-      const recordedAction = actions[i];
-      
-      if (manualStep && recordedAction) {
-        // Both exist: merge automation into manual step
-        merged.push({
-          ...manualStep,
-          qword: recordedAction.qword,
-          args: recordedAction.args,
-          selector: recordedAction.selectorObj?.selector,
-          selectorObj: recordedAction.selectorObj,
-          automationStatus: 'automated',
-          _merged: true
-        });
-      } else if (manualStep) {
-        // Only manual step exists
-        merged.push({
-          ...manualStep,
-          automationStatus: manualStep.qword ? 'automated' : 'manual',
-          _manualOnly: !manualStep.qword
-        });
-      } else if (recordedAction) {
-        // Only recorded action exists (extra automation)
-        merged.push({
-          id: `step_${Date.now()}_${i}`,
-          name: recordedAction.description || `${recordedAction.qword} ${recordedAction.args?.[0] || ''}`,
-          description: recordedAction.description,
-          qword: recordedAction.qword,
-          args: recordedAction.args,
-          selectorObj: recordedAction.selectorObj,
-          automationStatus: 'automated',
-          _extra: true
-        });
+    // Check if we have any step automation mappings
+    const hasStepMappings = Object.keys(stepAutomation).length > 0;
+    
+    if (hasStepMappings) {
+      // Use explicit step mappings
+      for (let i = 0; i < manualSteps.length; i++) {
+        const manualStep = manualSteps[i];
+        const automation = stepAutomation[i];
+        
+        if (automation?.type === 'recorded' && automation.data) {
+          const action = automation.data as RecordedAction;
+          merged.push({
+            ...manualStep,
+            qword: action.qword,
+            args: action.args,
+            selector: action.selectorObj?.selector || action.selector,
+            selectorObj: action.selectorObj,
+            automationStatus: 'automated',
+            _merged: true
+          });
+        } else if (automation?.type === 'suggested' && automation.data) {
+          const suggestion = automation.data as Suggestion;
+          merged.push({
+            ...manualStep,
+            qword: suggestion.qword,
+            args: suggestion.args,
+            selector: suggestion.selectorObj?.selector || suggestion.selector,
+            selectorObj: suggestion.selectorObj,
+            automationStatus: 'automated',
+            _merged: true
+          });
+        } else if (automation?.type === 'skipped') {
+          merged.push({
+            ...manualStep,
+            automationStatus: 'manual',
+            _manualOnly: true
+          });
+        } else {
+          // No automation assigned - keep as manual
+          merged.push({
+            ...manualStep,
+            automationStatus: manualStep.qword ? 'automated' : 'manual',
+            _manualOnly: !manualStep.qword
+          });
+        }
       }
+    } else {
+      // Fallback to position-based merge (legacy behavior)
+      const maxLength = Math.max(manualSteps.length, actions.length);
+      
+      for (let i = 0; i < maxLength; i++) {
+        const manualStep = manualSteps[i];
+        const recordedAction = actions[i];
+        
+        if (manualStep && recordedAction) {
+          merged.push({
+            ...manualStep,
+            qword: recordedAction.qword,
+            args: recordedAction.args,
+            selector: recordedAction.selectorObj?.selector,
+            selectorObj: recordedAction.selectorObj,
+            automationStatus: 'automated',
+            _merged: true
+          });
+        } else if (manualStep) {
+          merged.push({
+            ...manualStep,
+            automationStatus: manualStep.qword ? 'automated' : 'manual',
+            _manualOnly: !manualStep.qword
+          });
+        } else if (recordedAction) {
+          merged.push({
+            id: `step_${Date.now()}_${i}`,
+            name: recordedAction.description || `${recordedAction.qword} ${recordedAction.args?.[0] || ''}`,
+            description: recordedAction.description,
+            qword: recordedAction.qword,
+            args: recordedAction.args,
+            selector: recordedAction.selectorObj?.selector,
+            selectorObj: recordedAction.selectorObj,
+            automationStatus: 'automated',
+            _extra: true
+          });
+        }
+      }
+    }
+    
+    if (merged.length === 0) {
+      toast.error('No steps to merge');
+      return;
     }
     
     setMergedSteps(merged);
     setShowMergePreview(true);
-  }, [selectedTestCase, actions]);
+  }, [selectedTestCase, stepAutomation, actions]);
+
+  // Map qword to Builder step type
+  const qwordToType = (qword: string): string => {
+    if (!qword) return 'click';
+    const q = qword.toLowerCase();
+    if (q === 'goto' || q === 'navigate') return 'navigate';
+    if (q === 'fill' || q === 'type' || q === 'input') return 'input';
+    if (q === 'click' || q === 'clicktext' || q === 'clickelement') return 'click';
+    if (q === 'select') return 'select';
+    if (q === 'hover') return 'hover';
+    if (q === 'wait' || q === 'waitforelement' || q === 'waitfortext') return 'wait';
+    if (q === 'asserttext' || q === 'assert' || q === 'assertelement') return 'assert';
+    if (q === 'screenshot') return 'screenshot';
+    if (q === 'press' || q === 'keyboard') return 'press';
+    if (q === 'scroll') return 'scroll';
+    return 'click';
+  };
 
   // Save merged test case
   const saveMergedTest = async () => {
     if (!selectedTestCase || mergedSteps.length === 0) return;
     
-    const automationStatus: 'none' | 'partial' | 'full' = mergedSteps.every(s => s.qword) ? 'full' : 
-                        mergedSteps.some(s => s.qword) ? 'partial' : 'none';
+    // Calculate automation status: full if ALL steps have automation, partial if SOME do, none if NONE do
+    const stepsWithAutomation = mergedSteps.filter(s => s.qword || s.selector || s.selectorObj);
+    const automationStatus: 'none' | 'partial' | 'full' = 
+      stepsWithAutomation.length === 0 ? 'none' :
+      stepsWithAutomation.length === mergedSteps.length ? 'full' : 'partial';
+    
+    // Convert merged steps to proper format for both Builder AND Executor
+    // Builder needs: type, name, selector, value, url
+    // Executor needs: qword, args, selectorObj
+    const formattedSteps = mergedSteps.map((s, idx) => {
+      const { _merged, _manualOnly, _extra, ...step } = s;
+      
+      // Ensure step has a proper 'type' for Builder (derived from qword if not present)
+      const type = step.type || qwordToType(step.qword || '');
+      
+      // Extract value from args if not present
+      let value = step.value || '';
+      if (!value && step.args && step.args.length > 0) {
+        // For Fill/Type, first arg is usually the value
+        if (type === 'input' || step.qword?.toLowerCase() === 'fill') {
+          value = step.args[0] || '';
+        }
+      }
+      
+      // Extract URL from args for navigate steps
+      let url = step.url || '';
+      if (!url && type === 'navigate' && step.args && step.args.length > 0) {
+        url = step.args[0] || '';
+      }
+      
+      return {
+        ...step,
+        id: step.id || `step_${Date.now()}_${idx}`,
+        type: type,
+        name: step.name || step.description || `Step ${idx + 1}`,
+        enabled: step.enabled !== false,
+        // Builder display properties
+        selector: step.selector || step.selectorObj?.selector || '',
+        selectorObj: step.selectorObj,
+        value: value,
+        url: url,
+        // Executor properties (preserve for running)
+        qword: step.qword,
+        args: step.args,
+      };
+    });
+    
     const updatedTestCase: TestCase = {
       ...selectedTestCase,
-      steps: mergedSteps.map(s => {
-        const { _merged, _manualOnly, _extra, ...step } = s;
-        return step;
-      }),
+      steps: formattedSteps,
       automationStatus,
+      updatedAt: new Date().toISOString(), // Update timestamp so it appears at top
+      // Store unified_data so Builder can load with full step format preserved
+      unified_data: {
+        name: selectedTestCase.name,
+        description: selectedTestCase.description,
+        steps: formattedSteps,
+        settings: selectedTestCase.settings || {},
+      },
     };
     
     try {
-      // Save to localStorage
+      // Save to localStorage (test_cases) - also remove any duplicates by name
       const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      const idx = localCases.findIndex((tc: any) => tc.id === updatedTestCase.id);
-      if (idx >= 0) {
-        localCases[idx] = updatedTestCase;
-      } else {
-        localCases.push(updatedTestCase);
-      }
-      localStorage.setItem('test_cases', JSON.stringify(localCases));
+      // Remove any entries with same name OR same ID (to avoid duplicates)
+      const cleanedLocal = localCases.filter((tc: any) => 
+        tc.id !== updatedTestCase.id && tc.name !== updatedTestCase.name
+      );
+      cleanedLocal.push(updatedTestCase);
+      localStorage.setItem('test_cases', JSON.stringify(cleanedLocal));
       
-      // Update state
+      // Also update flowstral_test_cases - remove duplicates by name/ID
+      const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+      const cleanedFlowstral = flowstralCases.filter((tc: any) => 
+        tc.id !== updatedTestCase.id && tc.name !== updatedTestCase.name
+      );
+      cleanedFlowstral.push(updatedTestCase);
+      localStorage.setItem('flowstral_test_cases', JSON.stringify(cleanedFlowstral));
+      
+      // Also update individual unified_test_case entry
+      localStorage.setItem(`unified_test_case_${updatedTestCase.id}`, JSON.stringify(updatedTestCase));
+      
+      // Remove any legacy unified_test_case entries with same name but different ID
+      const unifiedKeys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
+      for (const key of unifiedKeys) {
+        try {
+          const tc = JSON.parse(localStorage.getItem(key) || '{}');
+          if (tc.name === updatedTestCase.name && tc.id !== updatedTestCase.id) {
+            localStorage.removeItem(key);
+            console.log(`[Recorder] Removed duplicate unified entry: ${key}`);
+          }
+        } catch (e) {}
+      }
+      
+      // Also update backend (PostgreSQL) if available
+      try {
+        const backendResponse = await fetch(`http://localhost:8000/test-cases/${updatedTestCase.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: updatedTestCase.name,
+            description: updatedTestCase.description,
+            steps: updatedTestCase.steps,
+            automation_status: automationStatus,
+            tags: updatedTestCase.tags || [],
+          })
+        });
+        if (backendResponse.ok) {
+          console.log(`[Recorder] Updated test case ${updatedTestCase.id} in PostgreSQL backend`);
+        } else {
+          console.warn(`[Recorder] PostgreSQL update failed with status: ${backendResponse.status}`);
+        }
+      } catch (e) {
+        console.warn('[Recorder] PostgreSQL update failed:', e);
+      }
+      
+      // Also update SQLite scale database if using it
+      try {
+        const scaleResponse = await fetch(`http://localhost:8000/test-cases/scale-data/update/${updatedTestCase.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: updatedTestCase.id,
+            name: updatedTestCase.name,
+            automation_status: automationStatus,
+            steps: updatedTestCase.steps,
+            updated_at: updatedTestCase.updatedAt
+          })
+        });
+        if (scaleResponse.ok) {
+          console.log(`[Recorder] Updated test case ${updatedTestCase.id} in SQLite scale DB`);
+        }
+      } catch (e) {
+        // SQLite update is optional - don't warn if not available
+      }
+      
+      // Trigger reload in Test Repository if it's open
+      window.dispatchEvent(new CustomEvent('reload-test-cases'));
+      
+      // Update state - put updated test case first so it appears at top
       setAllTestCases(prev => {
-        const updated = [...prev];
-        const i = updated.findIndex(tc => tc.id === updatedTestCase.id);
-        if (i >= 0) updated[i] = updatedTestCase;
-        return updated;
+        const filtered = prev.filter(tc => tc.id !== updatedTestCase.id);
+        return [updatedTestCase, ...filtered]; // Put at front so it appears at top
       });
       
-      toast.success(`Merged ${mergedSteps.filter(s => s.qword).length} automated steps into "${selectedTestCase.name}"`);
+      // Log detailed step info for debugging
+      console.log('[Recorder] Merged test saved:', updatedTestCase.id, 'status:', automationStatus, 'steps:', updatedTestCase.steps?.length);
+      console.log('[Recorder] Step details:', updatedTestCase.steps?.map((s, i) => ({
+        idx: i,
+        type: s.type,
+        qword: s.qword,
+        hasArgs: !!s.args,
+        hasSelector: !!s.selector || !!s.selectorObj,
+        name: s.name?.substring(0, 30)
+      })));
+      toast.success(`Merged ${stepsWithAutomation.length} automated steps into "${selectedTestCase.name}" (${automationStatus})`);
       setShowMergePreview(false);
       setSelectedTestCase(null);
       setActions([]);
+      setStepAutomation({});  // Reset step automation mapping
+      setCurrentStepIndex(0);
       setMode('new');
     } catch (error) {
       toast.error('Failed to save merged test');
@@ -643,10 +1009,35 @@ export default function PlaywrightRecorderPage() {
 
     if (flowstral?.on) {
     const unsubAction = flowstral.on('playwright-recorder-action', (action: RecordedAction) => {
+      // Always add to actions list for display
       setActions(prev => {
         if (prev.some(a => a.id === action.id)) return prev;
         return [...prev, action];
       });
+      
+      // In 'existing' mode, also assign to current step (use refs for current values)
+      if (modeRef.current === 'existing' && selectedTestCaseRef.current) {
+        const stepIdx = currentStepIndexRef.current;
+        const manualSteps = selectedTestCaseRef.current.steps || [];
+        if (stepIdx < manualSteps.length) {
+          setStepAutomation(prev => ({
+            ...prev,
+            [stepIdx]: { type: 'recorded', data: action }
+          }));
+          // Find next unassigned step
+          let nextIdx = -1;
+          for (let i = stepIdx + 1; i < manualSteps.length; i++) {
+            // Check if step i is not in prev automation
+            // We can't access prev here easily, so just increment
+            nextIdx = i;
+            break;
+          }
+          if (nextIdx !== -1) {
+            setCurrentStepIndex(nextIdx);
+          }
+          toast.success(`Step ${stepIdx + 1} automated`);
+        }
+      }
     });
 
     const unsubStopped = flowstral.on('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
@@ -1063,8 +1454,39 @@ export default function PlaywrightRecorderPage() {
       timestamp: Date.now(),
       selectorObj: suggestion.selectorObj
     };
-    setActions(prev => [...prev, newAction]);
-    toast.success('Added to test steps', { duration: 1500 });
+    
+    // In 'existing' mode, assign to current step
+    if (mode === 'existing' && selectedTestCase) {
+      const manualSteps = selectedTestCase.steps || [];
+      if (currentStepIndex < manualSteps.length) {
+        setStepAutomation(prev => ({
+          ...prev,
+          [currentStepIndex]: { type: 'suggested', data: suggestion }
+        }));
+        
+        // Find next unassigned step
+        let nextIdx = -1;
+        for (let i = currentStepIndex + 1; i < manualSteps.length; i++) {
+          if (!stepAutomation[i]) {
+            nextIdx = i;
+            break;
+          }
+        }
+        if (nextIdx !== -1) {
+          setCurrentStepIndex(nextIdx);
+        }
+        
+        toast.success(`Step ${currentStepIndex + 1} automated with suggestion`, { duration: 1500 });
+      } else {
+        // All steps assigned, just add to regular actions
+        setActions(prev => [...prev, newAction]);
+        toast.success('Added to test steps', { duration: 1500 });
+      }
+    } else {
+      // Normal mode - just add to actions
+      setActions(prev => [...prev, newAction]);
+      toast.success('Added to test steps', { duration: 1500 });
+    }
   };
 
   const handleStartRecording = async () => {
@@ -1084,21 +1506,27 @@ export default function PlaywrightRecorderPage() {
     setIsStarting(true);
     setActions([]);
     setRecordingTime(0);
+    setCapturedNetworkRequests([]); // Clear previous network captures
+
+    // Build capture options
+    const captureNetwork = captureForLoadTest || captureForApiTest;
 
     try {
       let result;
       if (flowstral?.playwrightRecorder) {
-        result = await flowstral.playwrightRecorder.start(url);
+        // Pass capture options to recorder
+        result = await flowstral.playwrightRecorder.start(url, { captureNetwork });
       } else if (electronAPI?.startRecording) {
         await electronAPI.navigateEmbeddedBrowser?.(url);
-        result = await electronAPI.startRecording();
+        result = await electronAPI.startRecording({ captureNetwork });
       }
       
       if (result?.success !== false) {
         setIsRecording(true);
         setIsPaused(false);
         setCurrentUrl(url);
-        toast.success("Recording started!");
+        const captureMsg = captureNetwork ? " (capturing network traffic)" : "";
+        toast.success(`Recording started!${captureMsg}`);
       } else {
         toast.error(result?.error || "Failed to start");
       }
@@ -1124,6 +1552,17 @@ export default function PlaywrightRecorderPage() {
       setIsRecording(false);
       setIsPaused(false);
       
+      // Capture network requests if they were recorded
+      if (result?.networkRequests && (captureForLoadTest || captureForApiTest)) {
+        const filteredRequests = result.networkRequests.filter((req: any) => {
+          // Filter out static assets
+          const url = req.url || '';
+          return !url.match(/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)(\?|$)/i);
+        });
+        setCapturedNetworkRequests(filteredRequests);
+        console.log(`[Recorder] Captured ${filteredRequests.length} network requests`);
+      }
+      
       // Merge recorded actions with manually added ones (SF Tools, navigation, etc.)
       const recordedActions = result?.actions || result;
       if (Array.isArray(recordedActions)) {
@@ -1148,7 +1587,9 @@ export default function PlaywrightRecorderPage() {
           return [...recordedOnly, ...manualActions];
         });
       }
-      toast.success(`Recording stopped - ${actions.length} actions`);
+      
+      const networkMsg = capturedNetworkRequests.length > 0 ? ` (${capturedNetworkRequests.length} HTTP requests)` : '';
+      toast.success(`Recording stopped - ${actions.length} actions${networkMsg}`);
     } catch (error) {
       toast.error("Failed to stop recording");
     }
@@ -1269,11 +1710,20 @@ const handleExportToBuilder = async () => {
         metadata: { 
           source: 'playwright-recorder',
           createdAt: new Date().toISOString(),
-        }
+        },
+        // Tags for filtering - automation is always included
+        tags: [
+          'automation',
+          ...(captureForLoadTest ? ['load'] : []),
+          ...(captureForApiTest ? ['api'] : []),
+        ],
+        // Network data for load/api testing (only if captured)
+        networkData: (captureForLoadTest || captureForApiTest) ? capturedNetworkRequests : undefined,
       };
       
       console.log('[Recorder] Exporting test case with', testCase.steps.length, 'steps');
-      console.log('[Recorder] Steps:', testCase.steps.map(s => `${s.qword}: ${s.name}`));
+      console.log('[Recorder] Tags:', testCase.tags);
+      console.log('[Recorder] Network requests:', testCase.networkData?.length || 0);
 
       if (electronAPI?.exportToTestBuilder) {
         await electronAPI.exportToTestBuilder(testCase);
@@ -1285,11 +1735,84 @@ const handleExportToBuilder = async () => {
         localStorage.setItem('unified_test_case_timestamp', Date.now().toString());
         window.location.href = '/test-cases/builder';
       }
-      toast.success(`Exported ${actions.length} steps to Builder!`);
+      
+      const tagMsg = testCase.tags.length > 1 ? ` [${testCase.tags.join(', ')}]` : '';
+      toast.success(`Exported ${actions.length} steps to Builder!${tagMsg}`);
     } catch (error) {
       console.error('[Recorder] Export failed:', error);
       toast.error("Failed to export");
     }
+  };
+
+  // Quick test in API tab - sends captured network requests or generates from recorded URL
+  const handleQuickApiTest = () => {
+    let apiRequests: any[] = [];
+    
+    if (capturedNetworkRequests.length > 0) {
+      // Use actual captured network requests
+      apiRequests = capturedNetworkRequests.map((req, index) => ({
+        id: `recorded-${index}-${Date.now()}`,
+        name: `${req.method} ${new URL(req.url).pathname}`,
+        method: req.method,
+        url: req.url,
+        headers: req.headers || {},
+        body: req.body || '',
+        timestamp: req.timestamp,
+      }));
+    } else {
+      // Generate basic requests from the recorded URL
+      // This helps users get started even without full network capture
+      const baseUrl = (url || 'http://localhost:8002').replace(/\/+$/, ''); // Remove trailing slashes
+      apiRequests = [
+        { id: `gen-1-${Date.now()}`, name: 'GET Products', method: 'GET', url: `${baseUrl}/api/products`, headers: {}, body: '' },
+        { id: `gen-2-${Date.now()}`, name: 'GET Cart', method: 'GET', url: `${baseUrl}/api/cart`, headers: {}, body: '' },
+        { id: `gen-3-${Date.now()}`, name: 'POST Cart', method: 'POST', url: `${baseUrl}/api/cart`, headers: {'Content-Type': 'application/json'}, body: '{"product_id": "1", "quantity": 1}' },
+        { id: `gen-4-${Date.now()}`, name: 'POST Checkout', method: 'POST', url: `${baseUrl}/api/checkout`, headers: {'Content-Type': 'application/json'}, body: '{}' },
+      ];
+      toast.info("Generated sample API requests from target URL. For actual traffic capture, use HAR import.");
+    }
+    
+    sessionStorage.setItem('pendingApiTestRequests', JSON.stringify(apiRequests));
+    sessionStorage.setItem('pendingApiTestTimestamp', Date.now().toString());
+    
+    toast.success(`Sending ${apiRequests.length} requests to API tab...`);
+    
+    // Navigate to API tab
+    window.location.href = '/api';
+  };
+
+  // Quick test in Perf tab - sends captured network requests for load testing
+  const handleQuickLoadTest = () => {
+    let loadTestRequests: any[] = [];
+    
+    if (capturedNetworkRequests.length > 0) {
+      // Use actual captured network requests
+      loadTestRequests = capturedNetworkRequests.map((req, index) => ({
+        id: `recorded-${index}-${Date.now()}`,
+        method: req.method,
+        url: req.url,
+        headers: req.headers || {},
+        body: req.body || '',
+        responseTime: req.responseTime,
+      }));
+    } else {
+      // Generate basic requests from the recorded URL for load testing
+      const baseUrl = (url || 'http://localhost:8002').replace(/\/+$/, ''); // Remove trailing slashes
+      loadTestRequests = [
+        { id: `gen-1-${Date.now()}`, method: 'GET', url: `${baseUrl}/api/products`, headers: {}, body: '' },
+        { id: `gen-2-${Date.now()}`, method: 'GET', url: `${baseUrl}/api/cart`, headers: {}, body: '' },
+        { id: `gen-3-${Date.now()}`, method: 'POST', url: `${baseUrl}/api/cart`, headers: {'Content-Type': 'application/json'}, body: '{"product_id": "1", "quantity": 1}' },
+      ];
+      toast.info("Generated sample load test requests from target URL. For actual traffic capture, use HAR import.");
+    }
+    
+    sessionStorage.setItem('pendingLoadTestRequests', JSON.stringify(loadTestRequests));
+    sessionStorage.setItem('pendingLoadTestTimestamp', Date.now().toString());
+    
+    toast.success(`Sending ${loadTestRequests.length} requests to Perf tab...`);
+    
+    // Navigate to Perf tab
+    window.location.href = '/performance';
   };
 
   // Execute SOQL Query via Electron or Backend
@@ -1826,6 +2349,36 @@ Recorded Test
             <Layers className="h-3.5 w-3.5 mr-1.5" />
             Builder
                     </Button>
+          {/* Quick API Test - show when API toggle is ON and has actions */}
+          {captureForApiTest && !isRecording && actions.length > 0 && (
+            <Button
+              onClick={handleQuickApiTest}
+              size="sm"
+              className="h-8 px-3 text-xs bg-violet-600 hover:bg-violet-700"
+              title={capturedNetworkRequests.length > 0 
+                ? `Test ${capturedNetworkRequests.length} captured requests in API tab`
+                : "Open API tab to test recorded endpoints"
+              }
+            >
+              <Zap className="h-3.5 w-3.5 mr-1" />
+              API {capturedNetworkRequests.length > 0 && `(${capturedNetworkRequests.length})`}
+            </Button>
+          )}
+          {/* Quick Load Test - show when Load toggle is ON and has actions */}
+          {captureForLoadTest && !isRecording && actions.length > 0 && (
+            <Button
+              onClick={handleQuickLoadTest}
+              size="sm"
+              className="h-8 px-3 text-xs bg-orange-600 hover:bg-orange-700"
+              title={capturedNetworkRequests.length > 0
+                ? `Load test ${capturedNetworkRequests.length} captured requests in Perf tab`
+                : "Open Perf tab to load test recorded endpoints"
+              }
+            >
+              <Activity className="h-3.5 w-3.5 mr-1" />
+              Perf {capturedNetworkRequests.length > 0 && `(${capturedNetworkRequests.length})`}
+            </Button>
+          )}
           <Select onValueChange={handleExport}>
             <SelectTrigger className="h-8 w-[100px] text-xs border-white/20 bg-transparent">
               <Download className="h-3.5 w-3.5 mr-1" />
@@ -1844,9 +2397,9 @@ Recorded Test
       </div>
 
       {/* ============ MAIN CONTENT ============ */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* ============ LEFT PANEL - URL & Recorded Steps ============ */}
-        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-border">
+        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-border overflow-hidden">
           {/* URL Bar */}
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg border border-border">
@@ -1860,6 +2413,54 @@ Recorded Test
                 className="h-7 bg-transparent border-0 text-sm p-0 focus-visible:ring-0"
                 />
             </div>
+            
+            {/* Network Capture Toggles - Only show when NOT recording */}
+            {!isRecording && (
+              <div className="mt-2 p-2 bg-muted/50 rounded-lg border border-border">
+                <p className="text-xs text-muted-foreground mb-2">Also capture network traffic for:</p>
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="capture-load"
+                      checked={captureForLoadTest}
+                      onCheckedChange={setCaptureForLoadTest}
+                      className="scale-75"
+                    />
+                    <Label htmlFor="capture-load" className="text-xs cursor-pointer flex items-center gap-1">
+                      📊 Load Testing
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="capture-api"
+                      checked={captureForApiTest}
+                      onCheckedChange={setCaptureForApiTest}
+                      className="scale-75"
+                    />
+                    <Label htmlFor="capture-api" className="text-xs cursor-pointer flex items-center gap-1">
+                      🔌 API Testing
+                    </Label>
+                  </div>
+                </div>
+                {(captureForLoadTest || captureForApiTest) && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                    ⚡ HTTP traffic will be captured during recording
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {/* Show capture status during recording */}
+            {isRecording && (captureForLoadTest || captureForApiTest) && (
+              <div className="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  Capturing network traffic ({capturedNetworkRequests.length} requests)
+                  {captureForLoadTest && <Badge variant="outline" className="text-[10px] h-4">Load</Badge>}
+                  {captureForApiTest && <Badge variant="outline" className="text-[10px] h-4">API</Badge>}
+                </div>
+              </div>
+            )}
               </div>
               
 {/* Recording Controls */}
@@ -1958,6 +2559,112 @@ Recorded Test
             </div>
             </div>
 
+          {/* Manual Steps Panel - Only in 'existing' mode */}
+          {mode === 'existing' && selectedTestCase && (
+            <div className="border-b border-border">
+              <div className="px-4 py-2 flex items-center justify-between bg-purple-500/10">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-purple-400" />
+                  <span className="text-sm font-medium text-purple-300">Manual Steps to Automate</span>
+                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                    {Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
+                  </Badge>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => { setStepAutomation({}); setCurrentStepIndex(0); }}
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Reset
+                </Button>
+              </div>
+              <ScrollArea className="max-h-[250px]">
+                <div className="px-2 py-2 space-y-1">
+                  {(selectedTestCase.steps || []).map((step: any, idx: number) => {
+                    const automation = stepAutomation[idx];
+                    const isCurrent = currentStepIndex === idx;
+                    const isAutomated = automation?.type === 'recorded' || automation?.type === 'suggested';
+                    const isSkipped = automation?.type === 'skipped';
+                    
+                    return (
+                      <div
+                        key={step.id || idx}
+                        onClick={() => setCurrentStepIndex(idx)}
+                        className={cn(
+                          "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all",
+                          isCurrent && "bg-purple-500/20 border border-purple-500/50 ring-1 ring-purple-500/30",
+                          !isCurrent && isAutomated && "bg-green-500/10 border border-green-500/30",
+                          !isCurrent && isSkipped && "bg-yellow-500/10 border border-yellow-500/30",
+                          !isCurrent && !automation && "bg-card border border-transparent hover:border-white/10"
+                        )}
+                      >
+                        {/* Step number */}
+                        <div className={cn(
+                          "flex items-center justify-center w-6 h-6 rounded text-xs font-mono shrink-0",
+                          isCurrent && "bg-purple-500 text-white",
+                          !isCurrent && isAutomated && "bg-green-500/20 text-green-400",
+                          !isCurrent && isSkipped && "bg-yellow-500/20 text-yellow-400",
+                          !isCurrent && !automation && "bg-white/5 text-muted-foreground"
+                        )}>
+                          {String(idx + 1).padStart(2, '0')}
+                        </div>
+                        
+                        {/* Status icon */}
+                        {isAutomated && <CheckCircle className="h-4 w-4 text-green-400 shrink-0" />}
+                        {isSkipped && <Circle className="h-4 w-4 text-yellow-400 shrink-0" />}
+                        {isCurrent && !automation && <ArrowRight className="h-4 w-4 text-purple-400 shrink-0 animate-pulse" />}
+                        
+                        {/* Step name */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{step.name || step.description || `Step ${idx + 1}`}</p>
+                          {automation?.data && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {automation.type === 'recorded' ? '🎬 ' : '✨ '}
+                              {(automation.data as any).description || (automation.data as any).qword}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Action buttons for current step */}
+                        {isCurrent && !automation && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => { e.stopPropagation(); skipCurrentStep(); }}
+                            className="h-6 px-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/20"
+                          >
+                            Skip
+                          </Button>
+                        )}
+                        
+                        {/* Clear button for automated steps */}
+                        {automation && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => { e.stopPropagation(); clearStepAutomation(idx); }}
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+              
+              {/* Quick tip */}
+              <div className="px-4 py-2 border-t border-border/50 bg-muted/30">
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-purple-400">Tip:</span> Record actions or add suggestions from the overlay - they'll be assigned to step {currentStepIndex + 1}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Recorded Steps Header */}
           <div className="px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1975,7 +2682,8 @@ Recorded Test
           </div>
 
           {/* Recorded Steps List */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
             {actions.length === 0 ? (
               <div className="text-center py-12 px-4 text-muted-foreground">
                 <Video className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -1983,7 +2691,7 @@ Recorded Test
                 <p className="text-xs mt-1">Click 'Start Recording' to begin.</p>
               </div>
             ) : (
-              <div className="px-2 pb-2 space-y-1">
+              <div className="px-2 pb-20 space-y-1"> {/* pb-20 for fixed footer space */}
                 {actions.map((action, index) => {
                   // Apply masking for sensitive fields (passwords)
                   const displayAction = maskSensitiveAction(action);
@@ -2045,32 +2753,8 @@ Recorded Test
                 })}
               </div>
             )}
-          </ScrollArea>
-                  
-{/* Footer - Save/Merge Button */}
-              {actions.length > 0 && (
-            <div className="p-3 border-t border-border space-y-2">
-              {selectedTestCase ? (
-                <>
-                  <Button
-                    onClick={performMerge} 
-                    className="w-full h-10 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                  >
-                    <Merge className="h-4 w-4 mr-2" />
-                    Merge {actions.length} Actions into "{selectedTestCase.name?.slice(0, 20)}..."
-                      </Button>
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    Position-based merge: Action 1 → Step 1, Action 2 → Step 2, etc.
-                  </p>
-                </>
-              ) : (
-                <Button onClick={handleSaveAsNew} className="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save as New Test Case
-                </Button>
-              )}
-            </div>
-          )}
+            </ScrollArea>
+          </div>
         </div>
 
         {/* ============ RIGHT PANEL - Suggestions ============ */}
@@ -2978,6 +3662,31 @@ Recorded Test
         </div>
       </div>
 
+      {/* Fixed Footer - Save/Merge Button - ALWAYS visible at bottom of screen */}
+      {actions.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-3 border-t border-border bg-card shadow-lg" style={{ width: '55%', minWidth: '500px' }}>
+          {selectedTestCase ? (
+            <div className="space-y-2">
+              <Button
+                onClick={performMerge} 
+                className="w-full h-10 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+              >
+                <Merge className="h-4 w-4 mr-2" />
+                Merge {actions.length} Actions into "{selectedTestCase.name?.slice(0, 20)}..."
+              </Button>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Position-based merge: Action 1 → Step 1, Action 2 → Step 2, etc.
+              </p>
+            </div>
+          ) : (
+            <Button onClick={handleSaveAsNew} className="w-full h-10 bg-gradient-to-r from-emerald-500 to-emerald-600">
+              <Save className="h-4 w-4 mr-2" />
+              Save as New Test Case
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Test Picker Dialog - Enterprise Scale */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
         <DialogContent className="max-w-4xl h-[85vh] bg-card border-border flex flex-col overflow-hidden">
@@ -3110,10 +3819,14 @@ Recorded Test
                     key={tc.id}
                     onClick={() => {
                       setSelectedTestCase(tc);
-                        setMode('existing');
+                      setMode('existing');
                       setShowTestPicker(false);
-                        toast.success(`Selected: ${tc.name}`);
-                      }}
+                      // Reset step automation state for new test case
+                      setCurrentStepIndex(0);
+                      setStepAutomation({});
+                      setActions([]); // Clear any previous recordings
+                      toast.success(`Selected: ${tc.name} - ${tc.steps?.length || 0} steps to automate`);
+                    }}
                       className="p-3 rounded-lg border border-border hover:border-purple-500/50 cursor-pointer transition-colors group"
                     >
                       <div className="flex items-start gap-3">
