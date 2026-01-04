@@ -1,6 +1,6 @@
 # 🚀 ArisTrace Performance Testing Architecture
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Last Updated:** January 2026  
 **Module:** Virtual User Generator (Perf Tab)
 
@@ -9,133 +9,158 @@
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture Diagram](#architecture-diagram)
-3. [Core Components](#core-components)
+2. [Architecture: Control Plane vs Load Plane](#architecture-control-plane-vs-load-plane)
+3. [System Components](#system-components)
 4. [Load Test Patterns](#load-test-patterns)
 5. [User Personas](#user-personas)
 6. [Quick Start Scenarios](#quick-start-scenarios)
-7. [UI Tabs & Features](#ui-tabs--features)
-8. [Metrics Collected](#metrics-collected)
-9. [Test Configuration](#test-configuration)
-10. [Data Flow](#data-flow)
-11. [Integration Points](#integration-points)
-12. [How to Use](#how-to-use)
+7. [Backend Services](#backend-services)
+8. [API Endpoints](#api-endpoints)
+9. [Metrics Collected](#metrics-collected)
+10. [Distributed Load Generation](#distributed-load-generation)
+11. [How to Use](#how-to-use)
+12. [Scalability](#scalability)
 
 ---
 
 ## 📖 Overview
 
-The ArisTrace Performance Testing module provides **enterprise-grade load testing** capabilities directly in the browser. Built with React and powered by a FastAPI backend, it enables:
+The ArisTrace Performance Testing module provides **enterprise-grade load testing** with a proper **Control Plane / Load Plane architecture**:
 
-- **Virtual User Simulation** - Simulate thousands of concurrent users
-- **Multiple Load Patterns** - Constant, Ramp-up, Spike, Stress, Soak, and more
-- **Real-time Metrics** - Live dashboards with response times, throughput, errors
-- **HAR Import** - Import recorded network traffic for realistic scenarios
-- **Protocol-Level Testing** - Direct HTTP/API testing without browser overhead
-- **AI-Powered Analysis** - Intelligent performance insights and recommendations
+- **Control Plane (Browser)** - UI for configuration, monitoring, and results
+- **Load Plane (Backend)** - Server-side load generation using asyncio workers
+- **Scalable** - From 10 to 10,000+ virtual users via distributed nodes
+- **Protocol-Level** - Direct HTTP/WebSocket testing without browser overhead
 
 ---
 
-## 🏗️ Architecture Diagram
+## 🏗️ Architecture: Control Plane vs Load Plane
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         ARISTRACE PERF MODULE                          │
+│                     CONTROL PLANE (Browser/UI)                          │
+│                    VirtualUserGenerator.tsx                              │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │   Quick     │  │    HAR      │  │   Config    │  │   Steps     │   │
-│  │   Start     │  │   Import    │  │   Tab       │  │   Tab       │   │
-│  │   Tab       │  │   Tab       │  │             │  │             │   │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘   │
-│         │                │                │                │          │
-│         └────────────────┴────────┬───────┴────────────────┘          │
-│                                   │                                    │
-│                    ┌──────────────▼──────────────┐                    │
-│                    │     Load Test Engine        │                    │
-│                    │  ┌─────────────────────┐   │                    │
-│                    │  │ Virtual User Pool   │   │                    │
-│                    │  │  - User Spawning    │   │                    │
-│                    │  │  - Think Time Sim   │   │                    │
-│                    │  │  - Persona Behavior │   │                    │
-│                    │  └─────────────────────┘   │                    │
-│                    └──────────────┬──────────────┘                    │
-│                                   │                                    │
-│         ┌─────────────────────────┼─────────────────────────┐         │
-│         │                         │                         │         │
-│  ┌──────▼──────┐  ┌───────────────▼───────────────┐  ┌──────▼──────┐ │
-│  │   Users     │  │        Metrics Tab            │  │  Results    │ │
-│  │   Tab       │  │  ┌─────────────────────────┐ │  │  Tab        │ │
-│  │             │  │  │ Real-time Dashboard     │ │  │             │ │
-│  │ - Active VUs│  │  │ - Response Times        │ │  │ - Summary   │ │
-│  │ - Status    │  │  │ - Throughput (RPS)      │ │  │ - Graphs    │ │
-│  │ - Actions   │  │  │ - Error Rate            │ │  │ - Export    │ │
-│  └─────────────┘  │  │ - Percentiles           │ │  └─────────────┘ │
-│                    │  └─────────────────────────┘ │                   │
-│                    └───────────────────────────────┘                   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
+│                                                                          │
+│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │
+│    │   Configure  │  │   Monitor    │  │   Results    │                 │
+│    │  Test Params │  │  Real-time   │  │   & Export   │                 │
+│    └──────────────┘  └──────────────┘  └──────────────┘                 │
+│                                                                          │
+│    ✅ Set VU count, duration, pattern                                    │
+│    ✅ View live metrics dashboard                                        │
+│    ✅ Start/Stop/Pause tests                                             │
+│    ✅ Export results to CSV/JSON                                         │
+│    ❌ Does NOT generate load (no browser fetch to target)                │
+│                                                                          │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │
+                                │  HTTP API Calls
+                                │  ┌─────────────────────────────┐
+                                │  │ POST /api/performance/tests/run
+                                │  │ GET  /api/performance/tests/{id}/status
+                                │  │ GET  /api/performance/metrics/realtime
+                                │  │ POST /api/performance/tests/{id}/stop
+                                │  └─────────────────────────────┘
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         BACKEND (FastAPI)                               │
+│                     LOAD PLANE (Backend/FastAPI)                         │
+│                    PerformanceEngine + LoadGenerator                     │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │  Load Test  │  │   HAR       │  │  Metrics    │  │  AI         │   │
-│  │  Executor   │  │   Parser    │  │  Collector  │  │  Analysis   │   │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
+│                                                                          │
+│    ┌──────────────────────────────────────────────────────────────┐     │
+│    │                   PerformanceEngine                           │     │
+│    │  ┌─────────────────┐  ┌─────────────────┐                    │     │
+│    │  │  LoadGenerator  │  │ DistributedCtrl │ ← Scale to N nodes │     │
+│    │  │  (asyncio pool) │  │                 │                    │     │
+│    │  └────────┬────────┘  └─────────────────┘                    │     │
+│    │           │                                                   │     │
+│    │   ┌───────┴───────┐                                          │     │
+│    │   │ VirtualUser   │ × 500+ concurrent                        │     │
+│    │   │ VirtualUser   │                                          │     │
+│    │   │ VirtualUser   │ → httpx/aiohttp (10K+ conn capable)      │     │
+│    │   │ ...           │                                          │     │
+│    │   └───────────────┘                                          │     │
+│    └──────────────────────────────────────────────────────────────┘     │
+│                                                                          │
+│    Supporting Services:                                                  │
+│    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
+│    │ Monitoring   │ │ Correlation  │ │ Alerting     │ │ Reporting    │  │
+│    │ Service      │ │ Engine       │ │ Service      │ │ Engine       │  │
+│    └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘  │
+│                                                                          │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │
+                                │  HTTP/WebSocket Requests
+                                │  (Server-side, no browser limits)
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         TARGET SYSTEM                                   │
-│              (Your Application Under Test)                              │
+│                         TARGET SYSTEM                                    │
+│                   (Application Under Test)                               │
+│                                                                          │
+│                     http://your-app.com                                  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Why This Architecture?
+
+| Browser-Based (Wrong) | Server-Based (Correct) |
+|-----------------------|------------------------|
+| 6 concurrent connections per domain | 10,000+ concurrent connections |
+| Limited by user's laptop | Scale across multiple servers |
+| CORS restrictions | No CORS (server-to-server) |
+| Results polluted by browser overhead | Clean protocol-level metrics |
+| Can't simulate real load | True production-like traffic |
 
 ---
 
-## 🧩 Core Components
+## 🧩 System Components
 
-### 1. Virtual User Generator (`VirtualUserGenerator.tsx`)
-- **Purpose:** Main UI component for performance testing
-- **Location:** `src/pages/VirtualUserGenerator.tsx`
-- **Size:** ~2,500 lines of React/TypeScript
+### Frontend (Control Plane)
 
-### 2. Load Test Engine
-- **Purpose:** Orchestrates virtual users and executes load patterns
-- **Features:**
-  - Spawns/despawns virtual users dynamically
-  - Applies think time and click delays
-  - Handles ramp-up/ramp-down curves
-  - Tracks per-user metrics
+| Component | File | Purpose |
+|-----------|------|---------|
+| Virtual User Generator | `src/pages/VirtualUserGenerator.tsx` | UI for configuration and monitoring |
 
-### 3. Metrics Collector
-- **Purpose:** Aggregates and calculates performance statistics
-- **Collected Data:**
-  - Response times (min, max, avg, percentiles)
-  - Throughput (requests/second)
-  - Error rates
-  - Bytes sent/received
+**The UI does NOT:**
+- Make HTTP requests to the target system
+- Generate actual load
+- Measure response times directly
 
-### 4. HAR Parser
-- **Purpose:** Import HTTP Archive files from browser recordings
-- **Converts:** HAR entries to executable test steps
+**The UI DOES:**
+- Send configuration to backend API
+- Poll for real-time metrics
+- Display results and graphs
+- Allow test control (start/stop/pause)
+
+### Backend (Load Plane)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Performance API | `backend/app/routers/performance_api.py` | REST endpoints |
+| Performance Engine | `backend/app/services/performance/performance_engine.py` | Main orchestrator |
+| Load Generator | `backend/app/services/performance/load_generator.py` | Virtual user pool |
+| Distributed Controller | `backend/app/services/performance/distributed_controller.py` | Multi-node scaling |
+| Protocol Handler | `backend/app/services/performance/protocol_handler.py` | HTTP/WS execution |
+| Monitoring Service | `backend/app/services/performance/monitoring_service.py` | Metrics aggregation |
+| Correlation Engine | `backend/app/services/performance/correlation_engine.py` | Dynamic value extraction |
 
 ---
 
 ## 📊 Load Test Patterns
 
-| Pattern | Icon | Description | Use Case |
-|---------|------|-------------|----------|
-| **Constant Load** | ➡️ | Maintain steady number of users | Baseline performance |
-| **Ramp Up** | 📈 | Gradually increase users | Normal load testing |
-| **Ramp Down** | 📉 | Gradually decrease users | Graceful degradation |
-| **Spike Test** | ⚡ | Sudden burst of users | Flash sale simulation |
-| **Stress Test** | 🔥 | Push beyond normal capacity | Find breaking point |
-| **Soak/Endurance** | 🕐 | Extended duration test | Memory leak detection |
-| **Breakpoint** | 💥 | Find system breaking point | Capacity planning |
-| **Wave Pattern** | 🌊 | Cyclic load increases | Traffic pattern simulation |
+| Pattern | Icon | Description | API `profile_type` |
+|---------|------|-------------|-------------------|
+| **Constant Load** | ➡️ | Maintain steady number of users | `linear` |
+| **Ramp Up** | 📈 | Gradually increase users | `linear` |
+| **Ramp Down** | 📉 | Gradually decrease users | `linear` |
+| **Spike Test** | ⚡ | Sudden burst of users | `spike` |
+| **Stress Test** | 🔥 | Push beyond normal capacity | `stress` |
+| **Soak/Endurance** | 🕐 | Extended duration test | `endurance` |
+| **Breakpoint** | 💥 | Find system breaking point | `capacity` |
+| **Wave Pattern** | 🌊 | Cyclic load increases | Custom |
 
 ### Pattern Visualization
 
@@ -162,83 +187,120 @@ Wave Pattern:       ╱╲╱╲╱╲╱╲╱╲╱╲
 
 ## 👥 User Personas
 
-Simulate different user behaviors with configurable timing:
-
-| Persona | Think Time | Click Delay | Description |
-|---------|------------|-------------|-------------|
-| **Casual Browser** | 3-8 seconds | 500-2000ms | Slow, exploratory behavior |
-| **Normal User** | 1-3 seconds | 200-800ms | Average interaction speed |
-| **Power User** | 0.5-1.5 seconds | 100-400ms | Fast, experienced user |
-| **Bot/Automated** | 100-500ms | 50-200ms | Machine-speed interactions |
+| Persona | Think Time | Click Delay | Use Case |
+|---------|------------|-------------|----------|
+| **Casual Browser** | 3-8 seconds | 500-2000ms | E-commerce browsing |
+| **Normal User** | 1-3 seconds | 200-800ms | Standard transactions |
+| **Power User** | 0.5-1.5 seconds | 100-400ms | Experienced users |
+| **Bot/Automated** | 100-500ms | 50-200ms | API stress testing |
 
 ---
 
 ## ⚡ Quick Start Scenarios
 
-Pre-configured one-click scenarios for common testing needs:
-
-| Scenario | Users | Duration | Pattern | Endpoints |
-|----------|-------|----------|---------|-----------|
-| 🚀 **API Load Test** | 50 | 60s | Ramp Up | Products, Categories, Health |
-| ⚡ **Spike Test** | 200 | 120s | Spike | Products, Categories |
-| 🔥 **Stress Test** | 500 | 180s | Stress | Products, Categories |
+| Scenario | Users | Duration | Pattern | Target Endpoints |
+|----------|-------|----------|---------|------------------|
+| 🚀 **API Load Test** | 50 | 60s | Ramp Up | `/api/products`, `/api/categories` |
+| ⚡ **Spike Test** | 200 | 120s | Spike | `/api/products` |
+| 🔥 **Stress Test** | 500 | 180s | Stress | All endpoints |
 | 🕐 **Endurance Test** | 25 | 600s | Constant | All endpoints |
 | 🌊 **Mixed Workload** | 100 | 300s | Wave | E-commerce flow |
 
 ---
 
-## 🖥️ UI Tabs & Features
+## 🔧 Backend Services
 
-### Tab 1: Quick Start
-- One-click scenario selection
-- Target URL configuration
-- Instant test launch
+### `PerformanceEngine` (Orchestrator)
 
-### Tab 2: HAR Import
-- Upload HAR files from browser
-- Parse recorded network traffic
-- Convert to test steps automatically
+```python
+class PerformanceEngine:
+    def __init__(self):
+        self.load_generator = LoadGenerator()           # Core VU pool
+        self.distributed_controller = DistributedController()  # Multi-node
+        self.monitoring_service = MonitoringService()   # Metrics
+        self.correlation_engine = CorrelationEngine()   # Dynamic values
+        self.reporting_engine = ReportingEngine()       # Reports
+        self.alerting_service = AlertingService()       # SLA alerts
+        self.test_scheduler = TestScheduler()           # Cron scheduling
+        self.system_monitor = SystemMonitor()           # CPU/Memory
+```
 
-### Tab 3: Config
-- Load pattern selection
-- Virtual users count
-- Duration settings
-- Ramp-up time
-- User persona selection
-- Think time toggle
+### `LoadGenerator` (Virtual User Pool)
 
-### Tab 4: Steps
-- View/edit test steps
-- Add manual steps (navigate, click, type, wait, assert, API)
-- Import from test library
-- Step reordering
+```python
+class LoadGenerator:
+    async def start_load_test(
+        self,
+        scenario_names: List[str],
+        protocol_handler: ProtocolHandler,
+        metrics_callback: Callable
+    ) -> str:
+        # Spawns VUs using asyncio tasks
+        for vu_index in range(scenario.virtual_users):
+            task = asyncio.create_task(
+                self._run_virtual_user(vu, scenario, delay)
+            )
+        # Each VU executes HTTP requests server-side
+```
 
-### Tab 5: Users
-- Real-time virtual user status
-- Active/idle/error states
-- Per-user metrics
-- User spawn/despawn visualization
+### `VirtualUser` (Single User Simulation)
 
-### Tab 6: Metrics (Live Dashboard)
-- **Response Time:** Min, Max, Avg
-- **Throughput:** Requests/second
-- **Error Rate:** Failures/second
-- **Active Users:** Current count
-- **Percentiles:** P50, P90, P95, P99
-- **Data Transfer:** Bytes sent/received
+```python
+@dataclass
+class VirtualUser:
+    user_id: str
+    state: UserState  # RUNNING, THINKING, WAITING, ERROR
+    iterations: int
+    errors: int
+    response_times: List[float]
+    session_data: Dict[str, Any]      # Cookies, tokens
+    correlation_data: Dict[str, Any]  # Extracted values
+```
 
-### Tab 7: Results
-- Test summary statistics
-- Response time distribution
-- Error breakdown
-- Export to CSV/JSON
-- Historical comparison
+---
+
+## 📡 API Endpoints
+
+### Test Execution
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/performance/tests/run` | Start a load test |
+| `POST` | `/api/performance/tests/{id}/stop` | Stop a running test |
+| `GET` | `/api/performance/tests/{id}/status` | Get test status + metrics |
+| `GET` | `/api/performance/tests/{id}/report` | Get final report |
+
+### Real-time Metrics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/performance/metrics/realtime` | Live dashboard data |
+| `GET` | `/api/performance/metrics/history` | Historical metrics |
+
+### Scenario Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/performance/scenarios` | Create scenario |
+| `GET` | `/api/performance/scenarios` | List all scenarios |
+| `POST` | `/api/performance/scenarios/{id}/steps` | Add test step |
+
+### Enterprise Features
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/performance/load-profiles/create` | Create spike/stress profile |
+| `POST` | `/api/performance/data-pools/create` | Data parameterization |
+| `POST` | `/api/performance/alerts/create` | SLA alerting |
+| `POST` | `/api/performance/schedules/create` | Scheduled tests |
+| `GET` | `/api/performance/system-metrics` | Server CPU/Memory |
 
 ---
 
 ## 📈 Metrics Collected
 
 ### Response Time Metrics
+
 ```typescript
 interface LoadTestMetrics {
   totalRequests: number;
@@ -251,7 +313,7 @@ interface LoadTestMetrics {
   p90ResponseTime: number;      // 90th percentile
   p95ResponseTime: number;      // 95th percentile
   p99ResponseTime: number;      // 99th percentile
-  requestsPerSecond: number;    // throughput
+  requestsPerSecond: number;    // throughput (RPS)
   activeUsers: number;
   errorsPerSecond: number;
   bytesReceived: number;
@@ -259,149 +321,147 @@ interface LoadTestMetrics {
 }
 ```
 
-### Per-User Tracking
-```typescript
-interface VirtualUser {
-  id: string;
-  status: 'idle' | 'running' | 'completed' | 'error';
-  currentStep: number;
-  completedIterations: number;
-  errors: number;
-  avgResponseTime: number;
-  lastAction: string;
-  startTime: Date;
+### Server-Side Collection
+
+Metrics are collected **on the backend**, not in the browser:
+
+```python
+async def _run_virtual_user(self, vu: VirtualUser, scenario: LoadScenario):
+    step_start = time.time()
+    
+    # Server-side HTTP request (httpx/aiohttp)
+    result = await self.protocol_handler.execute(step)
+    
+    response_time = time.time() - step_start
+    vu.response_times.append(response_time * 1000)  # ms
+```
+
+---
+
+## 🌐 Distributed Load Generation
+
+For tests requiring 1,000+ VUs, use distributed mode:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CONTROLLER NODE                               │
+│                  DistributedController                           │
+│                                                                  │
+│    Coordinates test execution across worker nodes                │
+│    Aggregates metrics from all nodes                             │
+└─────────────────────────────┬────────────────────────────────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+           ▼                  ▼                  ▼
+    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+    │  Worker 1    │  │  Worker 2    │  │  Worker N    │
+    │  500 VUs     │  │  500 VUs     │  │  500 VUs     │
+    │              │  │              │  │              │
+    │  LoadGen     │  │  LoadGen     │  │  LoadGen     │
+    └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+**Enable distributed mode:**
+```python
+POST /api/performance/tests/run
+{
+  "scenario_id": "...",
+  "virtual_users": 2000,
+  "use_distributed": true  # ← Enable multi-node
 }
 ```
-
----
-
-## ⚙️ Test Configuration
-
-```typescript
-interface LoadTestConfig {
-  name: string;              // Test name
-  targetUrl: string;         // Base URL for requests
-  virtualUsers: number;      // Number of concurrent users
-  duration: number;          // Test duration in seconds
-  rampUpTime: number;        // Time to reach full load
-  pattern: string;           // Load pattern type
-  persona: string;           // User behavior profile
-  steps: TestStep[];         // Test steps to execute
-  thinkTime: boolean;        // Enable think time simulation
-  iterations: number;        // 0 = infinite until duration
-}
-```
-
----
-
-## 🔄 Data Flow
-
-```
-1. USER CONFIGURES TEST
-   └─► Select pattern, users, duration, steps
-
-2. TEST STARTS
-   └─► Virtual User Pool spawns users based on ramp-up
-   
-3. USERS EXECUTE STEPS
-   └─► Each user executes test steps with persona timing
-   └─► HTTP requests sent to target system
-   
-4. METRICS COLLECTED
-   └─► Response times recorded per request
-   └─► Aggregated in real-time
-   
-5. LIVE DASHBOARD UPDATES
-   └─► Metrics tab shows real-time stats
-   └─► Users tab shows individual status
-   
-6. TEST COMPLETES
-   └─► Results tab shows summary
-   └─► Export available (CSV, JSON)
-```
-
----
-
-## 🔌 Integration Points
-
-### 1. Record Tab Integration
-- Recorded browser sessions can be imported for performance testing
-- Network traffic captured during recording becomes test steps
-
-### 2. API Tab Integration
-- API tests can be converted to load test scenarios
-- Recorded HTTP requests available for import
-
-### 3. Test Repository
-- Import existing test cases as performance scenarios
-- Filter by automation type
-
-### 4. HAR Files
-- Standard HTTP Archive format support
-- Chrome/Firefox DevTools export compatibility
-
-### 5. AI Analysis
-- GPT-4o-mini powered performance insights
-- Bottleneck identification
-- Optimization recommendations
 
 ---
 
 ## 🎯 How to Use
 
-### Quick Load Test (30 seconds)
+### Quick Load Test (1 Click)
+
 1. Navigate to **Perf** tab
 2. Enter your target URL
 3. Click **Run** on "API Load Test" scenario
-4. Watch metrics in real-time
+4. Watch **Metrics** tab (data from backend)
 
 ### Custom Load Test
+
 1. **Config** tab → Set users, duration, pattern
-2. **Steps** tab → Add or import test steps
-3. **Users** tab → Configure persona
-4. Click **Start Test**
-5. **Metrics** tab → Monitor live
-6. **Results** tab → Analyze and export
+2. **Steps** tab → Add HTTP request steps
+3. Click **Start Test**
+   - UI sends config to `POST /api/performance/tests/run`
+   - Backend spawns VUs and generates load
+4. **Metrics** tab → Polls `GET /api/performance/metrics/realtime`
+5. **Results** tab → Shows final report
 
 ### From HAR File
-1. **HAR** tab → Upload HAR file
-2. Review parsed requests
-3. Configure load settings
-4. Start test
 
-### From Recorded Session
-1. Record in **Record** tab (with network capture enabled)
-2. Click **Send to Perf** (orange button)
+1. **HAR** tab → Upload HAR file
+2. HAR requests converted to scenario steps
 3. Configure load parameters
-4. Run performance test
+4. Start test (backend executes)
+
+### Flow Diagram
+
+```
+┌──────────────────┐
+│  User Clicks     │
+│  "Start Test"    │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐     ┌──────────────────┐
+│  UI sends POST   │────▶│  Backend starts  │
+│  /tests/run      │     │  LoadGenerator   │
+└────────┬─────────┘     └────────┬─────────┘
+         │                        │
+         │                        ▼
+         │               ┌──────────────────┐
+         │               │  VUs execute     │
+         │               │  HTTP requests   │
+         │               │  (server-side)   │
+         │               └────────┬─────────┘
+         │                        │
+         ▼                        ▼
+┌──────────────────┐     ┌──────────────────┐
+│  UI polls GET    │◀────│  Backend returns │
+│  /metrics/realtime│     │  aggregated data │
+└────────┬─────────┘     └──────────────────┘
+         │
+         ▼
+┌──────────────────┐
+│  UI displays     │
+│  live dashboard  │
+└──────────────────┘
+```
 
 ---
 
-## 📊 Performance Testing Best Practices
+## 📊 Scalability
 
-| Practice | Description |
-|----------|-------------|
-| **Start Small** | Begin with 5-10 users, scale up |
-| **Baseline First** | Run constant load to establish baseline |
-| **Isolate Variables** | Change one parameter at a time |
-| **Monitor Server** | Check server CPU/memory alongside |
-| **Realistic Personas** | Use appropriate think times |
-| **Multiple Runs** | Run 3+ times for consistency |
-| **Analyze Percentiles** | P95/P99 more important than avg |
+| Scenario | VUs | Architecture |
+|----------|-----|--------------|
+| Development | 1-50 | Single backend node |
+| Staging | 50-500 | Single backend node |
+| Production | 500-2000 | Single high-spec node |
+| Enterprise | 2000-10000+ | Distributed (3-10 workers) |
+
+### Single Node Limits (Python asyncio)
+
+- **10,000+ concurrent connections** with httpx/aiohttp
+- **1,000-5,000 VUs** practical limit per node (depends on target latency)
+- **Linear scaling** with distributed controller
 
 ---
 
 ## 🛠️ Technical Stack
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | React 18 + TypeScript |
-| UI Framework | Tailwind CSS + Shadcn/UI |
-| State Management | React Hooks (useState, useEffect) |
-| Backend | FastAPI (Python) |
-| HTTP Client | Fetch API / httpx |
-| Charts | Recharts (planned) |
-| AI | OpenAI GPT-4o-mini |
+| Layer | Technology |
+|-------|------------|
+| **Control Plane** | React 18 + TypeScript + Shadcn/UI |
+| **Load Plane** | FastAPI + Python asyncio |
+| **HTTP Client** | httpx (async) / aiohttp |
+| **Metrics** | In-memory + time-series storage |
+| **Distribution** | Custom DistributedController |
 
 ---
 
@@ -410,18 +470,27 @@ interface LoadTestConfig {
 ```
 src/
 ├── pages/
-│   └── VirtualUserGenerator.tsx    # Main Perf component (2,536 lines)
-├── components/
-│   └── ui/                         # Shared UI components
-└── lib/
-    └── api-config.ts               # API configuration
+│   └── VirtualUserGenerator.tsx    # UI Control Plane
 
 backend/
 ├── app/
 │   ├── routers/
-│   │   └── load_test_api.py        # Load test endpoints
+│   │   └── performance_api.py      # REST endpoints
 │   └── services/
-│       └── load_test_executor.py   # Test execution engine
+│       └── performance/
+│           ├── performance_engine.py     # Main orchestrator
+│           ├── load_generator.py         # VU pool (asyncio)
+│           ├── distributed_controller.py # Multi-node
+│           ├── protocol_handler.py       # HTTP/WS execution
+│           ├── monitoring_service.py     # Metrics
+│           ├── correlation_engine.py     # Dynamic extraction
+│           ├── reporting_engine.py       # Reports
+│           ├── alerting_service.py       # SLA alerts
+│           ├── test_scheduler.py         # Cron scheduling
+│           ├── system_monitoring.py      # Server resources
+│           ├── load_profiles.py          # Spike/Stress patterns
+│           ├── data_parameterization.py  # CSV/JSON data
+│           └── transaction_analyzer.py   # Breakdown analysis
 ```
 
 ---
@@ -429,12 +498,11 @@ backend/
 ## 📞 Support
 
 For questions or issues with Performance Testing:
-- Check the **Metrics** tab for real-time diagnostics
+- Backend generates load; browser only displays
+- Check backend logs: `backend/logs/performance.log`
 - Enable **AI Analysis** in Settings for intelligent recommendations
-- Export results for offline analysis
 
 ---
 
 *Document generated by ArisTrace Platform*  
 *© 2026 ArisTrace - Excellence in Every QA Trace*
-

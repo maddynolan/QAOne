@@ -575,85 +575,137 @@ export default function VirtualUserGenerator() {
     }));
   };
 
-  // Simulate a single request - makes actual HTTP requests to the target URL
-  const simulateRequest = async (userId: string, stepIndex: number): Promise<{success: boolean, responseTime: number}> => {
-    const step = config.steps[stepIndex];
-    const persona = USER_PERSONAS[config.persona as keyof typeof USER_PERSONAS];
-    
-    // Add think time based on persona
-    if (config.thinkTime) {
-      const thinkDelay = Math.random() * (persona.thinkTime.max - persona.thinkTime.min) + persona.thinkTime.min;
-      await new Promise(resolve => setTimeout(resolve, thinkDelay));
-    }
-    
-    const startTime = performance.now();
-    
+  // ============================================================================
+  // BACKEND-BASED LOAD GENERATION
+  // The UI is the CONTROL PLANE - it does NOT generate load directly!
+  // The backend (Load Plane) generates actual HTTP traffic server-side.
+  // ============================================================================
+  
+  // Current backend test state
+  const [backendTestId, setBackendTestId] = useState<string | null>(null);
+  const [backendScenarioId, setBackendScenarioId] = useState<string | null>(null);
+  const metricsPollingRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Create a scenario on the backend from current config
+  const createBackendScenario = async (): Promise<string | null> => {
     try {
-      // For navigate steps, make actual HTTP GET request to the target URL
-      if (step.type === 'navigate') {
-        const targetUrl = step.target || config.targetUrl;
-        try {
-          const response = await fetch(targetUrl, {
-            method: 'GET',
-            mode: 'no-cors', // Allow cross-origin requests for load testing
-          });
-          const endTime = performance.now();
-          return {
-            success: true, // no-cors doesn't give us status, assume success
-            responseTime: endTime - startTime
-          };
-        } catch {
-          const endTime = performance.now();
-          return { success: false, responseTime: endTime - startTime };
-        }
-      } 
-      // For API steps, make the actual request
-      else if (step.type === 'api') {
-        const response = await fetch(step.target || config.targetUrl, {
-          method: 'GET',
-          mode: 'no-cors',
-        });
-        const endTime = performance.now();
-        return {
-          success: true,
-          responseTime: endTime - startTime
-        };
+      // First, create a scenario
+      const createResponse = await fetch(`${API_BASE_URL}/api/performance/scenarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: config.name,
+          description: `Load test with ${config.virtualUsers} VUs, ${config.duration}s duration`
+        })
+      });
+      
+      if (!createResponse.ok) {
+        throw new Error('Failed to create scenario');
       }
-      // For UI actions (click, type, etc.), simulate with realistic delays
-      else {
-        const actionDelay = Math.random() * (persona.clickDelay.max - persona.clickDelay.min) + persona.clickDelay.min;
-        await new Promise(resolve => setTimeout(resolve, actionDelay));
+      
+      const { scenario_id } = await createResponse.json();
+      
+      // Add steps to the scenario
+      for (const step of config.steps) {
+        const stepUrl = step.type === 'api' || step.type === 'navigate' 
+          ? (step.target?.startsWith('http') ? step.target : `${config.targetUrl}${step.target}`)
+          : config.targetUrl;
+          
+        await fetch(`${API_BASE_URL}/api/performance/scenarios/${scenario_id}/steps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step_type: 'http_request',
+            name: step.action || `${step.value || 'GET'} ${step.target}`,
+            method: step.value || 'GET',
+            url: stepUrl,
+            headers: step.headers || {},
+            body: step.body || null
+          })
+        });
+      }
+      
+      console.log(`[LoadTest] Created backend scenario: ${scenario_id}`);
+      return scenario_id;
+    } catch (error) {
+      console.error('[LoadTest] Failed to create backend scenario:', error);
+      return null;
+    }
+  };
+  
+  // Poll backend for real-time metrics
+  const pollBackendMetrics = async (testId: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/performance/tests/${testId}/status`);
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      
+      if (data.status === 'running' && data.current_metrics) {
+        const m = data.current_metrics;
+        setMetrics({
+          totalRequests: m.total_requests || 0,
+          successfulRequests: m.successful_requests || 0,
+          failedRequests: m.failed_requests || 0,
+          avgResponseTime: m.avg_response_time || 0,
+          minResponseTime: m.min_response_time || 0,
+          maxResponseTime: m.max_response_time || 0,
+          p50ResponseTime: m.p50_response_time || 0,
+          p90ResponseTime: m.p90_response_time || 0,
+          p95ResponseTime: m.p95_response_time || 0,
+          p99ResponseTime: m.p99_response_time || 0,
+          requestsPerSecond: m.requests_per_second || 0,
+          activeUsers: m.active_users || 0,
+          errorsPerSecond: m.errors_per_second || 0,
+          bytesReceived: m.bytes_received || 0,
+          bytesSent: m.bytes_sent || 0
+        });
         
-        const endTime = performance.now();
-        // 98% success rate for simulated UI actions
-        return {
-          success: Math.random() > 0.02,
-          responseTime: endTime - startTime
-        };
+        // Update virtual users display from backend
+        if (m.virtual_users) {
+          setVirtualUsers(m.virtual_users.map((vu: any, i: number) => ({
+            id: vu.user_id || `vu_${i}`,
+            name: `Virtual User ${i + 1}`,
+            persona: config.persona,
+            status: vu.state || 'running',
+            currentStep: vu.current_step || 0,
+            totalSteps: config.steps.length,
+            metrics: {
+              requestsCompleted: vu.iterations || 0,
+              errorsCount: vu.errors || 0,
+              avgResponseTime: vu.avg_response_time || 0
+            }
+          })));
+        }
+        
+        // Update metrics history for graphs
+        setMetricsHistory(prev => [...prev.slice(-59), { ...metrics }]);
+      } else if (data.status === 'completed' || data.status === 'stopped') {
+        // Test finished
+        stopBackendPolling();
+        setIsRunning(false);
+        isRunningRef.current = false;
+        
+        toast({
+          title: "✅ Load Test Complete",
+          description: `Test completed on backend. Check Results tab.`,
+        });
+        setActiveTab("results");
       }
     } catch (error) {
-      const endTime = performance.now();
-      console.warn(`[LoadTest] Request failed for user ${userId}, step ${stepIndex}:`, error);
-      return {
-        success: false,
-        responseTime: endTime - startTime
-      };
+      console.error('[LoadTest] Error polling metrics:', error);
+    }
+  };
+  
+  const stopBackendPolling = () => {
+    if (metricsPollingRef.current) {
+      clearInterval(metricsPollingRef.current);
+      metricsPollingRef.current = null;
     }
   };
 
   // Apply Quick Start scenario
   const applyQuickStartScenario = (scenario: typeof QUICK_START_SCENARIOS[0]) => {
-    if (scenario.isFlowstralImport) {
-      // Open Flowstral import dialog
-      setShowImportDialog(true);
-      setActiveTab("steps");
-      toast({
-        title: "Import Recording",
-        description: "Select a Flowstral recording to import for browser flow testing",
-      });
-      return;
-    }
-
     // Convert API endpoints to test steps
     const steps: TestStep[] = scenario.endpoints.map((endpoint, index) => ({
       id: `step_${index}_${Date.now()}`,
@@ -692,7 +744,7 @@ export default function VirtualUserGenerator() {
     }, 100);
   };
 
-  // Run load test
+  // Run load test - NOW USES BACKEND API (Control Plane / Load Plane architecture)
   const startLoadTest = async () => {
     if (config.steps.length === 0) {
       toast({
@@ -703,7 +755,7 @@ export default function VirtualUserGenerator() {
       return;
     }
 
-    // Update both state AND refs (refs are used in closures)
+    // Update state
     setIsRunning(true);
     setIsPaused(false);
     setElapsedTime(0);
@@ -711,6 +763,7 @@ export default function VirtualUserGenerator() {
     isRunningRef.current = true;
     isPausedRef.current = false;
     elapsedTimeRef.current = 0;
+    setFailedRequests([]);
     
     // Reset metrics
     setMetrics({
@@ -718,7 +771,7 @@ export default function VirtualUserGenerator() {
       successfulRequests: 0,
       failedRequests: 0,
       avgResponseTime: 0,
-      minResponseTime: Infinity,
+      minResponseTime: 0,
       maxResponseTime: 0,
       p50ResponseTime: 0,
       p90ResponseTime: 0,
@@ -731,228 +784,141 @@ export default function VirtualUserGenerator() {
       bytesSent: 0
     });
 
-    // Track all response times for percentile calculation
-    const allResponseTimes: number[] = [];
-    let totalRequests = 0;
-    let successfulRequests = 0;
-    let failedRequestsCount = 0;
-    
-    // Clear previous failed requests
-    setFailedRequests([]);
+    console.log(`[LoadTest] Starting BACKEND-based test: ${config.virtualUsers} VUs, ${config.duration}s duration`);
 
-    // Calculate user ramp schedule based on pattern
-    const pattern = LOAD_PATTERNS[config.pattern as keyof typeof LOAD_PATTERNS];
-    const targetUsers = config.virtualUsers;
-    const rampTime = config.rampUpTime;
-    const duration = config.duration;
-
-    console.log(`[LoadTest] Starting test: ${targetUsers} users, ${duration}s duration, ${config.steps.length} steps`);
-
-    // Start metrics collection interval
-    metricsInterval.current = setInterval(() => {
-      elapsedTimeRef.current += 1;
-      setElapsedTime(elapsedTimeRef.current);
-      
-      // Collect metrics snapshot
-      setMetrics(current => {
-        const snapshot = { ...current };
-        setMetricsHistory(prev => [...prev.slice(-59), snapshot]); // Keep last 60 seconds
-        return current;
+    try {
+      // Step 1: Create scenario on backend
+      toast({
+        title: "🔧 Creating Scenario...",
+        description: "Setting up load test on backend",
       });
-    }, 1000);
-
-    // Main test loop
-    let currentUsers = 0;
-    const activeUserPromises: Promise<void>[] = [];
-
-    const userLoop = async (userId: string, userIndex: number) => {
-      let iterations = 0;
-      const maxIterations = config.iterations || Infinity;
       
-      console.log(`[LoadTest] User ${userId} starting loop`);
-      
-      // Use REFS instead of state for closure access!
-      while (isRunningRef.current && !isPausedRef.current && iterations < maxIterations && elapsedTimeRef.current < duration) {
-        // Update user status
-        setVirtualUsers(prev => prev.map(u => 
-          u.id === userId ? { ...u, status: 'running' } : u
-        ));
-
-        for (let stepIndex = 0; stepIndex < config.steps.length; stepIndex++) {
-          if (!isRunningRef.current || isPausedRef.current) break;
-
-          // Update current step
-          setVirtualUsers(prev => prev.map(u => 
-            u.id === userId ? { ...u, currentStep: stepIndex + 1 } : u
-          ));
-
-          const result = await simulateRequest(userId, stepIndex);
-          totalRequests++;
-          
-          if (result.success) {
-            successfulRequests++;
-          } else {
-            failedRequestsCount++;
-            // Track failure details
-            setFailedRequests(prev => [...prev, {
-              userId,
-              userName: `Virtual User ${userIndex + 1}`,
-              stepIndex,
-              stepName: config.steps[stepIndex]?.action || `Step ${stepIndex + 1}`,
-              timestamp: new Date().toISOString(),
-              responseTime: result.responseTime,
-              error: 'Request failed or timed out'
-            }]);
-          }
-          
-          allResponseTimes.push(result.responseTime);
-
-          // Update metrics
-          setMetrics(prev => {
-            const newTotal = prev.totalRequests + 1;
-            const newAvg = (prev.avgResponseTime * prev.totalRequests + result.responseTime) / newTotal;
-            
-            // Calculate percentiles
-            const sorted = [...allResponseTimes].sort((a, b) => a - b);
-            const p50 = sorted[Math.floor(sorted.length * 0.5)] || 0;
-            const p90 = sorted[Math.floor(sorted.length * 0.9)] || 0;
-            const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
-            const p99 = sorted[Math.floor(sorted.length * 0.99)] || 0;
-            
-            return {
-              ...prev,
-              totalRequests: newTotal,
-              successfulRequests: result.success ? prev.successfulRequests + 1 : prev.successfulRequests,
-              failedRequests: result.success ? prev.failedRequests : prev.failedRequests + 1,
-              avgResponseTime: newAvg,
-              minResponseTime: Math.min(prev.minResponseTime, result.responseTime),
-              maxResponseTime: Math.max(prev.maxResponseTime, result.responseTime),
-              p50ResponseTime: p50,
-              p90ResponseTime: p90,
-              p95ResponseTime: p95,
-              p99ResponseTime: p99,
-              requestsPerSecond: newTotal / Math.max(1, elapsedTime),
-              activeUsers: currentUsers,
-              errorsPerSecond: (result.success ? prev.failedRequests : prev.failedRequests + 1) / Math.max(1, elapsedTime)
-            };
-          });
-
-          // Update user metrics
-          setVirtualUsers(prev => prev.map(u => {
-            if (u.id === userId) {
-              const newRequests = u.metrics.requestsCompleted + 1;
-              return {
-                ...u,
-                metrics: {
-                  requestsCompleted: newRequests,
-                  errorsCount: result.success ? u.metrics.errorsCount : u.metrics.errorsCount + 1,
-                  avgResponseTime: (u.metrics.avgResponseTime * (newRequests - 1) + result.responseTime) / newRequests
-                }
-              };
-            }
-            return u;
-          }));
-        }
-
-        iterations++;
+      const scenarioId = await createBackendScenario();
+      if (!scenarioId) {
+        throw new Error('Failed to create scenario on backend');
       }
-
-      // Mark user as completed
-      setVirtualUsers(prev => prev.map(u => 
-        u.id === userId ? { ...u, status: 'completed' } : u
-      ));
-    };
-
-    // Ramp up users based on pattern - use REFS for closure access!
-    const rampUpInterval = setInterval(() => {
-      if (!isRunningRef.current || isPausedRef.current) return;
+      setBackendScenarioId(scenarioId);
       
-      const elapsed = elapsedTimeRef.current;
-      let targetCurrentUsers = targetUsers;
-
-      // Calculate target users based on pattern
-      switch (config.pattern) {
-        case 'ramp_up':
-          targetCurrentUsers = Math.min(targetUsers, Math.floor((elapsed / rampTime) * targetUsers) + 1);
-          break;
-        case 'ramp_down':
-          targetCurrentUsers = Math.max(1, targetUsers - Math.floor((elapsed / duration) * (targetUsers - 1)));
-          break;
-        case 'spike':
-          // Sudden spike at 30% of duration
-          targetCurrentUsers = elapsed > duration * 0.3 && elapsed < duration * 0.5 
-            ? targetUsers * 3 
-            : targetUsers;
-          break;
-        case 'stress':
-          // Keep increasing users
-          targetCurrentUsers = Math.min(targetUsers * 2, targetUsers + Math.floor(elapsed / 5));
-          break;
-        case 'wave':
-          // Sine wave pattern
-          const cycle = Math.sin((elapsed / duration) * Math.PI * 4);
-          targetCurrentUsers = Math.floor(targetUsers * 0.5 + targetUsers * 0.5 * cycle);
-          break;
-        case 'breakpoint':
-          // Keep increasing until system breaks
-          targetCurrentUsers = Math.min(targetUsers * 5, targetUsers + Math.floor(elapsed / 2));
-          break;
-        default:
-          targetCurrentUsers = targetUsers;
+      // Step 2: Map load pattern to backend profile type
+      const profileTypeMap: Record<string, string> = {
+        'constant': 'linear',
+        'ramp_up': 'linear',
+        'ramp_down': 'linear',
+        'spike': 'spike',
+        'stress': 'stress',
+        'soak': 'endurance',
+        'breakpoint': 'capacity',
+        'wave': 'linear'
+      };
+      
+      // Step 3: Start load test via backend API
+      toast({
+        title: "🚀 Starting Load Test...",
+        description: `Backend generating ${config.virtualUsers} virtual users`,
+      });
+      
+      const runResponse = await fetch(`${API_BASE_URL}/api/performance/tests/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario_id: scenarioId,
+          virtual_users: config.virtualUsers,
+          ramp_up_seconds: config.rampUpTime,
+          duration_seconds: config.duration,
+          ramp_down_seconds: Math.floor(config.rampUpTime / 2),
+          think_time_ms: config.thinkTime ? 2000 : 500,
+          base_url: config.targetUrl,
+          protocol: 'http',
+          use_distributed: config.virtualUsers > 500 // Auto-distribute for large tests
+        })
+      });
+      
+      if (!runResponse.ok) {
+        const error = await runResponse.json();
+        throw new Error(error.detail || 'Failed to start load test');
       }
-
-      // Add new users if needed - use REFS!
-      while (currentUsers < targetCurrentUsers && isRunningRef.current) {
-        const newUser = generateVirtualUsers(1, currentUsers)[0]; // Pass currentUsers as startIndex
-        setVirtualUsers(prev => [...prev, newUser]);
-        activeUserPromises.push(userLoop(newUser.id, currentUsers));
-        currentUsers++;
-        setMetrics(prev => ({ ...prev, activeUsers: currentUsers }));
-        console.log(`[LoadTest] Added user ${currentUsers}/${targetCurrentUsers}`);
+      
+      const { test_id } = await runResponse.json();
+      setBackendTestId(test_id);
+      console.log(`[LoadTest] Backend test started: ${test_id}`);
+      
+      toast({
+        title: "✅ Load Test Running",
+        description: `Test ${test_id} executing on backend server`,
+      });
+      
+      // Step 4: Start elapsed time counter
+      metricsInterval.current = setInterval(() => {
+        elapsedTimeRef.current += 1;
+        setElapsedTime(elapsedTimeRef.current);
+      }, 1000);
+      
+      // Step 5: Poll backend for real-time metrics
+      metricsPollingRef.current = setInterval(() => {
+        if (test_id && isRunningRef.current) {
+          pollBackendMetrics(test_id);
       }
     }, 1000);
 
-    // Initial users
-    const initialUsers = generateVirtualUsers(config.pattern === 'constant' ? targetUsers : 1);
-    setVirtualUsers(initialUsers);
-    initialUsers.forEach((user, index) => {
-      activeUserPromises.push(userLoop(user.id, index));
-      currentUsers++;
-    });
-
-    // Wait for test to complete
+      // Step 6: Auto-stop after duration (backup, backend handles this too)
     testInterval.current = setTimeout(async () => {
-      console.log(`[LoadTest] Test duration complete, stopping...`);
-      clearInterval(rampUpInterval);
-      isRunningRef.current = false;
-      setIsRunning(false);
+        console.log(`[LoadTest] Duration complete, checking backend status...`);
       
-      // Wait for all user loops to complete
-      await Promise.all(activeUserPromises);
+        // Final poll
+        await pollBackendMetrics(test_id);
       
+        // Cleanup
+        stopBackendPolling();
       if (metricsInterval.current) {
         clearInterval(metricsInterval.current);
       }
       
-      console.log(`[LoadTest] Final results: ${totalRequests} requests, ${successfulRequests} successful, ${failedRequestsCount} failed`);
+        isRunningRef.current = false;
+        setIsRunning(false);
       
       toast({
-        title: "✅ Load Test Complete",
-        description: `Completed ${totalRequests} requests: ${successfulRequests} successful, ${failedRequestsCount} failed`,
-      });
+          title: "✅ Load Test Complete",
+          description: "Backend test finished. See Results tab for details.",
+        });
+        
+        setActiveTab("results");
+      }, (config.duration + 10) * 1000); // Add 10s buffer
       
-      // Auto-navigate to Results tab to show results
-      setActiveTab("results");
-    }, duration * 1000);
+    } catch (error: any) {
+      console.error('[LoadTest] Error starting backend test:', error);
+      setIsRunning(false);
+      isRunningRef.current = false;
+      
+      toast({
+        title: "❌ Load Test Failed",
+        description: error.message || "Failed to start load test on backend",
+        variant: "destructive"
+      });
+    }
   };
 
-  // Stop load test
-  const stopLoadTest = () => {
+  // Stop load test - also stops backend test
+  const stopLoadTest = async () => {
     // Update BOTH state AND refs
     isRunningRef.current = false;
     isPausedRef.current = false;
     setIsRunning(false);
     setIsPaused(false);
+    
+    // Stop backend test if running
+    if (backendTestId) {
+      try {
+        await fetch(`${API_BASE_URL}/api/performance/tests/${backendTestId}/stop`, {
+          method: 'POST'
+        });
+        console.log(`[LoadTest] Stopped backend test: ${backendTestId}`);
+      } catch (error) {
+        console.error('[LoadTest] Error stopping backend test:', error);
+      }
+    }
+    
+    // Stop polling
+    stopBackendPolling();
     
     if (metricsInterval.current) {
       clearInterval(metricsInterval.current);
@@ -968,18 +934,29 @@ export default function VirtualUserGenerator() {
     
     toast({
       title: "Load Test Stopped",
-      description: "Test execution has been stopped",
+      description: "Test execution has been stopped on backend",
     });
   };
 
-  // Pause/Resume
+  // Pause/Resume - Note: Backend handles actual pause, this is UI state
   const togglePause = () => {
     const newPausedState = !isPausedRef.current;
     isPausedRef.current = newPausedState;
     setIsPaused(newPausedState);
+    
+    // Note: Backend pause/resume would need additional API endpoint
+    // For now, just pause metrics polling
+    if (newPausedState) {
+      stopBackendPolling();
+    } else if (backendTestId) {
+      metricsPollingRef.current = setInterval(() => {
+        pollBackendMetrics(backendTestId);
+      }, 1000);
+    }
+    
     toast({
       title: newPausedState ? "Test Paused" : "Test Resumed",
-      description: newPausedState ? "Test execution paused" : "Continuing test execution",
+      description: newPausedState ? "Metrics polling paused" : "Metrics polling resumed",
     });
   };
 
@@ -1530,7 +1507,7 @@ export default function VirtualUserGenerator() {
                       {config.steps.length > 8 && (
                         <div className="text-muted-foreground">... and {config.steps.length - 8} more</div>
                       )}
-                    </div>
+              </div>
 
                     {/* Quick config and run */}
                     <div className="grid grid-cols-3 gap-3">
