@@ -481,3 +481,96 @@ async def get_capabilities():
         }
     }
 
+
+class SecurityScanRequest(BaseModel):
+    """Request for security scan"""
+    target_url: str
+    tests: List[str] = ["auth_matrix", "bola", "injection", "rate_limiting"]
+    api_spec: Optional[Dict[str, Any]] = None
+
+
+@router.post("/security/scan")
+async def run_security_scan(request: SecurityScanRequest):
+    """
+    Run OWASP API Security scan against target URL.
+    
+    Scan types:
+    - auth_matrix: Test 401/403 responses for no auth, wrong role, expired token
+    - bola: Broken Object Level Authorization (API1:2023)
+    - injection: SQL, NoSQL, Command injection testing
+    - rate_limiting: Test for 429 rate limiting
+    - ssrf: Server-Side Request Forgery (API7:2023)
+    - mass_assignment: Test for extra properties accepted
+    """
+    from app.services.api_testing.owasp_api_security import get_owasp_scanner
+    
+    try:
+        scanner = get_owasp_scanner()
+        
+        # Extract endpoints from API spec if provided
+        endpoints = []
+        if request.api_spec:
+            paths = request.api_spec.get("paths", {})
+            base_url = request.target_url.rstrip("/")
+            
+            for path, methods in paths.items():
+                for method in methods:
+                    if method.upper() in ["GET", "POST", "PUT", "PATCH", "DELETE"]:
+                        endpoints.append({
+                            "path": path,
+                            "method": method.upper(),
+                            "url": f"{base_url}{path}"
+                        })
+        
+        # Map test names to scan types
+        scan_type_map = {
+            "auth_matrix": ["authentication", "authorization"],
+            "bola": ["bola"],
+            "injection": ["injection"],
+            "rate_limiting": ["resource_consumption"],
+            "ssrf": ["ssrf"],
+            "mass_assignment": ["property_authorization"],
+        }
+        
+        scan_types = []
+        for test in request.tests:
+            if test in scan_type_map:
+                scan_types.extend(scan_type_map[test])
+        
+        # Run scan
+        result = await scanner.scan(
+            base_url=request.target_url,
+            endpoints=endpoints,
+            scan_types=scan_types if scan_types else None
+        )
+        
+        # Convert findings to dict
+        findings = []
+        for finding in result.findings:
+            findings.append({
+                "id": finding.id,
+                "title": finding.title,
+                "category": finding.category.value if hasattr(finding.category, 'value') else str(finding.category),
+                "severity": finding.severity.value if hasattr(finding.severity, 'value') else str(finding.severity),
+                "description": finding.description,
+                "evidence": finding.evidence,
+                "remediation": finding.remediation,
+                "endpoint": finding.endpoint,
+                "method": finding.method,
+                "cwe_id": finding.cwe_id
+            })
+        
+        return {
+            "status": "success",
+            "scan_id": result.scan_id,
+            "target_url": result.target_url,
+            "duration_ms": result.duration_ms,
+            "total_tests": result.total_tests,
+            "findings": findings,
+            "summary": result.summary
+        }
+        
+    except Exception as e:
+        logger.error(f"Security scan error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+

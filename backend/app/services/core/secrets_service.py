@@ -264,6 +264,123 @@ class SecretsService:
         
         return [dict(row) for row in results]
     
+    async def update_secret(
+        self,
+        secret_id: str,
+        value: Optional[str] = None,
+        description: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a secret.
+        
+        Args:
+            secret_id: Secret ID
+            value: New value (will be encrypted)
+            description: New description
+            
+        Returns:
+            Updated secret info
+        """
+        pool = get_postgres_pool()
+        if not pool:
+            raise Exception("Database connection pool not available")
+        
+        tenant_id = get_current_tenant_id()
+        
+        # Build update query dynamically
+        updates = []
+        params = [secret_id, tenant_id]
+        param_idx = 3
+        
+        if value is not None:
+            encrypted_value = self._encrypt_value(value)
+            updates.append(f"encrypted_value = ${param_idx}")
+            params.append(encrypted_value)
+            param_idx += 1
+        
+        if description is not None:
+            updates.append(f"description = ${param_idx}")
+            params.append(description)
+            param_idx += 1
+        
+        if not updates:
+            return {"secret_id": secret_id, "message": "No updates provided"}
+        
+        updates.append("updated_at = NOW()")
+        
+        query = f"""
+            UPDATE secrets
+            SET {", ".join(updates)}
+            WHERE secret_id = $1
+              AND (tenant_id = $2 OR tenant_id IS NULL)
+            RETURNING secret_id, updated_at
+        """
+        
+        async with pool.acquire() as conn:
+            result = await conn.fetchrow(query, *params)
+        
+        if not result:
+            raise Exception(f"Secret {secret_id} not found")
+        
+        return {
+            "secret_id": str(result["secret_id"]),
+            "updated_at": result["updated_at"].isoformat()
+        }
+    
+    async def delete_secret(self, secret_id: str) -> bool:
+        """
+        Delete a secret.
+        
+        Args:
+            secret_id: Secret ID to delete
+            
+        Returns:
+            True if deleted
+        """
+        pool = get_postgres_pool()
+        if not pool:
+            raise Exception("Database connection pool not available")
+        
+        tenant_id = get_current_tenant_id()
+        
+        async with pool.acquire() as conn:
+            result = await conn.execute("""
+                DELETE FROM secrets
+                WHERE secret_id = $1
+                  AND (tenant_id = $2 OR tenant_id IS NULL)
+            """, secret_id, tenant_id)
+        
+        return "DELETE" in result
+    
+    async def resolve_secret(
+        self,
+        secret_name: str,
+        org_id: Optional[str] = None,
+        project_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Resolve a secret by name and return its decrypted value.
+        This is the main method used during test execution.
+        
+        Args:
+            secret_name: Name of the secret to resolve
+            org_id: Organization ID filter
+            project_id: Project ID filter
+            
+        Returns:
+            Decrypted secret value or None if not found
+        """
+        secret = await self.get_secret_by_name(
+            secret_name,
+            org_id=org_id,
+            project_id=project_id,
+            decrypt=True
+        )
+        
+        if secret:
+            return secret.get("value")
+        return None
+    
     async def inject_secrets_into_env(
         self,
         secret_names: List[str],

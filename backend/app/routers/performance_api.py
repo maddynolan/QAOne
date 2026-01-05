@@ -320,7 +320,7 @@ async def compile_api_requests(request: Request, body: dict):
 
 
 # ============================================================================
-# GO RUNNER ENDPOINTS
+# GO RUNNER ENDPOINTS - Manage Go-based performance test runners
 # ============================================================================
 
 @router.get("/runner/status")
@@ -378,6 +378,76 @@ async def start_local_runner(request: Request, body: dict):
     
     except Exception as e:
         logger.error(f"Error starting local runner: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runner/register")
+async def register_runner(request: Request, body: dict):
+    """
+    Register a Go runner (local or remote).
+    
+    Body:
+    - hostname: Runner hostname/IP
+    - port: Runner port (default 50051)
+    - max_vus: Maximum VUs this runner can handle
+    - agent_id: Optional agent ID (auto-generated if not provided)
+    """
+    try:
+        hostname = body.get("hostname", "localhost")
+        port = body.get("port", 50051)
+        max_vus = body.get("max_vus", 1000)
+        agent_id = body.get("agent_id", f"{hostname}:{port}")
+        
+        client = get_go_runner_client()
+        await client.register_runner(agent_id, hostname, port, max_vus)
+        
+        return {
+            "status": "success",
+            "message": f"Runner {agent_id} registered",
+            "agent_id": agent_id,
+            "hostname": hostname,
+            "port": port,
+            "max_vus": max_vus
+        }
+    
+    except Exception as e:
+        logger.error(f"Error registering runner: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/runner/discover")
+async def discover_local_runner(request: Request):
+    """
+    Attempt to discover and register a locally running Go runner on port 50051.
+    """
+    try:
+        import socket
+        
+        # Check if something is listening on port 50051
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('localhost', 50051))
+        sock.close()
+        
+        if result == 0:
+            # Port is open, register the runner
+            client = get_go_runner_client()
+            await client.register_runner("local", "localhost", 50051, 1000)
+            
+            return {
+                "status": "success",
+                "message": "Local Go runner discovered and registered",
+                "agent_id": "local",
+                "port": 50051
+            }
+        else:
+            return {
+                "status": "not_found",
+                "message": "No Go runner found on port 50051",
+                "suggestion": "Start the runner with: runner.exe --port 50051"
+            }
+    
+    except Exception as e:
+        logger.error(f"Error discovering runner: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

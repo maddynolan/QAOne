@@ -388,7 +388,7 @@ for y in range(screenshot.height):
   const IconComponent = info.icon;
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0f]">
+    <div className="flex flex-col h-full">
       {/* Header with Clear button */}
       {hasAppliedFallback && onClear && (
         <div className="p-3 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
@@ -408,8 +408,8 @@ for y in range(screenshot.height):
       )}
 
       {/* Strategy Selection */}
-      <div className="p-4 border-b border-white/10">
-        <h3 className="text-sm font-medium text-white/60 mb-3">Select Strategy</h3>
+      <div className="p-4 border-b border-border">
+        <h3 className="text-sm font-medium text-muted-foreground mb-3">Select Strategy</h3>
         <div className="grid grid-cols-4 gap-2">
           {(Object.keys(STRATEGY_INFO) as BlackboxLocatorType[]).map(type => {
             const s = STRATEGY_INFO[type];
@@ -426,7 +426,7 @@ for y in range(screenshot.height):
                   flex flex-col items-center justify-center p-3 rounded-lg border transition-all
                   ${isSelected 
                     ? `${s.bgColor} border-current ${s.color}` 
-                    : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/70'}
+                    : 'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground'}
                 `}
               >
                 <Icon className="h-5 w-5 mb-1.5" />
@@ -438,25 +438,25 @@ for y in range(screenshot.height):
       </div>
 
       {/* Selected Strategy Info */}
-      <div className="p-4 border-b border-white/10">
+      <div className="p-4 border-b border-border">
         <div className="flex items-start gap-3">
           <div className={`p-2.5 rounded-lg ${info.bgColor} ${info.color}`}>
             <IconComponent className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h4 className="font-semibold text-white">{info.label}</h4>
+              <h4 className="font-semibold text-foreground">{info.label}</h4>
               <Badge className={`text-xs ${RELIABILITY_STYLES[info.reliability]}`}>
                 {info.reliability}
               </Badge>
               <button
                 onClick={() => setShowHelp(!showHelp)}
-                className="ml-auto text-white/40 hover:text-white/70"
+                className="ml-auto text-muted-foreground hover:text-foreground"
               >
                 <HelpCircle className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-sm text-white/60">{info.description}</p>
+            <p className="text-sm text-muted-foreground">{info.description}</p>
           </div>
         </div>
 
@@ -485,26 +485,26 @@ for y in range(screenshot.height):
           {selectedStrategy === 'ocr_text' && (
             <div className="space-y-4">
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">Text to Find</Label>
+                <Label className="text-muted-foreground text-sm mb-2 block">Text to Find</Label>
                 <Input
                   value={locator.searchText || ''}
                   onChange={(e) => updateLocator({ searchText: e.target.value })}
                   placeholder="e.g., Cancer, Submit, Save"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  className="bg-background border-input"
                 />
               </div>
               
               {/* NEW: Occurrence selector for multiple matches */}
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">
+                <Label className="text-muted-foreground text-sm mb-2 block">
                   Which occurrence? 
-                  <span className="text-white/40 ml-1">(if text appears multiple times)</span>
+                  <span className="text-muted-foreground/60 ml-1">(if text appears multiple times)</span>
                 </Label>
                 <Select
                   value={String(locator.occurrence || 1)}
                   onValueChange={(v) => updateLocator({ occurrence: parseInt(v) })}
                 >
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectTrigger className="bg-background border-input">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -516,7 +516,7 @@ for y in range(screenshot.height):
                     <SelectItem value="-1">Last occurrence</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-white/40 mt-1.5">
+                <p className="text-xs text-muted-foreground mt-1.5">
                   💡 For "Cancer" checkbox: Try 2nd or 3rd occurrence if first one is in header text
                 </p>
               </div>
@@ -526,9 +526,9 @@ for y in range(screenshot.height):
                   type="checkbox"
                   checked={locator.caseSensitive}
                   onChange={(e) => updateLocator({ caseSensitive: e.target.checked })}
-                  className="rounded border-white/20 bg-white/5"
+                  className="rounded border-input bg-background"
                 />
-                <span className="text-sm text-white/70">Case sensitive matching</span>
+                <span className="text-sm text-muted-foreground">Case sensitive matching</span>
               </label>
             </div>
           )}
@@ -538,7 +538,7 @@ for y in range(screenshot.height):
               <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                 <p className="text-xs text-blue-400 mb-2 font-medium">📍 How to find coordinates:</p>
                 <ol className="text-xs text-blue-300/80 space-y-1">
-                  <li>1. Press <kbd className="px-1 py-0.5 bg-white/10 rounded text-white">F12</kbd> to open DevTools</li>
+                  <li>1. Press <kbd className="px-1 py-0.5 bg-muted rounded text-foreground">F12</kbd> to open DevTools</li>
                   <li>2. Click the element selector tool (⬆️ arrow icon)</li>
                   <li>3. Hover over your element - see coordinates in tooltip</li>
                   <li>4. Or right-click element → Copy → Copy element coordinates</li>
@@ -546,23 +546,23 @@ for y in range(screenshot.height):
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">X Position (pixels)</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">X Position (pixels)</Label>
                   <Input
                     type="number"
                     value={locator.x || ''}
                     onChange={(e) => updateLocator({ x: parseInt(e.target.value) })}
                     placeholder="100"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Y Position (pixels)</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Y Position (pixels)</Label>
                   <Input
                     type="number"
                     value={locator.y || ''}
                     onChange={(e) => updateLocator({ y: parseInt(e.target.value) })}
                     placeholder="200"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
               </div>
@@ -586,22 +586,22 @@ for y in range(screenshot.height):
                 </ol>
               </div>
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">Anchor Element (CSS Selector)</Label>
+                <Label className="text-muted-foreground text-sm mb-2 block">Anchor Element (CSS Selector)</Label>
                 <Input
                   value={locator.anchorSelector || ''}
                   onChange={(e) => updateLocator({ anchorSelector: e.target.value })}
                   placeholder="#logo, .page-header, [data-testid='nav']"
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  className="bg-background border-input"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Direction from Anchor</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Direction from Anchor</Label>
                   <Select
                     value={locator.direction || 'right'}
                     onValueChange={(v) => updateLocator({ direction: v as any })}
                   >
-                    <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectTrigger className="bg-background border-input">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -613,7 +613,7 @@ for y in range(screenshot.height):
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Distance (pixels)</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Distance (pixels)</Label>
                   <Input
                     type="number"
                     value={locator.offsetX || locator.offsetY || 50}
@@ -625,7 +625,7 @@ for y in range(screenshot.height):
                         updateLocator({ offsetX: 0, offsetY: val });
                       }
                     }}
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
               </div>
@@ -637,14 +637,14 @@ for y in range(screenshot.height):
               <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                 <p className="text-xs text-blue-400 mb-2 font-medium">🖼️ How to capture image template:</p>
                 <ol className="text-xs text-blue-300/80 space-y-1">
-                  <li>1. Press <kbd className="px-1 py-0.5 bg-white/10 rounded text-white">Win+Shift+S</kbd> (Windows Snip)</li>
+                  <li>1. Press <kbd className="px-1 py-0.5 bg-muted rounded text-foreground">Win+Shift+S</kbd> (Windows Snip)</li>
                   <li>2. Select ONLY the element you want to match</li>
                   <li>3. Save as PNG file</li>
                   <li>4. Upload using the button below</li>
                 </ol>
               </div>
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">
+                <Label className="text-muted-foreground text-sm mb-2 block">
                   Match Confidence: {((locator.confidence || 0.8) * 100).toFixed(0)}%
                 </Label>
                 <Slider
@@ -655,16 +655,16 @@ for y in range(screenshot.height):
                   step={0.05}
                   className="py-2"
                 />
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   80% recommended. Lower = more flexible, Higher = stricter
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <Button variant="outline">
                   <Camera className="h-4 w-4 mr-2" />
                   Capture
                 </Button>
-                <Button variant="outline" className="bg-white/5 border-white/10 text-white hover:bg-white/10">
+                <Button variant="outline">
                   <Image className="h-4 w-4 mr-2" />
                   Upload PNG
                 </Button>
@@ -683,13 +683,13 @@ for y in range(screenshot.height):
                 </ul>
               </div>
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">Describe the Element</Label>
+                <Label className="text-muted-foreground text-sm mb-2 block">Describe the Element</Label>
                 <Textarea
                   value={locator.elementDescription || ''}
                   onChange={(e) => updateLocator({ elementDescription: e.target.value })}
                   placeholder="e.g., The unchecked checkbox next to the word 'Cancer' in the medical conditions list, below 'Brain injury'"
                   rows={4}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30 resize-none"
+                  className="bg-background border-input resize-none"
                 />
               </div>
             </div>
@@ -708,43 +708,43 @@ for y in range(screenshot.height):
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Start X</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Start X</Label>
                   <Input
                     type="number"
                     value={locator.regionX || ''}
                     onChange={(e) => updateLocator({ regionX: parseInt(e.target.value) })}
                     placeholder="100"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Start Y</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Start Y</Label>
                   <Input
                     type="number"
                     value={locator.regionY || ''}
                     onChange={(e) => updateLocator({ regionY: parseInt(e.target.value) })}
                     placeholder="100"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Width</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Width</Label>
                   <Input
                     type="number"
                     value={locator.regionWidth || ''}
                     onChange={(e) => updateLocator({ regionWidth: parseInt(e.target.value) })}
                     placeholder="200"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
                 <div>
-                  <Label className="text-white/70 text-sm mb-2 block">Height</Label>
+                  <Label className="text-muted-foreground text-sm mb-2 block">Height</Label>
                   <Input
                     type="number"
                     value={locator.regionHeight || ''}
                     onChange={(e) => updateLocator({ regionHeight: parseInt(e.target.value) })}
                     placeholder="50"
-                    className="bg-white/5 border-white/10 text-white"
+                    className="bg-background border-input"
                   />
                 </div>
               </div>
@@ -763,24 +763,24 @@ for y in range(screenshot.height):
                 </ol>
               </div>
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">Target Color</Label>
+                <Label className="text-muted-foreground text-sm mb-2 block">Target Color</Label>
                 <div className="flex gap-2">
                   <input
                     type="color"
                     value={locator.targetColor || '#FF0000'}
                     onChange={(e) => updateLocator({ targetColor: e.target.value })}
-                    className="w-12 h-10 rounded border border-white/10 cursor-pointer bg-transparent"
+                    className="w-12 h-10 rounded border border-input cursor-pointer bg-transparent"
                   />
                   <Input
                     value={locator.targetColor || '#FF0000'}
                     onChange={(e) => updateLocator({ targetColor: e.target.value })}
                     placeholder="#FF0000"
-                    className="bg-white/5 border-white/10 text-white flex-1"
+                    className="bg-background border-input flex-1"
                   />
                 </div>
               </div>
               <div>
-                <Label className="text-white/70 text-sm mb-2 block">
+                <Label className="text-muted-foreground text-sm mb-2 block">
                   Color Tolerance: {locator.colorTolerance || 10}
                 </Label>
                 <Slider
@@ -791,7 +791,7 @@ for y in range(screenshot.height):
                   step={1}
                   className="py-2"
                 />
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Higher tolerance = matches similar colors too
                 </p>
               </div>
@@ -801,20 +801,20 @@ for y in range(screenshot.height):
       </ScrollArea>
 
       {/* Code Preview & Apply */}
-      <div className="border-t border-white/10 p-4 space-y-3">
+      <div className="border-t border-border p-4 space-y-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-white/50 font-medium">Generated Code</span>
+          <span className="text-xs text-muted-foreground font-medium">Generated Code</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={copyCode}
-            className="h-7 text-xs text-white/50 hover:text-white"
+            className="h-7 text-xs"
           >
             {codeCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
             {codeCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>
-        <pre className="p-3 bg-black/50 rounded-lg text-xs text-emerald-400 overflow-x-auto max-h-32 font-mono">
+        <pre className="p-3 bg-muted rounded-lg text-xs text-emerald-400 overflow-x-auto max-h-32 font-mono">
           {generateCode(locator)}
         </pre>
         <Button 

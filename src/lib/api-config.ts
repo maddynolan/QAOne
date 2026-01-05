@@ -3,6 +3,11 @@
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+// Helper function to get the API base URL
+export function getApiBaseUrl(): string {
+  return API_BASE_URL;
+}
+
 export const API_ENDPOINTS = {
   // AI Endpoints
   AI_JIRA_TO_TESTCASES: `${API_BASE_URL}/ai/jira-to-testcases`,

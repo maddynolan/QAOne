@@ -1,0 +1,43 @@
+{
+  "id": "4ab40d0e",
+  "name": "Cy.Wait Waits For The Network Request To Happen",
+  "status": "approved",
+  "tags": [
+    "imported",
+    "framework:cypress",
+    "code_alchemy",
+    "imported"
+  ],
+  "created_at": "2026-01-03T00:28:48.169250",
+  "updated_at": "2026-01-03T00:28:48.169250",
+  "metadata": {
+    "start_url": "",
+    "app_type": "generic",
+    "recorded_at": "2026-01-03T00:28:48.169250",
+    "action_count": 0,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "imported",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "cy.wait waits for the network request to happen",
+    "source": "code_alchemy",
+    "repository": "https://github.com/cypress-io/cypress-example-recipes",
+    "branch": "main",
+    "originalMethod": "cy.wait waits for the network request to happen",
+    "originalClass": "",
+    "originalFile": "C:\\Users\\janum\\AppData\\Local\\Temp\\framework_analyzer_qc6dchtv\\examples\\server-communication__xhr-assertions\\cypress\\e2e\\wait-vs-get.cy.js",
+    "framework": "cypress",
+    "language": "javascript",
+    "importedAt": "2026-01-03T00:28:48.169250"
+  },
+  "actions": [],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

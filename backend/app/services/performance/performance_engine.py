@@ -179,8 +179,17 @@ class PerformanceEngine:
         if sla_thresholds:
             self.monitoring_service.set_sla_thresholds(sla_thresholds)
         
-        # Run test
+        # Create test ID first so we can return it immediately
         test_id = f"test_{uuid.uuid4()}"
+        
+        # Store test info BEFORE starting (so status polling works)
+        self.active_tests[test_id] = {
+            "scenario_id": scenario_id,
+            "start_time": datetime.utcnow(),
+            "status": "running"
+        }
+        
+        logger.info(f"Starting load test: {test_id}")
         
         if use_distributed and self.distributed_controller.get_available_nodes():
             # Run distributed test
@@ -193,27 +202,33 @@ class PerformanceEngine:
             
             test_id = await self.distributed_controller.start_distributed_test(scenario_config)
         else:
-            # Run local test
-            async with protocol_handler:
-                # Add scenario to load generator
-                await self.load_generator.add_scenario(load_scenario)
-                
-                # Start test
-                test_id = await self.load_generator.start_load_test(
-                    scenario_names=[load_scenario.name],
-                    protocol_handler=protocol_handler,
-                    metrics_callback=metrics_callback
-                )
+            # Run local test as BACKGROUND TASK (don't await - return immediately!)
+            async def run_test_background():
+                try:
+                    async with protocol_handler:
+                        # Add scenario to load generator
+                        await self.load_generator.add_scenario(load_scenario)
+                        
+                        # Start test (this blocks until test completes)
+                        await self.load_generator.start_load_test(
+                            scenario_names=[load_scenario.name],
+                            protocol_handler=protocol_handler,
+                            metrics_callback=metrics_callback
+                        )
+                    
+                    # Test completed
+                    self.active_tests[test_id]["status"] = "completed"
+                    self.active_tests[test_id]["end_time"] = datetime.utcnow()
+                    logger.info(f"Load test completed: {test_id}")
+                except Exception as e:
+                    logger.error(f"Load test error: {test_id} - {e}", exc_info=True)
+                    self.active_tests[test_id]["status"] = "error"
+                    self.active_tests[test_id]["error"] = str(e)
+            
+            # Start as background task - DON'T AWAIT!
+            asyncio.create_task(run_test_background())
         
-        # Store test info
-        self.active_tests[test_id] = {
-            "scenario_id": scenario_id,
-            "start_time": datetime.utcnow(),
-            "status": "running"
-        }
-        
-        logger.info(f"Started load test: {test_id}")
-        
+        # Return test_id immediately so frontend can start polling
         return test_id
     
     async def stop_test(self, test_id: str) -> Dict[str, Any]:

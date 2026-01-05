@@ -632,6 +632,53 @@ export default function VirtualUserGenerator() {
       return null;
     }
   };
+
+  // Create a scenario on the backend with explicit config (for quick start scenarios)
+  const createBackendScenarioWithConfig = async (testConfig: LoadTestConfig): Promise<string | null> => {
+    try {
+      // First, create a scenario
+      const createResponse = await fetch(`${API_BASE_URL}/api/performance/scenarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: testConfig.name,
+          description: `Load test with ${testConfig.virtualUsers} VUs, ${testConfig.duration}s duration`
+        })
+      });
+      
+      if (!createResponse.ok) {
+        throw new Error('Failed to create scenario');
+      }
+      
+      const { scenario_id } = await createResponse.json();
+      
+      // Add steps to the scenario
+      for (const step of testConfig.steps) {
+        const stepUrl = step.type === 'api' || step.type === 'navigate' 
+          ? (step.target?.startsWith('http') ? step.target : `${testConfig.targetUrl}${step.target}`)
+          : testConfig.targetUrl;
+          
+        await fetch(`${API_BASE_URL}/api/performance/scenarios/${scenario_id}/steps`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            step_type: 'http_request',
+            name: step.action || `${step.value || 'GET'} ${step.target}`,
+            method: step.value || 'GET',
+            url: stepUrl,
+            headers: step.headers || {},
+            body: step.body || null
+          })
+        });
+      }
+      
+      console.log(`[LoadTest] Created backend scenario: ${scenario_id}`);
+      return scenario_id;
+    } catch (error) {
+      console.error('[LoadTest] Failed to create backend scenario:', error);
+      return null;
+    }
+  };
   
   // Poll backend for real-time metrics
   const pollBackendMetrics = async (testId: string) => {
@@ -641,46 +688,55 @@ export default function VirtualUserGenerator() {
       
       const data = await response.json();
       
-      if (data.status === 'running' && data.current_metrics) {
-        const m = data.current_metrics;
+      // API returns { status: 'success', test: { status: 'running', current_metrics: {...} } }
+      const testData = data.test || data;
+      
+      if (testData.status === 'running' && testData.current_metrics) {
+        const m = testData.current_metrics;
+        // Backend returns nested structure: response_time.avg, throughput.total_requests, etc.
+        const rt = m.response_time || {};
+        const tp = m.throughput || {};
+        const vu = m.virtual_users || {};
+        const iter = m.iterations || {};
+        
         setMetrics({
-          totalRequests: m.total_requests || 0,
-          successfulRequests: m.successful_requests || 0,
-          failedRequests: m.failed_requests || 0,
-          avgResponseTime: m.avg_response_time || 0,
-          minResponseTime: m.min_response_time || 0,
-          maxResponseTime: m.max_response_time || 0,
-          p50ResponseTime: m.p50_response_time || 0,
-          p90ResponseTime: m.p90_response_time || 0,
-          p95ResponseTime: m.p95_response_time || 0,
-          p99ResponseTime: m.p99_response_time || 0,
-          requestsPerSecond: m.requests_per_second || 0,
-          activeUsers: m.active_users || 0,
-          errorsPerSecond: m.errors_per_second || 0,
+          totalRequests: tp.total_requests || 0,
+          successfulRequests: (tp.total_requests || 0) - (iter.errors || 0),
+          failedRequests: iter.errors || 0,
+          avgResponseTime: rt.avg || 0,
+          minResponseTime: rt.min || 0,
+          maxResponseTime: rt.max || 0,
+          p50ResponseTime: rt.p50 || 0,
+          p90ResponseTime: rt.p90 || 0,
+          p95ResponseTime: rt.p95 || 0,
+          p99ResponseTime: rt.p99 || 0,
+          requestsPerSecond: tp.rps || 0,
+          activeUsers: vu.active || 0,
+          errorsPerSecond: iter.error_rate || 0,
           bytesReceived: m.bytes_received || 0,
           bytesSent: m.bytes_sent || 0
         });
         
-        // Update virtual users display from backend
-        if (m.virtual_users) {
-          setVirtualUsers(m.virtual_users.map((vu: any, i: number) => ({
-            id: vu.user_id || `vu_${i}`,
-            name: `Virtual User ${i + 1}`,
-            persona: config.persona,
-            status: vu.state || 'running',
-            currentStep: vu.current_step || 0,
-            totalSteps: config.steps.length,
-            metrics: {
-              requestsCompleted: vu.iterations || 0,
-              errorsCount: vu.errors || 0,
-              avgResponseTime: vu.avg_response_time || 0
-            }
-          })));
-        }
+        // Update virtual users display from backend - vu is now an object not array
+        const vuCount = vu.total || config.virtualUsers;
+        const vuArray: VirtualUser[] = Array.from({ length: vuCount }, (_, i) => ({
+          id: `vu_${i}`,
+          name: `Virtual User ${i + 1}`,
+          persona: config.persona,
+          status: (i < (vu.active || 0) ? 'running' : (i < (vu.completed || 0) ? 'completed' : 'idle')) as 'idle' | 'running' | 'completed' | 'error',
+          currentStep: 0,
+          totalSteps: config.steps.length,
+          metrics: {
+            requestsCompleted: Math.floor((iter.total || 0) / vuCount),
+            errorsCount: Math.floor((iter.errors || 0) / vuCount),
+            avgResponseTime: rt.avg || 0
+          }
+        }));
+        setVirtualUsers(vuArray);
         
         // Update metrics history for graphs
         setMetricsHistory(prev => [...prev.slice(-59), { ...metrics }]);
-      } else if (data.status === 'completed' || data.status === 'stopped') {
+      } else if (testData.status === 'completed' || testData.status === 'stopped') {
         // Test finished
         stopBackendPolling();
         setIsRunning(false);
@@ -735,18 +791,37 @@ export default function VirtualUserGenerator() {
 
   // Run API endpoint test (for Quick Start scenarios)
   const runApiTest = async (scenario: typeof QUICK_START_SCENARIOS[0]) => {
-    applyQuickStartScenario(scenario);
-    // Small delay to let state update, then start
-    setTimeout(() => {
-      startLoadTest();
-      // Navigate to Live Metrics to show test progress
-      setActiveTab("metrics");
-    }, 100);
+    // Convert API endpoints to test steps immediately
+    const steps: TestStep[] = scenario.endpoints.map((endpoint, index) => ({
+      id: `step_${index}_${Date.now()}`,
+      type: 'api' as const,
+      action: `${endpoint.method} ${endpoint.path}`,
+      target: endpoint.path,
+      value: endpoint.method,
+    }));
+
+    // Build the full config for this test
+    const testConfig: LoadTestConfig = {
+      ...config,
+      name: scenario.name,
+      virtualUsers: scenario.virtualUsers,
+      duration: scenario.duration,
+      rampUpTime: scenario.rampUp,
+      pattern: scenario.pattern,
+      steps,
+    };
+
+    // Update state for UI display
+    setConfig(testConfig);
+    setActiveTab("metrics");
+
+    // Start test with the config directly (don't wait for React state)
+    await startLoadTestWithConfig(testConfig);
   };
 
-  // Run load test - NOW USES BACKEND API (Control Plane / Load Plane architecture)
-  const startLoadTest = async () => {
-    if (config.steps.length === 0) {
+  // Core load test implementation - accepts config directly
+  const startLoadTestWithConfig = async (testConfig: LoadTestConfig) => {
+    if (testConfig.steps.length === 0) {
       toast({
         title: "Error",
         description: "Please add test steps or import a Flowstral session",
@@ -784,7 +859,7 @@ export default function VirtualUserGenerator() {
       bytesSent: 0
     });
 
-    console.log(`[LoadTest] Starting BACKEND-based test: ${config.virtualUsers} VUs, ${config.duration}s duration`);
+    console.log(`[LoadTest] Starting BACKEND-based test: ${testConfig.virtualUsers} VUs, ${testConfig.duration}s duration`);
 
     try {
       // Step 1: Create scenario on backend
@@ -793,7 +868,7 @@ export default function VirtualUserGenerator() {
         description: "Setting up load test on backend",
       });
       
-      const scenarioId = await createBackendScenario();
+      const scenarioId = await createBackendScenarioWithConfig(testConfig);
       if (!scenarioId) {
         throw new Error('Failed to create scenario on backend');
       }
@@ -814,7 +889,7 @@ export default function VirtualUserGenerator() {
       // Step 3: Start load test via backend API
       toast({
         title: "🚀 Starting Load Test...",
-        description: `Backend generating ${config.virtualUsers} virtual users`,
+        description: `Backend generating ${testConfig.virtualUsers} virtual users`,
       });
       
       const runResponse = await fetch(`${API_BASE_URL}/api/performance/tests/run`, {
@@ -822,14 +897,14 @@ export default function VirtualUserGenerator() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scenario_id: scenarioId,
-          virtual_users: config.virtualUsers,
-          ramp_up_seconds: config.rampUpTime,
-          duration_seconds: config.duration,
-          ramp_down_seconds: Math.floor(config.rampUpTime / 2),
-          think_time_ms: config.thinkTime ? 2000 : 500,
-          base_url: config.targetUrl,
+          virtual_users: testConfig.virtualUsers,
+          ramp_up_seconds: testConfig.rampUpTime,
+          duration_seconds: testConfig.duration,
+          ramp_down_seconds: Math.floor(testConfig.rampUpTime / 2),
+          think_time_ms: testConfig.thinkTime ? 2000 : 500,
+          base_url: testConfig.targetUrl,
           protocol: 'http',
-          use_distributed: config.virtualUsers > 500 // Auto-distribute for large tests
+          use_distributed: testConfig.virtualUsers > 500 // Auto-distribute for large tests
         })
       });
       
@@ -882,7 +957,7 @@ export default function VirtualUserGenerator() {
         });
         
         setActiveTab("results");
-      }, (config.duration + 10) * 1000); // Add 10s buffer
+      }, (testConfig.duration + 10) * 1000); // Add 10s buffer
       
     } catch (error: any) {
       console.error('[LoadTest] Error starting backend test:', error);
@@ -895,6 +970,11 @@ export default function VirtualUserGenerator() {
         variant: "destructive"
       });
     }
+  };
+
+  // Wrapper function that uses current React state
+  const startLoadTest = async () => {
+    await startLoadTestWithConfig(config);
   };
 
   // Stop load test - also stops backend test
@@ -1274,7 +1354,8 @@ export default function VirtualUserGenerator() {
       )}
 
       {/* Banner: Loaded from Recording */}
-      {config.steps.length > 0 && config.name.includes('Quick Load Test') && !isRunning && (
+      {/* Show banner only when steps loaded and test hasn't been run yet (no metrics) */}
+      {config.steps.length > 0 && config.name.includes('Quick Load Test') && !isRunning && metrics.totalRequests === 0 && (
         <Card className="border-2 border-orange-500 bg-orange-50 dark:bg-orange-950/30">
           <CardContent className="py-4">
             <div className="flex items-center justify-between">

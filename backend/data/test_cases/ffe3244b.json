@@ -1,0 +1,43 @@
+{
+  "id": "ffe3244b",
+  "name": "Speeds Up Application By Controlling Clock",
+  "status": "approved",
+  "tags": [
+    "imported",
+    "framework:cypress",
+    "code_alchemy",
+    "imported"
+  ],
+  "created_at": "2026-01-03T00:28:47.909105",
+  "updated_at": "2026-01-03T00:28:47.909105",
+  "metadata": {
+    "start_url": "",
+    "app_type": "generic",
+    "recorded_at": "2026-01-03T00:28:47.909105",
+    "action_count": 0,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "imported",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "speeds up application by controlling clock",
+    "source": "code_alchemy",
+    "repository": "https://github.com/cypress-io/cypress-example-recipes",
+    "branch": "main",
+    "originalMethod": "speeds up application by controlling clock",
+    "originalClass": "",
+    "originalFile": "C:\\Users\\janum\\AppData\\Local\\Temp\\framework_analyzer_qc6dchtv\\examples\\server-communication__xhr-assertions\\cypress\\e2e\\clock-control.cy.js",
+    "framework": "cypress",
+    "language": "javascript",
+    "importedAt": "2026-01-03T00:28:47.909105"
+  },
+  "actions": [],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

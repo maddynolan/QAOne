@@ -75,6 +75,10 @@ import Integrations from "./pages/Integrations";
 import Results from "./pages/Results";
 import ProjectManagement from "./pages/ProjectManagement";
 import VisualTestingPage from "./pages/VisualTestingPage";
+import SecretsVault from "./pages/SecretsVault";
+import APICoverageMap from "./pages/APICoverageMap";
+import DataDependencyGraph from "./pages/DataDependencyGraph";
+import APMConfig from "./pages/APMConfig";
 
 // Auth (keep for future)
 import { AuthProvider } from "./contexts/AuthContext";
@@ -228,6 +232,18 @@ const App = () => {
                   {/* Integrations */}
                   <Route path="/integrations" element={<Integrations />} />
                   <Route path="/cicd" element={<CICDIntegration />} />
+                  
+                  {/* Secrets Vault */}
+                  <Route path="/secrets" element={<SecretsVault />} />
+                  
+                  {/* API Coverage Map */}
+                  <Route path="/coverage" element={<APICoverageMap />} />
+                  
+                  {/* Data Dependency Graph */}
+                  <Route path="/data-flow" element={<DataDependencyGraph />} />
+                  
+                  {/* APM Configuration */}
+                  <Route path="/apm" element={<APMConfig />} />
                   
                   {/* Project Management */}
                   <Route path="/projects" element={<ProjectManagement />} />

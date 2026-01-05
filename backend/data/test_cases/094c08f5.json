@@ -1,0 +1,43 @@
+{
+  "id": "094c08f5",
+  "name": "Asserts Multiple  X H R Properties At Once Using Cy-Spok",
+  "status": "approved",
+  "tags": [
+    "imported",
+    "framework:cypress",
+    "code_alchemy",
+    "imported"
+  ],
+  "created_at": "2026-01-03T00:28:48.125258",
+  "updated_at": "2026-01-03T00:28:48.125258",
+  "metadata": {
+    "start_url": "",
+    "app_type": "generic",
+    "recorded_at": "2026-01-03T00:28:48.125258",
+    "action_count": 0,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "imported",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "asserts multiple XHR properties at once using cy-spok",
+    "source": "code_alchemy",
+    "repository": "https://github.com/cypress-io/cypress-example-recipes",
+    "branch": "main",
+    "originalMethod": "asserts multiple XHR properties at once using cy-spok",
+    "originalClass": "",
+    "originalFile": "C:\\Users\\janum\\AppData\\Local\\Temp\\framework_analyzer_qc6dchtv\\examples\\server-communication__xhr-assertions\\cypress\\e2e\\spok-spec.cy.js",
+    "framework": "cypress",
+    "language": "javascript",
+    "importedAt": "2026-01-03T00:28:48.125258"
+  },
+  "actions": [],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

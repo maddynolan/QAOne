@@ -79,22 +79,61 @@ class GoRunnerClient:
         
         # Path to Go runner binary
         self.runner_binary = self._find_runner_binary()
+        
+        # Auto-discover local runner on init
+        self._try_discover_local_runner()
     
     def _find_runner_binary(self) -> Optional[Path]:
         """Find the Go runner binary"""
         # Check common locations
         possible_paths = [
+            # Built runner in runner directory (default location after go build)
+            Path(__file__).parent.parent.parent.parent.parent / "runner" / "runner.exe",
+            Path(__file__).parent.parent.parent.parent.parent / "runner" / "runner",
+            # Source location
             Path(__file__).parent.parent.parent.parent.parent / "runner" / "cmd" / "runner" / "runner.exe",
             Path(__file__).parent.parent.parent.parent.parent / "runner" / "cmd" / "runner" / "runner",
+            # User home locations
             Path.home() / ".aristrace" / "runner" / "runner.exe",
             Path.home() / ".aristrace" / "runner" / "runner",
         ]
         
         for path in possible_paths:
             if path.exists():
+                logger.info(f"Found Go runner binary at: {path}")
                 return path
         
+        logger.warning(f"Go runner binary not found. Checked paths: {[str(p) for p in possible_paths]}")
         return None
+    
+    def _try_discover_local_runner(self):
+        """Try to discover an already-running local Go runner"""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)  # Short timeout
+            result = sock.connect_ex(('localhost', self.local_runner_port))
+            sock.close()
+            
+            if result == 0:
+                # Something is listening on the port - assume it's the Go runner
+                logger.info(f"Discovered existing Go runner on port {self.local_runner_port}")
+                self.runners["local"] = RunnerStatus(
+                    agent_id="local",
+                    hostname="localhost",
+                    port=self.local_runner_port,
+                    status="online",
+                    max_vus=1000,  # Default assumption
+                    current_vus=0,
+                    available_vus=1000,
+                    cpu_percent=0.0,
+                    memory_percent=0.0,
+                    active_runs=[]
+                )
+            else:
+                logger.debug(f"No Go runner found on port {self.local_runner_port}")
+        except Exception as e:
+            logger.debug(f"Error discovering local runner: {e}")
     
     async def start_local_runner(self, max_vus: int = 1000) -> bool:
         """Start the local embedded Go runner"""

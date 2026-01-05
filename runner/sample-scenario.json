@@ -1,0 +1,86 @@
+{
+  "scenario_id": "sample-001",
+  "name": "Sample Load Test",
+  "source": "manual",
+  "version": "1.0",
+  "created_at": "2026-01-04T00:00:00Z",
+  "config": {
+    "virtual_users": 5,
+    "duration_seconds": 30,
+    "ramp_up_seconds": 5,
+    "ramp_down_seconds": 5,
+    "target_url": "https://httpbin.org",
+    "enable_http2": false,
+    "connection_timeout_ms": 5000,
+    "request_timeout_ms": 30000,
+    "think_time_min_ms": 500,
+    "think_time_max_ms": 1500
+  },
+  "thresholds": [
+    {
+      "metric": "http_req_duration_p95",
+      "op": "<",
+      "value": 2000,
+      "critical": true,
+      "name": "95th percentile response time < 2s"
+    },
+    {
+      "metric": "http_req_failed_rate",
+      "op": "<",
+      "value": 0.1,
+      "critical": true,
+      "name": "Error rate < 10%"
+    }
+  ],
+  "variables": {
+    "base_url": "https://httpbin.org"
+  },
+  "data_pools": [],
+  "steps": [
+    {
+      "id": "step-1",
+      "name": "GET Request",
+      "type": "http",
+      "method": "GET",
+      "url": "{{base_url}}/get",
+      "headers": {
+        "Accept": "application/json",
+        "User-Agent": "QAAI-LoadRunner/1.0"
+      },
+      "assertions": [
+        {
+          "type": "status",
+          "expected": 200
+        }
+      ]
+    },
+    {
+      "id": "step-2",
+      "name": "Think Time",
+      "type": "think",
+      "think_time_ms": 1000
+    },
+    {
+      "id": "step-3",
+      "name": "POST Request",
+      "type": "http",
+      "method": "POST",
+      "url": "{{base_url}}/post",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "test": "data",
+        "timestamp": "{{$timestamp}}"
+      },
+      "assertions": [
+        {
+          "type": "status",
+          "expected": 200
+        }
+      ]
+    }
+  ]
+}
+

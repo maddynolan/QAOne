@@ -59,6 +59,13 @@ import {
   getValidationsByDomain, getSuggestionsForField, calculateCoverage,
   groupValidations, getPriorityColor, validationToAssertion
 } from '@/lib/qa-validation-templates';
+import { 
+  EmailVerifyStepConfig, 
+  PDFVerifyStepConfig, 
+  FileVerifyStepConfig,
+  getDefaultEmailVerifyConfig 
+} from '@/components/verifications';
+import type { EmailVerifyConfig, PDFVerifyConfig, FileVerifyConfig } from '@/components/verifications/types';
 
 // ============================================================================
 // UTILITY FUNCTIONS - MUST BE DEFINED BEFORE USE
@@ -446,14 +453,15 @@ const STEP_CATEGORIES = {
       { type: 'use_data_row', label: 'Data Row', icon: ClipboardList, color: 'bg-violet-600', desc: 'Use dataset row' },
     ]
   },
-  // EVIDENCE - Documentation
+  // EVIDENCE - Documentation & Visual Testing
   evidence: {
     label: 'Evidence',
     icon: Camera,
     color: 'rose',
-    description: 'Screenshots and logs',
+    description: 'Screenshots, visual testing, and logs',
     steps: [
       { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-rose-500', desc: 'Capture screen' },
+      { type: 'visual_check', label: 'Visual Check', icon: Eye, color: 'bg-violet-500', desc: 'Compare to baseline' },
       { type: 'log', label: 'Log Message', icon: FileText, color: 'bg-rose-500', desc: 'Add log entry' },
     ]
   },
@@ -1926,10 +1934,36 @@ export default function UnifiedWorkflowEditor() {
         }
       }
 
-      // PRIORITY 2: Convert test case steps to TestStep format (legacy format)
+      // PRIORITY 2: Convert test case steps to TestStep format
       const rawSteps = foundCase.steps || [];
       const convertedSteps: TestStep[] = rawSteps.map((step: any, index: number) => {
-        // Try to parse test_data as JSON to get the original step
+        // PRIORITY 2A: If step already has 'type' property (from merged/recorder), use it directly
+        // This preserves qword, args, selectorObj for execution
+        if (step.type) {
+          // Clean up selector - extract the actual CSS selector if wrapped in locator()
+          let selector = step.selector || step.selectorObj?.selector || '';
+          if (typeof selector === 'string') {
+            const locatorMatch = selector.match(/^(?:page\.)?locator\(\s*['"](.+)['"]\s*\)$/);
+            if (locatorMatch) {
+              selector = locatorMatch[1].replace(/\\"/g, '"').replace(/\\'/g, "'");
+            }
+          }
+          
+          return {
+            ...step,
+            id: step.id || `step_${Date.now()}_${index}`,
+            selector: selector,
+            // Preserve execution properties
+            qword: step.qword,
+            args: step.args,
+            selectorObj: step.selectorObj,
+            // Ensure value is a simple string, not a JSON object
+            value: typeof step.value === 'string' ? step.value : (step.args?.[0] || ''),
+            enabled: step.enabled !== false,
+          };
+        }
+        
+        // PRIORITY 2B: Try to parse test_data as JSON to get the original step
         let originalStep: any = null;
         if (step.test_data) {
           try {
@@ -1956,13 +1990,17 @@ export default function UnifiedWorkflowEditor() {
             ...originalStep,
             id: originalStep.id || `step_${Date.now()}_${index}`,
             selector: selector,
+            // Preserve execution properties
+            qword: originalStep.qword,
+            args: originalStep.args,
+            selectorObj: originalStep.selectorObj,
             // Ensure value is a simple string, not a JSON object
             value: typeof originalStep.value === 'string' ? originalStep.value : '',
           };
         }
         
-        // Fallback: Parse from action text
-        const action = step.action || step.description || '';
+        // PRIORITY 2C: Fallback - Parse from action text (legacy manual steps)
+        const action = step.action || step.description || step.name || '';
         const actionLower = action.toLowerCase();
         
         // Determine step type from action text
@@ -2006,7 +2044,7 @@ export default function UnifiedWorkflowEditor() {
         }
         
         return {
-          id: `step_${Date.now()}_${index}`,
+          id: step.id || `step_${Date.now()}_${index}`,
           type: stepType,
           name: action.slice(0, 50) || `Step ${index + 1}`,
           description: action,
@@ -2015,6 +2053,10 @@ export default function UnifiedWorkflowEditor() {
           url: url,
           enabled: true,
           expectedResult: step.expected_result || step.expectedResult || 'Step completes successfully',
+          // Preserve execution properties if they exist (from partial merge)
+          qword: step.qword,
+          args: step.args,
+          selectorObj: step.selectorObj,
           assertion: step.expected_result || step.expectedResult ? {
             enabled: true,
             type: 'visible',
@@ -4187,7 +4229,7 @@ export default function UnifiedWorkflowEditor() {
                       
                       <div className="bg-violet-50 rounded-lg p-3 text-left">
                         <p className="text-xs font-medium text-violet-700 mb-2">
-                          🎯 Better than LoadRunner
+                          🎯 Protocol Recording Features
                         </p>
                         <ul className="text-xs text-violet-600 space-y-1">
                           <li>• No proxy setup needed</li>
@@ -5187,70 +5229,529 @@ function getAssertionSuggestions(stepType: StepType, assertionType: string) {
 
 function generateExpectedResultText(assertionType: string, value: string, target?: string): string {
   const targetText = target ? ` for "${target}"` : '';
+  const valueText = value ? `"${value}"` : '';
   
-  switch (assertionType) {
-    case 'element_visible':
-      return `Element${targetText} should be visible`;
-    case 'element_hidden':
-      return `Element${targetText} should be hidden`;
-    case 'text_contains':
-      return `Text should contain "${value}"${targetText}`;
-    case 'text_equals':
-      return `Text should equal "${value}"${targetText}`;
-    case 'url_contains':
-      return `URL should contain "${value}"`;
-    case 'url_equals':
-      return `URL should be "${value}"`;
-    case 'value_equals':
-      return `Input value should be "${value}"${targetText}`;
-    case 'element_enabled':
-      return `Element${targetText} should be enabled`;
-    case 'element_disabled':
-      return `Element${targetText} should be disabled`;
-    case 'count_equals':
-      return `Should find exactly ${value} matching elements`;
-    case 'page_title':
-      return `Page title should be "${value}"`;
-    case 'toast_message':
-      return `Should see message: "${value}"`;
-    case 'attribute_equals':
-      return `Attribute should equal "${value}"`;
-    default:
-      return value;
-  }
+  // Comprehensive mapping of all assertion types to expected result descriptions
+  const assertionDescriptions: Record<string, string> = {
+    // Navigate assertions
+    'page_loaded': 'Page should load successfully without errors',
+    'url_equals': `URL should be ${valueText}`,
+    'url_contains': `URL should contain ${valueText}`,
+    'title_equals': `Page title should be ${valueText}`,
+    'title_contains': `Page title should contain ${valueText}`,
+    'no_errors': 'No error messages should be displayed',
+    'loading_complete': 'Loading indicators should disappear',
+    'load_time_under': `Page should load within ${valueText}`,
+    
+    // Click assertions
+    'element_visible': `Element${targetText} should be visible`,
+    'element_hidden': `Element${targetText} should be hidden`,
+    'element_selected': `Element${targetText} should be selected`,
+    'element_expanded': `Section${targetText} should expand`,
+    'url_changed': 'Browser URL should change',
+    'new_tab_opens': 'Link should open in new tab',
+    'toast_success': `Success message should appear: ${valueText}`,
+    'toast_error': `Error message should appear: ${valueText}`,
+    'toast_info': `Info message should appear: ${valueText}`,
+    'toast_message': `Should see message: ${valueText}`,
+    'confirmation_dialog': 'Confirmation dialog should appear',
+    'form_submitted': 'Form should submit successfully',
+    'form_reset': 'Form should reset all fields',
+    'download_starts': 'File download should begin',
+    
+    // Input assertions
+    'value_accepted': 'Field should accept the input value',
+    'value_equals': `Input value should be ${valueText}${targetText}`,
+    'value_contains': `Input should contain ${valueText}${targetText}`,
+    'value_formatted': 'Input should be auto-formatted correctly',
+    'character_count': 'Character counter should be displayed',
+    'no_validation_error': 'No validation errors should appear',
+    'validation_error_shown': `Validation error should show: ${valueText}`,
+    'field_valid': `Field${targetText} should be marked as valid`,
+    'field_invalid': `Field${targetText} should be marked as invalid`,
+    'placeholder_hidden': 'Placeholder text should disappear',
+    'helper_text_shown': 'Helper text should be displayed',
+    'password_masked': 'Password should be masked',
+    'dependent_field_enabled': `Related field${targetText} should become enabled`,
+    'suggestions_shown': 'Autocomplete suggestions should appear',
+    'live_search_results': 'Search results should update',
+    
+    // Select assertions
+    'option_selected': `Option ${valueText} should be selected`,
+    'dropdown_closed': 'Dropdown should close after selection',
+    'selected_text_shown': 'Selected option text should be displayed',
+    'dependent_dropdown_updated': `Related dropdown${targetText} options should update`,
+    'dependent_field_shown': `Related field${targetText} should appear`,
+    'dependent_field_hidden': `Related field${targetText} should disappear`,
+    'form_section_enabled': 'Form section should become enabled',
+    'price_updated': `Price${targetText} should recalculate`,
+    'quantity_updated': 'Quantity should adjust',
+    
+    // Hover assertions
+    'tooltip_shown': `Tooltip should appear: ${valueText}`,
+    'dropdown_opens': 'Dropdown menu should open',
+    'preview_shown': 'Preview should appear',
+    'cursor_changes': 'Cursor style should change',
+    'element_highlighted': `Element${targetText} should be highlighted`,
+    
+    // Wait assertions
+    'element_appears': `Element${targetText} should appear`,
+    'element_disappears': `Element${targetText} should disappear`,
+    'text_appears': `Text ${valueText} should appear`,
+    'network_idle': 'All network requests should complete',
+    'animation_complete': 'Animation should finish',
+    
+    // API assertions
+    'status_200': 'API should return 200 OK',
+    'status_201': 'API should return 201 Created',
+    'status_code': `API should return status code ${valueText}`,
+    'status_2xx': 'API should return success status (2xx)',
+    'status_4xx': 'API should return client error (4xx)',
+    'body_contains': `Response body should contain ${valueText}`,
+    'body_equals': `Response body should equal ${valueText}`,
+    'json_path_equals': `JSON path should equal ${valueText}`,
+    'json_path_exists': `JSON path ${valueText} should exist`,
+    'array_length': `Array length should be ${valueText}`,
+    'not_empty': 'Response should not be empty',
+    'header_present': `Response should have header ${valueText}`,
+    'header_equals': `Header should have value ${valueText}`,
+    'cookie_set': `Cookie ${valueText} should be set`,
+    'response_time_under': `Response time should be under ${valueText}`,
+    
+    // Assert assertions
+    'element_exists': `Element${targetText} should exist in DOM`,
+    'text_contains': `Page should contain text ${valueText}`,
+    'text_not_contains': `Page should NOT contain text ${valueText}`,
+    'element_text_equals': `Element${targetText} text should be ${valueText}`,
+    'count_equals': `Should find exactly ${value} elements${targetText}`,
+    'count_greater': `Should find more than ${value} elements${targetText}`,
+    'count_less': `Should find fewer than ${value} elements${targetText}`,
+    
+    // Database assertions
+    'row_count': `Query should return ${value} rows`,
+    'row_count_greater': 'Query should return at least one row',
+    'no_rows': 'Query should return no rows',
+    'column_value': `Column value should be ${valueText}`,
+    
+    // Screenshot assertions
+    'screenshot_taken': 'Screenshot should be saved',
+    'visual_match': 'Screenshot should match baseline',
+    
+    // Upload assertions
+    'file_accepted': 'File should be accepted',
+    'upload_preview_shown': 'File preview should be displayed',
+    'progress_complete': 'Upload progress should reach 100%',
+    'upload_error': `Upload error should show: ${valueText}`,
+    
+    // Salesforce assertions
+    'record_count': `Query should return ${value} records`,
+    'field_value': `Field should have value ${valueText}`,
+    'record_exists': 'Record should exist',
+    'record_not_exists': 'Record should not exist',
+    'field_equals': `Field should equal ${valueText}`,
+    'field_not_empty': 'Field should have a value',
+    'record_type': `Record type should be ${valueText}`,
+    
+    // Legacy/generic
+    'text_equals': `Text should equal ${valueText}${targetText}`,
+    'element_enabled': `Element${targetText} should be enabled`,
+    'element_disabled': `Element${targetText} should be disabled`,
+    'page_title': `Page title should be ${valueText}`,
+    'attribute_equals': `Attribute should equal ${valueText}`,
+  };
+  
+  return assertionDescriptions[assertionType] || value || 'Verify expected result';
+}
+
+// ============================================================================
+// COMPREHENSIVE STEP-TYPE SPECIFIC ASSERTIONS
+// ============================================================================
+
+/**
+ * Context-aware assertion definitions for each step type
+ * Provides meaningful expected results that testers actually need
+ */
+const STEP_TYPE_ASSERTIONS: Record<string, {
+  category: string;
+  assertions: Array<{
+    type: string;
+    label: string;
+    description: string;
+    placeholder?: string;
+    needsValue?: boolean;
+    needsTarget?: boolean;
+    icon?: string;
+  }>;
+}[]> = {
+  // NAVIGATE - Page load expectations
+  navigate: [
+    {
+      category: '🌐 Page Load',
+      assertions: [
+        { type: 'page_loaded', label: 'Page loads successfully', description: 'Page should load without errors', icon: '✓' },
+        { type: 'url_equals', label: 'URL is correct', description: 'Browser URL matches expected', needsValue: true, placeholder: '/dashboard', icon: '🔗' },
+        { type: 'url_contains', label: 'URL contains', description: 'URL contains expected path', needsValue: true, placeholder: '/products', icon: '🔗' },
+        { type: 'title_equals', label: 'Page title is', description: 'Document title matches', needsValue: true, placeholder: 'Home Page', icon: '📄' },
+        { type: 'title_contains', label: 'Page title contains', description: 'Title contains text', needsValue: true, placeholder: 'Dashboard', icon: '📄' },
+      ]
+    },
+    {
+      category: '👁️ Visual',
+      assertions: [
+        { type: 'element_visible', label: 'Key element visible', description: 'Main content is visible', needsTarget: true, placeholder: 'header, .main-content', icon: '✓' },
+        { type: 'no_errors', label: 'No error messages', description: 'No error banners or alerts', icon: '⚠️' },
+        { type: 'loading_complete', label: 'Loading finished', description: 'Spinners/loaders gone', icon: '⏳' },
+      ]
+    },
+    {
+      category: '⚡ Performance',
+      assertions: [
+        { type: 'load_time_under', label: 'Load time under', description: 'Page loads within time', needsValue: true, placeholder: '3000ms', icon: '⚡' },
+      ]
+    }
+  ],
+
+  // CLICK - Action result expectations
+  click: [
+    {
+      category: '🎯 Immediate Effect',
+      assertions: [
+        { type: 'element_visible', label: 'Element appears', description: 'New content becomes visible', needsTarget: true, placeholder: '.modal, .dropdown', icon: '✓' },
+        { type: 'element_hidden', label: 'Element disappears', description: 'Content is hidden/removed', needsTarget: true, placeholder: '.loading', icon: '✗' },
+        { type: 'element_selected', label: 'Item selected', description: 'Element shows selected state', icon: '☑️' },
+        { type: 'element_expanded', label: 'Section expands', description: 'Collapsible section opens', icon: '⬇️' },
+      ]
+    },
+    {
+      category: '🔄 Navigation',
+      assertions: [
+        { type: 'url_changed', label: 'Page navigates', description: 'Browser URL changes', icon: '🔗' },
+        { type: 'url_contains', label: 'Navigates to', description: 'New URL contains', needsValue: true, placeholder: '/success', icon: '🔗' },
+        { type: 'new_tab_opens', label: 'Opens new tab', description: 'Link opens in new tab', icon: '📤' },
+      ]
+    },
+    {
+      category: '💬 Feedback',
+      assertions: [
+        { type: 'toast_success', label: 'Success message', description: 'Green success toast/alert', needsValue: true, placeholder: 'Saved successfully', icon: '✅' },
+        { type: 'toast_error', label: 'Error message', description: 'Error notification appears', needsValue: true, placeholder: 'Please try again', icon: '❌' },
+        { type: 'toast_info', label: 'Info message', description: 'Information toast appears', needsValue: true, placeholder: 'Processing...', icon: 'ℹ️' },
+        { type: 'confirmation_dialog', label: 'Confirmation appears', description: 'Confirm/cancel dialog shows', icon: '❓' },
+      ]
+    },
+    {
+      category: '📋 Form Actions',
+      assertions: [
+        { type: 'form_submitted', label: 'Form submits', description: 'Form data sent successfully', icon: '📤' },
+        { type: 'form_reset', label: 'Form resets', description: 'All fields cleared', icon: '🔄' },
+        { type: 'download_starts', label: 'Download starts', description: 'File download begins', icon: '⬇️' },
+      ]
+    }
+  ],
+
+  // INPUT - Field validation expectations
+  input: [
+    {
+      category: '📝 Value Acceptance',
+      assertions: [
+        { type: 'value_accepted', label: 'Value entered', description: 'Field accepts the input', icon: '✓' },
+        { type: 'value_equals', label: 'Value is', description: 'Field value matches', needsValue: true, icon: '=' },
+        { type: 'value_formatted', label: 'Value formatted', description: 'Input auto-formatted (phone, card)', icon: '✨' },
+        { type: 'character_count', label: 'Character count', description: 'Shows character counter', icon: '#' },
+      ]
+    },
+    {
+      category: '✅ Validation',
+      assertions: [
+        { type: 'no_validation_error', label: 'No validation errors', description: 'Field passes validation', icon: '✓' },
+        { type: 'validation_error_shown', label: 'Validation error shows', description: 'Error message displayed', needsValue: true, placeholder: 'Required field', icon: '⚠️' },
+        { type: 'field_valid', label: 'Field marked valid', description: 'Green checkmark/border', icon: '✓' },
+        { type: 'field_invalid', label: 'Field marked invalid', description: 'Red border/highlight', icon: '✗' },
+      ]
+    },
+    {
+      category: '🎨 Visual Feedback',
+      assertions: [
+        { type: 'placeholder_hidden', label: 'Placeholder hidden', description: 'Placeholder disappears on input', icon: '👻' },
+        { type: 'helper_text_shown', label: 'Helper text shown', description: 'Help text appears below', icon: 'ℹ️' },
+        { type: 'password_masked', label: 'Password masked', description: 'Characters shown as dots', icon: '🔒' },
+      ]
+    },
+    {
+      category: '🔗 Related Updates',
+      assertions: [
+        { type: 'dependent_field_enabled', label: 'Related field enabled', description: 'Another field becomes active', needsTarget: true, icon: '🔓' },
+        { type: 'suggestions_shown', label: 'Suggestions appear', description: 'Autocomplete dropdown shows', icon: '📋' },
+        { type: 'live_search_results', label: 'Search results update', description: 'Results refresh as you type', icon: '🔍' },
+      ]
+    }
+  ],
+
+  // SELECT - Dropdown expectations
+  select: [
+    {
+      category: '☑️ Selection',
+      assertions: [
+        { type: 'option_selected', label: 'Option selected', description: 'Selected value is set', needsValue: true, icon: '✓' },
+        { type: 'dropdown_closed', label: 'Dropdown closes', description: 'Menu closes after selection', icon: '⬆️' },
+        { type: 'selected_text_shown', label: 'Selection displayed', description: 'Shows selected option text', icon: '📝' },
+      ]
+    },
+    {
+      category: '🔄 Cascading Changes',
+      assertions: [
+        { type: 'dependent_dropdown_updated', label: 'Related dropdown updates', description: 'Child dropdown options change', needsTarget: true, placeholder: '#city-select', icon: '🔗' },
+        { type: 'dependent_field_shown', label: 'Related field appears', description: 'Conditional field becomes visible', needsTarget: true, icon: '👁️' },
+        { type: 'dependent_field_hidden', label: 'Related field hidden', description: 'Conditional field disappears', needsTarget: true, icon: '👻' },
+        { type: 'form_section_enabled', label: 'Form section enabled', description: 'Part of form becomes active', icon: '🔓' },
+      ]
+    },
+    {
+      category: '💰 Calculations',
+      assertions: [
+        { type: 'price_updated', label: 'Price recalculates', description: 'Price/total changes', needsTarget: true, placeholder: '.total-price', icon: '💵' },
+        { type: 'quantity_updated', label: 'Quantity adjusts', description: 'Count/quantity changes', icon: '🔢' },
+      ]
+    }
+  ],
+
+  // HOVER - Hover state expectations
+  hover: [
+    {
+      category: '📍 Hover Effects',
+      assertions: [
+        { type: 'tooltip_shown', label: 'Tooltip appears', description: 'Hover tooltip is displayed', needsValue: true, placeholder: 'Help text...', icon: '💬' },
+        { type: 'dropdown_opens', label: 'Menu opens', description: 'Dropdown menu appears', icon: '⬇️' },
+        { type: 'preview_shown', label: 'Preview appears', description: 'Image/content preview shows', icon: '🖼️' },
+        { type: 'cursor_changes', label: 'Cursor changes', description: 'Mouse cursor changes style', icon: '👆' },
+        { type: 'element_highlighted', label: 'Element highlighted', description: 'Visual highlight effect', icon: '✨' },
+      ]
+    }
+  ],
+
+  // WAIT - Synchronization expectations
+  wait: [
+    {
+      category: '⏳ Wait Completion',
+      assertions: [
+        { type: 'element_appears', label: 'Element appears', description: 'Target element becomes visible', needsTarget: true, icon: '✓' },
+        { type: 'element_disappears', label: 'Element disappears', description: 'Loading indicator gone', needsTarget: true, icon: '✗' },
+        { type: 'text_appears', label: 'Text appears', description: 'Expected text visible', needsValue: true, icon: '📝' },
+        { type: 'network_idle', label: 'Network idle', description: 'All API calls complete', icon: '📡' },
+        { type: 'animation_complete', label: 'Animation done', description: 'CSS animation finished', icon: '🎬' },
+      ]
+    }
+  ],
+
+  // API - API response expectations
+  api: [
+    {
+      category: '📊 Response Status',
+      assertions: [
+        { type: 'status_200', label: 'Success (200)', description: 'Returns 200 OK', icon: '✅' },
+        { type: 'status_201', label: 'Created (201)', description: 'Returns 201 Created', icon: '✅' },
+        { type: 'status_code', label: 'Status code is', description: 'Returns specific status', needsValue: true, placeholder: '200', icon: '🔢' },
+        { type: 'status_2xx', label: 'Success (2xx)', description: 'Any success status', icon: '✅' },
+        { type: 'status_4xx', label: 'Client error (4xx)', description: 'Returns 4xx error', icon: '⚠️' },
+      ]
+    },
+    {
+      category: '📄 Response Body',
+      assertions: [
+        { type: 'body_contains', label: 'Body contains', description: 'Response includes text', needsValue: true, placeholder: '"success": true', icon: '📝' },
+        { type: 'body_equals', label: 'Body equals', description: 'Exact response match', needsValue: true, icon: '=' },
+        { type: 'json_path_equals', label: 'JSON path value', description: 'Specific field equals', needsValue: true, placeholder: '$.data.id = 123', icon: '🎯' },
+        { type: 'json_path_exists', label: 'JSON path exists', description: 'Field exists in response', needsValue: true, placeholder: '$.data.items', icon: '❓' },
+        { type: 'array_length', label: 'Array has items', description: 'Array length matches', needsValue: true, placeholder: '$.items.length = 10', icon: '📊' },
+        { type: 'not_empty', label: 'Response not empty', description: 'Body is not empty', icon: '📦' },
+        { type: 'json_schema', label: 'Validates schema', description: 'Response matches JSON Schema', needsValue: true, placeholder: '{"type":"object","properties":{}}', icon: '📋' },
+        { type: 'response_type', label: 'Response type is', description: 'Content-Type matches', needsValue: true, placeholder: 'application/json', icon: '📄' },
+      ]
+    },
+    {
+      category: '📋 Headers',
+      assertions: [
+        { type: 'header_present', label: 'Header exists', description: 'Response has header', needsValue: true, placeholder: 'Content-Type', icon: '📋' },
+        { type: 'header_equals', label: 'Header value is', description: 'Header has value', needsValue: true, placeholder: 'Content-Type: application/json', icon: '=' },
+        { type: 'cookie_set', label: 'Cookie is set', description: 'Response sets cookie', needsValue: true, placeholder: 'session_id', icon: '🍪' },
+      ]
+    },
+    {
+      category: '⚡ Performance',
+      assertions: [
+        { type: 'response_time_under', label: 'Response time under', description: 'Responds within ms', needsValue: true, placeholder: '500ms', icon: '⚡' },
+      ]
+    }
+  ],
+
+  // ASSERT / VERIFY
+  assert: [
+    {
+      category: '👁️ Visibility',
+      assertions: [
+        { type: 'element_visible', label: 'Element visible', description: 'Element is displayed', needsTarget: true, icon: '✓' },
+        { type: 'element_hidden', label: 'Element hidden', description: 'Element not visible', needsTarget: true, icon: '✗' },
+        { type: 'element_exists', label: 'Element exists', description: 'Element in DOM', needsTarget: true, icon: '📄' },
+      ]
+    },
+    {
+      category: '📝 Content',
+      assertions: [
+        { type: 'text_contains', label: 'Page contains text', description: 'Text visible on page', needsValue: true, icon: '📝' },
+        { type: 'text_not_contains', label: 'Page NOT contains', description: 'Text NOT on page', needsValue: true, icon: '🚫' },
+        { type: 'element_text_equals', label: 'Element text is', description: 'Element has exact text', needsValue: true, needsTarget: true, icon: '=' },
+      ]
+    },
+    {
+      category: '🔢 Counts',
+      assertions: [
+        { type: 'count_equals', label: 'Element count is', description: 'Number of elements', needsValue: true, needsTarget: true, placeholder: '5', icon: '#' },
+        { type: 'count_greater', label: 'Count greater than', description: 'More than N elements', needsValue: true, needsTarget: true, icon: '>' },
+        { type: 'count_less', label: 'Count less than', description: 'Fewer than N elements', needsValue: true, needsTarget: true, icon: '<' },
+      ]
+    }
+  ],
+
+  // DATABASE
+  db_query: [
+    {
+      category: '📊 Query Results',
+      assertions: [
+        { type: 'row_count', label: 'Row count is', description: 'Query returns N rows', needsValue: true, placeholder: '1', icon: '#' },
+        { type: 'row_count_greater', label: 'Has rows', description: 'Query returns rows', icon: '✓' },
+        { type: 'no_rows', label: 'No rows returned', description: 'Query returns empty', icon: '∅' },
+        { type: 'column_value', label: 'Column value is', description: 'Field has value', needsValue: true, placeholder: 'status = active', icon: '=' },
+      ]
+    }
+  ],
+
+  // SCREENSHOT
+  screenshot: [
+    {
+      category: '📸 Screenshot',
+      assertions: [
+        { type: 'screenshot_taken', label: 'Screenshot saved', description: 'Image file created', icon: '✓' },
+        { type: 'visual_match', label: 'Matches baseline', description: 'No visual differences', icon: '🎯' },
+      ]
+    }
+  ],
+
+  // UPLOAD
+  upload: [
+    {
+      category: '📤 Upload',
+      assertions: [
+        { type: 'file_accepted', label: 'File accepted', description: 'Upload succeeds', icon: '✓' },
+        { type: 'preview_shown', label: 'Preview displayed', description: 'File preview appears', icon: '🖼️' },
+        { type: 'progress_complete', label: 'Upload complete', description: 'Progress reaches 100%', icon: '✅' },
+        { type: 'upload_error', label: 'Error shown', description: 'Upload error displayed', needsValue: true, placeholder: 'File too large', icon: '⚠️' },
+      ]
+    }
+  ],
+
+  // SALESFORCE specific
+  sf_query: [
+    {
+      category: '📊 SOQL Results',
+      assertions: [
+        { type: 'record_count', label: 'Record count is', description: 'Query returns N records', needsValue: true, icon: '#' },
+        { type: 'field_value', label: 'Field value is', description: 'Record field equals', needsValue: true, placeholder: 'Status = Active', icon: '=' },
+        { type: 'record_exists', label: 'Record exists', description: 'At least one record', icon: '✓' },
+        { type: 'record_not_exists', label: 'Record not exists', description: 'No matching records', icon: '✗' },
+      ]
+    }
+  ],
+
+  sf_assert: [
+    {
+      category: '☁️ Salesforce',
+      assertions: [
+        { type: 'field_equals', label: 'Field equals', description: 'Record field matches', needsValue: true, icon: '=' },
+        { type: 'field_not_empty', label: 'Field has value', description: 'Field is populated', icon: '✓' },
+        { type: 'record_type', label: 'Record type is', description: 'Matches record type', needsValue: true, icon: '🏷️' },
+      ]
+    }
+  ],
+};
+
+/**
+ * Get assertion categories and options for a specific step type
+ */
+function getAssertionsForStepType(stepType: StepType): typeof STEP_TYPE_ASSERTIONS[string] {
+  // Return step-specific assertions, or generic ones for unknown types
+  return STEP_TYPE_ASSERTIONS[stepType] || STEP_TYPE_ASSERTIONS['assert'] || [];
+}
+
+/**
+ * Check if step type should show the generic assertion builder
+ * (Complex verify steps have their own specialized UI)
+ */
+function shouldShowGenericAssertions(stepType: StepType): boolean {
+  const typesWithSpecializedUI = ['email_verify', 'pdf_verify', 'file_verify'];
+  return !typesWithSpecializedUI.includes(stepType);
 }
 
 function getQuickSuggestions(stepType: StepType): Array<{ label: string; type: string; expected?: string; text: string }> {
+  // Get the first few most common assertions for this step type
+  const stepAssertions = STEP_TYPE_ASSERTIONS[stepType];
+  if (!stepAssertions || stepAssertions.length === 0) {
+    // Fallback to generic suggestions
+    return [
+      { label: 'Element visible', type: 'element_visible', text: 'Element should be visible' },
+      { label: 'Text contains', type: 'text_contains', text: 'Page contains expected text' },
+    ];
+  }
+
+  // Collect first 2 assertions from each category
+  const suggestions: Array<{ label: string; type: string; expected?: string; text: string }> = [];
+  for (const category of stepAssertions) {
+    for (const assertion of category.assertions.slice(0, 2)) {
+      suggestions.push({
+        label: assertion.label,
+        type: assertion.type,
+        expected: assertion.placeholder || '',
+        text: assertion.description,
+      });
+      if (suggestions.length >= 6) break;
+    }
+    if (suggestions.length >= 6) break;
+  }
+
+  return suggestions;
+}
+
+// Legacy function for backwards compatibility
+function getQuickSuggestionsLegacy(stepType: StepType): Array<{ label: string; type: string; expected?: string; text: string }> {
   const baseSuggestions = {
     navigate: [
-      { label: 'Page loads', type: 'element_visible', text: 'Page should load successfully' },
+      { label: 'Page loads', type: 'page_loaded', text: 'Page should load successfully' },
       { label: 'URL matches', type: 'url_contains', expected: '/', text: 'URL should be correct' },
-      { label: 'Title correct', type: 'page_title', expected: '', text: 'Page title should be correct' },
+      { label: 'Title correct', type: 'title_contains', expected: '', text: 'Page title should be correct' },
     ],
     click: [
       { label: 'Element appears', type: 'element_visible', text: 'Expected element should appear after click' },
-      { label: 'Page changes', type: 'url_contains', text: 'Should navigate to new page' },
+      { label: 'Page changes', type: 'url_changed', text: 'Should navigate to new page' },
       { label: 'Modal opens', type: 'element_visible', text: 'Modal/dialog should open' },
-      { label: 'Success message', type: 'toast_message', expected: 'Success', text: 'Success message should appear' },
+      { label: 'Success message', type: 'toast_success', expected: 'Success', text: 'Success message should appear' },
     ],
     input: [
-      { label: 'Value accepted', type: 'value_equals', text: 'Input should accept the value' },
-      { label: 'No errors', type: 'element_hidden', text: 'No validation errors should appear' },
-      { label: 'Validation shows', type: 'element_visible', text: 'Validation message should appear' },
+      { label: 'Value accepted', type: 'value_accepted', text: 'Input should accept the value' },
+      { label: 'No errors', type: 'no_validation_error', text: 'No validation errors should appear' },
+      { label: 'Validation shows', type: 'validation_error_shown', text: 'Validation message should appear' },
     ],
     select: [
-      { label: 'Option selected', type: 'value_equals', text: 'Selected option should be set' },
-      { label: 'Form updates', type: 'element_visible', text: 'Dependent fields should update' },
+      { label: 'Option selected', type: 'option_selected', text: 'Selected option should be set' },
+      { label: 'Form updates', type: 'dependent_dropdown_updated', text: 'Dependent fields should update' },
     ],
     wait: [
-      { label: 'Element ready', type: 'element_visible', text: 'Element should be ready for interaction' },
+      { label: 'Element ready', type: 'element_appears', text: 'Element should be ready for interaction' },
     ],
     assert: [
       { label: 'Condition met', type: 'custom', text: 'Assertion condition should be true' },
     ],
     api: [
-      { label: 'Status 200', type: 'custom', expected: '200', text: 'API should return success status' },
-      { label: 'Response valid', type: 'custom', text: 'Response should contain expected data' },
+      { label: 'Status 200', type: 'status_200', expected: '200', text: 'API should return success status' },
+      { label: 'Response valid', type: 'body_contains', text: 'Response should contain expected data' },
     ],
     db_query: [
       { label: 'Records found', type: 'count_equals', expected: '1', text: 'Query should return expected records' },
@@ -5893,6 +6394,51 @@ function StepEditor({
         </>
       )}
 
+      {/* Visual Check Step Configuration */}
+      {step.type === 'visual_check' && (
+        <>
+          <div className="space-y-2">
+            <Label>Baseline Name</Label>
+            <Input
+              value={(step as any).baselineName || ''}
+              onChange={(e) => onUpdate({ baselineName: e.target.value })}
+              placeholder="login_page_baseline"
+            />
+            <p className="text-xs text-muted-foreground">Name of the baseline image to compare against (from Visual tab)</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Comparison Mode</Label>
+            <Select value={(step as any).visualMode || 'anti_aliased'} onValueChange={(v) => onUpdate({ visualMode: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="anti_aliased">Anti-Aliased (Recommended)</SelectItem>
+                <SelectItem value="pixel_perfect">Pixel Perfect</SelectItem>
+                <SelectItem value="perceptual">Perceptual Hash</SelectItem>
+                <SelectItem value="structural">Structural (SSIM)</SelectItem>
+                <SelectItem value="layout">Layout Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Threshold: {((step as any).visualThreshold || 0.1) * 100}%</Label>
+            <Slider
+              value={[((step as any).visualThreshold || 0.1) * 100]}
+              onValueChange={([v]) => onUpdate({ visualThreshold: v / 100 })}
+              min={0}
+              max={50}
+              step={1}
+            />
+            <p className="text-xs text-muted-foreground">Maximum allowed difference percentage</p>
+          </div>
+          <div className="p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800">
+            <p className="text-xs text-violet-700 dark:text-violet-300">
+              💡 <strong>How it works:</strong> This step captures a screenshot and compares it against the baseline. 
+              If the difference exceeds the threshold, the test fails.
+            </p>
+          </div>
+        </>
+      )}
+
       {step.type === 'db_query' && (
         <>
           <div className="space-y-2">
@@ -6379,175 +6925,92 @@ function StepEditor({
         </div>
       )}
 
-      {/* Expected Result with Assertion Builder */}
+      {/* ========== COMPLEX VERIFICATION STEP EDITORS ========== */}
+      
+      {/* Email Verify - Full email verification configuration */}
+      {step.type === 'email_verify' && (
+        <div className="space-y-4 border-l-4 border-indigo-500 pl-4">
+          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-medium">
+            <Mail className="h-4 w-4" />
+            Email Verification Configuration
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Verify that an email was received with specific content. Great for registration confirmations, OTP codes, and notification testing.
+          </p>
+          <EmailVerifyStepConfig
+            config={(step as any).emailConfig || {
+              provider: 'microsoft_365',
+              inbox: '',
+              timeoutSeconds: 60,
+              assertions: []
+            }}
+            onChange={(config) => onUpdate({ emailConfig: config } as any)}
+          />
+        </div>
+      )}
+
+      {/* PDF Verify - Full PDF verification configuration */}
+      {step.type === 'pdf_verify' && (
+        <div className="space-y-4 border-l-4 border-indigo-600 pl-4">
+          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-medium">
+            <FileText className="h-4 w-4" />
+            PDF Verification Configuration
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Verify PDF document content, page count, and extract values. Supports downloaded files or URLs.
+          </p>
+          <PDFVerifyStepConfig
+            config={(step as any).pdfConfig || {
+              source: '',
+              sourceType: 'download',
+              assertions: []
+            }}
+            onChange={(config) => onUpdate({ pdfConfig: config } as any)}
+          />
+        </div>
+      )}
+
+      {/* File Verify - Full file verification configuration */}
+      {step.type === 'file_verify' && (
+        <div className="space-y-4 border-l-4 border-indigo-700 pl-4">
+          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-medium">
+            <File className="h-4 w-4" />
+            File Verification Configuration
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Verify downloaded files: CSV, Excel, JSON, images. Check file content, size, format, and extract data.
+          </p>
+          <FileVerifyStepConfig
+            config={(step as any).fileConfig || {
+              downloadTrigger: '',
+              fileType: 'auto',
+              assertions: []
+            }}
+            onChange={(config) => onUpdate({ fileConfig: config } as any)}
+          />
+        </div>
+      )}
+
+      {/* Expected Result with Assertion Builder - Only show for non-complex-verify steps */}
+      {shouldShowGenericAssertions(step.type) && (
       <div className="space-y-3 border-t pt-4">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-500" />
             Expected Result & Verification
           </Label>
+          <span className="text-[10px] text-muted-foreground px-2 py-0.5 bg-green-500/10 rounded">
+            {step.type.toUpperCase()} specific
+          </span>
         </div>
         
-        {/* Multiple Assertions Support */}
-        <div className="space-y-3">
-          {/* Current Assertions List */}
-          {(step.assertions || (step.assertion?.type ? [step.assertion] : [])).map((assertion, idx) => (
-            <div key={assertion.id || idx} className="p-2 bg-muted/50 rounded-lg border border-muted space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Assertion {idx + 1}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-red-500"
-                  onClick={() => {
-                    const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                    const newAssertions = assertions.filter((_, i) => i !== idx);
-                    const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
-                    onUpdate({ 
-                      assertions: newAssertions.length > 0 ? newAssertions : undefined, 
-                      assertion: newAssertions[0] || undefined,
-                      expectedResult: newExpectedResult || step.expectedResult
-                    });
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-              
-              {/* Assertion Type */}
-              <Select
-                value={assertion.type || ''}
-                onValueChange={(value) => {
-                  const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                  const newAssertions = [...assertions];
-                  newAssertions[idx] = { ...assertion, type: value, enabled: true };
-                  const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
-                  onUpdate({ 
-                    assertions: newAssertions, 
-                    assertion: newAssertions[0],
-                    expectedResult: newExpectedResult
-                  });
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select verification..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="element_visible">✓ Element visible</SelectItem>
-                  <SelectItem value="element_hidden">✗ Element hidden</SelectItem>
-                  <SelectItem value="text_contains">📝 Page contains text</SelectItem>
-                  <SelectItem value="value_contains">📝 Input contains</SelectItem>
-                  <SelectItem value="value_equals">📝 Input equals</SelectItem>
-                  <SelectItem value="url_contains">🔗 URL contains</SelectItem>
-                  <SelectItem value="title_contains">📄 Title contains</SelectItem>
-                  <SelectItem value="toast_message">💬 Toast/Alert</SelectItem>
-                  <SelectItem value="count_equals">🔢 Element count</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              {/* Expected Value - Show for types that need it */}
-              {assertion.type && !['element_visible', 'element_hidden', 'element_enabled', 'element_disabled'].includes(assertion.type) && (
-                <Input
-                  value={assertion.expected || ''}
-                  onChange={(e) => {
-                    const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                    const newAssertions = [...assertions];
-                    newAssertions[idx] = { ...assertion, expected: e.target.value };
-                    const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
-                    onUpdate({ 
-                      assertions: newAssertions, 
-                      assertion: newAssertions[0],
-                      expectedResult: newExpectedResult
-                    });
-                  }}
-                  placeholder={
-                    assertion.type?.includes('value') ? (step.value || 'Expected value...') :
-                    assertion.type?.includes('url') ? '/success, /dashboard...' :
-                    assertion.type?.includes('title') ? 'Page title...' :
-                    assertion.type?.includes('toast') ? 'Success message...' :
-                    assertion.type?.includes('count') ? '1, 5, 10...' :
-                    'Expected text...'
-                  }
-                  className="h-8 text-xs"
-                />
-              )}
-              
-              {/* Target Element - Optional, defaults to step selector */}
-              {assertion.type && ['element_visible', 'element_hidden', 'value_contains', 'value_equals', 'text_equals', 'count_equals'].includes(assertion.type) && (
-                <div className="flex items-center gap-1">
-                  <Input
-                    value={assertion.target || ''}
-                    onChange={(e) => {
-                      const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                      const newAssertions = [...assertions];
-                      newAssertions[idx] = { ...assertion, target: e.target.value };
-                      onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
-                    }}
-                    placeholder={step.selector ? `Uses: ${step.selector.slice(0, 25)}...` : 'CSS selector (optional)'}
-                    className="h-7 text-xs flex-1"
-                  />
-                  {step.selector && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-                        const newAssertions = [...assertions];
-                        newAssertions[idx] = { ...assertion, target: step.selector };
-                        onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
-                      }}
-                    >
-                      Use Step
-                    </Button>
-                  )}
-                </div>
-              )}
-              
-              {/* Assertion Status Indicator */}
-              <div className="flex items-center gap-2 text-xs">
-                {assertion.enabled && assertion.type && (
-                  <>
-                    <span className="text-green-500">✓</span>
-                    <span className="text-muted-foreground truncate">
-                      {getAssertionDescription(assertion, step.selector)}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-          
-          {/* Add Assertion Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full h-8 text-xs border-dashed"
-            onClick={() => {
-              const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
-              const newAssertion: StepAssertion = {
-                id: `assert_${Date.now()}`,
-                enabled: true,
-                type: '',
-                target: step.selector || '',
-                expected: step.value || ''
-              };
-              onUpdate({ 
-                assertions: [...assertions, newAssertion],
-                assertion: assertions[0] || newAssertion
-              });
-            }}
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add Verification
-          </Button>
-        </div>
-        
-        {/* Quick Suggestions */}
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Quick Add</Label>
-          <div className="flex flex-wrap gap-1">
-            {getQuickSuggestions(step.type).slice(0, 4).map((suggestion, idx) => (
+        {/* Quick Suggestions - Step-type specific, shown first for easy access */}
+        <div className="space-y-2 p-3 bg-gradient-to-r from-green-500/5 to-emerald-500/5 rounded-lg border border-green-500/20">
+          <Label className="text-xs font-medium text-green-600 dark:text-green-400">
+            ⚡ Quick Add for {step.type.charAt(0).toUpperCase() + step.type.slice(1).replace(/_/g, ' ')} Step
+          </Label>
+          <div className="flex flex-wrap gap-1.5">
+            {getQuickSuggestions(step.type).map((suggestion, idx) => (
               <button
                 key={idx}
                 onClick={() => {
@@ -6567,7 +7030,8 @@ function StepEditor({
                     expectedResult: newExpectedResult
                   });
                 }}
-                className="text-[10px] px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded transition-colors"
+                className="text-[11px] px-2.5 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-700 dark:text-green-400 rounded-md transition-colors border border-green-500/20 hover:border-green-500/40"
+                title={suggestion.text}
               >
                 + {suggestion.label}
               </button>
@@ -6575,18 +7039,212 @@ function StepEditor({
           </div>
         </div>
         
+        {/* Multiple Assertions Support */}
+        <div className="space-y-3">
+          {/* Current Assertions List */}
+          {(step.assertions || (step.assertion?.type ? [step.assertion] : [])).map((assertion, idx) => {
+            // Find assertion details from step-type specific definitions
+            const stepAssertions = getAssertionsForStepType(step.type);
+            let assertionDef: { needsValue?: boolean; needsTarget?: boolean; placeholder?: string; description?: string } | undefined;
+            for (const cat of stepAssertions) {
+              const found = cat.assertions.find(a => a.type === assertion.type);
+              if (found) { assertionDef = found; break; }
+            }
+            
+            return (
+            <div key={assertion.id || idx} className="p-3 bg-muted/50 rounded-lg border border-muted space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  Expected Result {idx + 1}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-red-500"
+                  onClick={() => {
+                    const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                    const newAssertions = assertions.filter((_, i) => i !== idx);
+                    const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                    onUpdate({ 
+                      assertions: newAssertions.length > 0 ? newAssertions : undefined, 
+                      assertion: newAssertions[0] || undefined,
+                      expectedResult: newExpectedResult || step.expectedResult
+                    });
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+              
+              {/* Assertion Type - Step-specific categorized dropdown */}
+              <Select
+                value={assertion.type || ''}
+                onValueChange={(value) => {
+                  const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                  const newAssertions = [...assertions];
+                  newAssertions[idx] = { ...assertion, type: value, enabled: true };
+                  const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                  onUpdate({ 
+                    assertions: newAssertions, 
+                    assertion: newAssertions[0],
+                    expectedResult: newExpectedResult
+                  });
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="What should happen? (Select expected result...)" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[400px]">
+                  {getAssertionsForStepType(step.type).map((category, catIdx) => (
+                    <div key={catIdx}>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                        {category.category}
+                      </div>
+                      {category.assertions.map((a) => (
+                        <SelectItem key={a.type} value={a.type} className="pl-4">
+                          <div className="flex flex-col">
+                            <span>{a.icon || '•'} {a.label}</span>
+                            <span className="text-[10px] text-muted-foreground">{a.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </div>
+                  ))}
+                  {/* Also show generic assertions if needed */}
+                  <div className="border-t mt-1 pt-1">
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                      📋 Generic Assertions
+                    </div>
+                    <SelectItem value="element_visible" className="pl-4">✓ Element visible</SelectItem>
+                    <SelectItem value="element_hidden" className="pl-4">✗ Element hidden</SelectItem>
+                    <SelectItem value="text_contains" className="pl-4">📝 Page contains text</SelectItem>
+                    <SelectItem value="url_contains" className="pl-4">🔗 URL contains</SelectItem>
+                    <SelectItem value="count_equals" className="pl-4">🔢 Element count</SelectItem>
+                  </div>
+                </SelectContent>
+              </Select>
+              
+              {/* Show description of selected assertion */}
+              {assertion.type && assertionDef?.description && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  → {assertionDef.description}
+                </p>
+              )}
+              
+              {/* Expected Value - Show for types that need it */}
+              {assertion.type && (assertionDef?.needsValue || !['element_visible', 'element_hidden', 'element_enabled', 'element_disabled', 'page_loaded', 'no_errors', 'loading_complete', 'url_changed', 'form_submitted', 'form_reset', 'download_starts', 'element_selected', 'element_expanded', 'confirmation_dialog', 'new_tab_opens', 'dropdown_closed', 'network_idle', 'animation_complete', 'screenshot_taken', 'visual_match', 'file_accepted', 'progress_complete', 'value_accepted', 'value_formatted', 'no_validation_error', 'field_valid', 'field_invalid', 'placeholder_hidden', 'row_count_greater', 'no_rows', 'status_200', 'status_201', 'status_2xx', 'status_4xx', 'not_empty', 'record_exists', 'record_not_exists', 'field_not_empty'].includes(assertion.type)) && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Expected Value</Label>
+                  <Input
+                    value={assertion.expected || ''}
+                    onChange={(e) => {
+                      const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                      const newAssertions = [...assertions];
+                      newAssertions[idx] = { ...assertion, expected: e.target.value };
+                      const newExpectedResult = generateExpectedResultFromAssertions(newAssertions, step.selector);
+                      onUpdate({ 
+                        assertions: newAssertions, 
+                        assertion: newAssertions[0],
+                        expectedResult: newExpectedResult
+                      });
+                    }}
+                    placeholder={assertionDef?.placeholder || 'Enter expected value...'}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
+              
+              {/* Target Element - Show for types that need it */}
+              {assertion.type && (assertionDef?.needsTarget || ['element_visible', 'element_hidden', 'value_contains', 'value_equals', 'text_equals', 'count_equals', 'count_greater', 'count_less', 'element_text_equals', 'element_appears', 'element_disappears', 'dependent_field_enabled', 'dependent_dropdown_updated', 'dependent_field_shown', 'dependent_field_hidden', 'price_updated'].includes(assertion.type)) && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Target Element (CSS Selector)</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={assertion.target || ''}
+                      onChange={(e) => {
+                        const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                        const newAssertions = [...assertions];
+                        newAssertions[idx] = { ...assertion, target: e.target.value };
+                        onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
+                      }}
+                      placeholder={assertionDef?.placeholder || step.selector ? `Uses: ${(step.selector || '').slice(0, 25)}...` : 'CSS selector'}
+                      className="h-7 text-xs flex-1"
+                    />
+                    {step.selector && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+                          const newAssertions = [...assertions];
+                          newAssertions[idx] = { ...assertion, target: step.selector };
+                          onUpdate({ assertions: newAssertions, assertion: newAssertions[0] });
+                        }}
+                      >
+                        Use Step
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Assertion Preview */}
+              <div className="flex items-center gap-2 text-xs bg-green-500/5 p-2 rounded border border-green-500/10">
+                {assertion.enabled && assertion.type && (
+                  <>
+                    <span className="text-green-600 dark:text-green-400 font-medium">✓ Expected:</span>
+                    <span className="text-muted-foreground truncate">
+                      {getAssertionDescription(assertion, step.selector)}
+                    </span>
+                  </>
+                )}
+                {!assertion.type && (
+                  <span className="text-muted-foreground italic">Select what should happen after this step...</span>
+                )}
+              </div>
+            </div>
+          )})}
+          
+          {/* Add Assertion Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-9 text-xs border-dashed border-green-500/30 hover:border-green-500/50 hover:bg-green-500/5"
+            onClick={() => {
+              const assertions = step.assertions || (step.assertion?.type ? [step.assertion] : []);
+              const newAssertion: StepAssertion = {
+                id: `assert_${Date.now()}`,
+                enabled: true,
+                type: '',
+                target: step.selector || '',
+                expected: step.value || ''
+              };
+              onUpdate({ 
+                assertions: [...assertions, newAssertion],
+                assertion: assertions[0] || newAssertion
+              });
+            }}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add Expected Result
+          </Button>
+        </div>
+        
         {/* Free-form expected result */}
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Expected Result (human-readable)</Label>
+          <Label className="text-xs text-muted-foreground">Summary (auto-generated or custom)</Label>
           <Textarea
             value={step.expectedResult || ''}
             onChange={(e) => onUpdate({ expectedResult: e.target.value })}
-            placeholder="Auto-generated from assertions above, or type custom..."
+            placeholder="Auto-generated from assertions above, or type custom expected result..."
             rows={2}
             className="text-sm"
           />
         </div>
       </div>
+      )}
 
             {/* Store Result */}
             <div className="space-y-2">
@@ -7010,6 +7668,39 @@ def store_variable(name, value):
 def get_variable(name, default=None):
     """Retrieve a stored variable"""
     return _variables.get(name, default)
+
+# --- VISUAL TESTING FUNCTIONS ---
+def visual_compare(baseline_name, actual_base64, mode="anti_aliased", threshold=0.1):
+    """
+    Compare screenshot against baseline using the Visual Testing API.
+    Returns dict with: passed, diff_percentage, diff_path, error
+    """
+    import requests
+    try:
+        api_url = os.environ.get("QAAI_API_URL", "http://localhost:8000")
+        response = requests.post(
+            f"{api_url}/api/visual-testing/compare-by-name",
+            json={
+                "test_name": baseline_name,
+                "actual": actual_base64,
+                "mode": mode,
+                "threshold": threshold
+            },
+            timeout=30
+        )
+        if response.status_code == 200:
+            result = response.json().get("result", {})
+            return {
+                "passed": result.get("passed", False),
+                "diff_percentage": result.get("diff_percentage", 0),
+                "diff_path": result.get("diff_path"),
+                "ssim_score": result.get("ssim_score"),
+                "execution_time_ms": result.get("execution_time_ms", 0)
+            }
+        else:
+            return {"passed": False, "error": f"API error: {response.status_code}"}
+    except Exception as e:
+        return {"passed": False, "error": str(e)}
 
 def test_${safeName}():
     """${tc.description || tc.name}"""
@@ -7817,6 +8508,29 @@ def test_${safeName}():
       case 'screenshot':
         code += `${indent}page.screenshot(path="step_${index + 1}_${safeName}.png")\n`;
         break;
+      case 'visual_check': {
+        const baselineName = (step as any).baselineName || `step_${index + 1}_baseline`;
+        const visualMode = (step as any).visualMode || 'anti_aliased';
+        const visualThreshold = (step as any).visualThreshold || 0.1;
+        code += `${indent}# Visual Check: Compare current screen against baseline\n`;
+        code += `${indent}_screenshot_path = f"visual_check_step_${index + 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"\n`;
+        code += `${indent}page.screenshot(path=_screenshot_path, full_page=True)\n`;
+        code += `${indent}# Compare against baseline "${baselineName}" using ${visualMode} mode\n`;
+        code += `${indent}with open(_screenshot_path, "rb") as f:\n`;
+        code += `${indent}    _actual_b64 = base64.b64encode(f.read()).decode()\n`;
+        code += `${indent}_visual_result = visual_compare(\n`;
+        code += `${indent}    baseline_name="${baselineName}",\n`;
+        code += `${indent}    actual_base64=_actual_b64,\n`;
+        code += `${indent}    mode="${visualMode}",\n`;
+        code += `${indent}    threshold=${visualThreshold}\n`;
+        code += `${indent})\n`;
+        code += `${indent}if _visual_result.get("passed"):\n`;
+        code += `${indent}    print(f"[✓] Visual check passed: {_visual_result.get('diff_percentage', 0):.2f}% difference")\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    _diff_pct = _visual_result.get("diff_percentage", 0)\n`;
+        code += `${indent}    raise AssertionError(f"Visual check failed: {_diff_pct:.2f}% difference exceeds threshold of ${visualThreshold * 100}%")\n`;
+        break;
+      }
       case 'api':
         code += `${indent}pass  # API call handled separately\n`;
         break;

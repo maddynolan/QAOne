@@ -1,0 +1,43 @@
+{
+  "id": "e36ca606",
+  "name": "Sends  X H R To The Server And Gets Expected Response",
+  "status": "approved",
+  "tags": [
+    "imported",
+    "framework:cypress",
+    "code_alchemy",
+    "imported"
+  ],
+  "created_at": "2026-01-03T00:28:48.042110",
+  "updated_at": "2026-01-03T00:28:48.042110",
+  "metadata": {
+    "start_url": "",
+    "app_type": "generic",
+    "recorded_at": "2026-01-03T00:28:48.042110",
+    "action_count": 0,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "imported",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "sends XHR to the server and gets expected response",
+    "source": "code_alchemy",
+    "repository": "https://github.com/cypress-io/cypress-example-recipes",
+    "branch": "main",
+    "originalMethod": "sends XHR to the server and gets expected response",
+    "originalClass": "",
+    "originalFile": "C:\\Users\\janum\\AppData\\Local\\Temp\\framework_analyzer_qc6dchtv\\examples\\server-communication__xhr-assertions\\cypress\\e2e\\spec.cy.js",
+    "framework": "cypress",
+    "language": "javascript",
+    "importedAt": "2026-01-03T00:28:48.042110"
+  },
+  "actions": [],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

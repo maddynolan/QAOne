@@ -179,12 +179,12 @@ func (e *Engine) Substitute(text string) string {
 	result := text
 	for name, value := range e.variables {
 		strVal := e.toString(value)
+		// Replace {{var_name}} FIRST (before single braces to avoid partial replacement)
+		result = strings.ReplaceAll(result, "{{"+name+"}}", strVal)
 		// Replace ${var_name}
 		result = strings.ReplaceAll(result, "${"+name+"}", strVal)
-		// Replace {var_name}
+		// Replace {var_name} (single braces last)
 		result = strings.ReplaceAll(result, "{"+name+"}", strVal)
-		// Replace {{var_name}}
-		result = strings.ReplaceAll(result, "{{"+name+"}}", strVal)
 	}
 	return result
 }

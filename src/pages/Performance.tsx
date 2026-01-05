@@ -3,7 +3,7 @@ import {
   Zap, Play, Square, BarChart3, TrendingUp, Clock, Users, AlertTriangle, CheckCircle, 
   RefreshCw, Download, ExternalLink, FileText, Settings, Bell, Calendar, 
   Activity, Database, Network, Layers, FileSpreadsheet, Gauge, AlertCircle,
-  Rocket, Target, Timer, Server, Cpu, HardDrive, Wifi, PauseCircle
+  Rocket, Target, Timer, Server, Cpu, HardDrive, Wifi, PauseCircle, Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,26 @@ interface LiveTestData {
   responseTimeHistory: number[];
   rpsHistory: number[];
   errorHistory: number[];
+  cpuHistory: number[];
+  memoryHistory: number[];
+}
+
+interface ServerCpuMetrics {
+  cpu_percent: number;
+  memory_percent: number;
+  disk_percent: number;
+  network_sent_mb: number;
+  network_recv_mb: number;
+  load_average_1m?: number;
+  process_count?: number;
+  top_processes?: Array<{user: string; pid: string; cpu_percent: number; command: string}>;
+}
+
+interface ProtocolRecording {
+  recordingId: string;
+  isActive: boolean;
+  totalRequests: number;
+  totalBytes: number;
 }
 
 // Quick-start scenario presets for e-commerce testing
@@ -140,8 +160,25 @@ export default function Performance() {
   const [systemMetrics, setSystemMetrics] = useState<any>(null);
   const [testHistory, setTestHistory] = useState<any[]>([]);
   
+  // Protocol capture state
+  const [protocolCaptureEnabled, setProtocolCaptureEnabled] = useState(false);
+  const [protocolRecording, setProtocolRecording] = useState<ProtocolRecording | null>(null);
+  
+  // Server CPU monitoring state
+  const [serverMonitoringEnabled, setServerMonitoringEnabled] = useState(false);
+  const [targetServerConfig, setTargetServerConfig] = useState({
+    host: "localhost",
+    serverType: "prometheus" as "linux_ssh" | "windows_wmi" | "prometheus" | "aws_cloudwatch",
+    port: 9090,
+    username: "",
+    password: "",
+  });
+  const [serverCpuMetrics, setServerCpuMetrics] = useState<ServerCpuMetrics | null>(null);
+  const [serverHealthWarnings, setServerHealthWarnings] = useState<string[]>([]);
+  
   const testIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const metricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const serverMetricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadSystemMetrics();
@@ -150,8 +187,164 @@ export default function Performance() {
     return () => {
       if (metricsIntervalRef.current) clearInterval(metricsIntervalRef.current);
       if (testIntervalRef.current) clearInterval(testIntervalRef.current);
+      if (serverMetricsIntervalRef.current) clearInterval(serverMetricsIntervalRef.current);
     };
   }, []);
+
+  // Protocol capture functions
+  const startProtocolCapture = async () => {
+    try {
+      const recordingId = `protocol_${Date.now()}`;
+      const response = await fetch(`${API_BASE_URL}/api/protocol-recording/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recording_id: recordingId,
+          name: `Load Test Protocol Capture`,
+          base_url: customConfig.baseUrl
+        })
+      });
+      
+      if (response.ok) {
+        setProtocolRecording({
+          recordingId,
+          isActive: true,
+          totalRequests: 0,
+          totalBytes: 0
+        });
+        toast.success("🔴 Protocol capture started - all HTTP traffic will be recorded");
+      }
+    } catch (error) {
+      console.error("Failed to start protocol capture:", error);
+      toast.error("Failed to start protocol capture");
+    }
+  };
+
+  const stopProtocolCapture = async () => {
+    if (!protocolRecording) return;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/protocol-recording/stop/${protocolRecording.recordingId}`, {
+        method: "POST"
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(`📊 Protocol capture stopped: ${data.summary?.total_requests || 0} requests captured`);
+        setProtocolRecording(null);
+      }
+    } catch (error) {
+      console.error("Failed to stop protocol capture:", error);
+    }
+  };
+
+  // Server monitoring functions
+  const startServerMonitoring = async () => {
+    try {
+      // Add server to monitor
+      await fetch(`${API_BASE_URL}/api/srm/servers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          alias: "target_server",
+          server_type: targetServerConfig.serverType,
+          host: targetServerConfig.host,
+          port: targetServerConfig.port,
+          username: targetServerConfig.username || undefined,
+          password: targetServerConfig.password || undefined
+        })
+      });
+
+      // Start monitoring
+      await fetch(`${API_BASE_URL}/api/srm/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval_seconds: 2 })
+      });
+
+      setServerMonitoringEnabled(true);
+      
+      // Poll server metrics
+      serverMetricsIntervalRef.current = setInterval(async () => {
+        await loadServerCpuMetrics();
+      }, 2000);
+      
+      toast.success("📡 Server resource monitoring started");
+    } catch (error) {
+      console.error("Failed to start server monitoring:", error);
+      toast.error("Failed to start server monitoring");
+    }
+  };
+
+  const stopServerMonitoring = async () => {
+    try {
+      if (serverMetricsIntervalRef.current) {
+        clearInterval(serverMetricsIntervalRef.current);
+        serverMetricsIntervalRef.current = null;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/api/srm/stop`, {
+        method: "POST"
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setServerMonitoringEnabled(false);
+        toast.success("Server monitoring stopped - summary available in results");
+      }
+    } catch (error) {
+      console.error("Failed to stop server monitoring:", error);
+    }
+  };
+
+  const loadServerCpuMetrics = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/srm/current`);
+      if (response.ok) {
+        const data = await response.json();
+        const serverData = data.servers?.target_server;
+        if (serverData && !serverData.error) {
+          setServerCpuMetrics({
+            cpu_percent: serverData.cpu_percent || 0,
+            memory_percent: serverData.memory_percent || 0,
+            disk_percent: serverData.disk_percent || 0,
+            network_sent_mb: serverData.network_sent_mb || 0,
+            network_recv_mb: serverData.network_recv_mb || 0,
+            load_average_1m: serverData.load_average,
+            process_count: serverData.process_count,
+            top_processes: serverData.top_processes
+          });
+
+          // Check for warnings
+          const warnings: string[] = [];
+          if (serverData.cpu_percent > 80) warnings.push(`⚠️ HIGH CPU: ${serverData.cpu_percent.toFixed(1)}%`);
+          if (serverData.memory_percent > 85) warnings.push(`⚠️ HIGH MEMORY: ${serverData.memory_percent.toFixed(1)}%`);
+          if (serverData.disk_percent > 90) warnings.push(`⚠️ LOW DISK: ${serverData.disk_percent.toFixed(1)}% used`);
+          setServerHealthWarnings(warnings);
+        }
+      }
+    } catch (error) {
+      // Silent fail for polling
+    }
+  };
+
+  const recordResponseTimeToServer = async (responseTimeMs: number, transactionName?: string) => {
+    if (!serverMonitoringEnabled) return;
+    
+    try {
+      await fetch(`${API_BASE_URL}/api/srm/record-response-time`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          response_time_ms: responseTimeMs,
+          transaction_name: transactionName,
+          status: "pass"
+        })
+      });
+    } catch (error) {
+      // Silent fail
+    }
+  };
 
   const loadSystemMetrics = async () => {
     try {
@@ -208,8 +401,20 @@ export default function Performance() {
       metrics: initialMetrics,
       responseTimeHistory: [],
       rpsHistory: [],
-      errorHistory: []
+      errorHistory: [],
+      cpuHistory: [],
+      memoryHistory: []
     });
+
+    // Start protocol capture if enabled
+    if (protocolCaptureEnabled && !protocolRecording) {
+      await startProtocolCapture();
+    }
+
+    // Start server monitoring if enabled
+    if (serverMonitoringEnabled && !serverMetricsIntervalRef.current) {
+      await startServerMonitoring();
+    }
 
     toast.success(`🚀 Load test started: ${scenario?.name || "Custom Test"}`);
 
@@ -235,11 +440,12 @@ export default function Performance() {
       return endpoints[0];
     };
 
-    // Make HTTP requests
+    // Make HTTP requests and capture for protocol recording
     const makeRequest = async () => {
       const endpoint = selectEndpoint();
       const url = `${baseUrl}${endpoint.path}`;
       const reqStart = performance.now();
+      const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       try {
         const response = await fetch(url, {
@@ -252,19 +458,83 @@ export default function Performance() {
         responseTimes.push(duration);
         requestCount++;
         
-        if (response.ok) {
+        const success = response.ok;
+        if (success) {
           successCount++;
         } else {
           failCount++;
         }
         
-        return { success: response.ok, duration };
+        // Send to protocol recording if enabled
+        if (protocolCaptureEnabled && protocolRecording?.recordingId) {
+          try {
+            // Get response headers
+            const responseHeaders: Record<string, string> = {};
+            response.headers.forEach((value, key) => {
+              responseHeaders[key] = value;
+            });
+            
+            // Send captured request to protocol recorder
+            await fetch(`${API_BASE_URL}/api/protocol-recording/request/${protocolRecording.recordingId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                request_id: requestId,
+                timestamp: reqStart,
+                method: endpoint.method,
+                url: url,
+                headers: { "Content-Type": "application/json" },
+                status_code: response.status,
+                response_headers: responseHeaders,
+                response_size: parseInt(response.headers.get("content-length") || "0"),
+                duration_ms: duration,
+                ttfb_ms: duration * 0.3, // Approximate TTFB
+                request_type: "fetch"
+              })
+            }).catch(() => {}); // Silent fail - don't block load test
+            
+            // Update protocol recording stats
+            setProtocolRecording(prev => prev ? {
+              ...prev,
+              totalRequests: (prev.totalRequests || 0) + 1,
+              totalBytes: (prev.totalBytes || 0) + parseInt(response.headers.get("content-length") || "0")
+            } : null);
+          } catch {
+            // Silent fail - protocol capture shouldn't break load test
+          }
+        }
+        
+        return { success, duration };
       } catch (error) {
         const reqEnd = performance.now();
         const duration = reqEnd - reqStart;
         responseTimes.push(duration);
         requestCount++;
         failCount++;
+        
+        // Capture failed request too
+        if (protocolCaptureEnabled && protocolRecording?.recordingId) {
+          try {
+            await fetch(`${API_BASE_URL}/api/protocol-recording/request/${protocolRecording.recordingId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                request_id: requestId,
+                timestamp: reqStart,
+                method: endpoint.method,
+                url: url,
+                headers: { "Content-Type": "application/json" },
+                status_code: 0,
+                duration_ms: duration,
+                request_type: "fetch",
+                error: error instanceof Error ? error.message : "Request failed"
+              })
+            }).catch(() => {});
+          } catch {
+            // Silent fail
+          }
+        }
+        
         return { success: false, duration };
       }
     };
@@ -310,12 +580,20 @@ export default function Performance() {
         elapsedTime: elapsed
       };
 
+      // Record response time to server for correlation
+      if (serverMonitoringEnabled && responseTimes.length > 0) {
+        const avgRecentTime = responseTimes.slice(-10).reduce((a, b) => a + b, 0) / Math.min(responseTimes.length, 10);
+        recordResponseTimeToServer(avgRecentTime, scenario?.name || "Custom Test");
+      }
+
       setCurrentTest(prev => prev ? {
         ...prev,
         metrics,
         responseTimeHistory: [...(prev.responseTimeHistory || []).slice(-30), metrics.avgResponseTime],
         rpsHistory: [...(prev.rpsHistory || []).slice(-30), metrics.requestsPerSecond],
-        errorHistory: [...(prev.errorHistory || []).slice(-30), metrics.errorRate]
+        errorHistory: [...(prev.errorHistory || []).slice(-30), metrics.errorRate],
+        cpuHistory: [...(prev.cpuHistory || []).slice(-30), serverCpuMetrics?.cpu_percent || 0],
+        memoryHistory: [...(prev.memoryHistory || []).slice(-30), serverCpuMetrics?.memory_percent || 0]
       } : null);
 
       // Check if test should end
@@ -328,13 +606,23 @@ export default function Performance() {
     setActiveTab("live");
   };
 
-  const stopTest = (finalMetrics?: TestMetrics) => {
+  const stopTest = async (finalMetrics?: TestMetrics) => {
     if (testIntervalRef.current) {
       clearInterval(testIntervalRef.current);
       testIntervalRef.current = null;
     }
     
     setIsRunning(false);
+
+    // Stop protocol capture if running
+    if (protocolRecording) {
+      await stopProtocolCapture();
+    }
+
+    // Stop server monitoring if running
+    if (serverMonitoringEnabled && serverMetricsIntervalRef.current) {
+      await stopServerMonitoring();
+    }
     
     if (currentTest) {
       const completedTest = {
@@ -449,10 +737,15 @@ export default function Performance() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="quickstart">
             <Rocket className="w-4 h-4 mr-2" />
             Quick Start
+          </TabsTrigger>
+          <TabsTrigger value="record">
+            <Activity className="w-4 h-4 mr-2" />
+            Record
+            {protocolCaptureEnabled && <span className="ml-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
           </TabsTrigger>
           <TabsTrigger value="live">
             <Activity className="w-4 h-4 mr-2" />
@@ -460,7 +753,7 @@ export default function Performance() {
           </TabsTrigger>
           <TabsTrigger value="config">
             <Settings className="w-4 h-4 mr-2" />
-            Custom Config
+            Config
           </TabsTrigger>
           <TabsTrigger value="history">
             <BarChart3 className="w-4 h-4 mr-2" />
@@ -471,6 +764,303 @@ export default function Performance() {
             System
           </TabsTrigger>
         </TabsList>
+
+        {/* Record Tab - Protocol Capture & Server Monitoring */}
+        <TabsContent value="record" className="space-y-4">
+          <Alert>
+            <Activity className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Protocol Recording & Server Monitoring:</strong> Capture HTTP traffic and monitor target server CPU/memory during load tests for comprehensive analysis.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Protocol Capture Card */}
+            <Card className={protocolCaptureEnabled ? "border-red-500 bg-red-500/5" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Network className="w-5 h-5 text-violet-500" />
+                  Protocol Capture
+                  {protocolCaptureEnabled && (
+                    <Badge variant="destructive" className="animate-pulse">
+                      <span className="w-2 h-2 bg-white rounded-full mr-1" />
+                      ENABLED
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Capture all HTTP/HTTPS traffic during load tests for detailed protocol-level analysis
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="protocol-capture">Enable Protocol Capture</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Records request/response details, headers, timing
+                    </p>
+                  </div>
+                  <Switch
+                    id="protocol-capture"
+                    checked={protocolCaptureEnabled}
+                    onCheckedChange={(checked) => {
+                      setProtocolCaptureEnabled(checked);
+                      if (checked) {
+                        toast.success("Protocol capture enabled - will start with next test");
+                      } else {
+                        toast.info("Protocol capture disabled");
+                      }
+                    }}
+                  />
+                </div>
+
+                {protocolCaptureEnabled && (
+                  <div className="p-3 bg-muted rounded-lg space-y-2">
+                    <p className="text-sm font-semibold">What gets captured:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>✓ All HTTP requests & responses</li>
+                      <li>✓ Request/response headers</li>
+                      <li>✓ Response times per request</li>
+                      <li>✓ Request body & response body</li>
+                      <li>✓ Auto-detected correlation values (tokens, session IDs)</li>
+                      <li>✓ WebSocket messages (if enabled)</li>
+                    </ul>
+                  </div>
+                )}
+
+                {protocolRecording && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 space-y-2">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-300 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      Recording Active
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      ID: {protocolRecording.recordingId}
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Requests: {protocolRecording.totalRequests} | Bytes: {protocolRecording.totalBytes}
+                    </p>
+                    <div className="flex gap-2 pt-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/protocol-recording/export-har/${protocolRecording.recordingId}`, {
+                              method: "POST"
+                            });
+                            if (response.ok) {
+                              const data = await response.json();
+                              // Download HAR file
+                              const blob = new Blob([JSON.stringify(data.har, null, 2)], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `loadtest_${protocolRecording.recordingId}.har`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                              toast.success("HAR file exported!");
+                            }
+                          } catch (error) {
+                            toast.error("Failed to export HAR");
+                          }
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Export HAR
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/api/protocol-recording/${protocolRecording.recordingId}`);
+                            if (response.ok) {
+                              const data = await response.json();
+                              console.log("Protocol Recording Data:", data);
+                              toast.success(`Recording has ${data.recording?.total_requests || 0} requests. Check console for details.`);
+                            }
+                          } catch (error) {
+                            toast.error("Failed to fetch recording details");
+                          }
+                        }}
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        View Details
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Server Monitoring Card */}
+            <Card className={serverMonitoringEnabled ? "border-green-500 bg-green-500/5" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Server className="w-5 h-5 text-blue-500" />
+                  Server CPU Monitoring
+                  {serverMonitoringEnabled && (
+                    <Badge variant="default" className="bg-green-500">
+                      MONITORING
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Monitor target server CPU, memory, disk during load tests to detect bottlenecks
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="server-monitoring">Enable Server Monitoring</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Correlates response time with server resources
+                    </p>
+                  </div>
+                  <Switch
+                    id="server-monitoring"
+                    checked={serverMonitoringEnabled}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        startServerMonitoring();
+                      } else {
+                        stopServerMonitoring();
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Server Type</Label>
+                  <Select
+                    value={targetServerConfig.serverType}
+                    onValueChange={(value: "linux_ssh" | "windows_wmi" | "prometheus" | "aws_cloudwatch") => 
+                      setTargetServerConfig({ ...targetServerConfig, serverType: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="prometheus">Prometheus Endpoint</SelectItem>
+                      <SelectItem value="linux_ssh">Linux (SSH)</SelectItem>
+                      <SelectItem value="windows_wmi">Windows (WMI/PowerShell)</SelectItem>
+                      <SelectItem value="aws_cloudwatch">AWS CloudWatch</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Host</Label>
+                    <Input
+                      value={targetServerConfig.host}
+                      onChange={(e) => setTargetServerConfig({ ...targetServerConfig, host: e.target.value })}
+                      placeholder="localhost"
+                    />
+                  </div>
+                  <div>
+                    <Label>Port</Label>
+                    <Input
+                      type="number"
+                      value={targetServerConfig.port}
+                      onChange={(e) => setTargetServerConfig({ ...targetServerConfig, port: parseInt(e.target.value) || 22 })}
+                    />
+                  </div>
+                </div>
+
+                {(targetServerConfig.serverType === "linux_ssh" || targetServerConfig.serverType === "windows_wmi") && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label>Username</Label>
+                      <Input
+                        value={targetServerConfig.username}
+                        onChange={(e) => setTargetServerConfig({ ...targetServerConfig, username: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Password</Label>
+                      <Input
+                        type="password"
+                        value={targetServerConfig.password}
+                        onChange={(e) => setTargetServerConfig({ ...targetServerConfig, password: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {serverCpuMetrics && serverMonitoringEnabled && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 space-y-2">
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+                      Live Server Metrics
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-xs text-muted-foreground">CPU</p>
+                        <p className={`text-lg font-bold ${serverCpuMetrics.cpu_percent > 80 ? 'text-red-500' : 'text-green-600'}`}>
+                          {serverCpuMetrics.cpu_percent.toFixed(1)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Memory</p>
+                        <p className={`text-lg font-bold ${serverCpuMetrics.memory_percent > 85 ? 'text-red-500' : 'text-green-600'}`}>
+                          {serverCpuMetrics.memory_percent.toFixed(1)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Disk</p>
+                        <p className={`text-lg font-bold ${serverCpuMetrics.disk_percent > 90 ? 'text-red-500' : 'text-green-600'}`}>
+                          {serverCpuMetrics.disk_percent.toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {serverHealthWarnings.length > 0 && (
+                  <div className="space-y-1">
+                    {serverHealthWarnings.map((warning, idx) => (
+                      <Alert key={idx} variant="destructive" className="py-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">{warning}</AlertDescription>
+                      </Alert>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Benefits Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Why Use Protocol Capture + Server Monitoring?</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-3 gap-4 text-sm">
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-semibold mb-2">🔍 Find Root Causes</h4>
+                  <p className="text-muted-foreground">
+                    When response times spike, see if it's CPU-bound, memory pressure, or external dependencies.
+                  </p>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-semibold mb-2">📊 Correlation Analysis</h4>
+                  <p className="text-muted-foreground">
+                    Automatically correlate response times with server metrics to identify bottlenecks.
+                  </p>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <h4 className="font-semibold mb-2">🚨 Early Warning</h4>
+                  <p className="text-muted-foreground">
+                    Get alerts when server resources approach critical levels during testing.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Quick Start Tab */}
         <TabsContent value="quickstart" className="space-y-4">
@@ -678,6 +1268,102 @@ export default function Performance() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Server Resource Charts - CPU & Memory */}
+              {serverMonitoringEnabled && currentTest.cpuHistory && currentTest.cpuHistory.length > 0 && (
+                <div className="grid grid-cols-2 gap-4">
+                  <Card className="border-orange-500/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Cpu className="w-5 h-5 text-orange-500" />
+                        Server CPU History
+                        {serverCpuMetrics && (
+                          <Badge variant={serverCpuMetrics.cpu_percent > 80 ? "destructive" : "secondary"}>
+                            {serverCpuMetrics.cpu_percent.toFixed(1)}%
+                          </Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-32 flex items-end gap-1">
+                        {currentTest.cpuHistory.map((cpu, i) => (
+                          <div
+                            key={i}
+                            className={`flex-1 rounded-t transition-all ${cpu > 80 ? 'bg-red-500' : cpu > 60 ? 'bg-orange-500' : 'bg-green-500'}`}
+                            style={{ 
+                              height: `${Math.min(100, cpu)}%`,
+                              minHeight: "4px"
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>0%</span>
+                        <span className="text-orange-500">80% threshold</span>
+                        <span>100%</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-purple-500/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <HardDrive className="w-5 h-5 text-purple-500" />
+                        Server Memory History
+                        {serverCpuMetrics && (
+                          <Badge variant={serverCpuMetrics.memory_percent > 85 ? "destructive" : "secondary"}>
+                            {serverCpuMetrics.memory_percent.toFixed(1)}%
+                          </Badge>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-32 flex items-end gap-1">
+                        {currentTest.memoryHistory.map((mem, i) => (
+                          <div
+                            key={i}
+                            className={`flex-1 rounded-t transition-all ${mem > 85 ? 'bg-red-500' : mem > 70 ? 'bg-purple-500' : 'bg-blue-500'}`}
+                            style={{ 
+                              height: `${Math.min(100, mem)}%`,
+                              minHeight: "4px"
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>0%</span>
+                        <span className="text-purple-500">85% threshold</span>
+                        <span>100%</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Server Health Warnings during test */}
+              {isRunning && serverHealthWarnings.length > 0 && (
+                <Card className="border-red-500 bg-red-500/5">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-red-600 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5" />
+                      Server Health Warnings
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {serverHealthWarnings.map((warning, idx) => (
+                        <div key={idx} className="p-2 bg-red-100 dark:bg-red-900/30 rounded text-sm text-red-700 dark:text-red-300">
+                          {warning}
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground mt-2">
+                        ⚠️ High server resource usage detected - your load test may be approaching the server's capacity limit.
+                        Consider stopping the test to prevent server crash.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </>
           ) : (
             <div className="text-center py-16">

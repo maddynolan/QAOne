@@ -38,6 +38,10 @@ import {
   Sun,
   Moon,
   FileText,
+  Shield,
+  Map,
+  Workflow,
+  Activity,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -225,7 +229,7 @@ function Header() {
   const currentPath = location.pathname;
   const inElectron = isElectron();
 
-  // Web-only features menu items
+  // Extended features menu items (available in both web and desktop)
   const webFeatures = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 },
@@ -238,6 +242,11 @@ function Header() {
     { label: 'Requirements', path: '/requirements', icon: FileText },
     { label: 'Traceability', path: '/traceability', icon: Link2 },
     { label: 'Defects', path: '/defects', icon: Bug },
+    { divider: true },
+    { label: 'Secrets Vault', path: '/secrets', icon: Shield },
+    { label: 'Coverage Map', path: '/coverage', icon: Map },
+    { label: 'Data Flow', path: '/data-flow', icon: Workflow },
+    { label: 'APM Config', path: '/apm', icon: Activity },
     { divider: true },
     { label: 'Framework Analyzer', path: '/framework-analyzer', icon: Wrench },
     { label: 'Element Repository', path: '/elements', icon: Box },
@@ -287,9 +296,8 @@ function Header() {
             );
           })}
           
-          {/* More Dropdown - Web Only */}
-          {!inElectron && (
-            <DropdownMenu>
+          {/* More Dropdown - Available in both Web and Desktop */}
+          <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className={cn(
                   "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200",
@@ -326,7 +334,6 @@ function Header() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
         </nav>
       </div>
       

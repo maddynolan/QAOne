@@ -507,6 +507,76 @@ async def get_releases_paginated(page: int = 1, limit: int = 50):
         return {"releases": [], "total": 0, "page": page, "limit": limit}
 
 
+@router.put("/scale-data/update/{case_id}")
+async def update_scale_test_case(case_id: str, request: Request):
+    """Update a test case in SQLite scale database"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"status": "not_found", "id": case_id}
+        
+        data = await request.json()
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Update automation_status and updated_at
+        cursor.execute("""
+            UPDATE scale_test_cases 
+            SET automation_status = ?, steps = ?, updated_at = ?
+            WHERE id = ?
+        """, (
+            data.get('automation_status', 'none'),
+            json.dumps(data.get('steps', [])),
+            data.get('updated_at', datetime.utcnow().isoformat()),
+            case_id
+        ))
+        updated_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        if updated_count > 0:
+            logger.info(f"Updated test case {case_id} in SQLite scale database: status={data.get('automation_status')}")
+            return {"status": "updated", "id": case_id}
+        else:
+            return {"status": "not_found", "id": case_id}
+    except Exception as e:
+        logger.error(f"Error updating scale database: {str(e)}")
+        return {"status": "error", "error": str(e)}
+
+
+@router.delete("/scale-data/{case_id}")
+async def delete_scale_test_case(case_id: str):
+    """Delete a test case from SQLite scale database"""
+    try:
+        import sqlite3
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "scale_test.db")
+        
+        if not os.path.exists(db_path):
+            return {"status": "not_found", "id": case_id}
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Actually delete the record (hard delete)
+        cursor.execute("DELETE FROM scale_test_cases WHERE id = ?", (case_id,))
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        if deleted_count > 0:
+            logger.info(f"Deleted test case {case_id} from SQLite scale database")
+            return {"status": "deleted", "id": case_id}
+        else:
+            return {"status": "not_found", "id": case_id}
+    except Exception as e:
+        logger.error(f"Error deleting from scale database: {str(e)}")
+        return {"status": "error", "error": str(e)}
+
+
 @router.get("/scale-data")
 async def get_scale_test_data():
     """Get all scale test data from SQLite database - WARNING: Use paginated endpoints for production"""
@@ -522,8 +592,8 @@ async def get_scale_test_data():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Get test cases
-        cursor.execute("SELECT * FROM scale_test_cases")
+        # Get test cases - filter out archived/deleted status, sort newest first
+        cursor.execute("SELECT * FROM scale_test_cases WHERE status IS NULL OR status NOT IN ('archived', 'deleted') ORDER BY created_at DESC")
         test_cases = []
         for row in cursor.fetchall():
             tc = dict(row)

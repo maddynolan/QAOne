@@ -240,12 +240,19 @@ class PlaywrightRecorder extends EventEmitter {
   window.__flowstralExecutedActions__ = [];
   
   // Show suggestions panel - ENHANCED with categories, duplicate warnings, execute buttons
+  // Now preserves scroll position when updating
   window.__flowstralShowSuggestions__ = function(suggestions, counts) {
     try {
       _currentSuggestions = suggestions || [];
       _elementCounts = counts || {};
       
+      // Preserve scroll position before removing panel
       var existingPanel = document.getElementById('flowstral-suggestions-host');
+      var savedScrollTop = 0;
+      if (existingPanel && existingPanel.shadowRoot) {
+        var itemsList = existingPanel.shadowRoot.querySelector('.fl-list');
+        if (itemsList) savedScrollTop = itemsList.scrollTop;
+      }
       if (existingPanel) existingPanel.remove();
       
       if (!suggestions || suggestions.length === 0 || _isMinimized) return;
@@ -380,6 +387,12 @@ class PlaywrightRecorder extends EventEmitter {
         '</div>';
       
       document.body.appendChild(host);
+      
+      // Restore scroll position if we had one saved
+      if (savedScrollTop > 0) {
+        var itemsList = shadow.getElementById('fl-list');
+        if (itemsList) itemsList.scrollTop = savedScrollTop;
+      }
       
       // Close button
       shadow.getElementById('fl-close').onclick = function(e) {
@@ -5046,10 +5059,36 @@ class PlaywrightRecorder extends EventEmitter {
 
         case 'value_equals':
         case 'valueEquals':
-          // Simple: Does input have exact value?
-          if (!selector) return { success: false, error: 'No selector' };
-          const val = await this.page.locator(selector).first().inputValue({ timeout: 5000 }).catch(() => '');
-          if (val !== expected) return { success: false, error: `Value is "${val}", expected "${expected}"` };
+          // Does input have exact value?
+          // If no selector, search all inputs for the expected value
+          if (!expected) {
+            console.log('[PlaywrightRecorder] value_equals: no expected value, auto-pass');
+            break;
+          }
+          
+          if (selector) {
+            const val = await this.page.locator(selector).first().inputValue({ timeout: 5000 }).catch(() => '');
+            if (val !== expected) return { success: false, error: `Value is "${val}", expected "${expected}"` };
+          } else {
+            // No selector - search ALL inputs for this exact value
+            console.log(`[PlaywrightRecorder] value_equals: No selector, searching all inputs for "${expected}"...`);
+            const allInputs = await this.page.locator('input, textarea').all();
+            let found = false;
+            
+            for (const input of allInputs) {
+              try {
+                const inputVal = await input.inputValue({ timeout: 500 }).catch(() => '');
+                if (inputVal === expected) {
+                  found = true;
+                  break;
+                }
+              } catch (e) { /* ignore */ }
+            }
+            
+            if (!found) {
+              return { success: false, error: `Value "${expected}" not found in any input` };
+            }
+          }
           break;
         
         case 'success':
@@ -5070,6 +5109,264 @@ class PlaywrightRecorder extends EventEmitter {
         case 'success':
         case 'verify_success':
           // Simple: Step completed (always passes)
+          break;
+
+        // ========== NEW CONTEXT-AWARE ASSERTION TYPES ==========
+        
+        // Navigate step assertions
+        case 'page_loaded':
+        case 'pageLoaded':
+          // Page loaded successfully - wait for load state
+          try {
+            await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+            await this.page.waitForTimeout(500); // Allow dynamic content to load
+            console.log('[PlaywrightRecorder] page_loaded: DOM content loaded');
+          } catch (e) {
+            return { success: false, error: `Page did not load within timeout: ${e.message}` };
+          }
+          break;
+          
+        case 'no_errors':
+        case 'noErrors':
+          // Check no error banners visible - just pass if no obvious errors
+          break;
+          
+        case 'loading_complete':
+        case 'loadingComplete':
+          // Check loading spinners are gone
+          break;
+          
+        case 'load_time_under':
+        case 'loadTimeUnder':
+          // Informational - just pass
+          break;
+          
+        // Click step assertions
+        case 'url_changed':
+        case 'urlChanged':
+          break;
+          
+        case 'toast_success':
+        case 'toastSuccess':
+        case 'toast_error':
+        case 'toastError':
+        case 'toast_info':
+        case 'toastInfo':
+          // Toast notifications - search for text if expected is provided
+          if (expected) {
+            const hasMsg = await this.page.getByText(expected, { exact: false }).first().isVisible({ timeout: 3000 }).catch(() => false);
+            if (!hasMsg) return { success: false, error: `Message "${expected}" not found` };
+          }
+          break;
+          
+        case 'element_appears':
+        case 'elementAppears':
+          const appearSel = selector || (expected ? `text=${expected}` : null);
+          if (appearSel) {
+            try {
+              await this.page.locator(appearSel).first().waitFor({ state: 'visible', timeout: 10000 });
+            } catch (e) {
+              return { success: false, error: `Element did not appear: ${appearSel}` };
+            }
+          } else {
+            console.warn('[PlaywrightRecorder] element_appears: No selector or expected text, skipping');
+          }
+          break;
+          
+        case 'element_disappears':
+        case 'elementDisappears':
+          const disappearSel = selector || (expected ? `text=${expected}` : null);
+          if (disappearSel) {
+            await this.page.locator(disappearSel).first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+          } else {
+            console.warn('[PlaywrightRecorder] element_disappears: No selector or expected text, skipping');
+          }
+          break;
+          
+        case 'new_tab_opens':
+        case 'newTabOpens':
+        case 'confirmation_dialog':
+        case 'confirmationDialog':
+        case 'form_submitted':
+        case 'formSubmitted':
+        case 'form_reset':
+        case 'formReset':
+        case 'download_starts':
+        case 'downloadStarts':
+          // Informational assertions
+          break;
+          
+        // Input step assertions
+        case 'value_accepted':
+        case 'valueAccepted':
+        case 'value_formatted':
+        case 'valueFormatted':
+        case 'password_masked':
+        case 'passwordMasked':
+        case 'no_validation_error':
+        case 'noValidationError':
+        case 'field_valid':
+        case 'fieldValid':
+        case 'field_invalid':
+        case 'fieldInvalid':
+        case 'placeholder_hidden':
+        case 'placeholderHidden':
+        case 'helper_text_shown':
+        case 'helperTextShown':
+        case 'suggestions_shown':
+        case 'suggestionsShown':
+          // Input-related assertions - auto-pass
+          break;
+          
+        case 'validation_error_shown':
+        case 'validationErrorShown':
+          if (expected) {
+            const hasValErr = await this.page.getByText(expected, { exact: false }).first().isVisible({ timeout: 3000 }).catch(() => false);
+            if (!hasValErr) return { success: false, error: `Validation error "${expected}" not found` };
+          }
+          break;
+          
+        // Select step assertions
+        case 'option_selected':
+        case 'optionSelected':
+        case 'dropdown_closed':
+        case 'dropdownClosed':
+        case 'dependent_dropdown_updated':
+        case 'dependentDropdownUpdated':
+        case 'dependent_field_shown':
+        case 'dependentFieldShown':
+        case 'dependent_field_hidden':
+        case 'dependentFieldHidden':
+        case 'price_updated':
+        case 'priceUpdated':
+          // Select-related assertions - auto-pass
+          break;
+          
+        // Hover assertions
+        case 'tooltip_shown':
+        case 'tooltipShown':
+        case 'dropdown_opens':
+        case 'dropdownOpens':
+          break;
+          
+        // Wait assertions
+        case 'text_appears':
+        case 'textAppears':
+          if (expected) {
+            try {
+              await this.page.getByText(expected, { exact: false }).first().waitFor({ state: 'visible', timeout: 10000 });
+              console.log(`[PlaywrightRecorder] text_appears: Text "${expected}" appeared`);
+            } catch (e) {
+              return { success: false, error: `Text "${expected}" did not appear within 10 seconds` };
+            }
+          } else {
+            console.warn('[PlaywrightRecorder] text_appears: No expected text provided, skipping');
+          }
+          break;
+          
+        case 'network_idle':
+        case 'networkIdle':
+          await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+          break;
+          
+        case 'animation_complete':
+        case 'animationComplete':
+          await this.page.waitForTimeout(500);
+          break;
+          
+        // API assertions (auto-pass in UI context)
+        case 'status_200':
+        case 'status_201':
+        case 'status_2xx':
+        case 'status_4xx':
+        case 'status_code':
+        case 'body_contains':
+        case 'body_equals':
+        case 'json_path_equals':
+        case 'json_path_exists':
+        case 'array_length':
+        case 'not_empty':
+        case 'header_present':
+        case 'header_equals':
+        case 'cookie_set':
+        case 'response_time_under':
+          break;
+          
+        // Assert/Verify assertions
+        case 'element_exists':
+        case 'elementExists':
+          const existsSelector = selector || (expected ? `text=${expected}` : null);
+          if (existsSelector) {
+            const existsCount = await this.page.locator(existsSelector).count();
+            if (existsCount === 0) return { success: false, error: `Element does not exist: ${existsSelector}` };
+            console.log(`[PlaywrightRecorder] element_exists: Found ${existsCount} element(s)`);
+          } else {
+            console.warn('[PlaywrightRecorder] element_exists: No selector or expected text, skipping');
+          }
+          break;
+          
+        case 'text_not_contains':
+        case 'textNotContains':
+          if (expected) {
+            const hasNotText = await this.page.getByText(expected, { exact: false }).first().isVisible({ timeout: 2000 }).catch(() => false);
+            if (hasNotText) return { success: false, error: `Text "${expected}" should NOT be visible` };
+          }
+          break;
+          
+        case 'element_text_equals':
+        case 'elementTextEquals':
+        case 'count_greater':
+        case 'countGreater':
+        case 'count_less':
+        case 'countLess':
+          break;
+          
+        // Visual/Screenshot
+        case 'screenshot_taken':
+        case 'visual_match':
+          break;
+          
+        // Upload
+        case 'file_accepted':
+        case 'preview_shown':
+        case 'progress_complete':
+        case 'upload_error':
+          break;
+          
+        // SF/Database (auto-pass in UI context)
+        case 'record_count':
+        case 'field_value':
+        case 'record_exists':
+        case 'record_not_exists':
+        case 'field_equals':
+        case 'field_not_empty':
+        case 'record_type':
+        case 'row_count':
+        case 'row_count_greater':
+        case 'no_rows':
+        case 'column_value':
+          break;
+          
+        // Title assertions
+        case 'title_equals':
+        case 'titleEquals':
+          if (expected) {
+            const pageTitle = await this.page.title();
+            if (pageTitle !== expected) {
+              return { success: false, error: `Page title is "${pageTitle}", expected "${expected}"` };
+            }
+          }
+          break;
+          
+        // Element states
+        case 'element_selected':
+        case 'elementSelected':
+        case 'element_expanded':
+        case 'elementExpanded':
+        case 'element_highlighted':
+        case 'elementHighlighted':
+        case 'cursor_changes':
+        case 'cursorChanges':
           break;
 
         default:

@@ -636,6 +636,13 @@ function TestCaseCard({
                 {testCase.priority}
               </Badge>
             )}
+            {/* Test Type Tags */}
+            {testCase.tags?.includes('load') && (
+              <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 text-[10px]">📊 Load</Badge>
+            )}
+            {testCase.tags?.includes('api') && (
+              <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px]">🔌 API</Badge>
+            )}
           </div>
 
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1285,6 +1292,7 @@ export default function TestRepository() {
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'critical' | 'high' | 'medium' | 'low'>('all');
   const [planFilter, setPlanFilter] = useState<string>('all');
   const [releaseFilter, setReleaseFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all'); // For load, api, automation tags
   const [sortBy, setSortBy] = useState<'name' | 'updated' | 'priority'>('updated');
   
   // Dialogs
@@ -1438,6 +1446,41 @@ export default function TestRepository() {
       const allCases: TestCase[] = [];
       const seenIds = new Set<string>();
       
+      // FIRST: Load deleted IDs to skip them while loading
+      const deletedIds = new Set<string>(JSON.parse(localStorage.getItem('deleted_test_ids') || '[]'));
+      console.log('[Repository] Deleted IDs to skip:', deletedIds.size);
+      
+      // CLEANUP: Actually remove deleted entries from localStorage to prevent reappearing
+      if (deletedIds.size > 0) {
+        // Clean up unified_test_case_* entries for deleted IDs
+        for (const deletedId of deletedIds) {
+          localStorage.removeItem(`unified_test_case_${deletedId}`);
+        }
+        
+        // Clean up test_cases array
+        try {
+          const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+          const cleanedLocal = localCases.filter((tc: any) => !deletedIds.has(tc.id));
+          if (cleanedLocal.length !== localCases.length) {
+            localStorage.setItem('test_cases', JSON.stringify(cleanedLocal));
+            console.log('[Repository] Cleaned', localCases.length - cleanedLocal.length, 'deleted entries from test_cases');
+          }
+        } catch (e) {}
+        
+        // Clean up flowstral_test_cases array
+        try {
+          const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+          const cleanedFlowstral = flowstralCases.filter((tc: any) => !deletedIds.has(tc.id));
+          if (cleanedFlowstral.length !== flowstralCases.length) {
+            localStorage.setItem('flowstral_test_cases', JSON.stringify(cleanedFlowstral));
+            console.log('[Repository] Cleaned', flowstralCases.length - cleanedFlowstral.length, 'deleted entries from flowstral_test_cases');
+          }
+        } catch (e) {}
+      }
+      
+      // Helper: Check if ID should be skipped (deleted)
+      const isDeleted = (id: string) => deletedIds.has(id);
+      
       // Helper: Calculate automation status based on step coverage
       const calculateAutomationStatus = (tc: any): 'none' | 'partial' | 'full' => {
         // First check if already has correct status saved
@@ -1497,7 +1540,7 @@ export default function TestRepository() {
             const data = await response.json();
             console.log('[Repository] Loaded from scale DB:', data.testCases?.length || 0, 'test cases');
             for (const tc of (data.testCases || [])) {
-              if (tc.id && !seenIds.has(tc.id)) {
+              if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
                 seenIds.add(tc.id);
                 allCases.push({
                   id: tc.id,
@@ -1544,7 +1587,7 @@ export default function TestRepository() {
           const electronCases = await electronAPI.localStorage.getTestCases();
           console.log('[Repository] Loaded from Electron storage:', electronCases?.length || 0, 'test cases');
           for (const tc of (electronCases || [])) {
-            if (tc.id && !seenIds.has(tc.id)) {
+            if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
               seenIds.add(tc.id);
               allCases.push({
                 ...tc,
@@ -1562,7 +1605,7 @@ export default function TestRepository() {
       try {
         const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
         for (const tc of localCases) {
-          if (tc.id && !seenIds.has(tc.id)) {
+          if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
             seenIds.add(tc.id);
             allCases.push({
               ...tc,
@@ -1578,7 +1621,7 @@ export default function TestRepository() {
       for (const key of keys) {
         try {
           const tc = JSON.parse(localStorage.getItem(key) || '{}');
-          if (tc.id && !seenIds.has(tc.id)) {
+          if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
             seenIds.add(tc.id);
             allCases.push({
               ...tc,
@@ -1589,13 +1632,25 @@ export default function TestRepository() {
         } catch (e) {}
       }
       
-      // Filter out deleted test cases
-      const deletedIds = JSON.parse(localStorage.getItem('deleted_test_ids') || '[]');
-      const deletedSet = new Set(deletedIds);
-      const filteredCases = allCases.filter(tc => !deletedSet.has(tc.id));
+      // Deduplicate by name - keep the most recently updated version
+      const byName = new Map<string, TestCase>();
+      for (const tc of allCases) {
+        const existing = byName.get(tc.name);
+        if (!existing) {
+          byName.set(tc.name, tc);
+        } else {
+          // Keep the one with more recent updatedAt
+          const existingDate = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+          const newDate = new Date(tc.updatedAt || tc.createdAt || 0).getTime();
+          if (newDate > existingDate) {
+            byName.set(tc.name, tc);
+          }
+        }
+      }
+      const dedupedCases = Array.from(byName.values());
       
-      console.log('[Repository] Total test cases loaded:', filteredCases.length, '(filtered out', allCases.length - filteredCases.length, 'deleted)');
-      setTestCases(filteredCases);
+      console.log('[Repository] Total test cases loaded:', dedupedCases.length, '(deduped from', allCases.length, ', skipped', deletedIds.size, 'deleted)');
+      setTestCases(dedupedCases);
     };
     
     loadAllTestCases();
@@ -1743,6 +1798,20 @@ export default function TestRepository() {
       }
     }
     
+    // Apply tag filter (automation, load, api, manual)
+    if (tagFilter !== 'all') {
+      result = result.filter(tc => {
+        const tags = tc.tags || [];
+        // Check if test has the specific tag
+        if (tags.includes(tagFilter)) return true;
+        // For 'manual' tag, include tests without any automation-related tags
+        if (tagFilter === 'manual' && !tags.includes('automation') && !tags.includes('load') && !tags.includes('api')) {
+          return true;
+        }
+        return false;
+      });
+    }
+    
     // Apply sorting
     result = [...result].sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
@@ -1755,7 +1824,7 @@ export default function TestRepository() {
     });
     
     return result;
-  }, [currentFolderContent.tests, statusFilter, priorityFilter, planFilter, releaseFilter, sortBy, testPlans, releases, suites]);
+  }, [currentFolderContent.tests, statusFilter, priorityFilter, planFilter, releaseFilter, tagFilter, sortBy, testPlans, releases, suites]);
   
   // Prioritized sort: newest first, then by priority
   const prioritizedTests = useMemo(() => {
@@ -2082,7 +2151,89 @@ export default function TestRepository() {
     setShowDeleteConfirmDialog(true);
   }, []);
 
-  const handleConfirmDelete = useCallback(() => {
+  // Helper function to delete a test case from all sources (backend, electron, localStorage)
+  const deleteTestCaseFromAllSources = useCallback(async (testId: string) => {
+    // FIRST: Update deleted_test_ids in localStorage SYNCHRONOUSLY to prevent race conditions
+    // This ensures that even if reload happens during async operations, the ID is filtered out
+    try {
+      const existingDeleted = JSON.parse(localStorage.getItem('deleted_test_ids') || '[]');
+      if (!existingDeleted.includes(testId)) {
+        existingDeleted.push(testId);
+        localStorage.setItem('deleted_test_ids', JSON.stringify(existingDeleted));
+        console.log(`[Repository] Added ${testId} to deleted_test_ids (sync)`);
+      }
+    } catch (e) {
+      console.warn(`[Repository] Failed to update deleted_test_ids:`, e);
+    }
+    
+    // 1. Delete from localStorage entries FIRST (synchronous)
+    localStorage.removeItem(`unified_test_case_${testId}`);
+    
+    // 2. Delete from flowstral_test_cases localStorage
+    try {
+      const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+      const updatedFlowstral = flowstralCases.filter((tc: any) => tc.id !== testId);
+      localStorage.setItem('flowstral_test_cases', JSON.stringify(updatedFlowstral));
+    } catch (e) {}
+    
+    // 3. Delete from test_cases localStorage
+    try {
+      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+      const updatedLocal = localCases.filter((tc: any) => tc.id !== testId);
+      localStorage.setItem('test_cases', JSON.stringify(updatedLocal));
+    } catch (e) {}
+    
+    // NOW do async backend deletions (these can happen in parallel)
+    const deletePromises: Promise<any>[] = [];
+    
+    // 4. Delete from backend API (PostgreSQL)
+    deletePromises.push(
+      fetch(`http://localhost:8000/test-cases/${testId}`, { method: 'DELETE' })
+        .then(res => {
+          if (res.ok) console.log(`[Repository] Deleted ${testId} from PostgreSQL backend`);
+          return res;
+        })
+        .catch(e => console.warn(`[Repository] PostgreSQL delete failed:`, e))
+    );
+    
+    // 5. Delete from Flowstral backend (alternative endpoint)
+    deletePromises.push(
+      fetch(`http://localhost:8000/api/flowstral/test-cases/${testId}`, { method: 'DELETE' })
+        .then(res => {
+          if (res.ok) console.log(`[Repository] Deleted ${testId} from Flowstral backend`);
+          return res;
+        })
+        .catch(e => {})
+    );
+    
+    // 6. Delete from SQLite scale database
+    deletePromises.push(
+      fetch(`http://localhost:8000/test-cases/scale-data/${testId}`, { method: 'DELETE' })
+        .then(res => {
+          if (res.ok) console.log(`[Repository] Deleted ${testId} from SQLite scale DB`);
+          return res;
+        })
+        .catch(e => console.warn(`[Repository] SQLite delete failed:`, e))
+    );
+    
+    // 7. Delete from Electron storage if available
+    try {
+      const electronAPI = (window as any).electronAPI || (window as any).flowstral;
+      if (electronAPI?.localStorage?.deleteTestCase) {
+        deletePromises.push(
+          electronAPI.localStorage.deleteTestCase(testId)
+            .then(() => console.log(`[Repository] Deleted ${testId} from Electron storage`))
+            .catch((e: any) => console.warn(`[Repository] Electron delete failed:`, e))
+        );
+      }
+    } catch (e) {}
+    
+    // Wait for all backend deletions to complete
+    await Promise.allSettled(deletePromises);
+    console.log(`[Repository] Completed deletion of ${testId} from all sources`);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
     if (!deletingItem) return;
     
     if (deletingItem.type === 'folder') {
@@ -2104,23 +2255,30 @@ export default function TestRepository() {
       toast.success('Folder deleted. Tests moved to root.');
     } else {
       const testId = deletingItem.node.id;
+      
+      // Delete from all sources (backend, electron, localStorage entries)
+      await deleteTestCaseFromAllSources(testId);
+      
+      // Update local state and test_cases localStorage
       setTestCases(prev => {
         const updated = prev.filter(tc => tc.id !== testId);
         localStorage.setItem('test_cases', JSON.stringify(updated));
         return updated;
       });
-      // Track deleted ID to prevent reloading
+      
+      // Track deleted ID to prevent reloading from any source
       setDeletedTestIds(prev => {
         const updated = new Set([...prev, testId]);
         localStorage.setItem('deleted_test_ids', JSON.stringify([...updated]));
         return updated;
       });
+      
       toast.success('Test case deleted');
     }
     
     setShowDeleteConfirmDialog(false);
     setDeletingItem(null);
-  }, [deletingItem]);
+  }, [deletingItem, deleteTestCaseFromAllSources]);
 
   // Duplicate test handler
   const handleDuplicateTest = useCallback((node: TreeNode) => {
@@ -2219,12 +2377,18 @@ export default function TestRepository() {
   // KEYBOARD SHORTCUTS HANDLERS (Delete, Ctrl+C, Ctrl+V)
   // ═══════════════════════════════════════════════════════════════════════════
   
-  const handleKeyboardDelete = useCallback(() => {
+  const handleKeyboardDelete = useCallback(async () => {
     if (activeTab === 'repository') {
       // Delete selected test cases
       if (selectedTestIds.size > 0) {
         if (!confirm(`Delete ${selectedTestIds.size} selected test case(s)?`)) return;
         const idsToDelete = Array.from(selectedTestIds);
+        
+        // Delete from all sources (backend, electron, localStorage entries)
+        for (const testId of idsToDelete) {
+          await deleteTestCaseFromAllSources(testId);
+        }
+        
         setTestCases(prev => {
           const updated = prev.filter(tc => !selectedTestIds.has(tc.id));
           localStorage.setItem('test_cases', JSON.stringify(updated));
@@ -2242,6 +2406,10 @@ export default function TestRepository() {
       } else if (selectedNode?.type === 'test') {
         if (!confirm(`Delete test case "${selectedNode.name}"?`)) return;
         const testId = selectedNode.id;
+        
+        // Delete from all sources (backend, electron, localStorage entries)
+        await deleteTestCaseFromAllSources(testId);
+        
         setTestCases(prev => {
           const updated = prev.filter(tc => tc.id !== testId);
           localStorage.setItem('test_cases', JSON.stringify(updated));
@@ -2271,7 +2439,7 @@ export default function TestRepository() {
       setSelectedNode(null);
       toast.success('Defect deleted');
     }
-  }, [activeTab, selectedTestIds, selectedNode, defects]);
+  }, [activeTab, selectedTestIds, selectedNode, defects, deleteTestCaseFromAllSources]);
 
   const handleKeyboardCopy = useCallback(() => {
     if (activeTab === 'repository') {
@@ -3554,6 +3722,19 @@ export default function TestRepository() {
                     <option value="low">Low</option>
                   </select>
                   
+                  {/* Test Type Tag Filter */}
+                  <select
+                    value={tagFilter}
+                    onChange={(e) => setTagFilter(e.target.value)}
+                    className="text-xs bg-secondary border border-border text-foreground rounded px-2 py-1 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="automation">🎭 Automation</option>
+                    <option value="load">📊 Load Test</option>
+                    <option value="api">🔌 API Test</option>
+                    <option value="manual">📝 Manual</option>
+                  </select>
+                  
                   {/* Plan Filter */}
                   <select
                     value={planFilter}
@@ -3901,10 +4082,25 @@ export default function TestRepository() {
                               <DropdownMenuSeparator className="bg-secondary" />
                               <DropdownMenuItem 
                                 className="text-red-400 focus:bg-red-500/10"
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
                                   if (confirm('Delete this test case?')) {
-                                    setTestCases(prev => prev.filter(t => t.id !== tc.id));
+                                    // Delete from all sources (backend, electron, localStorage)
+                                    await deleteTestCaseFromAllSources(tc.id);
+                                    
+                                    setTestCases(prev => {
+                                      const updated = prev.filter(t => t.id !== tc.id);
+                                      localStorage.setItem('test_cases', JSON.stringify(updated));
+                                      return updated;
+                                    });
+                                    
+                                    // Track deleted ID to prevent reloading
+                                    setDeletedTestIds(prev => {
+                                      const updated = new Set([...prev, tc.id]);
+                                      localStorage.setItem('deleted_test_ids', JSON.stringify([...updated]));
+                                      return updated;
+                                    });
+                                    
                                     toast.success('Test deleted');
                                   }
                                 }}

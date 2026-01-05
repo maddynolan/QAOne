@@ -1,0 +1,43 @@
+{
+  "id": "b8a5a7de",
+  "name": "Index.Html",
+  "status": "approved",
+  "tags": [
+    "imported",
+    "framework:cypress",
+    "code_alchemy",
+    "imported"
+  ],
+  "created_at": "2026-01-03T00:28:48.073137",
+  "updated_at": "2026-01-03T00:28:48.073137",
+  "metadata": {
+    "start_url": "",
+    "app_type": "generic",
+    "recorded_at": "2026-01-03T00:28:48.073137",
+    "action_count": 0,
+    "browser": "chromium",
+    "test_type": "automated",
+    "category": "imported",
+    "priority": "medium",
+    "output_format": "python",
+    "description": "index.html",
+    "source": "code_alchemy",
+    "repository": "https://github.com/cypress-io/cypress-example-recipes",
+    "branch": "main",
+    "originalMethod": "index.html",
+    "originalClass": "",
+    "originalFile": "C:\\Users\\janum\\AppData\\Local\\Temp\\framework_analyzer_qc6dchtv\\examples\\server-communication__xhr-assertions\\cypress\\e2e\\spec.cy.js",
+    "framework": "cypress",
+    "language": "javascript",
+    "importedAt": "2026-01-03T00:28:48.073137"
+  },
+  "actions": [],
+  "script": null,
+  "execution_history": [],
+  "notes": "",
+  "approval": {
+    "approved_by": null,
+    "approved_at": null,
+    "comments": []
+  }
+}

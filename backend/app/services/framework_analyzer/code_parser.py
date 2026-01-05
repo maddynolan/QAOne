@@ -370,24 +370,51 @@ class CodeParser:
             for match in re.finditer(self.JS_PATTERNS["describe"], content):
                 classes.append(match.group(1))
             
-            # Extract test cases (it/test blocks)
-            for match in re.finditer(self.JS_PATTERNS["it"], content):
-                test_name = match.group(1)
-                test_method = TestMethod(
-                    name=test_name,
-                    file_path=file_path,
-                    description=test_name,
-                )
-                test_methods.append(test_method)
+            # Better approach: Find all test definitions and extract their bodies by bracket matching
+            # Pattern to find it(...) or test(...) start positions
+            test_pattern = re.compile(r"(?:it|test)\s*\(\s*['\"]([^'\"]+)['\"]", re.MULTILINE)
             
-            for match in re.finditer(self.JS_PATTERNS["test"], content):
+            for match in test_pattern.finditer(content):
                 test_name = match.group(1)
-                test_method = TestMethod(
-                    name=test_name,
-                    file_path=file_path,
-                    description=test_name,
-                )
-                test_methods.append(test_method)
+                start_pos = match.end()
+                
+                # Find the function body by looking for => or function, then matching braces
+                remainder = content[start_pos:]
+                
+                # Look for arrow function or regular function
+                func_match = re.search(r'(?:,\s*(?:async\s*)?\([^)]*\)\s*=>|,\s*(?:async\s*)?function\s*\([^)]*\))\s*\{', remainder)
+                if func_match:
+                    body_start = func_match.end() - 1  # Position of opening {
+                    test_body = self._extract_function_body(remainder[body_start:])
+                    
+                    if test_body:
+                        steps = self._extract_cypress_steps(test_body)
+                        logger.debug(f"Test '{test_name}' extracted {len(steps)} steps from body length {len(test_body)}")
+                        test_method = TestMethod(
+                            name=test_name,
+                            file_path=file_path,
+                            description=test_name,
+                            steps=steps,
+                        )
+                        test_methods.append(test_method)
+                    else:
+                        # Fallback: create test without steps
+                        test_method = TestMethod(
+                            name=test_name,
+                            file_path=file_path,
+                            description=test_name,
+                            steps=[],
+                        )
+                        test_methods.append(test_method)
+                else:
+                    # Couldn't find function body, add test without steps
+                    test_method = TestMethod(
+                        name=test_name,
+                        file_path=file_path,
+                        description=test_name,
+                        steps=[],
+                    )
+                    test_methods.append(test_method)
             
             # Extract Cypress locators
             locators.extend(self._extract_js_locators(content, file_path))
@@ -406,6 +433,25 @@ class CodeParser:
             classes=classes,
             errors=errors
         )
+    
+    def _extract_function_body(self, content: str) -> str:
+        """Extract function body by matching braces."""
+        if not content or content[0] != '{':
+            return ""
+        
+        depth = 0
+        start = 0
+        
+        for i, char in enumerate(content):
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    # Return body without outer braces
+                    return content[1:i]
+        
+        return ""
     
     def _parse_robot(self, file_path: str, content: str) -> ParsedFile:
         """Parse Robot Framework files"""
@@ -546,10 +592,22 @@ class CodeParser:
         return po
     
     def _extract_java_test_method(self, method_name: str, content: str, file_path: str) -> Optional[TestMethod]:
-        """Extract a Java test method"""
+        """Extract a Java test method with steps"""
+        # Find the method body (simplified - looks for method signature and extracts body)
+        method_pattern = rf'(?:public|private|protected)?\s*void\s+{re.escape(method_name)}\s*\([^)]*\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*\{{([^{{}}]*(?:\{{[^{{}}]*\}}[^{{}}]*)*)\}}'
+        method_match = re.search(method_pattern, content, re.DOTALL)
+        
+        method_body = ""
+        if method_match:
+            method_body = method_match.group(1)
+        
+        # Extract steps from the method body
+        steps = self._extract_selenium_java_steps(method_body)
+        
         test = TestMethod(
             name=method_name,
             file_path=file_path,
+            steps=steps,
         )
         
         # Find annotations
@@ -564,11 +622,108 @@ class CodeParser:
         
         return test
     
+    def _extract_selenium_java_steps(self, method_body: str) -> List[TestStep]:
+        """Extract Selenium Java commands as test steps"""
+        steps = []
+        
+        if not method_body:
+            return steps
+        
+        # driver.get("url") - navigation
+        for match in re.finditer(r'driver\.get\s*\(\s*"([^"]+)"', method_body):
+            steps.append(TestStep(
+                action="navigate",
+                target="",
+                value=match.group(1),
+                description=f"Navigate to {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # driver.navigate().to("url") - navigation
+        for match in re.finditer(r'driver\.navigate\(\)\.to\s*\(\s*"([^"]+)"', method_body):
+            steps.append(TestStep(
+                action="navigate",
+                target="",
+                value=match.group(1),
+                description=f"Navigate to {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # findElement(By.xxx("selector")).click() - click
+        for match in re.finditer(r'findElement\s*\(\s*By\.(\w+)\s*\(\s*"([^"]+)"\s*\)\s*\)\.click\s*\(', method_body):
+            locator_type, selector = match.group(1), match.group(2)
+            steps.append(TestStep(
+                action="click",
+                target=selector,
+                value="",
+                description=f"Click on element ({locator_type}: {selector})",
+                original_code=match.group(0),
+            ))
+        
+        # findElement(By.xxx("selector")).sendKeys("value") - type
+        for match in re.finditer(r'findElement\s*\(\s*By\.(\w+)\s*\(\s*"([^"]+)"\s*\)\s*\)\.sendKeys\s*\(\s*"([^"]+)"', method_body):
+            locator_type, selector, value = match.group(1), match.group(2), match.group(3)
+            steps.append(TestStep(
+                action="fill",
+                target=selector,
+                value=value,
+                description=f"Type '{value}' into element ({locator_type}: {selector})",
+                original_code=match.group(0),
+            ))
+        
+        # findElement(By.xxx("selector")).clear() - clear
+        for match in re.finditer(r'findElement\s*\(\s*By\.(\w+)\s*\(\s*"([^"]+)"\s*\)\s*\)\.clear\s*\(', method_body):
+            locator_type, selector = match.group(1), match.group(2)
+            steps.append(TestStep(
+                action="clear",
+                target=selector,
+                value="",
+                description=f"Clear element ({locator_type}: {selector})",
+                original_code=match.group(0),
+            ))
+        
+        # Assert statements
+        for match in re.finditer(r'(?:Assert|assertThat|assertEquals|assertTrue|assertFalse)\s*\.\s*(\w+)\s*\(([^;]+)\)', method_body):
+            assert_method, args = match.group(1), match.group(2)
+            steps.append(TestStep(
+                action="assert",
+                target="",
+                value="",
+                description=f"Assert {assert_method}: {args[:50]}",
+                original_code=match.group(0),
+            ))
+        
+        # Page object method calls
+        for match in re.finditer(r'(\w+Page|\w+page)\.(\w+)\s*\(([^)]*)\)', method_body, re.IGNORECASE):
+            page_obj, method, args = match.group(1), match.group(2), match.group(3)
+            if method not in ['getClass', 'toString', 'equals', 'hashCode']:
+                steps.append(TestStep(
+                    action="custom",
+                    target=f"{page_obj}.{method}",
+                    value=args.strip() if args else "",
+                    description=f"Call {page_obj}.{method}({args.strip()[:30] if args else ''})",
+                    original_code=match.group(0),
+                ))
+        
+        return steps
+    
     def _extract_python_test_method(self, method_name: str, content: str, file_path: str) -> Optional[TestMethod]:
-        """Extract a Python test method"""
+        """Extract a Python test method with steps"""
+        # Find the method body
+        method_pattern = rf'def\s+{re.escape(method_name)}\s*\([^)]*\):\s*\n((?:[ \t]+[^\n]*\n?)+)'
+        method_match = re.search(method_pattern, content)
+        
+        method_body = ""
+        if method_match:
+            method_body = method_match.group(1)
+        
+        # Extract steps from the method body
+        steps = self._extract_selenium_python_steps(method_body)
+        
         test = TestMethod(
             name=method_name,
             file_path=file_path,
+            steps=steps,
         )
         
         # Find pytest markers
@@ -581,6 +736,89 @@ class CodeParser:
             test.priority = "high"
         
         return test
+    
+    def _extract_selenium_python_steps(self, method_body: str) -> List[TestStep]:
+        """Extract Selenium/Playwright Python commands as test steps"""
+        steps = []
+        
+        if not method_body:
+            return steps
+        
+        # driver.get / page.goto - navigation
+        for match in re.finditer(r'(?:driver|page|self\.driver|self\.page)\.(?:get|goto)\s*\(\s*["\']([^"\']+)["\']', method_body):
+            steps.append(TestStep(
+                action="navigate",
+                target="",
+                value=match.group(1),
+                description=f"Navigate to {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # find_element + click - element click
+        for match in re.finditer(r'(?:driver|self\.driver)\.find_element\s*\(\s*(?:By\.)?(\w+)\s*,\s*["\']([^"\']+)["\']\s*\)\.click\s*\(', method_body):
+            locator_type, selector = match.group(1), match.group(2)
+            steps.append(TestStep(
+                action="click",
+                target=selector,
+                value="",
+                description=f"Click on element ({locator_type}: {selector})",
+                original_code=match.group(0),
+            ))
+        
+        # find_element + send_keys - text input
+        for match in re.finditer(r'(?:driver|self\.driver)\.find_element\s*\(\s*(?:By\.)?(\w+)\s*,\s*["\']([^"\']+)["\']\s*\)\.send_keys\s*\(\s*["\']([^"\']+)["\']', method_body):
+            locator_type, selector, value = match.group(1), match.group(2), match.group(3)
+            steps.append(TestStep(
+                action="fill",
+                target=selector,
+                value=value,
+                description=f"Type '{value}' into element ({locator_type}: {selector})",
+                original_code=match.group(0),
+            ))
+        
+        # page.locator().click() - Playwright click
+        for match in re.finditer(r'page\.locator\s*\(\s*["\']([^"\']+)["\']\s*\)\.click\s*\(', method_body):
+            steps.append(TestStep(
+                action="click",
+                target=match.group(1),
+                value="",
+                description=f"Click on {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # page.locator().fill() - Playwright fill
+        for match in re.finditer(r'page\.locator\s*\(\s*["\']([^"\']+)["\']\s*\)\.fill\s*\(\s*["\']([^"\']+)["\']', method_body):
+            steps.append(TestStep(
+                action="fill",
+                target=match.group(1),
+                value=match.group(2),
+                description=f"Type '{match.group(2)}' into {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # assert / expect statements
+        for match in re.finditer(r'assert\s+([^\n]+)', method_body):
+            steps.append(TestStep(
+                action="assert",
+                target="",
+                value="",
+                description=f"Assert: {match.group(1)[:50]}",
+                original_code=match.group(0),
+            ))
+        
+        # Page object method calls (self.page.xxx or page_object.xxx)
+        for match in re.finditer(r'(?:self\.)?(\w+_page|\w+page)\.(\w+)\s*\(([^)]*)\)', method_body, re.IGNORECASE):
+            page_obj, method, args = match.group(1), match.group(2), match.group(3)
+            if method not in ['__init__', 'setup', 'teardown']:
+                steps.append(TestStep(
+                    action="custom",
+                    target=f"{page_obj}.{method}",
+                    value=args.strip() if args else "",
+                    description=f"Call {page_obj}.{method}({args.strip() if args else ''})",
+                    original_code=match.group(0),
+                ))
+        
+        return steps
     
     def _extract_java_locators(self, content: str, file_path: str) -> List[Locator]:
         """Extract all locators from Java code"""
@@ -671,6 +909,106 @@ class CodeParser:
             ))
         
         return locators
+    
+    def _extract_cypress_steps(self, test_body: str) -> List[TestStep]:
+        """Extract Cypress commands as test steps from test body"""
+        steps = []
+        
+        # cy.visit - navigation
+        for match in re.finditer(r"cy\.visit\s*\(\s*['\"]([^'\"]+)['\"]", test_body):
+            steps.append(TestStep(
+                action="navigate",
+                target="",
+                value=match.group(1),
+                description=f"Navigate to {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).click() - click action
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.click\s*\(", test_body):
+            steps.append(TestStep(
+                action="click",
+                target=match.group(1),
+                value="",
+                description=f"Click on {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).type('value') - type action
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.type\s*\(\s*['\"]([^'\"]+)['\"]", test_body):
+            steps.append(TestStep(
+                action="fill",
+                target=match.group(1),
+                value=match.group(2),
+                description=f"Type '{match.group(2)}' into {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.contains(...).click() - click by text
+        for match in re.finditer(r"cy\.contains\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.click\s*\(", test_body):
+            steps.append(TestStep(
+                action="click",
+                target=f"text={match.group(1)}",
+                value="",
+                description=f"Click on text '{match.group(1)}'",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).should(...) - assertion
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.should\s*\(\s*['\"]([^'\"]+)['\"](?:\s*,\s*['\"]([^'\"]+)['\"])?\s*\)", test_body):
+            selector = match.group(1)
+            assertion_type = match.group(2)
+            expected_value = match.group(3) or ""
+            steps.append(TestStep(
+                action="assert",
+                target=selector,
+                value=expected_value,
+                description=f"Assert {selector} {assertion_type} {expected_value}".strip(),
+                original_code=match.group(0),
+            ))
+        
+        # cy.wait - wait action
+        for match in re.finditer(r"cy\.wait\s*\(\s*(\d+|['\"]@[^'\"]+['\"])\s*\)", test_body):
+            wait_value = match.group(1).strip("'\"")
+            steps.append(TestStep(
+                action="wait",
+                target="",
+                value=wait_value,
+                description=f"Wait for {wait_value}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).clear() - clear action
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.clear\s*\(", test_body):
+            steps.append(TestStep(
+                action="clear",
+                target=match.group(1),
+                value="",
+                description=f"Clear {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).select('option') - select action
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.select\s*\(\s*['\"]([^'\"]+)['\"]", test_body):
+            steps.append(TestStep(
+                action="select",
+                target=match.group(1),
+                value=match.group(2),
+                description=f"Select '{match.group(2)}' from {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        # cy.get(...).check() - checkbox
+        for match in re.finditer(r"cy\.get\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.check\s*\(", test_body):
+            steps.append(TestStep(
+                action="check",
+                target=match.group(1),
+                value="",
+                description=f"Check {match.group(1)}",
+                original_code=match.group(0),
+            ))
+        
+        return steps
     
     def _extract_js_locators(self, content: str, file_path: str) -> List[Locator]:
         """Extract all locators from JavaScript/TypeScript code"""

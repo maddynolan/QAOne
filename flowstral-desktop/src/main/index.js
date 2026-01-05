@@ -76,9 +76,12 @@ function getDeviceId() {
 function getWebappUrl() {
   const isDev = process.argv.includes('--dev');
   
+  // Check environment variable for custom port
+  const devPort = process.env.FLOWSTRAL_DEV_PORT || '8082';
+  
   if (isDev) {
     // In dev mode, load from Vite dev server
-    return 'http://localhost:8080';
+    return `http://localhost:${devPort}`;
   }
   
   // In production, load from bundled webapp
@@ -89,7 +92,7 @@ function getWebappUrl() {
   
   // Fallback to dev server if no bundled webapp
   console.log('[App] No bundled webapp found, trying dev server...');
-  return 'http://localhost:8080';
+  return `http://localhost:${devPort}`;
 }
 
 // Create main window with navigation shell

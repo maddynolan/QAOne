@@ -7114,6 +7114,10 @@ app.include_router(exploration_workflow_router)
 from app.routers.metrics_api import router as metrics_router
 app.include_router(metrics_router)
 
+# Secrets Vault API - Encrypted secrets management
+from app.routers.secrets_api import router as secrets_router
+app.include_router(secrets_router)
+
 # Enterprise integrations
 from app.routers.integrations.jira_webhook import router as jira_webhook_router
 app.include_router(jira_webhook_router)

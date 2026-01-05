@@ -1,8 +1,8 @@
 import { 
   LayoutDashboard, FileText, Play, AlertCircle, Settings, CheckSquare, Bug, 
-  BookOpen, Sparkles, Plug, Code, FileCode, Map, Zap, Scan, BarChart3, 
+  BookOpen, Sparkles, Plug, Code, FileCode, Zap, Scan, BarChart3, Activity,
   TrendingUp, MousePointerClick, GitBranch, Workflow, ChevronDown, ChevronRight, 
-  Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database,
+  Layers, Users, Calendar, Compass, TestTube, FlaskConical, Database, Shield, Map,
   Video, Target, Gauge, Rocket, Wrench, Circle, Cloud
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -112,6 +112,7 @@ const navigationGroups = [
       { title: "Self-Healing", url: "/self-healing", icon: Wrench, description: "Auto-fix broken selectors" },
       { title: "Gherkin", url: "/gherkin", icon: FileCode },
       { title: "Framework Analyzer", url: "/framework-analyzer", icon: FlaskConical },
+      { title: "CodeAlchemy", url: "/code-alchemy", icon: Sparkles, description: "Import repos as test cases" },
     ],
   },
   
@@ -125,6 +126,10 @@ const navigationGroups = [
     items: [
       { title: "CI/CD Pipeline", url: "/cicd", icon: GitBranch },
       { title: "Integrations", url: "/integrations", icon: Plug },
+      { title: "Secrets Vault", url: "/secrets", icon: Shield },
+      { title: "Coverage Map", url: "/coverage", icon: Map },
+      { title: "Data Flow", url: "/data-flow", icon: Workflow },
+      { title: "APM Config", url: "/apm", icon: Activity },
       { title: "Settings", url: "/settings", icon: Settings },
     ],
   },

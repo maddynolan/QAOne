@@ -233,6 +233,7 @@ export default function EnhancedAPITesting() {
   const [executionResults, setExecutionResults] = useState<any>(null);
   const [executing, setExecuting] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("");
+  const [reportViewTab, setReportViewTab] = useState<"summary" | "html" | "junit" | "json" | "allure">("summary");
   const [selectedTestCases, setSelectedTestCases] = useState<Set<string>>(new Set());
   const [viewingTestCase, setViewingTestCase] = useState<any>(null);
   
@@ -250,6 +251,414 @@ export default function EnhancedAPITesting() {
   
   // Report state
   const [reports, setReports] = useState<any[]>([]);
+  
+  // Security scanning state
+  const [securityScanning, setSecurityScanning] = useState(false);
+  const [securityResults, setSecurityResults] = useState<any>(null);
+  const [securityTargetUrl, setSecurityTargetUrl] = useState(ECOMMERCE_TEST_URL);
+  const [selectedSecurityTests, setSelectedSecurityTests] = useState<string[]>([
+    "auth_matrix", "bola", "injection", "rate_limiting"
+  ]);
+
+  // Assertions Builder state
+  const [assertions, setAssertions] = useState<any[]>([]);
+  const [newAssertion, setNewAssertion] = useState({
+    type: "status_code",
+    name: "",
+    expected: "",
+    path: "",
+    operator: "equals",
+    schema: ""
+  });
+
+  // Assertion type definitions
+  const ASSERTION_TYPES = [
+    { value: "status_code", label: "Status Code", icon: "🔢", description: "Validate HTTP status code" },
+    { value: "response_time", label: "Response Time", icon: "⏱️", description: "Check response time (ms)" },
+    { value: "jsonpath", label: "JSONPath", icon: "📍", description: "Extract and validate JSON values" },
+    { value: "schema", label: "JSON Schema", icon: "📋", description: "Validate against JSON Schema" },
+    { value: "contains", label: "Contains", icon: "🔍", description: "Response contains text" },
+    { value: "not_contains", label: "Not Contains", icon: "🚫", description: "Response doesn't contain text" },
+    { value: "regex", label: "Regex Match", icon: "🎯", description: "Match regular expression" },
+    { value: "header", label: "Header Value", icon: "📨", description: "Validate response header" },
+    { value: "equals", label: "Equals", icon: "⚖️", description: "Exact value match" },
+    { value: "xpath", label: "XPath", icon: "🏷️", description: "Extract and validate XML values" },
+  ];
+
+  const ASSERTION_OPERATORS = [
+    { value: "equals", label: "Equals" },
+    { value: "not_equals", label: "Not Equals" },
+    { value: "contains", label: "Contains" },
+    { value: "not_contains", label: "Not Contains" },
+    { value: "greater_than", label: "Greater Than" },
+    { value: "less_than", label: "Less Than" },
+    { value: "matches_regex", label: "Matches Regex" },
+    { value: "exists", label: "Exists" },
+    { value: "not_exists", label: "Not Exists" },
+  ];
+
+  // Add assertion to list
+  const addAssertion = () => {
+    if (!newAssertion.type) return;
+    
+    const assertion = {
+      id: `assertion_${Date.now()}`,
+      ...newAssertion,
+      name: newAssertion.name || `${newAssertion.type} assertion`
+    };
+    
+    setAssertions([...assertions, assertion]);
+    setNewAssertion({
+      type: "status_code",
+      name: "",
+      expected: "",
+      path: "",
+      operator: "equals",
+      schema: ""
+    });
+    
+    toast({
+      title: "Assertion Added",
+      description: `Added ${assertion.type} assertion`,
+    });
+  };
+
+  // Remove assertion
+  const removeAssertion = (id: string) => {
+    setAssertions(assertions.filter(a => a.id !== id));
+  };
+
+  // Export results as JUnit XML
+  const exportAsJUnitXML = () => {
+    if (!executionResults) return;
+    
+    const testResults = executionResults.test_results || [];
+    const summary = executionResults.summary || {};
+    
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="API Test Suite" tests="${summary.total || 0}" failures="${summary.failed || 0}" errors="0" time="${(summary.total_duration_ms || 0) / 1000}">
+${testResults.map((result: any, idx: number) => `  <testcase name="${result.title || result.name || `Test ${idx + 1}`}" classname="api.tests" time="${(result.response_time_ms || 0) / 1000}">
+${result.status !== 'passed' ? `    <failure message="${result.error_message || 'Test failed'}" type="${result.error_type || 'AssertionError'}">
+      Expected: ${result.expected_status || 200}
+      Actual: ${result.actual_status || 'N/A'}
+    </failure>` : ''}
+  </testcase>`).join('\n')}
+</testsuite>`;
+    
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `api-test-results-${new Date().toISOString().split('T')[0]}.xml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Exported",
+      description: "JUnit XML report downloaded",
+    });
+  };
+
+  // Export results as HTML report
+  const exportAsHTML = () => {
+    if (!executionResults) return;
+    
+    const testResults = executionResults.test_results || [];
+    const summary = executionResults.summary || {};
+    
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>API Test Report - ${new Date().toLocaleDateString()}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 40px; background: #f5f5f5; }
+    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 30px 0; }
+    .stat { text-align: center; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+    .stat-value { font-size: 36px; font-weight: bold; }
+    .stat-label { color: #666; margin-top: 5px; }
+    .passed { color: #22c55e; }
+    .failed { color: #ef4444; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f8f9fa; font-weight: 600; }
+    .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    .badge-pass { background: #dcfce7; color: #166534; }
+    .badge-fail { background: #fee2e2; color: #991b1b; }
+    .timestamp { color: #888; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>API Test Report</h1>
+    <p class="timestamp">Generated: ${new Date().toLocaleString()}</p>
+    
+    <div class="summary">
+      <div class="stat">
+        <div class="stat-value">${summary.total || 0}</div>
+        <div class="stat-label">Total Tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value passed">${summary.passed || 0}</div>
+        <div class="stat-label">Passed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value failed">${summary.failed || 0}</div>
+        <div class="stat-label">Failed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">${summary.pass_rate?.toFixed(1) || 0}%</div>
+        <div class="stat-label">Pass Rate</div>
+      </div>
+    </div>
+    
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Test Case</th>
+          <th>Status</th>
+          <th>Response Time</th>
+          <th>Status Code</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${testResults.map((result: any, idx: number) => `
+        <tr>
+          <td>${result.title || result.name || `Test ${idx + 1}`}</td>
+          <td><span class="badge ${result.status === 'passed' ? 'badge-pass' : 'badge-fail'}">${result.status || 'unknown'}</span></td>
+          <td>${result.response_time_ms?.toFixed(2) || 'N/A'}ms</td>
+          <td>${result.actual_status || result.status_code || 'N/A'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+    
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `api-test-report-${new Date().toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Exported",
+      description: "HTML report downloaded",
+    });
+  };
+
+  // Export results as JSON
+  const exportAsJSON = () => {
+    if (!executionResults) return;
+    
+    const blob = new Blob([JSON.stringify(executionResults, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `api-test-results-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Exported",
+      description: "JSON results downloaded",
+    });
+  };
+
+  // Export results in Allure format
+  const exportAsAllure = () => {
+    if (!executionResults) return;
+    
+    const testResults = executionResults.test_results || [];
+    const executionId = executionResults.execution_id || `exec_${Date.now()}`;
+    
+    // Generate Allure-compatible JSON files
+    const allureResults: any[] = testResults.map((result: any, idx: number) => {
+      const uuid = `${executionId}_${idx}_${Date.now()}`;
+      const startTime = result.start_time ? new Date(result.start_time).getTime() : Date.now() - (result.response_time_ms || 0);
+      const stopTime = startTime + (result.response_time_ms || 0);
+      
+      return {
+        uuid: uuid,
+        historyId: `${result.test_case_id || result.title || `test_${idx}`}`,
+        name: result.title || result.name || `Test ${idx + 1}`,
+        fullName: `api.tests.${result.test_case_id || `test_${idx}`}`,
+        status: result.status === 'passed' ? 'passed' : 'failed',
+        statusDetails: result.status !== 'passed' ? {
+          message: result.error_message || 'Test failed',
+          trace: result.stack_trace || ''
+        } : undefined,
+        stage: 'finished',
+        start: startTime,
+        stop: stopTime,
+        labels: [
+          { name: 'suite', value: 'API Test Suite' },
+          { name: 'subSuite', value: result.category || 'functional' },
+          { name: 'host', value: 'localhost' },
+          { name: 'thread', value: 'main' },
+          { name: 'package', value: 'api.tests' },
+          { name: 'testMethod', value: result.method || 'GET' },
+          { name: 'severity', value: result.priority || 'normal' },
+          ...(result.tags || []).map((tag: string) => ({ name: 'tag', value: tag }))
+        ],
+        parameters: [
+          { name: 'endpoint', value: result.endpoint || result.url || '' },
+          { name: 'method', value: result.method || 'GET' },
+          { name: 'expected_status', value: String(result.expected_status || 200) },
+          { name: 'actual_status', value: String(result.actual_status || result.status_code || '') }
+        ],
+        attachments: result.response_body ? [
+          {
+            name: 'Response Body',
+            source: `${uuid}-response.json`,
+            type: 'application/json'
+          }
+        ] : [],
+        steps: [
+          {
+            name: `${result.method || 'GET'} ${result.endpoint || result.url || '/'}`,
+            status: result.status === 'passed' ? 'passed' : 'failed',
+            start: startTime,
+            stop: stopTime,
+            attachments: [],
+            parameters: []
+          }
+        ]
+      };
+    });
+
+    // Create a ZIP-like structure with all results
+    const allureContainer = {
+      uuid: executionId,
+      name: 'API Test Suite',
+      children: allureResults.map(r => r.uuid),
+      befores: [],
+      afters: [],
+      start: Math.min(...allureResults.map(r => r.start)),
+      stop: Math.max(...allureResults.map(r => r.stop))
+    };
+
+    // Export as single JSON file (can be used with allure generate)
+    const allureExport = {
+      _meta: {
+        format: 'allure2',
+        version: '2.0',
+        generated: new Date().toISOString()
+      },
+      container: allureContainer,
+      results: allureResults
+    };
+    
+    const blob = new Blob([JSON.stringify(allureExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `allure-results-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Exported",
+      description: "Allure format results downloaded. Use 'allure generate' to create the report.",
+    });
+  };
+
+  // Generate report content for inline viewing
+  const generateJUnitXMLContent = (): string => {
+    if (!executionResults) return '';
+    const testResults = executionResults.test_results || [];
+    const summary = executionResults.summary || {};
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="API Test Suite" tests="${summary.total || 0}" failures="${summary.failed || 0}" errors="0" time="${(summary.total_duration_ms || 0) / 1000}">
+${testResults.map((result: any, idx: number) => `  <testcase name="${result.title || result.name || `Test ${idx + 1}`}" classname="api.tests" time="${(result.response_time_ms || 0) / 1000}">
+${result.status !== 'passed' ? `    <failure message="${result.error_message || 'Test failed'}" type="${result.error_type || 'AssertionError'}">
+      Expected: ${result.expected_status || 200}
+      Actual: ${result.actual_status || 'N/A'}
+    </failure>` : ''}
+  </testcase>`).join('\n')}
+</testsuite>`;
+  };
+
+  const generateHTMLContent = (): string => {
+    if (!executionResults) return '';
+    const testResults = executionResults.test_results || [];
+    const summary = executionResults.summary || {};
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <title>API Test Report - ${new Date().toLocaleDateString()}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 100%; background: white; padding: 24px; border-radius: 8px; }
+    h1 { color: #333; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; font-size: 1.5rem; }
+    h2 { font-size: 1.2rem; margin-top: 20px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
+    .stat { text-align: center; padding: 16px; background: #f8f9fa; border-radius: 8px; }
+    .stat-value { font-size: 28px; font-weight: bold; }
+    .stat-label { color: #666; margin-top: 4px; font-size: 12px; }
+    .passed { color: #22c55e; }
+    .failed { color: #ef4444; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f8f9fa; font-weight: 600; }
+    .badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; display: inline-block; }
+    .badge-pass { background: #dcfce7; color: #166534; }
+    .badge-fail { background: #fee2e2; color: #991b1b; }
+    .timestamp { color: #888; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 API Test Report</h1>
+    <p class="timestamp">Generated: ${new Date().toLocaleString()}</p>
+    <div class="summary">
+      <div class="stat"><div class="stat-value">${summary.total || 0}</div><div class="stat-label">Total Tests</div></div>
+      <div class="stat"><div class="stat-value passed">${summary.passed || 0}</div><div class="stat-label">Passed</div></div>
+      <div class="stat"><div class="stat-value failed">${summary.failed || 0}</div><div class="stat-label">Failed</div></div>
+      <div class="stat"><div class="stat-value">${summary.pass_rate?.toFixed(1) || 0}%</div><div class="stat-label">Pass Rate</div></div>
+    </div>
+    <h2>Test Results</h2>
+    <table>
+      <thead><tr><th>Test Case</th><th>Status</th><th>Response Time</th><th>Status Code</th></tr></thead>
+      <tbody>
+        ${testResults.map((result: any, idx: number) => `
+        <tr>
+          <td>${result.title || result.name || `Test ${idx + 1}`}</td>
+          <td><span class="badge ${result.status === 'passed' ? 'badge-pass' : 'badge-fail'}">${result.status || 'unknown'}</span></td>
+          <td>${result.response_time_ms?.toFixed(2) || 'N/A'}ms</td>
+          <td>${result.actual_status || result.status_code || 'N/A'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+  };
+
+  const generateAllureContent = (): string => {
+    if (!executionResults) return '';
+    const testResults = executionResults.test_results || [];
+    const executionId = executionResults.execution_id || `exec_${Date.now()}`;
+    const allureResults = testResults.map((result: any, idx: number) => {
+      const uuid = `${executionId}_${idx}`;
+      const startTime = result.start_time ? new Date(result.start_time).getTime() : Date.now();
+      return {
+        uuid, name: result.title || result.name || `Test ${idx + 1}`,
+        status: result.status === 'passed' ? 'passed' : 'failed',
+        start: startTime, stop: startTime + (result.response_time_ms || 0),
+        labels: [{ name: 'suite', value: 'API Test Suite' }],
+        parameters: [
+          { name: 'endpoint', value: result.endpoint || result.url || '' },
+          { name: 'method', value: result.method || 'GET' }
+        ]
+      };
+    });
+    return JSON.stringify({ format: 'allure2', results: allureResults }, null, 2);
+  };
   
   // Pending API requests from Record tab (Quick API Test)
   const [pendingApiRequests, setPendingApiRequests] = useState<any[]>([]);
@@ -1390,7 +1799,7 @@ export default function EnhancedAPITesting() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7 bg-card border border-border p-1">
+        <TabsList className="grid w-full grid-cols-8 bg-card border border-border p-1">
           <TabsTrigger value="templates" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Rocket className="w-4 h-4 mr-1" />
             Templates
@@ -1398,6 +1807,10 @@ export default function EnhancedAPITesting() {
           <TabsTrigger value="import" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
           <TabsTrigger value="database" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Database</TabsTrigger>
           <TabsTrigger value="execute" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
+          <TabsTrigger value="security" className="data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
+            <Shield className="w-4 h-4 mr-1" />
+            Security
+          </TabsTrigger>
           <TabsTrigger value="environments" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
           <TabsTrigger value="virtual" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Virtual</TabsTrigger>
           <TabsTrigger value="results" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
@@ -1972,6 +2385,224 @@ export default function EnhancedAPITesting() {
           </Card>
         </TabsContent>
 
+        {/* Security Tab - OWASP API Security Testing */}
+        <TabsContent value="security" className="space-y-4">
+          <Alert className="bg-red-500/10 border-red-500/30">
+            <Shield className="h-4 w-4 text-red-500" />
+            <AlertDescription>
+              <strong className="text-red-600 dark:text-red-400">OWASP API Security Top 10 Scanner</strong> - 
+              Automated security testing for broken authentication, authorization, injection, and more.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Security Config */}
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-red-500" />
+                  Security Scan Config
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Target URL</Label>
+                  <Input
+                    value={securityTargetUrl}
+                    onChange={(e) => setSecurityTargetUrl(e.target.value)}
+                    placeholder="https://api.example.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Security Tests</Label>
+                  <div className="space-y-2">
+                    {[
+                      { id: "auth_matrix", label: "Auth Matrix (401/403 checks)", desc: "Test no auth, wrong role, expired token" },
+                      { id: "bola", label: "BOLA (API1:2023)", desc: "Broken Object Level Authorization" },
+                      { id: "injection", label: "Injection Testing", desc: "SQL, NoSQL, Command injection" },
+                      { id: "rate_limiting", label: "Rate Limiting (429)", desc: "Detect throttling detection" },
+                      { id: "ssrf", label: "SSRF (API7:2023)", desc: "Server-Side Request Forgery" },
+                      { id: "mass_assignment", label: "Mass Assignment", desc: "Extra properties accepted unexpectedly" },
+                    ].map((test) => (
+                      <div key={test.id} className="flex items-start gap-2 p-2 rounded bg-muted/50">
+                        <input
+                          type="checkbox"
+                          id={test.id}
+                          checked={selectedSecurityTests.includes(test.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSecurityTests([...selectedSecurityTests, test.id]);
+                            } else {
+                              setSelectedSecurityTests(selectedSecurityTests.filter(t => t !== test.id));
+                            }
+                          }}
+                          className="mt-1"
+                        />
+                        <label htmlFor={test.id} className="text-sm cursor-pointer">
+                          <div className="font-medium">{test.label}</div>
+                          <div className="text-xs text-muted-foreground">{test.desc}</div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Button 
+                  className="w-full bg-red-600 hover:bg-red-700"
+                  disabled={securityScanning || !securityTargetUrl}
+                  onClick={async () => {
+                    setSecurityScanning(true);
+                    setSecurityResults(null);
+                    try {
+                      const response = await fetch(`${API_BASE_URL}/api/v2/testing/security/scan`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          target_url: securityTargetUrl,
+                          tests: selectedSecurityTests,
+                          api_spec: parsedSpec
+                        })
+                      });
+                      const data = await response.json();
+                      setSecurityResults(data);
+                      toast({
+                        title: data.findings?.length > 0 ? "⚠️ Vulnerabilities Found" : "✅ Scan Complete",
+                        description: `Found ${data.findings?.length || 0} security issues`,
+                        variant: data.findings?.length > 0 ? "destructive" : "default"
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: "Scan Failed",
+                        description: error.message,
+                        variant: "destructive"
+                      });
+                    } finally {
+                      setSecurityScanning(false);
+                    }
+                  }}
+                >
+                  {securityScanning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4 mr-2" />
+                      Run Security Scan
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Security Results */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    Security Findings
+                  </span>
+                  {securityResults && (
+                    <Badge variant={securityResults.findings?.length > 0 ? "destructive" : "default"}>
+                      {securityResults.findings?.length || 0} Issues
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!securityResults ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Shield className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                    <p>Run a security scan to see findings</p>
+                  </div>
+                ) : securityResults.findings?.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-green-500" />
+                    <p className="text-green-600 font-medium">No vulnerabilities detected!</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Scanned {securityResults.total_tests || 0} security tests
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                    {securityResults.findings?.map((finding: any, idx: number) => (
+                      <div 
+                        key={idx} 
+                        className={`p-4 rounded-lg border ${
+                          finding.severity === 'critical' ? 'border-red-500 bg-red-500/10' :
+                          finding.severity === 'high' ? 'border-orange-500 bg-orange-500/10' :
+                          finding.severity === 'medium' ? 'border-yellow-500 bg-yellow-500/10' :
+                          'border-gray-500 bg-gray-500/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={
+                                finding.severity === 'critical' ? 'border-red-500 text-red-500' :
+                                finding.severity === 'high' ? 'border-orange-500 text-orange-500' :
+                                finding.severity === 'medium' ? 'border-yellow-500 text-yellow-500' :
+                                'border-gray-500 text-gray-500'
+                              }>
+                                {finding.severity?.toUpperCase()}
+                              </Badge>
+                              <span className="font-medium">{finding.title}</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">{finding.description}</p>
+                            {finding.endpoint && (
+                              <code className="text-xs bg-muted px-2 py-1 rounded mt-2 inline-block">
+                                {finding.method} {finding.endpoint}
+                              </code>
+                            )}
+                          </div>
+                        </div>
+                        {finding.remediation && (
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <p className="text-xs font-medium text-muted-foreground">Remediation:</p>
+                            <p className="text-sm">{finding.remediation}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* OWASP Categories Reference */}
+          <Card>
+            <CardHeader>
+              <CardTitle>OWASP API Security Top 10 (2023)</CardTitle>
+              <CardDescription>Security categories covered by our scanner</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                {[
+                  { id: "API1", name: "BOLA", color: "red" },
+                  { id: "API2", name: "Broken Auth", color: "red" },
+                  { id: "API3", name: "Property Auth", color: "orange" },
+                  { id: "API4", name: "Resource Limit", color: "yellow" },
+                  { id: "API5", name: "Function Auth", color: "orange" },
+                  { id: "API6", name: "Business Flow", color: "yellow" },
+                  { id: "API7", name: "SSRF", color: "red" },
+                  { id: "API8", name: "Misconfig", color: "orange" },
+                  { id: "API9", name: "Inventory", color: "yellow" },
+                  { id: "API10", name: "Unsafe APIs", color: "orange" },
+                ].map((cat) => (
+                  <div key={cat.id} className={`p-2 rounded text-center bg-${cat.color}-500/10 border border-${cat.color}-500/30`}>
+                    <div className="font-bold">{cat.id}</div>
+                    <div className="text-muted-foreground">{cat.name}</div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Environments Tab */}
         <TabsContent value="environments" className="space-y-4">
           <Card>
@@ -2121,93 +2752,253 @@ export default function EnhancedAPITesting() {
         <TabsContent value="results" className="space-y-4">
           {executionResults && (
             <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Execution Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-2xl font-bold">{executionResults.summary?.total || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Passed</p>
-                      <p className="text-2xl font-bold text-green-600">{executionResults.summary?.passed || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Failed</p>
-                      <p className="text-2xl font-bold text-red-600">{executionResults.summary?.failed || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pass Rate</p>
-                      <p className="text-2xl font-bold">{executionResults.summary?.pass_rate?.toFixed(1) || 0}%</p>
-                    </div>
-                  </div>
-                  
-                  {executionResults.performance_metrics && (
-                    <div className="mt-4 space-y-2">
-                      <Label>Performance Metrics</Label>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
+              {/* Export Buttons */}
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  <Button 
+                    variant={reportViewTab === "summary" ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setReportViewTab("summary")}
+                  >
+                    📊 Summary
+                  </Button>
+                  <Button 
+                    variant={reportViewTab === "html" ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setReportViewTab("html")}
+                  >
+                    🌐 HTML Report
+                  </Button>
+                  <Button 
+                    variant={reportViewTab === "junit" ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setReportViewTab("junit")}
+                  >
+                    📋 JUnit XML
+                  </Button>
+                  <Button 
+                    variant={reportViewTab === "json" ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setReportViewTab("json")}
+                  >
+                    📦 JSON
+                  </Button>
+                  <Button 
+                    variant={reportViewTab === "allure" ? "default" : "outline"} 
+                    size="sm" 
+                    onClick={() => setReportViewTab("allure")}
+                    className="border-orange-500/30 data-[state=active]:bg-orange-500/20"
+                  >
+                    🔶 Allure
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={exportAsJUnitXML} title="Download JUnit XML">
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={exportAsHTML} title="Download HTML">
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={exportAsJSON} title="Download JSON">
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={exportAsAllure} title="Download Allure">
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Summary View */}
+              {reportViewTab === "summary" && (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Execution Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-4 gap-4">
                         <div>
-                          <p className="text-muted-foreground">Avg Response Time</p>
-                          <p className="font-semibold">{executionResults.performance_metrics.avg_response_time_ms?.toFixed(2)}ms</p>
+                          <p className="text-sm text-muted-foreground">Total</p>
+                          <p className="text-2xl font-bold">{executionResults.summary?.total || 0}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">P95 Response Time</p>
-                          <p className="font-semibold">{executionResults.performance_metrics.p95_response_time_ms?.toFixed(2)}ms</p>
+                          <p className="text-sm text-muted-foreground">Passed</p>
+                          <p className="text-2xl font-bold text-green-600">{executionResults.summary?.passed || 0}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Requests/sec</p>
-                          <p className="font-semibold">{executionResults.performance_metrics.requests_per_second?.toFixed(2)}</p>
+                          <p className="text-sm text-muted-foreground">Failed</p>
+                          <p className="text-2xl font-bold text-red-600">{executionResults.summary?.failed || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Pass Rate</p>
+                          <p className="text-2xl font-bold">{executionResults.summary?.pass_rate?.toFixed(1) || 0}%</p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Test Results</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Test Case</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Response Time</TableHead>
-                        <TableHead>Status Code</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {executionResults.test_results && executionResults.test_results.length > 0 ? (
-                        executionResults.test_results.slice(0, 100).map((result: any, idx: number) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-medium">
-                              {result.title || result.name || result.test_name || result.test_case_name || `Test ${idx + 1}`}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={result.status === "passed" ? "default" : "destructive"}>
-                                {result.status || "unknown"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{result.response_time_ms?.toFixed(2) || "N/A"}ms</TableCell>
-                            <TableCell>{result.actual_status || result.status_code || "N/A"}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                            No test results available. Tests may not have executed successfully.
-                          </TableCell>
-                        </TableRow>
+                      
+                      {executionResults.performance_metrics && (
+                        <div className="mt-4 space-y-2">
+                          <Label>Performance Metrics</Label>
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <p className="text-muted-foreground">Avg Response Time</p>
+                              <p className="font-semibold">{executionResults.performance_metrics.avg_response_time_ms?.toFixed(2)}ms</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">P95 Response Time</p>
+                              <p className="font-semibold">{executionResults.performance_metrics.p95_response_time_ms?.toFixed(2)}ms</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Requests/sec</p>
+                              <p className="font-semibold">{executionResults.performance_metrics.requests_per_second?.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        </div>
                       )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Test Results</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollArea className="h-[400px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Test Case</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Response Time</TableHead>
+                              <TableHead>Status Code</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {executionResults.test_results && executionResults.test_results.length > 0 ? (
+                              executionResults.test_results.slice(0, 100).map((result: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-medium">
+                                    {result.title || result.name || result.test_name || result.test_case_name || `Test ${idx + 1}`}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={result.status === "passed" ? "default" : "destructive"}>
+                                      {result.status || "unknown"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{result.response_time_ms?.toFixed(2) || "N/A"}ms</TableCell>
+                                  <TableCell>{result.actual_status || result.status_code || "N/A"}</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                  No test results available. Tests may not have executed successfully.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+
+              {/* HTML Report View */}
+              {reportViewTab === "html" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      🌐 HTML Report Preview
+                      <Button variant="outline" size="sm" onClick={exportAsHTML}>
+                        <Download className="w-4 h-4 mr-2" /> Download
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="border rounded-lg overflow-hidden bg-white">
+                      <iframe 
+                        srcDoc={generateHTMLContent()} 
+                        className="w-full h-[500px] border-0"
+                        title="HTML Report Preview"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* JUnit XML View */}
+              {reportViewTab === "junit" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      📋 JUnit XML Report
+                      <Button variant="outline" size="sm" onClick={exportAsJUnitXML}>
+                        <Download className="w-4 h-4 mr-2" /> Download
+                      </Button>
+                    </CardTitle>
+                    <CardDescription>Compatible with CI/CD tools like Jenkins, GitHub Actions, Azure DevOps</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[500px]">
+                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
+                        {generateJUnitXMLContent()}
+                      </pre>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* JSON View */}
+              {reportViewTab === "json" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      📦 JSON Results
+                      <Button variant="outline" size="sm" onClick={exportAsJSON}>
+                        <Download className="w-4 h-4 mr-2" /> Download
+                      </Button>
+                    </CardTitle>
+                    <CardDescription>Raw test execution data for custom processing</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[500px]">
+                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
+                        {JSON.stringify(executionResults, null, 2)}
+                      </pre>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Allure View */}
+              {reportViewTab === "allure" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      🔶 Allure Report Data
+                      <Button variant="outline" size="sm" onClick={exportAsAllure}>
+                        <Download className="w-4 h-4 mr-2" /> Download
+                      </Button>
+                    </CardTitle>
+                    <CardDescription>
+                      Download and run <code className="bg-muted px-1 rounded">allure generate allure-results-*.json</code> to view the full Allure report
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Alert className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Allure reports require the Allure CLI to generate. Install with: <code className="bg-muted px-1 rounded">npm install -g allure-commandline</code>
+                      </AlertDescription>
+                    </Alert>
+                    <ScrollArea className="h-[400px]">
+                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
+                        {generateAllureContent()}
+                      </pre>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
           

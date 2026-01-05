@@ -1,0 +1,698 @@
+"""
+Visual Testing API
+==================
+
+REST API endpoints for robust visual regression testing.
+
+Features:
+- Multiple comparison modes
+- Baseline management (CRUD)
+- Batch comparison
+- Ignore region configuration
+- Diff image generation
+"""
+
+import logging
+import os
+import base64
+import json
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/visual-testing", tags=["Visual Testing"])
+
+
+# ==================== Pydantic Models ====================
+
+class IgnoreRegionModel(BaseModel):
+    """Region to ignore during comparison"""
+    x: int = Field(..., description="X coordinate")
+    y: int = Field(..., description="Y coordinate")
+    width: int = Field(..., description="Width in pixels")
+    height: int = Field(..., description="Height in pixels")
+    name: str = Field("", description="Optional name for the region")
+    reason: str = Field("", description="Reason for ignoring (e.g., 'timestamp', 'ad')")
+
+
+class CompareRequest(BaseModel):
+    """Request to compare two images"""
+    baseline: str = Field(..., description="Baseline image (path or base64)")
+    actual: str = Field(..., description="Actual image (path or base64)")
+    mode: str = Field("anti_aliased", description="Comparison mode")
+    threshold: float = Field(0.1, description="Allowed difference (0.0-1.0)")
+    ignore_regions: List[IgnoreRegionModel] = Field(default_factory=list)
+    test_name: str = Field("visual_test", description="Test name for reporting")
+
+
+class CompareByNameRequest(BaseModel):
+    """Request to compare actual image against stored baseline"""
+    test_name: str = Field(..., description="Test name to match baseline")
+    actual: str = Field(..., description="Actual image (base64)")
+    mode: str = Field("anti_aliased", description="Comparison mode")
+    threshold: float = Field(0.1, description="Allowed difference (0.0-1.0)")
+    ignore_regions: List[IgnoreRegionModel] = Field(default_factory=list)
+
+
+class SaveBaselineRequest(BaseModel):
+    """Request to save a new baseline"""
+    test_name: str = Field(..., description="Unique test name")
+    image: str = Field(..., description="Image as base64")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Optional metadata")
+
+
+class UpdateBaselineRequest(BaseModel):
+    """Request to update an existing baseline"""
+    test_name: str = Field(..., description="Test name")
+    image: str = Field(..., description="New baseline image as base64")
+    reason: str = Field("", description="Reason for update")
+
+
+class BatchCompareRequest(BaseModel):
+    """Request to compare multiple images"""
+    comparisons: List[CompareByNameRequest] = Field(..., description="List of comparisons")
+
+
+# ==================== API Endpoints ====================
+
+@router.post("/compare")
+async def compare_images(request: CompareRequest) -> Dict[str, Any]:
+    """
+    Compare two images and return detailed comparison result.
+    
+    Supports multiple comparison modes:
+    - pixel_perfect: Strict pixel-by-pixel comparison
+    - anti_aliased: Allows anti-aliasing differences (recommended)
+    - perceptual: Perceptual hash comparison (tolerant of minor changes)
+    - structural: SSIM-based structural comparison
+    - layout: Focus on layout, ignore content changes
+    """
+    try:
+        from app.services.automation.visual_testing_engine import (
+            VisualTestingEngine, 
+            ComparisonOptions,
+            ComparisonMode,
+            IgnoreRegion
+        )
+        
+        engine = VisualTestingEngine()
+        
+        # Parse mode
+        try:
+            mode = ComparisonMode(request.mode)
+        except ValueError:
+            mode = ComparisonMode.ANTI_ALIASED
+        
+        # Build ignore regions
+        regions = [
+            IgnoreRegion(
+                x=r.x, y=r.y, width=r.width, height=r.height,
+                name=r.name, reason=r.reason
+            )
+            for r in request.ignore_regions
+        ]
+        
+        options = ComparisonOptions(
+            mode=mode,
+            threshold=request.threshold,
+            ignore_regions=regions,
+            generate_diff=True
+        )
+        
+        # Handle base64 input
+        baseline = request.baseline
+        actual = request.actual
+        
+        if not Path(baseline).exists() and len(baseline) > 200:
+            baseline = base64.b64decode(baseline)
+        if not Path(actual).exists() and len(actual) > 200:
+            actual = base64.b64decode(actual)
+        
+        result = engine.compare(baseline, actual, options, request.test_name)
+        
+        return {
+            "success": True,
+            "result": result.to_dict()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error comparing images: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/compare-by-name")
+async def compare_by_baseline_name(request: CompareByNameRequest) -> Dict[str, Any]:
+    """
+    Compare an actual image against a stored baseline by test name.
+    
+    This is the recommended approach for CI/CD pipelines.
+    """
+    try:
+        from app.services.automation.visual_testing_engine import (
+            VisualTestingEngine, 
+            ComparisonOptions,
+            ComparisonMode,
+            IgnoreRegion
+        )
+        
+        engine = VisualTestingEngine()
+        
+        # Get baseline path
+        baseline_path = engine.get_baseline(request.test_name)
+        
+        if not baseline_path:
+            return {
+                "success": True,
+                "result": {
+                    "passed": True,
+                    "is_new_baseline": True,
+                    "message": f"No baseline exists for '{request.test_name}'. Consider saving this as the baseline."
+                }
+            }
+        
+        # Parse mode
+        try:
+            mode = ComparisonMode(request.mode)
+        except ValueError:
+            mode = ComparisonMode.ANTI_ALIASED
+        
+        # Build ignore regions
+        regions = [
+            IgnoreRegion(
+                x=r.x, y=r.y, width=r.width, height=r.height,
+                name=r.name, reason=r.reason
+            )
+            for r in request.ignore_regions
+        ]
+        
+        options = ComparisonOptions(
+            mode=mode,
+            threshold=request.threshold,
+            ignore_regions=regions,
+            generate_diff=True
+        )
+        
+        # Decode actual image
+        actual_bytes = base64.b64decode(request.actual)
+        
+        result = engine.compare(baseline_path, actual_bytes, options, request.test_name)
+        
+        return {
+            "success": True,
+            "result": result.to_dict()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error comparing by name: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch-compare")
+async def batch_compare(request: BatchCompareRequest) -> Dict[str, Any]:
+    """
+    Compare multiple images in batch.
+    
+    Useful for running visual regression tests for multiple pages/components.
+    """
+    try:
+        results = []
+        passed_count = 0
+        failed_count = 0
+        
+        for comparison in request.comparisons:
+            result = await compare_by_baseline_name(comparison)
+            
+            if result.get("result", {}).get("passed", False):
+                passed_count += 1
+            else:
+                failed_count += 1
+            
+            results.append({
+                "test_name": comparison.test_name,
+                **result
+            })
+        
+        return {
+            "success": True,
+            "summary": {
+                "total": len(results),
+                "passed": passed_count,
+                "failed": failed_count,
+                "pass_rate": passed_count / len(results) if results else 0
+            },
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in batch compare: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Baseline Management ====================
+
+@router.get("/baselines")
+async def list_baselines() -> Dict[str, Any]:
+    """List all stored baselines with metadata"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        baselines = engine.list_baselines()
+        
+        return {
+            "success": True,
+            "count": len(baselines),
+            "baselines": baselines
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing baselines: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/baselines/{test_name}")
+async def get_baseline(test_name: str) -> Dict[str, Any]:
+    """Get baseline info and image for a specific test"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        from PIL import Image
+        import io
+        
+        engine = VisualTestingEngine()
+        baseline_path = engine.get_baseline(test_name)
+        
+        if not baseline_path:
+            raise HTTPException(status_code=404, detail=f"Baseline '{test_name}' not found")
+        
+        metadata = engine.get_baseline_metadata(test_name)
+        
+        # Load and encode image
+        with open(baseline_path, 'rb') as f:
+            image_bytes = f.read()
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        return {
+            "success": True,
+            "test_name": test_name,
+            "path": str(baseline_path),
+            "image_base64": image_base64,
+            "metadata": metadata
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting baseline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/baselines/{test_name}/image")
+async def get_baseline_image(test_name: str):
+    """Get baseline image file directly"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        baseline_path = engine.get_baseline(test_name)
+        
+        if not baseline_path:
+            raise HTTPException(status_code=404, detail=f"Baseline '{test_name}' not found")
+        
+        return FileResponse(
+            baseline_path,
+            media_type="image/png",
+            filename=f"{test_name}.png"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting baseline image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/baselines")
+async def save_baseline(request: SaveBaselineRequest) -> Dict[str, Any]:
+    """Save a new baseline image"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        
+        # Check if baseline already exists
+        existing = engine.get_baseline(request.test_name)
+        if existing:
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Baseline '{request.test_name}' already exists. Use PUT to update."
+            )
+        
+        # Decode image
+        image_bytes = base64.b64decode(request.image)
+        
+        path = engine.save_baseline(
+            image_bytes,
+            request.test_name,
+            request.metadata
+        )
+        
+        return {
+            "success": True,
+            "message": f"Baseline saved successfully",
+            "test_name": request.test_name,
+            "path": path
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving baseline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/baselines/{test_name}")
+async def update_baseline(test_name: str, request: UpdateBaselineRequest) -> Dict[str, Any]:
+    """Update an existing baseline (with history tracking)"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        
+        # Decode image
+        image_bytes = base64.b64decode(request.image)
+        
+        path = engine.update_baseline(
+            test_name,
+            image_bytes,
+            request.reason
+        )
+        
+        return {
+            "success": True,
+            "message": f"Baseline updated successfully",
+            "test_name": test_name,
+            "path": path,
+            "update_reason": request.reason
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating baseline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/baselines/{test_name}")
+async def delete_baseline(test_name: str) -> Dict[str, Any]:
+    """Delete a baseline"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        deleted = engine.delete_baseline(test_name)
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Baseline '{test_name}' not found")
+        
+        return {
+            "success": True,
+            "message": f"Baseline '{test_name}' deleted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting baseline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Diff Management ====================
+
+@router.get("/diffs")
+async def list_diffs(
+    test_name: Optional[str] = Query(None, description="Filter by test name"),
+    limit: int = Query(50, description="Maximum number of diffs to return")
+) -> Dict[str, Any]:
+    """List generated diff images"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        
+        diffs = []
+        for path in sorted(engine.diffs_dir.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True):
+            if test_name and test_name not in path.stem:
+                continue
+            
+            diffs.append({
+                "filename": path.name,
+                "path": str(path),
+                "created_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "size": path.stat().st_size
+            })
+            
+            if len(diffs) >= limit:
+                break
+        
+        return {
+            "success": True,
+            "count": len(diffs),
+            "diffs": diffs
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing diffs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/diffs/{filename}")
+async def get_diff_image(filename: str):
+    """Get a specific diff image"""
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        diff_path = engine.diffs_dir / filename
+        
+        if not diff_path.exists():
+            raise HTTPException(status_code=404, detail=f"Diff '{filename}' not found")
+        
+        return FileResponse(
+            diff_path,
+            media_type="image/png",
+            filename=filename
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting diff: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Configuration ====================
+
+@router.get("/config")
+async def get_config() -> Dict[str, Any]:
+    """Get visual testing configuration"""
+    try:
+        from app.services.automation.visual_testing_engine import (
+            VisualTestingEngine,
+            ComparisonMode
+        )
+        
+        engine = VisualTestingEngine()
+        
+        return {
+            "success": True,
+            "config": {
+                "storage_path": str(engine.storage_path),
+                "baselines_dir": str(engine.baselines_dir),
+                "actuals_dir": str(engine.actuals_dir),
+                "diffs_dir": str(engine.diffs_dir),
+                "available_modes": [m.value for m in ComparisonMode],
+                "recommended_mode": "anti_aliased",
+                "default_threshold": 0.1
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Upload Endpoints (for multipart form data) ====================
+
+@router.post("/upload/compare")
+async def upload_and_compare(
+    baseline: UploadFile = File(..., description="Baseline image file"),
+    actual: UploadFile = File(..., description="Actual image file"),
+    mode: str = Form("anti_aliased", description="Comparison mode"),
+    threshold: float = Form(0.1, description="Allowed difference"),
+    test_name: str = Form("upload_test", description="Test name")
+) -> Dict[str, Any]:
+    """
+    Upload two images and compare them.
+    
+    Useful for manual testing through Swagger UI or forms.
+    """
+    try:
+        from app.services.automation.visual_testing_engine import (
+            VisualTestingEngine, 
+            ComparisonOptions,
+            ComparisonMode as CM
+        )
+        
+        engine = VisualTestingEngine()
+        
+        # Read uploaded files
+        baseline_bytes = await baseline.read()
+        actual_bytes = await actual.read()
+        
+        # Parse mode
+        try:
+            comparison_mode = CM(mode)
+        except ValueError:
+            comparison_mode = CM.ANTI_ALIASED
+        
+        options = ComparisonOptions(
+            mode=comparison_mode,
+            threshold=threshold,
+            generate_diff=True
+        )
+        
+        result = engine.compare(baseline_bytes, actual_bytes, options, test_name)
+        
+        return {
+            "success": True,
+            "result": result.to_dict()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in upload compare: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload/baseline")
+async def upload_baseline(
+    image: UploadFile = File(..., description="Baseline image file"),
+    test_name: str = Form(..., description="Unique test name")
+) -> Dict[str, Any]:
+    """
+    Upload and save a baseline image.
+    """
+    try:
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        
+        # Check if exists
+        existing = engine.get_baseline(test_name)
+        if existing:
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Baseline '{test_name}' already exists"
+            )
+        
+        # Read and save
+        image_bytes = await image.read()
+        path = engine.save_baseline(image_bytes, test_name)
+        
+        return {
+            "success": True,
+            "message": "Baseline uploaded successfully",
+            "test_name": test_name,
+            "path": path
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading baseline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Helper Endpoints ====================
+
+@router.post("/capture")
+async def capture_screenshot(
+    url: str = Form(..., description="URL to capture"),
+    test_name: str = Form(..., description="Test name for the screenshot"),
+    full_page: bool = Form(True, description="Capture full page"),
+    viewport_width: int = Form(1920, description="Viewport width"),
+    viewport_height: int = Form(1080, description="Viewport height"),
+    wait_for_selector: Optional[str] = Form(None, description="Wait for selector before capture"),
+    save_as_baseline: bool = Form(False, description="Save as baseline")
+) -> Dict[str, Any]:
+    """
+    Capture a screenshot from a URL.
+    
+    Uses Playwright to render the page and capture a screenshot.
+    Optionally saves it as a baseline.
+    """
+    try:
+        from playwright.async_api import async_playwright
+        from app.services.automation.visual_testing_engine import VisualTestingEngine
+        
+        engine = VisualTestingEngine()
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                viewport={'width': viewport_width, 'height': viewport_height}
+            )
+            page = await context.new_page()
+            
+            # Navigate
+            await page.goto(url, wait_until='networkidle')
+            
+            # Wait for selector if specified
+            if wait_for_selector:
+                await page.wait_for_selector(wait_for_selector, timeout=10000)
+            
+            # Small delay for rendering
+            await page.wait_for_timeout(500)
+            
+            # Capture screenshot
+            screenshot_bytes = await page.screenshot(full_page=full_page)
+            
+            await browser.close()
+        
+        # Save as baseline if requested
+        if save_as_baseline:
+            path = engine.save_baseline(screenshot_bytes, test_name, {
+                "url": url,
+                "viewport": f"{viewport_width}x{viewport_height}",
+                "full_page": full_page
+            })
+            
+            return {
+                "success": True,
+                "message": "Screenshot captured and saved as baseline",
+                "test_name": test_name,
+                "path": path,
+                "image_base64": base64.b64encode(screenshot_bytes).decode('utf-8')
+            }
+        else:
+            # Save to actuals directory
+            safe_name = engine._safe_filename(test_name)
+            actual_path = engine.actuals_dir / f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            
+            with open(actual_path, 'wb') as f:
+                f.write(screenshot_bytes)
+            
+            return {
+                "success": True,
+                "message": "Screenshot captured",
+                "path": str(actual_path),
+                "image_base64": base64.b64encode(screenshot_bytes).decode('utf-8')
+            }
+        
+    except Exception as e:
+        logger.error(f"Error capturing screenshot: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
