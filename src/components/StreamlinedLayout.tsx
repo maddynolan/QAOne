@@ -20,28 +20,12 @@ import {
   Bell,
   User,
   ChevronDown,
-  MoreHorizontal,
   LayoutDashboard,
   BarChart3,
-  GitBranch,
-  Link2,
-  List,
-  Bug,
-  FileCheck,
-  Calendar,
-  Wrench,
-  Box,
-  RefreshCw,
-  FolderTree,
-  Kanban,
   Plug,
   Sun,
   Moon,
-  FileText,
   Shield,
-  Map,
-  Workflow,
-  Activity,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -229,31 +213,14 @@ function Header() {
   const currentPath = location.pathname;
   const inElectron = isElectron();
 
-  // Extended features menu items (available in both web and desktop)
-  const webFeatures = [
+  // Simplified menu - only core features from landing page
+  const coreFeatures = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Analytics', path: '/analytics', icon: BarChart3 },
-    { label: 'Project Boards', path: '/projects', icon: Kanban },
-    { divider: true },
-    { label: 'Test Suites', path: '/suites', icon: List },
-    { label: 'Test Plans', path: '/plans', icon: FileCheck },
-    { label: 'Test Runs', path: '/runs', icon: RefreshCw },
-    { divider: true },
-    { label: 'Requirements', path: '/requirements', icon: FileText },
-    { label: 'Traceability', path: '/traceability', icon: Link2 },
-    { label: 'Defects', path: '/defects', icon: Bug },
     { divider: true },
     { label: 'Secrets Vault', path: '/secrets', icon: Shield },
-    { label: 'Coverage Map', path: '/coverage', icon: Map },
-    { label: 'Data Flow', path: '/data-flow', icon: Workflow },
-    { label: 'APM Config', path: '/apm', icon: Activity },
-    { divider: true },
-    { label: 'Framework Analyzer', path: '/framework-analyzer', icon: Wrench },
-    { label: 'Element Repository', path: '/elements', icon: Box },
-    { label: 'Scheduled Runs', path: '/scheduled-runs', icon: Calendar },
-    { label: 'CI/CD', path: '/cicd', icon: GitBranch },
-    { divider: true },
     { label: 'Integrations', path: '/integrations', icon: Plug },
+    { divider: true },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];
 
@@ -309,9 +276,8 @@ function Header() {
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56 max-h-[70vh] overflow-y-auto">
-                <DropdownMenuLabel className="text-xs uppercase tracking-wider">Additional Features</DropdownMenuLabel>
-                {webFeatures.map((item, idx) => 
+              <DropdownMenuContent align="start" className="w-48">
+                {coreFeatures.map((item, idx) => 
                   item.divider ? (
                     <DropdownMenuSeparator key={idx} />
                   ) : (

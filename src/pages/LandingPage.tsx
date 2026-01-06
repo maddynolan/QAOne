@@ -1,0 +1,1075 @@
+/**
+ * Flowstral Landing Page - Premium Visual Design
+ * 
+ * Features highlighted based on competitive analysis:
+ * - Smart Recording with element recognition
+ * - Visual Test Builder with 53 generators
+ * - Test Management (6 modules)
+ * - Performance Testing (10k+ VUs, auto-correlation)
+ * - API Testing (multi-protocol, security scanning)
+ * - Visual Testing (6 modes)
+ * - Accessibility (WCAG 2.1)
+ * - Salesforce Native (20+ tools)
+ * - Works without AI + Optional AI boost
+ */
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Play, Zap, Shield, Users, BarChart3, Code2, Workflow, Target,
+  CheckCircle2, ArrowRight, Sparkles, Globe, Lock, Eye, 
+  Bot, Layers, GitBranch, FileText, Bug, Activity, Clock, Gauge,
+  ChevronRight, Star, Building2, Rocket, Database, RefreshCw, MousePointer,
+  Type, Wand2, Blocks, ArrowDown,
+  Settings2, ClipboardCheck,
+  TrendingUp, Server,
+  MonitorCheck, Laptop, LineChart, AlertTriangle,
+  Search, Folder, Calendar,
+  Lightbulb, FileJson, Link2, Timer,
+  Accessibility, BrainCircuit,
+  ShieldAlert, Cable, FlaskConical,
+  Diff, Image as ImageIcon, Mail, Phone, MapPin,
+  Twitter, Linkedin, Github, Youtube,
+  PauseCircle, Square, CheckSquare, XCircle, Circle,
+  Pencil, Trash2, Copy, MoreHorizontal, Filter, Download,
+  FileSpreadsheet, TestTube, Beaker, Microscope
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HERO SECTION WITH INTERACTIVE PREVIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+function HeroSection() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'record' | 'build' | 'execute' | 'analyze'>('record');
+
+  const tabs = [
+    { id: 'record' as const, label: 'Record', color: 'amber' },
+    { id: 'build' as const, label: 'Build', color: 'blue' },
+    { id: 'execute' as const, label: 'Execute', color: 'emerald' },
+    { id: 'analyze' as const, label: 'Analyze', color: 'violet' },
+  ];
+
+  // Auto-cycle through tabs
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTab(prev => {
+        const order: ('record' | 'build' | 'execute' | 'analyze')[] = ['record', 'build', 'execute', 'analyze'];
+        const currentIdx = order.indexOf(prev);
+        return order[(currentIdx + 1) % 4];
+      });
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/50 to-violet-50/50">
+      {/* Background Effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-gradient-to-br from-blue-400/20 to-violet-400/20 rounded-full blur-[100px]" />
+        <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] bg-gradient-to-br from-emerald-400/20 to-teal-400/20 rounded-full blur-[100px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-br from-violet-400/5 to-blue-400/5 rounded-full blur-[120px]" />
+        
+        {/* Subtle Grid */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
+          backgroundImage: `linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)`,
+          backgroundSize: '60px 60px'
+        }} />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-6 pt-28 pb-16">
+        {/* Top Badge */}
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/80 shadow-sm">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-sm font-medium text-slate-700">Complete QA Platform</span>
+          </div>
+        </div>
+
+        {/* Testing Capabilities Strip */}
+        <div className="flex justify-center mb-10">
+          <div className="flex flex-wrap justify-center gap-2">
+            {[
+              { label: 'E2E Testing', color: 'amber' },
+              { label: 'API Testing', color: 'pink' },
+              { label: 'Performance', color: 'emerald' },
+              { label: 'Visual Testing', color: 'indigo' },
+              { label: 'Accessibility', color: 'teal' },
+              { label: 'Test Management', color: 'violet' },
+            ].map((type, idx) => (
+              <span 
+                key={idx}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-medium",
+                  type.color === 'amber' ? "bg-amber-100 text-amber-700" :
+                  type.color === 'pink' ? "bg-pink-100 text-pink-700" :
+                  type.color === 'emerald' ? "bg-emerald-100 text-emerald-700" :
+                  type.color === 'indigo' ? "bg-indigo-100 text-indigo-700" :
+                  type.color === 'teal' ? "bg-teal-100 text-teal-700" :
+                  "bg-violet-100 text-violet-700"
+                )}
+              >
+                {type.label}
+              </span>
+            ))}
+            <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 flex items-center gap-1">
+              <Database className="w-3 h-3" /> Salesforce Native
+            </span>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+          {/* Left Content */}
+          <div className="space-y-8 text-center lg:text-left">
+            {/* Main Headline */}
+            <div className="space-y-4">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.1] tracking-tight">
+                Maximize Your
+                <span className="block mt-2 bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent pb-2" style={{ lineHeight: '1.2' }}>
+                  Test Coverage
+                </span>
+              </h1>
+              <p className="text-lg sm:text-xl text-slate-600 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+                Build automated tests visually. Turn manual test cases into automation. 
+                Achieve <span className="font-semibold text-emerald-600">maximum coverage</span> without writing code.
+              </p>
+            </div>
+
+            {/* Stats Row */}
+            <div className="flex flex-wrap justify-center lg:justify-start gap-x-8 gap-y-4">
+              {[
+                { value: '0', suffix: ' code', label: 'Lines Required' },
+                { value: '10k+', label: 'Virtual Users' },
+                { value: '50+', label: 'Data Generators' },
+              ].map((stat, idx) => (
+                <div key={idx} className="text-center lg:text-left">
+                  <div className="text-2xl font-bold text-slate-800">
+                    {stat.value}<span className="text-slate-400 text-lg">{stat.suffix}</span>
+                  </div>
+                  <div className="text-xs text-slate-500">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* CTAs - Three aligned buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-50 to-emerald-100 border-2 border-emerald-300 shadow-sm hover:shadow-md transition-shadow cursor-default">
+                <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-4 h-4 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-emerald-800">100% Without AI</div>
+                  <div className="text-xs text-emerald-600">Complete automation, zero cloud dependency</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-violet-50 border border-violet-200 hover:border-violet-300 transition-colors cursor-default">
+                <BrainCircuit className="w-5 h-5 text-violet-600 flex-shrink-0" />
+                <div className="text-left">
+                  <div className="text-sm font-semibold text-slate-800">Optional AI</div>
+                  <div className="text-xs text-slate-500">Smart test generation & NLP assertions</div>
+                </div>
+              </div>
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={() => navigate('/demo')}
+                className="h-auto py-3 px-6 border-slate-200 bg-white/80 text-slate-700 hover:bg-white rounded-xl"
+              >
+                <Play className="w-5 h-5 mr-2" />
+                Watch Demo
+              </Button>
+            </div>
+          </div>
+
+          {/* Right - Interactive Preview */}
+          <div className="relative">
+            <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-200/50 overflow-hidden">
+              {/* Browser Chrome */}
+              <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-400" />
+                  <div className="w-3 h-3 rounded-full bg-amber-400" />
+                  <div className="w-3 h-3 rounded-full bg-green-400" />
+                </div>
+                <div className="flex-1 flex justify-center">
+                  <div className="px-4 py-1 bg-white rounded-md border border-slate-200 text-xs text-slate-400">
+                    flowstral.app
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab Navigation */}
+              <div className="flex gap-1 p-3 bg-slate-50/50 border-b border-slate-100">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300",
+                      activeTab === tab.id 
+                        ? tab.color === 'amber' ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30" :
+                          tab.color === 'blue' ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" :
+                          tab.color === 'emerald' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30" :
+                          "bg-violet-500 text-white shadow-lg shadow-violet-500/30"
+                        : "text-slate-500 hover:bg-slate-100"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Content Area */}
+              <div className="relative h-[340px] overflow-hidden">
+                {/* Record Tab */}
+                <div className={cn(
+                  "absolute inset-0 p-5 transition-all duration-500 ease-out",
+                  activeTab === 'record' 
+                    ? "opacity-100 translate-x-0" 
+                    : "opacity-0 -translate-x-8 pointer-events-none"
+                )}>
+                  <div className="flex gap-4 h-full">
+                    {/* Recording Steps */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-semibold text-slate-700">Recording...</span>
+                        <Badge className="bg-red-100 text-red-600 border-0 animate-pulse">● REC</Badge>
+                      </div>
+                      {[
+                        { step: 1, action: 'Navigate to login', done: true },
+                        { step: 2, action: 'Fill username', done: true },
+                        { step: 3, action: 'Fill password', done: true },
+                        { step: 4, action: 'Click "Sign In"', done: false, active: true },
+                      ].map((item, idx) => (
+                        <div 
+                          key={idx}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-xl transition-all duration-300",
+                            item.active 
+                              ? "bg-amber-50 border-2 border-amber-400 shadow-sm" 
+                              : "bg-slate-50 border border-slate-100"
+                          )}
+                          style={{ animationDelay: `${idx * 100}ms` }}
+                        >
+                          <div className={cn(
+                            "w-7 h-7 rounded-lg flex items-center justify-center text-sm font-medium",
+                            item.done ? "bg-emerald-100 text-emerald-600" : 
+                            item.active ? "bg-amber-500 text-white" : "bg-slate-200 text-slate-500"
+                          )}>
+                            {item.done ? <CheckCircle2 className="w-4 h-4" /> : item.step}
+                          </div>
+                          <span className={cn(
+                            "text-sm",
+                            item.active ? "font-medium text-amber-700" : "text-slate-600"
+                          )}>{item.action}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Smart Suggestions Panel */}
+                    <div className="w-48 p-3 bg-gradient-to-b from-blue-50 to-violet-50 rounded-xl border border-blue-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lightbulb className="w-4 h-4 text-amber-500" />
+                        <span className="text-xs font-semibold text-slate-700">Smart Suggestions</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mb-2">Contextual actions for current step</div>
+                      <div className="space-y-1.5">
+                        {['Assert element visible', 'Verify text content', 'Wait for network', 'Take screenshot', 'Add validation'].map((s, i) => (
+                          <div key={i} className="px-2.5 py-1.5 bg-white rounded-lg text-[11px] text-slate-600 border border-slate-100 cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-all">
+                            + {s}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Build Tab */}
+                <div className={cn(
+                  "absolute inset-0 p-5 transition-all duration-500 ease-out",
+                  activeTab === 'build' 
+                    ? "opacity-100 translate-x-0" 
+                    : "opacity-0 translate-x-8 pointer-events-none"
+                )}>
+                  <div className="flex gap-4 h-full">
+                    {/* Visual Steps */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-semibold text-slate-700">Test Steps</span>
+                        <Button size="sm" className="h-7 bg-blue-500 hover:bg-blue-600 text-xs">+ Add Step</Button>
+                      </div>
+                      {[
+                        { icon: Globe, step: 'Navigate', value: 'https://app.example.com' },
+                        { icon: Type, step: 'Fill Input', value: 'user@company.com' },
+                        { icon: Lock, step: 'Fill Input', value: '••••••••' },
+                        { icon: MousePointer, step: 'Click', value: 'Sign In Button' },
+                      ].map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-blue-200 transition-all">
+                          <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
+                            <item.icon className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-slate-500">{item.step}</div>
+                            <div className="text-sm text-slate-700 truncate">{item.value}</div>
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Pencil className="w-3.5 h-3.5 text-slate-400 cursor-pointer hover:text-blue-500" />
+                            <Trash2 className="w-3.5 h-3.5 text-slate-400 cursor-pointer hover:text-red-500" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Smart Fill Data Generators */}
+                    <div className="w-48 p-3 bg-gradient-to-b from-amber-50 to-orange-50 rounded-xl border border-amber-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wand2 className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs font-semibold text-slate-700">Smart Fill</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mb-2">Auto-generate test data</div>
+                      <div className="space-y-1">
+                        {[
+                          { name: 'First Name', example: 'John' },
+                          { name: 'Email', example: 'test@mail.com' },
+                          { name: 'Phone', example: '+1-555-0123' },
+                          { name: 'Address', example: '123 Main St' },
+                          { name: 'Credit Card', example: '4111...1111' },
+                        ].map((g, i) => (
+                          <div key={i} className="flex items-center justify-between px-2 py-1.5 bg-white rounded-lg text-[11px] border border-slate-100 cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-all">
+                            <span className="text-slate-700">{g.name}</span>
+                            <span className="text-slate-400 text-[10px]">{g.example}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-[10px] text-amber-600 text-center mt-2 font-medium">50+ data generators</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Execute Tab */}
+                <div className={cn(
+                  "absolute inset-0 p-5 transition-all duration-500 ease-out",
+                  activeTab === 'execute' 
+                    ? "opacity-100 translate-x-0" 
+                    : "opacity-0 translate-x-8 pointer-events-none"
+                )}>
+                  <div className="space-y-4">
+                    {/* Progress */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-700">Test Execution</span>
+                      <Badge className="bg-emerald-100 text-emerald-600 border-0">Running</Badge>
+                    </div>
+                    
+                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm text-emerald-700 font-medium">Login Flow Test</span>
+                        <span className="text-xs text-emerald-600">Step 3/4</span>
+                      </div>
+                      <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                        <div className="h-full w-3/4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-1000" />
+                      </div>
+                    </div>
+
+                    {/* Live Results */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: 'Passed', value: '3', color: 'emerald' },
+                        { label: 'Running', value: '1', color: 'blue' },
+                        { label: 'Pending', value: '0', color: 'slate' },
+                      ].map((stat, idx) => (
+                        <div key={idx} className={cn(
+                          "p-3 rounded-xl text-center",
+                          stat.color === 'emerald' ? "bg-emerald-50" :
+                          stat.color === 'blue' ? "bg-blue-50" : "bg-slate-50"
+                        )}>
+                          <div className={cn(
+                            "text-2xl font-bold",
+                            stat.color === 'emerald' ? "text-emerald-600" :
+                            stat.color === 'blue' ? "text-blue-600" : "text-slate-400"
+                          )}>{stat.value}</div>
+                          <div className="text-xs text-slate-500">{stat.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Execution Mode */}
+                    <div className="flex gap-2">
+                      <div className="flex-1 p-3 bg-violet-50 rounded-xl border border-violet-200 text-center">
+                        <Bot className="w-5 h-5 text-violet-600 mx-auto mb-1" />
+                        <div className="text-xs font-medium text-violet-700">Automated</div>
+                      </div>
+                      <div className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                        <MousePointer className="w-5 h-5 text-slate-400 mx-auto mb-1" />
+                        <div className="text-xs text-slate-500">Manual</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Analyze Tab */}
+                <div className={cn(
+                  "absolute inset-0 p-5 transition-all duration-500 ease-out",
+                  activeTab === 'analyze' 
+                    ? "opacity-100 translate-x-0" 
+                    : "opacity-0 translate-x-8 pointer-events-none"
+                )}>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-700">Test Results</span>
+                      <Badge className="bg-emerald-100 text-emerald-600 border-0">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> All Passed
+                      </Badge>
+                    </div>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100">
+                        <div className="text-3xl font-bold text-emerald-600">100%</div>
+                        <div className="text-xs text-slate-500">Pass Rate</div>
+                      </div>
+                      <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-100">
+                        <div className="text-3xl font-bold text-blue-600">2.3s</div>
+                        <div className="text-xs text-slate-500">Duration</div>
+                      </div>
+                    </div>
+
+                    {/* Test Results */}
+                    <div className="space-y-2">
+                      {[
+                        { name: 'Navigate to login', time: '0.4s', pass: true },
+                        { name: 'Fill credentials', time: '0.8s', pass: true },
+                        { name: 'Submit form', time: '0.6s', pass: true },
+                        { name: 'Verify dashboard', time: '0.5s', pass: true },
+                      ].map((test, idx) => (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <span className="text-sm text-slate-700 flex-1">{test.name}</span>
+                          <span className="text-xs text-slate-400">{test.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating Badge */}
+            <div className="absolute -bottom-4 -right-4 px-4 py-2 bg-white rounded-xl shadow-lg border border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-800">87%</div>
+                  <div className="text-[10px] text-slate-500">Coverage</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURES SHOWCASE - Premium Cards
+// ═══════════════════════════════════════════════════════════════════════════
+
+const features = [
+  {
+    icon: MousePointer,
+    title: 'Smart Recorder',
+    description: 'Record browser interactions with intelligent element detection. Get contextual suggestions as you record.',
+    gradient: 'from-amber-500 to-orange-500',
+    bgGradient: 'from-amber-50 to-orange-50',
+    highlights: ['Element Detection', 'Smart Suggestions', 'Auto-Wait'],
+    href: '/products/smart-recorder'
+  },
+  {
+    icon: Blocks,
+    title: 'Visual Builder',
+    description: 'Build tests with drag-and-drop. Smart Fill with 50+ data generators for realistic test data.',
+    gradient: 'from-blue-500 to-cyan-500',
+    bgGradient: 'from-blue-50 to-cyan-50',
+    highlights: ['Drag & Drop', '50+ Generators', 'Reusable Steps'],
+    href: '/products/visual-builder'
+  },
+  {
+    icon: ClipboardCheck,
+    title: 'Test Management',
+    description: 'Complete test lifecycle. Cases, Suites, Plans, Releases, Runs, Defects - all connected.',
+    gradient: 'from-violet-500 to-purple-500',
+    bgGradient: 'from-violet-50 to-purple-50',
+    highlights: ['6 Modules', 'Manual + Auto', 'Traceability'],
+    href: '/products/test-management'
+  },
+  {
+    icon: BarChart3,
+    title: 'Dashboards',
+    description: 'Beautiful, actionable dashboards. Track coverage, trends, and team performance at a glance.',
+    gradient: 'from-orange-500 to-amber-500',
+    bgGradient: 'from-orange-50 to-amber-50',
+    highlights: ['Coverage Metrics', 'Trend Analysis', 'Custom Reports'],
+    href: '/products/dashboards'
+  },
+  {
+    icon: Globe,
+    title: 'API Testing',
+    description: 'Test REST, GraphQL, SOAP APIs. Chain requests and scan for security vulnerabilities.',
+    gradient: 'from-pink-500 to-rose-500',
+    bgGradient: 'from-pink-50 to-rose-50',
+    highlights: ['Multi-Protocol', 'Security Scan', 'Chaining'],
+    href: '/products/api-testing'
+  },
+  {
+    icon: Activity,
+    title: 'Performance',
+    description: 'Load test with 10,000+ virtual users. Auto-correlation and multiple load patterns.',
+    gradient: 'from-emerald-500 to-teal-500',
+    bgGradient: 'from-emerald-50 to-teal-50',
+    highlights: ['10k+ VUs', 'Auto-Correlation', 'Load Patterns'],
+    href: '/products/performance'
+  },
+  {
+    icon: Eye,
+    title: 'Visual Testing',
+    description: 'Catch visual regressions with 6 comparison modes. Pixel-perfect validation.',
+    gradient: 'from-indigo-500 to-violet-500',
+    bgGradient: 'from-indigo-50 to-violet-50',
+    highlights: ['6 Modes', 'Pixel Diff', 'Baselines'],
+    href: '/products/visual-testing'
+  },
+  {
+    icon: Accessibility,
+    title: 'Accessibility',
+    description: 'WCAG 2.1 scanning. Identify issues by severity with remediation guidance.',
+    gradient: 'from-teal-500 to-emerald-500',
+    bgGradient: 'from-teal-50 to-emerald-50',
+    highlights: ['WCAG 2.1', 'Fix Guides', 'Reports'],
+    href: '/products/accessibility'
+  },
+];
+
+function FeaturesSection() {
+  const navigate = useNavigate();
+  
+  return (
+    <section id="features" className="py-24 bg-white relative">
+      <div className="max-w-7xl mx-auto px-6">
+        {/* Section Header */}
+        <div className="text-center mb-16">
+          <Badge className="mb-4 bg-blue-100 text-blue-700 border-0 px-4 py-1.5">
+            Complete QA Platform
+          </Badge>
+          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+            Everything You Need in <span className="text-blue-600">One Platform</span>
+          </h2>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            No plugins, no add-ons, no hidden costs. All capabilities included.
+          </p>
+        </div>
+
+        {/* Features Grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {features.map((feature, idx) => (
+            <div 
+              key={idx}
+              onClick={() => navigate(feature.href)}
+              className="group relative p-6 rounded-2xl bg-white border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+            >
+              {/* Gradient Border on Hover */}
+              <div className={cn(
+                "absolute inset-0 rounded-2xl bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-sm",
+                feature.gradient
+              )} />
+              
+              <div className={cn(
+                "w-14 h-14 rounded-2xl bg-gradient-to-r mb-5 flex items-center justify-center shadow-lg",
+                feature.gradient
+              )}>
+                <feature.icon className="w-7 h-7 text-white" />
+              </div>
+              
+              <h3 className="text-lg font-bold text-slate-800 mb-2">{feature.title}</h3>
+              <p className="text-sm text-slate-500 mb-4 leading-relaxed">{feature.description}</p>
+              
+              <div className="flex flex-wrap gap-1.5">
+                {feature.highlights.map((h, i) => (
+                  <Badge key={i} className={cn("text-[10px] border-0 bg-gradient-to-r", feature.bgGradient)}>
+                    {h}
+                  </Badge>
+                ))}
+              </div>
+              
+              <div className="mt-4 text-xs text-slate-400 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                Learn more <ArrowRight className="w-3 h-3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PERFORMANCE & API SHOWCASE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PerformanceAPISection() {
+  const [activeMetric, setActiveMetric] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveMetric(prev => (prev + 1) % 4);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const metrics = [
+    { label: 'Virtual Users', value: '10,247', color: 'emerald' },
+    { label: 'Requests/sec', value: '2,487', color: 'blue' },
+    { label: 'Avg Latency', value: '45ms', color: 'amber' },
+    { label: 'Error Rate', value: '0.02%', color: 'violet' },
+  ];
+
+  return (
+    <section className="py-24 bg-gradient-to-b from-slate-50 to-white">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-16">
+          {/* Performance Testing */}
+          <div className="space-y-6">
+            <Badge className="bg-emerald-100 text-emerald-700 border-0">Performance Testing</Badge>
+            <h3 className="text-3xl font-bold text-slate-900">
+              Scale to <span className="text-emerald-600">10,000+</span> Virtual Users
+            </h3>
+            <p className="text-slate-600 leading-relaxed">
+              Enterprise-grade load testing with intelligent auto-correlation. Detect and parameterize 
+              dynamic values automatically. Real-time metrics and threshold-based validation.
+            </p>
+
+            {/* Metrics Display */}
+            <div className="grid grid-cols-2 gap-4">
+              {metrics.map((metric, idx) => (
+                <div 
+                  key={idx}
+                  className={cn(
+                    "p-4 rounded-xl border-2 transition-all duration-500",
+                    activeMetric === idx 
+                      ? metric.color === 'emerald' ? "bg-emerald-50 border-emerald-300" :
+                        metric.color === 'blue' ? "bg-blue-50 border-blue-300" :
+                        metric.color === 'amber' ? "bg-amber-50 border-amber-300" :
+                        "bg-violet-50 border-violet-300"
+                      : "bg-white border-slate-200"
+                  )}
+                >
+                  <div className={cn(
+                    "text-2xl font-bold transition-colors",
+                    activeMetric === idx
+                      ? metric.color === 'emerald' ? "text-emerald-600" :
+                        metric.color === 'blue' ? "text-blue-600" :
+                        metric.color === 'amber' ? "text-amber-600" :
+                        "text-violet-600"
+                      : "text-slate-700"
+                  )}>{metric.value}</div>
+                  <div className="text-sm text-slate-500">{metric.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Load Patterns */}
+            <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="text-sm font-medium text-slate-700 mb-3">Load Patterns</div>
+              <div className="flex flex-wrap gap-2">
+                {['⚡ Spike', '🔥 Stress', '⏱️ Endurance', '🎯 Breakpoint'].map((p, i) => (
+                  <Badge key={i} className="bg-white border border-slate-200 text-slate-600">{p}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* API Testing */}
+          <div className="space-y-6">
+            <Badge className="bg-pink-100 text-pink-700 border-0">API Testing</Badge>
+            <h3 className="text-3xl font-bold text-slate-900">
+              Multi-Protocol with <span className="text-pink-600">Security</span>
+            </h3>
+            <p className="text-slate-600 leading-relaxed">
+              Test REST, GraphQL, and SOAP APIs in one place. Chain requests together, validate responses 
+              against schemas, and scan for security vulnerabilities automatically.
+            </p>
+
+            {/* Protocol Tabs */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex border-b border-slate-200">
+                {['REST', 'GraphQL', 'SOAP'].map((p, i) => (
+                  <div key={i} className={cn(
+                    "flex-1 py-3 text-center text-sm font-medium",
+                    i === 0 ? "bg-pink-50 text-pink-700 border-b-2 border-pink-500" : "text-slate-500"
+                  )}>{p}</div>
+                ))}
+              </div>
+              <div className="p-4 space-y-2">
+                {[
+                  { method: 'POST', path: '/auth/login', status: '200' },
+                  { method: 'GET', path: '/users/me', status: '200' },
+                  { method: 'PUT', path: '/users/{id}', status: '200' },
+                ].map((req, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
+                    <Badge className={cn(
+                      "text-xs border-0",
+                      req.method === 'POST' ? "bg-green-100 text-green-700" :
+                      req.method === 'GET' ? "bg-blue-100 text-blue-700" :
+                      "bg-amber-100 text-amber-700"
+                    )}>{req.method}</Badge>
+                    <code className="text-sm text-slate-600 flex-1">{req.path}</code>
+                    <Badge className="bg-emerald-100 text-emerald-700 text-xs border-0">{req.status}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Security Features */}
+            <div className="flex flex-wrap gap-2">
+              {['SQL Injection', 'XSS', 'CSRF', 'Auth Testing', 'Schema Validation'].map((s, i) => (
+                <Badge key={i} className="bg-slate-100 text-slate-600 border-0">
+                  <ShieldAlert className="w-3 h-3 mr-1" /> {s}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISUAL & A11Y SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function VisualA11ySection() {
+  return (
+    <section className="py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Visual Testing */}
+          <div className="p-8 rounded-3xl bg-gradient-to-br from-indigo-50 via-violet-50 to-purple-50 border border-indigo-100">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg">
+                <Eye className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Visual Testing</h3>
+                <p className="text-sm text-slate-500">6 comparison modes</p>
+              </div>
+            </div>
+
+            {/* Visual Diff Preview */}
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {['Baseline', 'Current', 'Diff'].map((label, i) => (
+                <div key={i} className="text-center">
+                  <div className={cn(
+                    "h-24 rounded-xl flex items-center justify-center border",
+                    i === 2 ? "bg-red-50 border-red-200" : "bg-white border-slate-200"
+                  )}>
+                    {i === 2 ? <Diff className="w-6 h-6 text-red-400" /> : <ImageIcon className="w-6 h-6 text-slate-300" />}
+                  </div>
+                  <div className={cn("text-xs mt-2", i === 2 ? "text-red-500 font-medium" : "text-slate-500")}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {['Strict', 'Layout', 'Content', 'Anti-Alias', 'Colors', 'Zones'].map((m, i) => (
+                <Badge key={i} className={cn(
+                  "text-xs justify-center border-0",
+                  i === 0 ? "bg-indigo-100 text-indigo-700" : "bg-white text-slate-600"
+                )}>{m}</Badge>
+              ))}
+            </div>
+          </div>
+
+          {/* Accessibility */}
+          <div className="p-8 rounded-3xl bg-gradient-to-br from-teal-50 via-emerald-50 to-green-50 border border-teal-100">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-500 flex items-center justify-center shadow-lg">
+                <Accessibility className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Accessibility</h3>
+                <p className="text-sm text-slate-500">WCAG 2.1 scanning</p>
+              </div>
+            </div>
+
+            {/* Issues Preview */}
+            <div className="space-y-3 mb-6">
+              {[
+                { level: 'Critical', count: 2, color: 'red' },
+                { level: 'Serious', count: 5, color: 'orange' },
+                { level: 'Moderate', count: 3, color: 'amber' },
+              ].map((issue, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-100">
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm",
+                    issue.color === 'red' ? "bg-red-500" :
+                    issue.color === 'orange' ? "bg-orange-500" : "bg-amber-500"
+                  )}>{issue.count}</div>
+                  <span className={cn(
+                    "text-sm font-medium",
+                    issue.color === 'red' ? "text-red-600" :
+                    issue.color === 'orange' ? "text-orange-600" : "text-amber-600"
+                  )}>{issue.level}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-teal-100">
+              <span className="text-sm text-slate-600">247 elements</span>
+              <Badge className="bg-emerald-100 text-emerald-700 border-0">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> 237 passed
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CTA SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function CTASection() {
+  const navigate = useNavigate();
+  
+  return (
+    <section className="py-24 bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 relative overflow-hidden">
+      <div className="absolute inset-0">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-white/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-white/10 rounded-full blur-[100px]" />
+      </div>
+      
+      <div className="relative max-w-4xl mx-auto px-6 text-center">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-6">
+          Ready to Maximize Your Test Coverage?
+        </h2>
+        <p className="text-xl text-white/80 mb-10">
+          Start building tests without code. Free 14-day trial, no credit card required.
+        </p>
+        
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-10">
+          <Button 
+            size="lg"
+            onClick={() => navigate('/signup')}
+            className="h-14 px-10 bg-white text-violet-600 hover:bg-white/90 font-semibold rounded-xl shadow-lg transition-all hover:scale-105"
+          >
+            <Rocket className="w-5 h-5 mr-2" />
+            Start Free Trial
+          </Button>
+          <Button 
+            size="lg"
+            variant="outline"
+            onClick={() => navigate('/contact')}
+            className="h-14 px-10 border-white/30 text-white hover:bg-white/10 rounded-xl"
+          >
+            Schedule Live Demo
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-8 text-white/70 text-sm">
+          {['14-day free trial', 'No credit card', 'Cancel anytime'].map((item, idx) => (
+            <span key={idx} className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" /> {item}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HEADER & FOOTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function Header() {
+  const navigate = useNavigate();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  
+  return (
+    <header className={cn(
+      "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+      scrolled 
+        ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/50" 
+        : "bg-transparent"
+    )}>
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <span className="text-white font-bold text-lg">F</span>
+            </div>
+            <span className="text-xl font-bold text-slate-800">Flowstral</span>
+          </div>
+          <nav className="hidden md:flex items-center gap-6">
+            <a href="#features" className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium">Features</a>
+            <span onClick={() => navigate('/pricing')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Pricing</span>
+            <span onClick={() => navigate('/download')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">Download</span>
+            <span onClick={() => navigate('/about')} className="text-sm text-slate-600 hover:text-slate-900 transition-colors font-medium cursor-pointer">About</span>
+          </nav>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
+            Sign In
+          </Button>
+          <Button 
+            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-lg shadow-blue-500/20 font-medium" 
+            onClick={() => navigate('/signup')}
+          >
+            Start Free <ArrowRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Footer() {
+  const navigate = useNavigate();
+  
+  const footerLinks = {
+    Product: [
+      { name: 'Smart Recorder', href: '/products/smart-recorder' },
+      { name: 'Visual Builder', href: '/products/visual-builder' },
+      { name: 'Test Management', href: '/products/test-management' },
+      { name: 'API Testing', href: '/products/api-testing' },
+      { name: 'Performance', href: '/products/performance' },
+      { name: 'Download Desktop', href: '/download' },
+    ],
+    Resources: [
+      { name: 'Documentation', href: '/resources/docs' },
+      { name: 'Watch Demo', href: '/demo' },
+      { name: 'FAQ', href: '/faq' },
+      { name: 'Community', href: '/resources/community' },
+      { name: 'Support', href: '/contact' },
+    ],
+    Company: [
+      { name: 'About Us', href: '/about' },
+      { name: 'Pricing', href: '/pricing' },
+      { name: 'Contact', href: '/contact' },
+      { name: 'Privacy', href: '/privacy' },
+      { name: 'Terms', href: '/terms' },
+    ],
+  };
+
+  return (
+    <footer className="bg-slate-900 text-white">
+      <div className="max-w-7xl mx-auto px-6 py-16">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2.5 mb-4 cursor-pointer" onClick={() => navigate('/')}>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center">
+                <span className="text-white font-bold text-xl">F</span>
+              </div>
+              <span className="text-xl font-bold">Flowstral</span>
+            </div>
+            <p className="text-slate-400 text-sm mb-6">
+              The complete no-code QA platform. Maximize test coverage without writing code.
+            </p>
+            <div className="flex gap-3">
+              {[Twitter, Linkedin, Github, Youtube].map((Icon, idx) => (
+                <a key={idx} href="#" className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:bg-slate-700 hover:text-white transition-all">
+                  <Icon className="w-4 h-4" />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* Links */}
+          {Object.entries(footerLinks).map(([title, links]) => (
+            <div key={title}>
+              <h3 className="font-semibold mb-4">{title}</h3>
+              <ul className="space-y-2.5">
+                {links.map((link) => (
+                  <li key={link.name}>
+                    {link.href.startsWith('/') ? (
+                      <span 
+                        onClick={() => navigate(link.href)} 
+                        className="text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {link.name}
+                      </span>
+                    ) : (
+                      <a href={link.href} className="text-sm text-slate-400 hover:text-white transition-colors">{link.name}</a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom */}
+      <div className="border-t border-slate-800">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-sm text-slate-500">© 2025 Flowstral Inc. All rights reserved.</div>
+          <div className="flex gap-6 text-sm text-slate-500">
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
+            <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Contact Bar */}
+      <div className="bg-slate-950">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-center gap-8 text-sm text-slate-500">
+          <a href="mailto:hello@flowstral.com" className="flex items-center gap-2 hover:text-white transition-colors">
+            <Mail className="w-4 h-4" /> hello@flowstral.com
+          </a>
+          <a href="tel:+1-555-0123" className="flex items-center gap-2 hover:text-white transition-colors">
+            <Phone className="w-4 h-4" /> +1 (555) 012-3456
+          </a>
+          <span className="flex items-center gap-2">
+            <MapPin className="w-4 h-4" /> San Francisco, CA
+          </span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN LANDING PAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+export default function LandingPage() {
+  return (
+    <div className="min-h-screen bg-white">
+      <Header />
+      <main>
+        <HeroSection />
+        <FeaturesSection />
+        <PerformanceAPISection />
+        <VisualA11ySection />
+        <CTASection />
+      </main>
+      <Footer />
+    </div>
+  );
+}

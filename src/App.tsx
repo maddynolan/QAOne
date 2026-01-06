@@ -23,7 +23,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 // Layout
 import { StreamlinedLayout } from "./components/StreamlinedLayout";
@@ -85,11 +85,60 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute, PublicRoute } from "./components/ProtectedRoute";
 import { AuthPage } from "./pages/AuthPage";
 
+// Landing Page & Marketing Pages
+import LandingPage from "./pages/LandingPage";
+import SmartRecorderPage from "./pages/marketing/SmartRecorderPage";
+import FeaturePage from "./pages/marketing/FeaturePage";
+import PricingPage from "./pages/marketing/PricingPage";
+import AboutPage from "./pages/marketing/AboutPage";
+import ContactPage from "./pages/marketing/ContactPage";
+import PlaceholderPage from "./pages/marketing/PlaceholderPage";
+import TermsPage from "./pages/marketing/TermsPage";
+import PrivacyPage from "./pages/marketing/PrivacyPage";
+import FAQPage from "./pages/marketing/FAQPage";
+import DemoPage from "./pages/marketing/DemoPage";
+import DownloadPage from "./pages/marketing/DownloadPage";
+import SignInPage from "./pages/marketing/SignInPage";
+import SignUpPage from "./pages/marketing/SignUpPage";
+import WelcomePage from "./pages/marketing/WelcomePage";
+
 // Utilities
 import { dataStorageService } from "./lib/data-storage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ELECTRON DETECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Check if running in Electron desktop app
+const isElectron = (): boolean => {
+  // Check for Electron-specific globals
+  if (typeof window !== 'undefined') {
+    // @ts-ignore - electron preload may expose this
+    if (window.electron) return true;
+    // Check user agent
+    if (navigator.userAgent.toLowerCase().includes('electron')) return true;
+    // Check for Electron-specific process
+    // @ts-ignore
+    if (window.process?.type === 'renderer') return true;
+  }
+  return false;
+};
+
+// Root route component - shows Landing Page for web, redirects to Dashboard for Electron
+const RootRoute = () => {
+  const inElectron = useMemo(() => isElectron(), []);
+  
+  if (inElectron) {
+    // Electron app: go directly to Dashboard
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  // Web browser: show Landing Page
+  return <LandingPage />;
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN APP COMPONENT
@@ -113,16 +162,36 @@ const App = () => {
               <Routes>
                 {/* ═══════════════════════════════════════════════════════════
                     PUBLIC ROUTES
+                    - Web: Shows Landing Page
+                    - Electron: Redirects to Dashboard
                     ═══════════════════════════════════════════════════════════ */}
+                <Route path="/" element={<RootRoute />} />
                 <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
+                
+                {/* Marketing Pages */}
+                <Route path="/products/smart-recorder" element={<SmartRecorderPage />} />
+                <Route path="/products/:feature" element={<FeaturePage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/contact" element={<ContactPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/faq" element={<FAQPage />} />
+                <Route path="/demo" element={<DemoPage />} />
+                <Route path="/download" element={<DownloadPage />} />
+                <Route path="/signin" element={<SignInPage />} />
+                <Route path="/signup" element={<SignUpPage />} />
+                <Route path="/welcome" element={<WelcomePage />} />
+                <Route path="/resources/:page" element={<PlaceholderPage />} />
+                <Route path="/company/:page" element={<PlaceholderPage />} />
                 
                 {/* ═══════════════════════════════════════════════════════════
                     MAIN APPLICATION - Streamlined Layout
                     ═══════════════════════════════════════════════════════════ */}
                 <Route element={<StreamlinedLayout />}>
                   
-                  {/* Default: Redirect to Recorder */}
-                  <Route path="/" element={<Navigate to="/recorder" replace />} />
+                  {/* Default App Home: Redirect to Recorder */}
+                  <Route path="/app" element={<Navigate to="/recorder" replace />} />
                   
                   {/* ─────────────────────────────────────────────────────────
                       1. RECORDER MODULE

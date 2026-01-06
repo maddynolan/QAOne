@@ -19,7 +19,12 @@
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "electron:dev": "vite build && electron electron/main.js",
+    "electron:build": "vite build && electron-builder --config electron-builder.config.js",
+    "electron:build:win": "vite build && electron-builder --config electron-builder.config.js --win",
+    "electron:build:mac": "vite build && electron-builder --config electron-builder.config.js --mac",
+    "electron:build:linux": "vite build && electron-builder --config electron-builder.config.js --linux"
   },
   "keywords": [
     "playwright",
