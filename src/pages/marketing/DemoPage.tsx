@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { 
   ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2, 
   MousePointer, Type, Eye, Zap, Database, BarChart3, Shield, Workflow,
@@ -611,12 +611,36 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
   );
 }
 
+// Map feature page names to demo step IDs
+const featureToStepMap: Record<string, string> = {
+  'visual-builder': 'builder',
+  'test-management': 'management',
+  'api-testing': 'api',
+  'performance': 'performance',
+  'dashboards': 'dashboards',
+  'smart-recorder': 'recorder',
+};
+
 export default function DemoPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+
+  // Handle feature query parameter to auto-select step
+  useEffect(() => {
+    const feature = searchParams.get('feature');
+    if (feature) {
+      const stepId = featureToStepMap[feature] || feature;
+      const stepIndex = demoSteps.findIndex(s => s.id === stepId);
+      if (stepIndex >= 0) {
+        setCurrentStep(stepIndex);
+        setIsPlaying(true); // Auto-play when coming from feature page
+      }
+    }
+  }, [searchParams]);
 
   const step = demoSteps[currentStep];
 

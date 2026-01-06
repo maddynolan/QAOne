@@ -258,7 +258,12 @@ export default function FeaturePage() {
               >
                 <Rocket className="w-5 h-5 mr-2" /> Try It Free
               </Button>
-              <Button size="lg" variant="outline" className="h-12 px-8 rounded-xl">
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="h-12 px-8 rounded-xl"
+                onClick={() => navigate(`/demo?feature=${feature}`)}
+              >
                 <Play className="w-5 h-5 mr-2" /> Watch Demo
               </Button>
             </div>
