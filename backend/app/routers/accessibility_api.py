@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
+import asyncio
 from pydantic import BaseModel
 
 from app.services.flowstral.flowstral_wcag_pipeline import WCAGPipeline
@@ -20,6 +21,76 @@ router = APIRouter(prefix="/api/accessibility", tags=["accessibility"])
 # Global instances
 wcag_pipeline = WCAGPipeline()
 accessibility_agent = AccessibilityAgent()
+
+
+async def run_axe_core_scan(url: str, component_selector: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Run axe-core accessibility scan using Playwright.
+    Returns violations from axe-core analysis.
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        logger.warning("Playwright not installed, using basic HTML checks")
+        return {"violations": [], "html": ""}
+    
+    violations = []
+    html_content = ""
+    
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
+            
+            # Navigate to URL with timeout
+            await page.goto(url, timeout=30000, wait_until="networkidle")
+            
+            # Get HTML content
+            html_content = await page.content()
+            
+            # Inject and run axe-core
+            # Using CDN version of axe-core
+            await page.add_script_tag(url="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js")
+            
+            # Wait for axe to load
+            await page.wait_for_function("typeof axe !== 'undefined'", timeout=10000)
+            
+            # Configure axe options
+            axe_options = {
+                "runOnly": {
+                    "type": "tag",
+                    "values": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]
+                }
+            }
+            
+            # Run axe-core scan
+            if component_selector:
+                # Scan specific component
+                axe_result = await page.evaluate(f"""
+                    async () => {{
+                        const element = document.querySelector('{component_selector}');
+                        if (!element) return {{ violations: [], error: 'Component not found' }};
+                        return await axe.run(element, {axe_options});
+                    }}
+                """)
+            else:
+                # Scan full page
+                axe_result = await page.evaluate(f"""
+                    async () => {{
+                        return await axe.run(document, {axe_options});
+                    }}
+                """)
+            
+            violations = axe_result.get("violations", [])
+            
+            await browser.close()
+            
+    except Exception as e:
+        logger.error(f"Error running axe-core scan: {e}", exc_info=True)
+        # Return empty violations on error - will fall back to basic checks
+    
+    return {"violations": violations, "html": html_content}
 
 
 # Request/Response Models
@@ -101,19 +172,25 @@ async def scan_page(
                 detail="component_selector is required for component scans"
             )
         
-        # Use WCAG pipeline directly (doesn't require LLM)
-        # For now, we'll use a simplified approach that doesn't require Playwright execution
-        # In production, you'd use Playwright to load the page and run axe-core
+        logger.info(f"Starting accessibility scan for URL: {request.url}")
         
-        # Simulate HTML fetch (in production, use Playwright to get HTML)
-        # For demo purposes, we'll use basic HTML checks
-        html_content = f"<html><body>Page content from {request.url}</body></html>"
+        # Run actual axe-core scan using Playwright
+        axe_result = await run_axe_core_scan(
+            url=request.url,
+            component_selector=request.component_selector if request.scan_type == "component" else None
+        )
         
-        # Run WCAG scan using the pipeline (no LLM required)
+        axe_violations = axe_result.get("violations", [])
+        html_content = axe_result.get("html", "")
+        
+        logger.info(f"Axe-core found {len(axe_violations)} violations")
+        
+        # Run WCAG scan using the pipeline with real axe-core results
         wcag_result = await wcag_pipeline.scan_page(
             html=html_content,
             url=request.url,
-            component_selector=request.component_selector if request.scan_type == "component" else None
+            component_selector=request.component_selector if request.scan_type == "component" else None,
+            wcag_scan_data={"violations": axe_violations} if axe_violations else None
         )
         
         # Convert WCAG violations to issues format
@@ -121,18 +198,25 @@ async def scan_page(
         for violation in wcag_result.get("violations", []):
             # Get element HTML from nodes
             element_html = ""
+            selector = ""
             if violation.get("nodes"):
                 first_node = violation.get("nodes", [{}])[0]
-                element_html = first_node.get("html", "") if isinstance(first_node, dict) else str(first_node)
+                if isinstance(first_node, dict):
+                    element_html = first_node.get("html", "")
+                    selector = first_node.get("selector", "")
+                else:
+                    element_html = str(first_node)
             
             issues.append({
                 "id": violation.get("id", "unknown"),
-                "rule": violation.get("rule", ""),
+                "rule": violation.get("rule", "") or violation.get("description", ""),
                 "impact": violation.get("impact", "minor"),
-                "description": violation.get("description", ""),
+                "description": violation.get("description", "") or violation.get("help", ""),
                 "element": element_html,
+                "selector": selector,
                 "suggested_fix": violation.get("suggested_fix", ""),
-                "wcag_criterion": violation.get("wcag_criterion", "")
+                "wcag_criterion": violation.get("wcag_criterion", ""),
+                "help_url": violation.get("helpUrl", "")
             })
         
         scan_id = f"scan-{datetime.utcnow().timestamp()}"
@@ -140,13 +224,15 @@ async def scan_page(
         # Generate simple report without LLM
         summary = wcag_result.get("summary", {})
         report = {
-            "compliance_status": "non_compliant" if summary.get("critical", 0) > 0 else "mostly_compliant",
+            "compliance_status": "non_compliant" if summary.get("critical", 0) > 0 else ("compliant" if summary.get("total", 0) == 0 else "mostly_compliant"),
             "total_issues": summary.get("total", 0),
             "critical_issues": summary.get("critical", 0),
             "serious_issues": summary.get("serious", 0),
             "moderate_issues": summary.get("moderate", 0),
             "minor_issues": summary.get("minor", 0)
         }
+        
+        logger.info(f"Scan complete: {summary.get('total', 0)} total issues found")
         
         return {
             "status": "success",
