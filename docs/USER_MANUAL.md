@@ -1,509 +1,706 @@
-# QAAI/ArisTrace Features Usage Guide
+# QAAI/ArisTrace User Manual
 
-Complete guide for using all features including Email Verification, PDF Verification, File Verification, and Salesforce Auto-Connect.
+> **Complete User Guide**  
+> From First Test to Production Deployment  
+> Version 3.0 | Last Updated: January 11, 2026
 
 ---
 
 ## Table of Contents
 
-1. [Email Verification](#1-email-verification)
-2. [PDF Verification](#2-pdf-verification)
-3. [File Verification](#3-file-verification)
-4. [Salesforce Auto-Connect](#4-salesforce-auto-connect)
-5. [Quick Reference](#5-quick-reference)
+1. [Getting Started](#getting-started)
+2. [Recording Your First Test](#recording-your-first-test)
+3. [Building Tests Manually](#building-tests-manually)
+4. [Running Tests](#running-tests)
+5. [API Testing](#api-testing)
+6. [Performance Testing](#performance-testing)
+7. [Accessibility Testing](#accessibility-testing)
+8. [Visual Testing](#visual-testing)
+9. [Salesforce Testing](#salesforce-testing)
+10. [AI Features](#ai-features)
+11. [Test Management](#test-management)
+12. [Integrations](#integrations)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
-## 1. Email Verification
-
-### Overview
-Verify emails received during test execution - perfect for 2FA, password reset, registration confirmations, and more.
-
-### Supported Providers
-- **Microsoft 365 / Outlook** (Enterprise recommended)
-- **Gmail** (Personal/Development)
-
-### Step-by-Step Setup
-
-#### Option A: Microsoft 365 Setup
-
-**Step 1: Create Azure AD App**
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to: Azure Active Directory → App registrations → New registration
-3. Name: `QAAI Email Verification`
-4. Account type: `Accounts in this organizational directory only`
-5. Click `Register`
-6. Copy the **Application (client) ID** and **Directory (tenant) ID**
-
-**Step 2: Add API Permissions**
-1. Go to: API permissions → Add a permission
-2. Select: Microsoft Graph → Application permissions
-3. Add these permissions:
-   - `Mail.Read`
-   - `Mail.ReadBasic`
-4. Click `Grant admin consent for [Your Org]`
-
-**Step 3: Create Client Secret**
-1. Go to: Certificates & secrets → New client secret
-2. Description: `QAAI Secret`
-3. Expiry: 24 months
-4. Click `Add`
-5. **COPY THE VALUE IMMEDIATELY** (only shown once!)
-
-**Step 4: Configure Backend**
-Create/edit `backend/.env`:
-```env
-MS_CLIENT_ID=your-application-client-id
-MS_CLIENT_SECRET=your-client-secret-value
-MS_TENANT_ID=your-directory-tenant-id
-```
-
-#### Option B: Gmail Setup
-
-**Step 1: Create Google Cloud Project**
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create new project: `QAAI Email Verification`
-3. Enable: Gmail API
-
-**Step 2: Create OAuth Credentials**
-1. Go to: APIs & Services → Credentials
-2. Create Credentials → OAuth client ID
-3. Application type: Desktop app
-4. Download JSON file as `gmail_credentials.json`
-
-**Step 3: Configure Backend**
-```env
-GMAIL_CREDENTIALS_PATH=./config/gmail_credentials.json
-```
-
-### Using Email Verification in Tests
-
-#### Method 1: Via Workflow Editor UI
-
-1. Open **Workflow Editor**
-2. Expand **Complex Verify** category in Step Palette
-3. Drag **Email Verify** step to your test
-4. Configure:
-
-```
-┌─────────────────────────────────────────────────────┐
-│ 📧 Email Verify Step Configuration                  │
-├─────────────────────────────────────────────────────┤
-│ Provider: [Microsoft 365 ▼]                         │
-│                                                     │
-│ Inbox/Email: test-user@company.com                  │
-│                                                     │
-│ Filters:                                            │
-│   Subject Filter: "Your verification code"          │
-│   Sender Filter: noreply@myapp.com                  │
-│                                                     │
-│ Wait Timeout: 60 seconds                            │
-│                                                     │
-│ ── Assertions ──                                    │
-│ [+] Subject contains: "verification"                │
-│ [+] Body contains: "Your code is"                   │
-│ [+] From equals: "noreply@myapp.com"                │
-│                                                     │
-│ ── Extractions ──                                   │
-│ ☑ Extract verification link → {{verifyUrl}}        │
-│ ☑ Extract OTP code → {{otpCode}}                   │
-└─────────────────────────────────────────────────────┘
-```
-
-5. Use extracted values in later steps:
-   - Next step: Fill input with `{{otpCode}}`
-   - Or: Navigate to `{{verifyUrl}}`
-
-#### Method 2: Via API
-
-```bash
-# Initialize email service
-curl -X POST http://localhost:8000/api/complex-verify/email/initialize?provider=microsoft_365 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client_id": "your-client-id",
-    "client_secret": "your-secret",
-    "tenant_id": "your-tenant",
-    "user_email": "inbox@company.com"
-  }'
-
-# Wait for and verify email
-curl -X POST http://localhost:8000/api/complex-verify/email/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "provider": "microsoft_365",
-    "inbox": "test@company.com",
-    "subject_filter": "verification code",
-    "timeout_seconds": 60,
-    "assertions": [
-      {"type": "subject_contains", "expected": "verification", "enabled": true},
-      {"type": "body_contains", "expected": "code", "enabled": true}
-    ],
-    "extract_otp": {"store_as": "otpCode"}
-  }'
-```
-
-### Common Email Test Scenarios
-
-#### Scenario 1: 2FA Login
-```
-Step 1: Navigate → login page
-Step 2: Input → email: test@company.com
-Step 3: Input → password: ****
-Step 4: Click → Login button
-Step 5: Email Verify →
-        - Subject: "verification code"
-        - Extract OTP → {{otpCode}}
-Step 6: Input → OTP field: {{otpCode}}
-Step 7: Click → Verify button
-Step 8: Assert → URL contains "/dashboard"
-```
-
-#### Scenario 2: Registration Confirmation
-```
-Step 1: Navigate → signup page
-Step 2: Fill form → name, email, password
-Step 3: Click → Register
-Step 4: Email Verify →
-        - Subject: "Confirm your email"
-        - Extract Link → {{confirmUrl}}
-Step 5: Navigate → {{confirmUrl}}
-Step 6: Assert → text "Email confirmed"
-```
-
----
-
-## 2. PDF Verification
-
-### Overview
-Verify downloaded or fetched PDF documents - great for invoices, reports, contracts, and generated documents.
+## Getting Started
 
 ### Prerequisites
+
+- **Node.js** 18+ 
+- **Python** 3.10+
+- **Chrome** browser (for recording extension)
+
+### Quick Start (5 Minutes)
+
 ```bash
+# 1. Start Backend
 cd backend
-pip install PyPDF2 pdfplumber
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 2. Start Frontend (new terminal)
+npm install
+npm run dev
+
+# 3. Open Browser
+# Frontend: http://localhost:8080
+# API Docs: http://localhost:8000/docs
 ```
 
-### Using PDF Verification in Tests
+### Install Browser Extension
 
-#### Method 1: Via Workflow Editor UI
+1. Open Chrome → `chrome://extensions`
+2. Enable "Developer mode" (top-right toggle)
+3. Click "Load unpacked"
+4. Select the `flowstral-extension` folder
+5. Pin the extension to your toolbar
 
-1. Open **Workflow Editor**
-2. Expand **Complex Verify** category
-3. Drag **PDF Verify** step to your test
-4. Configure:
+---
 
+## Recording Your First Test
+
+### Step 1: Start Recording
+
+1. Navigate to your test website
+2. Click the **Flowstral** extension icon in Chrome toolbar
+3. Click **Start Recording**
+4. The sidepanel opens showing recording status
+
+### Step 2: Perform Actions
+
+Perform your test scenario. The recorder captures:
+
+| Action | Captured As |
+|--------|-------------|
+| Click | Click step with selector |
+| Type text | Input step with value |
+| Navigate | Navigate step with URL |
+| Scroll | Scroll step with position |
+| Select dropdown | Select step with value |
+
+### Step 3: Stop and Edit
+
+1. Click **Stop Recording**
+2. Click **Open in Workflow Editor**
+3. Review captured steps
+4. Edit selectors or add assertions
+
+### Step 4: Save Test Case
+
+1. Click **Save Test Case**
+2. Enter a name and description
+3. Set priority and tags
+4. Click **Save**
+
+---
+
+## Building Tests Manually
+
+### Using the Visual Builder
+
+1. Navigate to **Test Cases → Builder**
+2. Click **Add Step**
+3. Choose step type:
+   - **Navigate** - Go to URL
+   - **Click** - Click element
+   - **Input** - Enter text
+   - **Wait** - Wait for time/element
+   - **Assert** - Verify condition
+   - **API** - Make API call
+   - **Database** - Execute query
+
+### Step Configuration
+
+For each step, configure:
+
+| Field | Description |
+|-------|-------------|
+| **Target** | Human-readable description |
+| **Selector** | Technical CSS/XPath selector |
+| **Value** | Input value or expected result |
+| **Expected Result** | What should happen |
+
+### Adding Assertions
+
+1. Click **Add Step** → **Assert**
+2. Choose assertion type:
+
+| Type | Description |
+|------|-------------|
+| `element_visible` | Element is visible |
+| `element_hidden` | Element is hidden |
+| `text_equals` | Text exactly matches |
+| `text_contains` | Text contains substring |
+| `url_equals` | URL matches |
+| `url_contains` | URL contains |
+| `title_equals` | Page title matches |
+| `element_count` | Number of elements |
+| `value_equals` | Input value matches |
+| `checked` | Checkbox is checked |
+
+### Using Variables
+
+1. Open **Variable Store** panel
+2. Add variables:
+   ```
+   {{username}} = testuser@example.com
+   {{password}} = Test123!
+   ```
+3. Use in steps: `Input: {{username}}`
+
+### Importing Preconditions
+
+1. Click **Import Test Case**
+2. Select existing test to use as setup
+3. Precondition runs before main test
+
+---
+
+## Running Tests
+
+### Single Test Execution
+
+1. Open test case in Builder
+2. Click **Run** button
+3. Watch real-time progress:
+   - Green checkmarks = passed steps
+   - Red X = failed steps
+   - Yellow = self-healed selectors
+
+### Batch Execution
+
+1. Navigate to **Test Suites**
+2. Create or select a suite
+3. Click **Run All**
+4. View results in **Test Runs**
+
+### Execution Options
+
+| Option | Description |
+|--------|-------------|
+| **Browser** | Chromium, Firefox, WebKit |
+| **Headed/Headless** | Show browser or run hidden |
+| **Parallel** | Run tests concurrently |
+| **Environment** | Dev, Staging, Production |
+
+### Self-Healing
+
+When a selector fails, QAAI automatically:
+
+1. Detects the failure pattern
+2. Applies healing strategies:
+   - AI-based regeneration
+   - Text-based fallback
+   - Role-based fallback
+   - Attribute matching
+3. Retries with healed selector
+4. Updates the test case
+
+---
+
+## API Testing
+
+### Creating API Tests
+
+1. Navigate to **API Testing**
+2. Click **New Request**
+3. Configure request:
+
+| Field | Description |
+|-------|-------------|
+| **Method** | GET, POST, PUT, DELETE, PATCH |
+| **URL** | API endpoint |
+| **Headers** | Request headers |
+| **Body** | Request body (JSON, XML, Form) |
+| **Auth** | Basic, Bearer, OAuth2 |
+
+### Request Chaining
+
+1. Create multiple requests in sequence
+2. Use property transfer:
+   ```
+   Step 1: POST /login → Extract token
+   Step 2: GET /profile (use {{token}})
+   ```
+
+### Assertions
+
+Add response assertions:
+
+| Type | Example |
+|------|---------|
+| Status code | `200 OK` |
+| JSONPath | `$.data.id == "123"` |
+| Response time | `< 500ms` |
+| Header | `Content-Type: application/json` |
+
+### Import Specifications
+
+1. Click **Import**
+2. Upload OpenAPI/Swagger spec
+3. Tests auto-generated for all endpoints
+
+### Supported Protocols
+
+- REST
+- SOAP (WSDL import)
+- GraphQL (queries, mutations)
+- gRPC (protobuf)
+- Kafka (producer/consumer)
+- MQTT (pub/sub)
+- WebSocket
+
+---
+
+## Performance Testing
+
+### Creating Load Tests
+
+1. Navigate to **Performance**
+2. Click **New Scenario**
+3. Add HTTP requests or import from Flowstral
+
+### Load Patterns
+
+| Pattern | Use Case |
+|---------|----------|
+| **Constant** | Steady baseline |
+| **Ramp Up** | Gradual user increase |
+| **Ramp Down** | Graceful decrease |
+| **Spike** | Sudden traffic burst |
+| **Stress** | Beyond normal capacity |
+| **Soak** | Extended duration (memory leaks) |
+| **Breakpoint** | Find system limits |
+| **Wave** | Cyclic load |
+
+### Configuration
+
+```yaml
+Virtual Users: 100
+Duration: 5 minutes
+Ramp Up: 1 minute
+Think Time: 1-3 seconds
 ```
-┌─────────────────────────────────────────────────────┐
-│ 📄 PDF Verify Step Configuration                    │
-├─────────────────────────────────────────────────────┤
-│ Source Type: [Download ▼]                           │
-│                                                     │
-│ Download Trigger: button#download-invoice           │
-│ (CSS selector for download button)                  │
-│                                                     │
-│ ── OR ──                                            │
-│ Source Type: [URL ▼]                                │
-│ PDF URL: https://api.example.com/invoice/123.pdf    │
-│                                                     │
-│ ── Assertions ──                                    │
-│ [+] Contains text: "Invoice #12345"                 │
-│ [+] Contains text: "Total: $499.99"                 │
-│ [+] Page count equals: 2                            │
-│ [+] Table contains: "Item" (page 1)                 │
-│                                                     │
-│ ── Extractions ──                                   │
-│ Pattern: Total: \$([0-9.]+)                         │
-│ Store as: {{invoiceTotal}}                          │
-└─────────────────────────────────────────────────────┘
-```
 
-#### Method 2: Via API
+### User Personas
 
-```bash
-# Verify PDF from URL
-curl -X POST http://localhost:8000/api/complex-verify/pdf/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "https://example.com/invoice.pdf",
-    "source_type": "url",
-    "assertions": [
-      {"type": "contains_text", "expected": "Invoice #12345", "enabled": true},
-      {"type": "page_count", "expected": "1", "enabled": true}
-    ],
-    "extract_text": {
-      "pattern": "Total: \\$([0-9.]+)",
-      "store_as": "invoiceTotal"
-    }
-  }'
+| Persona | Behavior |
+|---------|----------|
+| **Casual** | Slow, exploratory |
+| **Normal** | Average interaction |
+| **Power** | Fast, experienced |
+| **Bot** | Machine speed |
 
-# Parse PDF to see all text (debugging)
-curl -X POST http://localhost:8000/api/complex-verify/pdf/parse \
-  -H "Content-Type: application/json" \
-  -d '{"source": "/path/to/document.pdf", "source_type": "path"}'
-```
+### Metrics
 
-### PDF Assertion Types
+- Response time (avg, p50, p95, p99)
+- Throughput (requests/sec)
+- Error rate
+- Active users
+- Resource utilization
 
-| Type | What it checks | Example |
-|------|----------------|---------|
-| `contains_text` | Text exists in PDF | "Invoice #12345" |
-| `not_contains_text` | Text NOT in PDF | "DRAFT" |
-| `page_count` | Exact page count | 2 |
-| `page_count_min` | At least N pages | 1 |
-| `title_equals` | PDF metadata title | "Invoice Report" |
-| `text_matches` | Regex pattern match | `\d{4}-\d{4}` |
-| `table_contains` | Table has value | "$499.99" |
+---
 
-### Common PDF Test Scenarios
+## Accessibility Testing
 
-#### Scenario: Verify Invoice Download
-```
-Step 1: Navigate → Orders page
-Step 2: Click → View Order #123
-Step 3: Click → Download Invoice (triggers PDF download)
-Step 4: PDF Verify →
-        - Source: Download
-        - Contains: "Order #123"
-        - Contains: "Total: $"
-        - Page count: 1
-        - Extract: Total: \$([0-9.]+) → {{total}}
-Step 5: Assert → {{total}} equals order total
+### Running Scans
+
+1. Navigate to **Accessibility**
+2. Enter URL to scan
+3. Select scan type:
+   - **Full Page** - Entire page
+   - **Component** - Specific element
+   - **Site Audit** - Multiple pages
+
+### WCAG Standards
+
+| Standard | Levels |
+|----------|--------|
+| WCAG 2.0 | A, AA, AAA |
+| WCAG 2.1 | A, AA, AAA |
+| Section 508 | Full |
+
+### Understanding Results
+
+Violations categorized by:
+
+| Severity | Description |
+|----------|-------------|
+| **Critical** | Blocks access |
+| **Serious** | Major barriers |
+| **Moderate** | Some difficulty |
+| **Minor** | Best practice |
+
+### VPAT Generation
+
+1. Run site-wide audit
+2. Click **Generate VPAT**
+3. Download compliance document
+
+---
+
+## Visual Testing
+
+### Creating Baselines
+
+1. Navigate to **Visual Testing**
+2. Click **Capture Baseline**
+3. Enter test name and URL
+4. Screenshot saved as baseline
+
+### Running Comparisons
+
+1. Select baseline
+2. Click **Compare**
+3. Enter actual URL or upload image
+4. View diff results
+
+### Comparison Modes
+
+| Mode | Best For |
+|------|----------|
+| **Pixel Perfect** | Exact match required |
+| **Anti-Aliased** | Font rendering tolerance |
+| **Perceptual** | Minor changes OK |
+| **Structural** | Layout focus |
+| **Layout** | Ignore content changes |
+
+### Ignore Regions
+
+Mark areas to ignore (timestamps, ads):
+
+```json
+{
+  "x": 10,
+  "y": 10,
+  "width": 100,
+  "height": 50,
+  "reason": "timestamp"
+}
 ```
 
 ---
 
-## 3. File Verification
+## Salesforce Testing
 
-### Overview
-Verify downloaded files including CSV exports, Excel reports, JSON data, XML files, and images.
+### Connecting Your Org
 
-### Prerequisites
-```bash
-cd backend
-pip install pandas openpyxl Pillow xmltodict
-```
+1. Navigate to **Salesforce Tools**
+2. Click **Connect via OAuth**
+3. Log in to your Salesforce org
+4. Authorize the connected app
 
-### Using File Verification in Tests
+### Multi-Org Management
 
-#### Method 1: Via Workflow Editor UI
+1. Add multiple orgs (Dev, QA, Prod)
+2. Color-code for visual distinction
+3. Switch orgs in one click
 
-1. Open **Workflow Editor**
-2. Expand **Complex Verify** category
-3. Drag **File Verify** step to your test
-4. Configure based on file type:
+### Available Tools
 
-**For CSV Files:**
-```
-┌─────────────────────────────────────────────────────┐
-│ 📁 File Verify Step Configuration                   │
-├─────────────────────────────────────────────────────┤
-│ Download Trigger: button#export-csv                 │
-│ File Type: [CSV ▼]                                  │
-│                                                     │
-│ ── Assertions ──                                    │
-│ [+] File exists                                     │
-│ [+] Row count min: 100                              │
-│ [+] Column count: 5                                 │
-│ [+] Header contains: "Email"                        │
-│ [+] Cell equals: "test@example.com" (row 0, col 2)  │
-│                                                     │
-│ ── Extractions ──                                   │
-│ Row: 0, Column: Email → {{firstEmail}}              │
-└─────────────────────────────────────────────────────┘
-```
+| Tool | Usage |
+|------|-------|
+| **SOQL Builder** | Visual query building |
+| **Schema Browser** | Explore objects/fields |
+| **Test Data Factory** | Generate realistic data |
+| **Apex Test Runner** | Run and monitor tests |
+| **Debug Log Analyzer** | Parse log files |
+| **Record Cloner** | Deep clone records |
+| **Permission Analyzer** | Check user access |
 
-**For Excel Files:**
-```
-┌─────────────────────────────────────────────────────┐
-│ 📁 File Verify Step Configuration                   │
-├─────────────────────────────────────────────────────┤
-│ Download Trigger: button#export-excel               │
-│ File Type: [Excel ▼]                                │
-│                                                     │
-│ ── Assertions ──                                    │
-│ [+] Sheet exists: "Summary"                         │
-│ [+] Sheet count: 3                                  │
-│ [+] Cell equals: "Total" (sheet: Summary, B1)       │
-└─────────────────────────────────────────────────────┘
-```
+### Running Apex Tests
 
-**For JSON Files:**
-```
-┌─────────────────────────────────────────────────────┐
-│ 📁 File Verify Step Configuration                   │
-├─────────────────────────────────────────────────────┤
-│ Download Trigger: button#export-json                │
-│ File Type: [JSON ▼]                                 │
-│                                                     │
-│ ── Assertions ──                                    │
-│ [+] JSONPath exists: $.data.users                   │
-│ [+] JSONPath equals: $.status = "success"           │
-│ [+] Array length: $.data.items ≥ 10                 │
-└─────────────────────────────────────────────────────┘
-```
+1. Go to **Apex Test Runner** tab
+2. Select test classes
+3. Click **Run Tests**
+4. View results and code coverage
 
-#### Method 2: Via API
+### Smart Recording for Salesforce
 
-```bash
-# Verify CSV file
-curl -X POST http://localhost:8000/api/complex-verify/file/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "file_path": "/downloads/export.csv",
-    "file_type": "csv",
-    "assertions": [
-      {"type": "file_exists", "expected": "", "enabled": true},
-      {"type": "csv_row_count_min", "expected": "100", "enabled": true},
-      {"type": "csv_header_contains", "expected": "Email", "enabled": true}
-    ]
-  }'
-
-# Check capabilities (which libraries are installed)
-curl http://localhost:8000/api/complex-verify/capabilities
-```
-
-### File Assertion Types by Type
-
-#### CSV Assertions
-| Type | Description |
-|------|-------------|
-| `csv_row_count` | Exact row count |
-| `csv_row_count_min` | At least N rows |
-| `csv_column_count` | Number of columns |
-| `csv_header_contains` | Has column header |
-| `csv_cell_equals` | Cell value matches |
-
-#### Excel Assertions
-| Type | Description |
-|------|-------------|
-| `excel_sheet_exists` | Sheet name exists |
-| `excel_sheet_count` | Number of sheets |
-| `excel_cell_equals` | Cell value matches |
-
-#### JSON Assertions
-| Type | Description |
-|------|-------------|
-| `json_path_exists` | Path exists |
-| `json_path_equals` | Path value matches |
-| `json_array_length` | Array has N items |
-
-#### Image Assertions
-| Type | Description |
-|------|-------------|
-| `image_width` | Width in pixels |
-| `image_height` | Height in pixels |
-| `image_format` | Format (PNG, JPEG) |
+The recorder has optimized selectors for:
+- Lightning components
+- LWC elements
+- Classic UI
+- Process Builder
+- Flows
 
 ---
 
-## 4. Salesforce Auto-Connect
+## AI Features
 
-### Overview
-The app now automatically reconnects to Salesforce when the backend starts, using saved OAuth tokens.
+### Test Generation from Requirements
 
-### How It Works
+1. Navigate to **Test Cases → Create**
+2. Enter natural language requirement:
+   ```
+   User should be able to login with valid credentials
+   and see their dashboard with profile information
+   ```
+3. Click **Generate with AI**
+4. Review generated steps
+5. Edit and save
 
-1. **On First Login**: Connect via OAuth in SF Tools page
-2. **Tokens Saved**: Access & refresh tokens saved to `backend/config/salesforce_credentials.json`
-3. **On Restart**: Backend automatically uses refresh token to get new access token
-4. **No Manual Login**: Works automatically across laptop restarts!
+### AI Test Improvement
 
-### Setup (One-Time)
+1. Open existing test case
+2. Click **Improve with AI**
+3. Select improvement type:
+   - Add assertions
+   - Handle edge cases
+   - Improve selectors
+   - Add data variations
 
-**Step 1: Initial OAuth Connection**
-1. Start the backend: `cd backend && uvicorn app.main:app --reload --port 8000`
-2. Open QAAI app
-3. Go to **Salesforce Tools** page
-4. Click **Connect via OAuth**
-5. Login to your Salesforce org
-6. Authorize the connected app
+### Configuring AI
 
-**Step 2: Verify Auto-Connect**
-After restart, check backend logs:
-```
-[OK] Salesforce auto-connected: https://your-org.my.salesforce.com (your-user@org.com)
-```
+1. Navigate to **Settings → AI**
+2. Choose provider:
+   - Anthropic Claude (cloud)
+   - Ollama (local)
+   - OpenAI (cloud)
+3. Enter API key
+4. Select model
 
-### Manual Reconnect (If Needed)
+### AI Agents
 
-If auto-connect fails, you can manually trigger it:
+Specialized agents for:
 
-```bash
-curl -X POST http://localhost:8000/api/salesforce/auto-connect
-```
-
-Or re-authenticate via OAuth in the SF Tools page.
-
-### Troubleshooting
-
-**"Refresh token expired"**
-- Re-authenticate via OAuth in SF Tools page
-- This typically happens after several months
-
-**"No credentials found"**
-- You haven't connected to Salesforce yet
-- Go to SF Tools page and connect via OAuth
-
----
-
-## 5. Quick Reference
-
-### Backend API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/complex-verify/capabilities` | GET | Check installed libraries |
-| `/api/complex-verify/email/verify` | POST | Verify email with assertions |
-| `/api/complex-verify/email/check-latest` | POST | Debug: get recent emails |
-| `/api/complex-verify/pdf/verify` | POST | Verify PDF with assertions |
-| `/api/complex-verify/pdf/parse` | POST | Debug: extract PDF text |
-| `/api/complex-verify/file/verify` | POST | Verify file with assertions |
-| `/api/salesforce/auto-connect` | POST | Trigger SF reconnect |
-| `/api/salesforce/status` | GET | Check SF connection status |
-
-### Environment Variables
-
-```env
-# Microsoft 365 Email
-MS_CLIENT_ID=your-azure-app-client-id
-MS_CLIENT_SECRET=your-azure-client-secret
-MS_TENANT_ID=your-azure-tenant-id
-
-# Gmail
-GMAIL_CREDENTIALS_PATH=./config/gmail_credentials.json
-
-# Salesforce (auto-managed via OAuth)
-# Saved in: backend/config/salesforce_credentials.json
-```
-
-### Required Python Packages
-
-```bash
-# Email (Microsoft 365)
-pip install msal httpx
-
-# PDF
-pip install PyPDF2 pdfplumber
-
-# File verification
-pip install pandas openpyxl Pillow xmltodict
-```
-
-### Step Types in Workflow Editor
-
-| Category | Step Type | Description |
-|----------|-----------|-------------|
-| Complex Verify | Email Verify | Wait for and verify email |
-| Complex Verify | PDF Verify | Verify PDF document |
-| Complex Verify | File Verify | Verify downloaded file |
+| Agent | Purpose |
+|-------|---------|
+| Test Design | Create test strategies |
+| Requirements | Parse requirements |
+| Defect | Triage bugs |
+| Performance | Analyze results |
+| Security | Review findings |
+| Accessibility | WCAG guidance |
 
 ---
 
-## Need Help?
+## Test Management
 
-1. **Check Capabilities**: `GET /api/complex-verify/capabilities`
-2. **Check Backend Logs**: Look for error messages
-3. **Test API Directly**: Use curl commands above
-4. **Check Documentation**: `docs/COMPLEX_VERIFICATIONS.md`
+### Test Cases
 
+- Create, edit, clone, delete
+- Organize by type, priority, tags
+- Link to requirements
+- Track execution history
+
+### Test Suites
+
+- Group related test cases
+- Configure execution order
+- Set suite-level variables
+- Run as batch
+
+### Test Plans
+
+- Release-based planning
+- Assign test cases to cycles
+- Track progress and coverage
+- Schedule automated runs
+
+### Test Runs
+
+- View execution history
+- Analyze pass/fail trends
+- Review self-healing events
+- Export reports
+
+### Traceability
+
+View the complete matrix:
+```
+Requirements → Test Plans → Test Cases → Test Runs → Defects
+```
+
+Coverage metrics:
+- Requirements without tests (gaps)
+- Tests without requirements (orphans)
+- Requirements with failing tests (risks)
+
+---
+
+## Integrations
+
+### CI/CD Pipelines
+
+Export configurations for:
+
+| Platform | Format |
+|----------|--------|
+| GitHub Actions | YAML |
+| GitLab CI | YAML |
+| Jenkins | Groovy |
+| Azure DevOps | YAML |
+| CircleCI | YAML |
+
+### Issue Trackers
+
+| Platform | Features |
+|----------|----------|
+| Jira | Create/link issues |
+| Azure Boards | Work item sync |
+| GitHub Issues | Auto-create |
+
+### Documentation
+
+- Confluence integration
+- Markdown export
+- ISTQB format
+- Gherkin/BDD
+
+### Notifications
+
+- Slack alerts
+- Teams messages
+- Email notifications
+
+---
+
+## Troubleshooting
+
+### Backend Won't Start
+
+```bash
+# Check Python version
+python --version  # Should be 3.10+
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Check for port conflicts
+netstat -an | findstr 8000
+```
+
+### Extension Not Recording
+
+1. Refresh the target page
+2. Reload extension in `chrome://extensions`
+3. Check console for errors
+4. Verify backend is running
+
+### Tests Failing
+
+1. Check **Test Runs** for error details
+2. Review screenshots on failure
+3. Check backend logs:
+   ```powershell
+   Get-Content backend\logs\app.log -Tail 100
+   ```
+
+### WebSocket Disconnecting
+
+1. Verify backend is running on port 8000
+2. Check firewall settings
+3. Ensure no proxy blocking WebSocket
+
+### Self-Healing Not Working
+
+1. Enable in **Settings → Execution**
+2. Check if AI provider is configured
+3. Verify LLM is accessible
+
+### Salesforce Connection Failed
+
+1. Check OAuth credentials
+2. Verify connected app permissions
+3. Re-authenticate via OAuth flow
+
+### Common Errors
+
+| Error | Solution |
+|-------|----------|
+| "Element not found" | Selector changed - run self-healing |
+| "Timeout exceeded" | Increase wait time or check page load |
+| "Connection refused" | Start backend server |
+| "Unauthorized" | Check API keys |
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` | Save test case |
+| `Ctrl+R` | Run test |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
+| `Delete` | Remove selected step |
+| `Ctrl+D` | Duplicate step |
+| `Ctrl+↑/↓` | Move step up/down |
+
+---
+
+## Best Practices
+
+### Test Design
+
+1. **Keep tests atomic** - One scenario per test
+2. **Use meaningful names** - Describe what's being tested
+3. **Add assertions** - Verify expected outcomes
+4. **Handle setup/teardown** - Use preconditions
+5. **Use variables** - Avoid hardcoded values
+
+### Selectors
+
+1. **Prefer data-testid** - Most stable
+2. **Use role-based selectors** - Accessible and stable
+3. **Avoid indexes** - `nth(0)` breaks easily
+4. **Combine strategies** - Text + role + attribute
+
+### Execution
+
+1. **Run in headed mode** - Debug failures visually
+2. **Use screenshots** - Document failures
+3. **Monitor self-healing** - Review healed selectors
+4. **Schedule regularly** - Catch regressions early
+
+### Maintenance
+
+1. **Review test results** - Address failures promptly
+2. **Update baselines** - When UI changes intentionally
+3. **Clean up unused tests** - Keep repository organized
+4. **Document changes** - Track test modifications
+
+---
+
+## Quick Reference
+
+### URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:8080 |
+| Backend | http://localhost:8000 |
+| API Docs | http://localhost:8000/docs |
+
+### Default Ports
+
+| Service | Port |
+|---------|------|
+| Frontend (Vite) | 8080 |
+| Backend (FastAPI) | 8000 |
+| Ollama | 11434 |
+
+### File Locations
+
+| Item | Path |
+|------|------|
+| Backend logs | `backend/logs/app.log` |
+| Database | `backend/qa_platform.db` |
+| Screenshots | `backend/screenshots/` |
+| Extension | `flowstral-extension/` |
+
+---
+
+## Getting Help
+
+- **Documentation**: `/docs` folder
+- **API Reference**: `http://localhost:8000/docs`
+- **Logs**: `backend/logs/app.log`
+- **Community**: GitHub Issues
+
+---
+
+*Last updated: January 11, 2026*

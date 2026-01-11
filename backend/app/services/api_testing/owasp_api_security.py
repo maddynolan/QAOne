@@ -618,3 +618,5 @@ def get_owasp_scanner() -> OWASPAPISecurityScanner:
         _scanner = OWASPAPISecurityScanner()
     return _scanner
 
+
+

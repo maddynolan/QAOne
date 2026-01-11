@@ -20,7 +20,9 @@ import {
   MousePointer, Keyboard, Eye, Target, Cloud, Link,
   Hash, Type, CircleDot, FormInput, Database, Copy,
   Shield, Wand2, CheckSquare, Plus, Circle, Hand,
-  PenLine, LayoutGrid, ArrowRight, Upload, Activity
+  PenLine, LayoutGrid, ArrowRight, Upload, Activity,
+  Navigation, Building2, Users, User, Contact, Briefcase,
+  FileBox, MapPin, Compass, Route, TestTube, FlaskConical
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -216,6 +218,10 @@ export default function PlaywrightRecorderPage() {
   const [actions, setActions] = useState<RecordedAction[]>([]);
   const [isStarting, setIsStarting] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  
+  // Ref for auto-scrolling to newly added actions
+  const actionsEndRef = useRef<HTMLDivElement>(null);
+  const prevActionsLengthRef = useRef<number>(0);
   
   // Network capture toggles for Load/API testing
   const [captureForLoadTest, setCaptureForLoadTest] = useState(false);
@@ -1041,23 +1047,37 @@ export default function PlaywrightRecorderPage() {
     });
 
     const unsubStopped = flowstral.on('playwright-recorder-stopped', ({ actions: finalActions }: { actions: RecordedAction[] }) => {
-      // Merge recorded actions with manually added ones (SF Tools, etc.)
+      // Merge recorded actions with manually added ones (SF Tools, Test Helpers, etc.)
       setActions(prev => {
-        // Keep manually added actions (those with id starting with 'action_' - our manual prefix)
-        // Recorded actions from playwright typically have different id format
+        // Keep manually added actions - these have known prefixes from our Test Helpers panel
+        // Recorded actions from playwright typically start with 'act_' or have different format
+        const manualPrefixes = [
+          'action_', 'assert_', 'nav_', 'create_', 'soqlnav_', 'gsearch_', 
+          'search_', 'util_', 'rec_', 'tab_', 'flow_', 'test_helper_', 'sf_'
+        ];
+        
+        const isManualAction = (id: string) => {
+          return manualPrefixes.some(prefix => id.startsWith(prefix));
+        };
+        
         const manualActions = prev.filter(a => {
           const id = a.id || '';
-          // Our manually added actions always start with 'action_' followed by timestamp
-          return id.startsWith('action_') || id.startsWith('assert_');
+          // Also check for sf-* types which are our Salesforce helpers
+          const isSfType = (a.type || '').startsWith('sf-');
+          return isManualAction(id) || isSfType;
         });
         
         // Get recorded actions, removing any that match manual ones by description
         const manualDescriptions = new Set(manualActions.map(a => a.description));
         const recordedOnly = (finalActions || []).filter(a => !manualDescriptions.has(a.description));
         
-        // Combine: recorded actions + manually added (preserve order)
+        // Combine: recorded actions first, then manually added actions (preserve insertion order)
         if (recordedOnly.length > 0 || manualActions.length > 0) {
-          return [...recordedOnly, ...manualActions];
+          // Sort combined list by timestamp to maintain proper order
+          const combined = [...recordedOnly, ...manualActions].sort((a, b) => 
+            (a.timestamp || 0) - (b.timestamp || 0)
+          );
+          return combined;
         }
         return prev;
       });
@@ -1088,6 +1108,18 @@ export default function PlaywrightRecorderPage() {
       return () => { unsubAction?.(); unsubUrl?.(); };
     }
   }, []);
+
+  // Auto-scroll to newly added actions
+  useEffect(() => {
+    // Only scroll if a new action was added (not on initial load or removals)
+    if (actions.length > prevActionsLengthRef.current) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        actionsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
+    prevActionsLengthRef.current = actions.length;
+  }, [actions.length]);
 
   // Handle suggestions refresh
   const handleRefreshSuggestions = async () => {
@@ -1563,14 +1595,25 @@ export default function PlaywrightRecorderPage() {
         console.log(`[Recorder] Captured ${filteredRequests.length} network requests`);
       }
       
-      // Merge recorded actions with manually added ones (SF Tools, navigation, etc.)
+      // Merge recorded actions with manually added ones (SF Tools, Test Helpers, etc.)
       const recordedActions = result?.actions || result;
       if (Array.isArray(recordedActions)) {
         setActions(prev => {
-          // Keep manually added actions (those with id starting with 'action_' or 'assert_')
+          // Keep manually added actions - these have known prefixes from our Test Helpers panel
+          const manualPrefixes = [
+            'action_', 'assert_', 'nav_', 'create_', 'soqlnav_', 'gsearch_', 
+            'search_', 'util_', 'rec_', 'tab_', 'flow_', 'test_helper_', 'sf_'
+          ];
+          
+          const isManualAction = (id: string) => {
+            return manualPrefixes.some(prefix => id.startsWith(prefix));
+          };
+          
           const manualActions = prev.filter(a => {
             const id = a.id || '';
-            return id.startsWith('action_') || id.startsWith('assert_');
+            // Also check for sf-* types which are our Salesforce helpers
+            const isSfType = (a.type || '').startsWith('sf-');
+            return isManualAction(id) || isSfType;
           });
           
           if (manualActions.length === 0) {
@@ -1582,9 +1625,13 @@ export default function PlaywrightRecorderPage() {
           const manualDescriptions = new Set(manualActions.map(a => a.description));
           const recordedOnly = recordedActions.filter(a => !manualDescriptions.has(a.description));
           
-          // Combine: recorded actions first, then manual actions (SF Tools, etc.)
+          // Combine and sort by timestamp to maintain proper insertion order
+          const combined = [...recordedOnly, ...manualActions].sort((a, b) => 
+            (a.timestamp || 0) - (b.timestamp || 0)
+          );
+          
           console.log(`[Recorder] Merging ${recordedOnly.length} recorded + ${manualActions.length} manual actions`);
-          return [...recordedOnly, ...manualActions];
+          return combined;
         });
       }
       
@@ -1671,16 +1718,24 @@ const handleExportToBuilder = async () => {
         name: 'Recorded Test',
         description: `Recorded on ${new Date().toISOString()}`,
         steps: actions.map((action, idx) => {
-          // Determine step type from qword
-          let stepType = 'click';
+          // Determine step type - preserve sf-* types for Salesforce helpers
+          let stepType = action.type || 'click';
+          const actionType = (action.type || '').toLowerCase();
           const qword = (action.qword || '').toLowerCase();
-          if (qword.includes('goto') || qword.includes('navigate')) stepType = 'navigate';
+          
+          // If action already has an sf-* type, preserve it exactly
+          if (actionType.startsWith('sf-')) {
+            stepType = action.type!;
+          }
+          // Otherwise infer from qword
+          else if (qword.includes('goto') || qword.includes('navigate')) stepType = 'navigate';
           else if (qword.includes('fill') || qword.includes('type') || qword.includes('input')) stepType = 'input';
           else if (qword.includes('select')) stepType = 'select';
           else if (qword.includes('assert')) stepType = 'assert';
           else if (qword.includes('wait')) stepType = 'wait';
           else if (qword.includes('click')) stepType = 'click';
           else if (qword.includes('hover')) stepType = 'hover';
+          else if (qword.includes('screenshot')) stepType = 'screenshot';
           // For SF Tools, use custom type
           else if (['executesoql', 'executeapex', 'createtestdata', 'createrecord', 'clonerecord', 
                     'deleterecord', 'triggerflow', 'assertvalidation', 'assertfieldvalue',
@@ -2135,6 +2190,7 @@ Recorded Test
       steps: actions.map((action, idx) => ({
         id: `step_${Date.now()}_${idx}`,
         name: action.description || `${action.qword} ${action.args?.join(' ')}`,
+        type: action.type || 'click', // Preserve action type (sf-* types for Salesforce helpers)
         qword: action.qword,
         args: action.args,
         selectorObj: action.selectorObj,
@@ -2195,7 +2251,7 @@ Recorded Test
         result = await electronAPI.testRunner.executeTest({
           name: 'Recorded Test',
           steps: actions.map(a => ({
-            type: a.qword,
+            type: a.type || a.qword,  // Use sf-* type if available, fallback to qword
             qword: a.qword,
             args: a.args,
             selector: a.selectorObj?.selector,
@@ -2277,10 +2333,20 @@ Recorded Test
   const getActionIcon = (qword: string, small = false) => {
     const size = small ? "h-3 w-3" : "h-4 w-4";
     const type = qword?.toLowerCase() || '';
+    
+    // Salesforce-specific action types
+    if (type.startsWith('sf-navigate') || type.includes('navigateto')) return <Globe className={`${size} text-blue-400`} />;
+    if (type === 'sf-global-search' || type.includes('search')) return <Search className={`${size} text-purple-400`} />;
+    if (type === 'sf-app-launcher') return <LayoutGrid className={`${size} text-cyan-400`} />;
+    if (type === 'sf-wait' || type.includes('wait')) return <RefreshCw className={`${size} text-amber-400`} />;
+    if (type.startsWith('sf-click')) return <Hand className={`${size} text-emerald-400`} />;
+    
+    // Standard action types
     if (type.includes('goto') || type.includes('nav')) return <Globe className={`${size} text-blue-400`} />;
     if (type.includes('fill')) return <PenLine className={`${size} text-purple-400`} />;
     if (type.includes('click')) return <Hand className={`${size} text-emerald-400`} />;
     if (type.includes('assert')) return <Eye className={`${size} text-cyan-400`} />;
+    if (type.includes('screenshot')) return <Eye className={`${size} text-pink-400`} />;
     return <CircleDot className={`${size} text-muted-foreground`} />;
   };
 
@@ -2373,21 +2439,21 @@ Recorded Test
   }
 
   return (
-    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
+    <div className="h-full bg-background text-foreground flex flex-col overflow-hidden">
       {/* ============ TOP TOOLBAR ============ */}
-      <div className="h-12 bg-card border-b border-gray-200 dark:border-border flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
+      <div className="h-12 min-h-[48px] shrink-0 bg-card border-b border-gray-200 dark:border-border flex items-center justify-between px-4 overflow-visible">
+        <div className="flex items-center gap-2 shrink-0">
           {isRecording && (
             <div className="flex items-center gap-2 px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
               <div className={cn("w-2 h-2 rounded-full", isPaused ? "bg-amber-500" : "bg-red-500 animate-pulse")} />
               <span className="text-xs text-foreground">Ready</span>
               <span className="text-xs text-muted-foreground">•</span>
               <span className="text-xs text-foreground">{actions.length} steps</span>
-        </div>
+            </div>
           )}
-                      </div>
+        </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground">
             <Settings className="h-3.5 w-3.5 mr-1.5" />
           </Button>
@@ -2761,10 +2827,11 @@ Recorded Test
                   const displayAction = maskSensitiveAction(action);
                   const isPw = isPasswordField(action);
                   const isSelected = selectedActionIndex === index;
+                  const isNewlyAdded = index === actions.length - 1;
                   
                   return (
                   <div
-                    key={action.id || index}
+                    key={action.id || `action_${index}_${action.timestamp}`}
                     draggable
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
@@ -2775,7 +2842,8 @@ Recorded Test
                       isSelected && "border-primary bg-primary/10 ring-1 ring-primary/30",
                       draggedIndex === index && "opacity-50 border-cyan-500/50",
                       dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
-                      !isSelected && draggedIndex === null && "border-transparent hover:border-white/5"
+                      !isSelected && draggedIndex === null && "border-transparent hover:border-white/5",
+                      isNewlyAdded && "animate-pulse-once"
                     )}
                   >
                     {/* Drag handle */}
@@ -2808,13 +2876,18 @@ Recorded Test
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => setActions(prev => prev.filter((_, i) => i !== index))}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActions(prev => prev.filter((_, i) => i !== index));
+                      }}
                     >
                       <Trash2 className="h-3 w-3" />
                   </Button>
                   </div>
                   );
                 })}
+                {/* Auto-scroll target */}
+                <div ref={actionsEndRef} />
               </div>
             )}
             </ScrollArea>
@@ -3112,6 +3185,18 @@ Recorded Test
                   >
                     <Zap className="h-3.5 w-3.5" />
                     Quick
+                  </button>
+                  <button
+                    onClick={() => setSfToolsSubTab('testhelpers')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-all border-b-2",
+                      sfToolsSubTab === 'testhelpers' 
+                        ? "bg-green-500/10 text-green-400 border-green-500" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent border-transparent"
+                    )}
+                  >
+                    <FlaskConical className="h-3.5 w-3.5" />
+                    Test
                   </button>
                 </div>
               </div>
@@ -3526,6 +3611,597 @@ Recorded Test
               </ScrollArea>
                 )}
                 {/* End Quick Tools Sub-tab */}
+
+                {/* Test Helpers Sub-tab - Navigation & Record Operations */}
+                {sfToolsSubTab === 'testhelpers' && (
+                  <ScrollArea className="h-full">
+                    <div className="p-2 space-y-3">
+                      
+                      {/* ===== NAVIGATE TO RECORD BY ID ===== */}
+                      <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2.5">
+                        <h4 className="text-[10px] font-medium text-green-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <MapPin className="h-3 w-3" />
+                          Navigate to Record by ID
+                        </h4>
+                        <div className="flex gap-1.5">
+                          <Input
+                            value={sfToolInput}
+                            onChange={(e) => setSfToolInput(e.target.value)}
+                            placeholder="Enter Record ID (e.g., 001xxx, 003xxx)"
+                            className="h-8 text-xs bg-input border-green-500/20 text-foreground font-mono flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 bg-green-600 hover:bg-green-700"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!sfToolInput.trim()) {
+                                toast.error('Please enter a Record ID');
+                                return;
+                              }
+                              const recordId = sfToolInput.trim();
+                              // Determine object type from ID prefix
+                              const prefix = recordId.substring(0, 3);
+                              const prefixMap: Record<string, string> = {
+                                '001': 'Account', '003': 'Contact', '006': 'Opportunity', '00Q': 'Lead',
+                                '500': 'Case', '00T': 'Task', '00U': 'Event', '005': 'User',
+                                '701': 'Campaign', '01t': 'Product2', '0Q0': 'Quote', '800': 'Contract'
+                              };
+                              const objectType = prefixMap[prefix] || 'sObject';
+                              // Construct Lightning URL path - this will be appended to the base URL during execution
+                              const lightningPath = `/lightning/r/${objectType}/${recordId}/view`;
+                              const action: RecordedAction = {
+                                id: `nav_${Date.now()}`,
+                                qword: 'NavigateToRecordById',
+                                args: [recordId, objectType, lightningPath],
+                                description: `Navigate to ${objectType}: ${recordId}`,
+                                timestamp: Date.now(),
+                                type: 'sf-navigate-record'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success(`Added: Navigate to ${objectType} ${recordId}`);
+                              setSfToolInput('');
+                            }}
+                          >
+                            <Compass className="h-3.5 w-3.5 mr-1" />
+                            Add Step
+                          </Button>
+                        </div>
+                        <p className="text-[9px] text-muted-foreground mt-1.5">
+                          Supports: Account (001), Contact (003), Opportunity (006), Lead (00Q), Case (500), User (005), and more
+                        </p>
+                      </div>
+
+                      {/* ===== NAVIGATE VIA SOQL ===== */}
+                      <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-2.5">
+                        <h4 className="text-[10px] font-medium text-cyan-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Database className="h-3 w-3" />
+                          Navigate via SOQL Query
+                        </h4>
+                        <div className="space-y-2">
+                          <Select value={sfToolInput2 || 'Account'} onValueChange={setSfToolInput2}>
+                            <SelectTrigger className="h-7 text-xs bg-input border-cyan-500/20">
+                              <SelectValue placeholder="Select Object" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Account">Account</SelectItem>
+                              <SelectItem value="Contact">Contact</SelectItem>
+                              <SelectItem value="Opportunity">Opportunity</SelectItem>
+                              <SelectItem value="Lead">Lead</SelectItem>
+                              <SelectItem value="Case">Case</SelectItem>
+                              <SelectItem value="User">User</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={sfToolInput3}
+                            onChange={(e) => setSfToolInput3(e.target.value)}
+                            placeholder="WHERE clause (e.g., Name = 'Acme Corp')"
+                            className="h-8 text-xs bg-input border-cyan-500/20 text-foreground font-mono"
+                          />
+                          <Button
+                            size="sm"
+                            className="w-full h-8 bg-cyan-600 hover:bg-cyan-700"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const objectType = sfToolInput2 || 'Account';
+                              const whereClause = sfToolInput3.trim();
+                              // Construct SOQL query
+                              const soqlQuery = whereClause 
+                                ? `SELECT Id FROM ${objectType} WHERE ${whereClause} LIMIT 1`
+                                : `SELECT Id FROM ${objectType} LIMIT 1`;
+                              const action: RecordedAction = {
+                                id: `soqlnav_${Date.now()}`,
+                                qword: 'NavigateToRecordBySOQL',
+                                args: [objectType, soqlQuery],
+                                description: `Query ${objectType} and navigate to result`,
+                                timestamp: Date.now(),
+                                type: 'sf-navigate-soql'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success(`Added: Navigate to ${objectType} via SOQL`);
+                              setSfToolInput3('');
+                            }}
+                          >
+                            <Database className="h-3.5 w-3.5 mr-1.5" />
+                            Add SOQL Navigate Step
+                          </Button>
+                        </div>
+                        <p className="text-[9px] text-muted-foreground mt-1.5">
+                          Runs SOQL query to get record ID, then navigates to that record.
+                        </p>
+                      </div>
+
+                      {/* ===== QUICK OBJECT NAVIGATION ===== */}
+                      <div>
+                        <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1 flex items-center gap-1.5">
+                          <Navigation className="h-3 w-3" />
+                          Quick Navigate - Sales Objects
+                        </h4>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { name: 'Accounts', obj: 'Account', icon: Building2, color: 'blue' },
+                            { name: 'Contacts', obj: 'Contact', icon: Contact, color: 'green' },
+                            { name: 'Opportunities', obj: 'Opportunity', icon: Briefcase, color: 'yellow' },
+                            { name: 'Leads', obj: 'Lead', icon: Users, color: 'purple' },
+                            { name: 'Campaigns', obj: 'Campaign', icon: Target, color: 'pink' },
+                            { name: 'Products', obj: 'Product2', icon: FileBox, color: 'cyan' },
+                            { name: 'Quotes', obj: 'Quote', icon: FileText, color: 'orange' },
+                            { name: 'Contracts', obj: 'Contract', icon: FileText, color: 'teal' }
+                          ].map(({ name, obj, icon: Icon, color }) => (
+                            <Button
+                              key={name}
+                              variant="outline"
+                              size="sm"
+                              className={`h-9 text-[9px] border-border hover:border-${color}-500/50 hover:bg-${color}-500/5 flex-col gap-0.5 justify-center`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const lightningPath = `/lightning/o/${obj}/list`;
+                                const action: RecordedAction = {
+                                  id: `nav_${Date.now()}`,
+                                  qword: 'NavigateToObjectList',
+                                  args: [obj, lightningPath],
+                                  description: `Navigate to ${name} list view`,
+                                  timestamp: Date.now(),
+                                  type: 'sf-navigate-list'
+                                };
+                                setActions(prev => [...prev, action]);
+                                toast.success(`Added: Navigate to ${name}`);
+                              }}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {name}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ===== SERVICE & ADMIN NAVIGATION ===== */}
+                      <div>
+                        <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">
+                          Quick Navigate - Service & Admin
+                        </h4>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { name: 'Cases', obj: 'Case' },
+                            { name: 'Tasks', obj: 'Task' },
+                            { name: 'Events', obj: 'Event' },
+                            { name: 'Reports', obj: 'Report' },
+                            { name: 'Dashboards', obj: 'Dashboard' },
+                            { name: 'Files', obj: 'ContentDocument' },
+                            { name: 'Users', obj: 'User' },
+                            { name: 'Setup', obj: 'SetupOneHome' }
+                          ].map(({ name, obj }) => (
+                            <Button
+                              key={name}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[9px] border-border hover:bg-accent"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const lightningPath = name === 'Setup' 
+                                  ? '/lightning/setup/SetupOneHome/home'
+                                  : `/lightning/o/${obj}/list`;
+                                const action: RecordedAction = {
+                                  id: `nav_${Date.now()}`,
+                                  qword: 'NavigateToObjectList',
+                                  args: [obj, lightningPath],
+                                  description: `Navigate to ${name}`,
+                                  timestamp: Date.now(),
+                                  type: 'sf-navigate-list'
+                                };
+                                setActions(prev => [...prev, action]);
+                                toast.success(`Added: Navigate to ${name}`);
+                              }}
+                            >
+                              {name}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ===== QUICK CREATE RECORDS ===== */}
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-2.5">
+                        <h4 className="text-[10px] font-medium text-blue-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Plus className="h-3 w-3" />
+                          Quick Create Record
+                        </h4>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { name: 'Account', prefix: '001', color: 'blue' },
+                            { name: 'Contact', prefix: '003', color: 'green' },
+                            { name: 'Opportunity', prefix: '006', color: 'yellow' },
+                            { name: 'Lead', prefix: '00Q', color: 'purple' },
+                            { name: 'Case', prefix: '500', color: 'red' },
+                            { name: 'Task', prefix: '00T', color: 'cyan' }
+                          ].map(({ name, prefix, color }) => (
+                            <Button
+                              key={name}
+                              variant="outline"
+                              size="sm"
+                              className={`h-10 text-[10px] border-border hover:border-${color}-500/50 hover:bg-${color}-500/5 flex-col gap-0.5 justify-center`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const lightningPath = `/lightning/o/${name}/new`;
+                                const action: RecordedAction = {
+                                  id: `create_${Date.now()}`,
+                                  qword: 'NavigateToNewRecord',
+                                  args: [name, lightningPath],
+                                  description: `Create New ${name}`,
+                                  timestamp: Date.now(),
+                                  type: 'sf-navigate-new'
+                                };
+                                setActions(prev => [...prev, action]);
+                                toast.success(`Added: Create New ${name}`);
+                              }}
+                            >
+                              <Plus className="h-3 w-3" />
+                              New {name}
+                            </Button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-muted-foreground mt-2">
+                          These steps navigate to the New record form. Use recording to capture field inputs.
+                        </p>
+                      </div>
+
+                      {/* ===== GLOBAL SEARCH ===== */}
+                      <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-2.5">
+                        <h4 className="text-[10px] font-medium text-purple-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Search className="h-3 w-3" />
+                          Global Search
+                        </h4>
+                        <div className="flex gap-1.5">
+                          <Input
+                            value={sfToolInput}
+                            onChange={(e) => setSfToolInput(e.target.value)}
+                            placeholder="Enter search term..."
+                            className="h-8 text-xs bg-input border-purple-500/20 text-foreground flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 bg-purple-600 hover:bg-purple-700"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const searchTerm = sfToolInput.trim();
+                              if (!searchTerm) {
+                                toast.error('Please enter a search term');
+                                return;
+                              }
+                              const action: RecordedAction = {
+                                id: `gsearch_${Date.now()}`,
+                                qword: 'SalesforceGlobalSearch',
+                                args: [searchTerm],
+                                description: `Global search for: "${searchTerm}"`,
+                                timestamp: Date.now(),
+                                type: 'sf-global-search'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success(`Added: Global search "${searchTerm}"`);
+                              setSfToolInput('');
+                            }}
+                          >
+                            <Search className="h-3.5 w-3.5 mr-1" />
+                            Add Step
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* ===== COMMON TEST WORKFLOWS ===== */}
+                      <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2.5">
+                        <h4 className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Route className="h-3 w-3" />
+                          Common Test Workflows (Multi-Step)
+                        </h4>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { name: 'Account', obj: 'Account', icon: Building2 },
+                            { name: 'Contact', obj: 'Contact', icon: Contact },
+                            { name: 'Opportunity', obj: 'Opportunity', icon: Briefcase },
+                            { name: 'Case', obj: 'Case', icon: FileBox }
+                          ].map(({ name, obj, icon: Icon }) => (
+                            <Button
+                              key={name}
+                              variant="outline"
+                              size="sm"
+                              className="h-11 text-[10px] border-border hover:border-orange-500/50 hover:bg-orange-500/5 flex-col gap-0.5 justify-center"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const now = Date.now();
+                                const steps: RecordedAction[] = [
+                                  { 
+                                    id: `flow_${now}_1`, 
+                                    qword: 'NavigateToObjectList', 
+                                    args: [obj, `/lightning/o/${obj}/list`], 
+                                    description: `Navigate to ${name}s list`, 
+                                    timestamp: now, 
+                                    type: 'sf-navigate-list' 
+                                  },
+                                  { 
+                                    id: `flow_${now}_2`, 
+                                    qword: 'NavigateToNewRecord', 
+                                    args: [obj, `/lightning/o/${obj}/new`], 
+                                    description: `Open New ${name} form`, 
+                                    timestamp: now + 1, 
+                                    type: 'sf-navigate-new' 
+                                  },
+                                  { 
+                                    id: `flow_${now}_3`, 
+                                    qword: 'WaitForSalesforceReady', 
+                                    args: ['3000'], 
+                                    description: 'Wait for form to load', 
+                                    timestamp: now + 2, 
+                                    type: 'sf-wait' 
+                                  }
+                                ];
+                                setActions(prev => [...prev, ...steps]);
+                                toast.success(`Added: Create ${name} workflow (3 steps)`);
+                              }}
+                            >
+                              <Icon className="h-4 w-4 text-orange-400" />
+                              <span>Create {name}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ===== RECORD TABS NAVIGATION ===== */}
+                      <div>
+                        <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">
+                          Navigate Record Tabs
+                        </h4>
+                        <div className="grid grid-cols-5 gap-1">
+                          {['Details', 'Related', 'Activity', 'News', 'Chatter'].map(tab => (
+                            <Button
+                              key={tab}
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[9px] border-border hover:bg-accent"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const action: RecordedAction = {
+                                  id: `tab_${Date.now()}`,
+                                  qword: 'ClickRecordTab',
+                                  args: [tab],
+                                  description: `Click ${tab} tab`,
+                                  timestamp: Date.now(),
+                                  type: 'sf-click-tab'
+                                };
+                                setActions(prev => [...prev, action]);
+                                toast.success(`Added: Click ${tab} tab`);
+                              }}
+                            >
+                              {tab}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ===== UTILITY ACTIONS ===== */}
+                      <div>
+                        <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">
+                          Utility Actions
+                        </h4>
+                        <div className="grid grid-cols-4 gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `util_${Date.now()}`,
+                                qword: 'OpenAppLauncher',
+                                args: [],
+                                description: 'Open App Launcher',
+                                timestamp: Date.now(),
+                                type: 'sf-app-launcher'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Open App Launcher');
+                            }}
+                          >
+                            <LayoutGrid className="h-3 w-3" />
+                            App Launcher
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `util_${Date.now()}`,
+                                qword: 'OpenGlobalSearch',
+                                args: [],
+                                description: 'Open Global Search',
+                                timestamp: Date.now(),
+                                type: 'sf-open-search'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Open Global Search');
+                            }}
+                          >
+                            <Search className="h-3 w-3" />
+                            Search
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `util_${Date.now()}`,
+                                qword: 'WaitForSalesforceReady',
+                                args: ['3000'],
+                                description: 'Wait 3 seconds',
+                                timestamp: Date.now(),
+                                type: 'sf-wait'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Wait 3 seconds');
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Wait 3s
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:bg-accent flex-col gap-0 p-0.5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `util_${Date.now()}`,
+                                qword: 'TakeScreenshot',
+                                args: [`screenshot_${Date.now()}.png`],
+                                description: 'Take screenshot',
+                                timestamp: Date.now(),
+                                type: 'screenshot'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Take screenshot');
+                            }}
+                          >
+                            <Eye className="h-3 w-3" />
+                            Screenshot
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* ===== SAVE/EDIT/DELETE ACTIONS ===== */}
+                      <div>
+                        <h4 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5 px-1">
+                          Record Actions
+                        </h4>
+                        <div className="grid grid-cols-4 gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:border-green-500/50 hover:bg-green-500/5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `rec_${Date.now()}`,
+                                qword: 'ClickSaveButton',
+                                args: [],
+                                description: 'Click Save button',
+                                timestamp: Date.now(),
+                                type: 'sf-click-save'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Click Save');
+                            }}
+                          >
+                            <Save className="h-3 w-3 mr-1 text-green-400" />
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:border-blue-500/50 hover:bg-blue-500/5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `rec_${Date.now()}`,
+                                qword: 'ClickEditButton',
+                                args: [],
+                                description: 'Click Edit button',
+                                timestamp: Date.now(),
+                                type: 'sf-click-edit'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Click Edit');
+                            }}
+                          >
+                            <PenLine className="h-3 w-3 mr-1 text-blue-400" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:border-red-500/50 hover:bg-red-500/5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `rec_${Date.now()}`,
+                                qword: 'ClickDeleteButton',
+                                args: [],
+                                description: 'Click Delete button',
+                                timestamp: Date.now(),
+                                type: 'sf-click-delete'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Click Delete');
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1 text-red-400" />
+                            Delete
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-[9px] border-border hover:border-purple-500/50 hover:bg-purple-500/5"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const action: RecordedAction = {
+                                id: `rec_${Date.now()}`,
+                                qword: 'ClickCloneButton',
+                                args: [],
+                                description: 'Click Clone button',
+                                timestamp: Date.now(),
+                                type: 'sf-click-clone'
+                              };
+                              setActions(prev => [...prev, action]);
+                              toast.success('Added: Click Clone');
+                            }}
+                          >
+                            <Copy className="h-3 w-3 mr-1 text-purple-400" />
+                            Clone
+                          </Button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </ScrollArea>
+                )}
+                {/* End Test Helpers Sub-tab */}
                 
               </div>
               {/* End SF Tools Sub-tab Content */}

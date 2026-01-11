@@ -1,7 +1,7 @@
 # QAAI Platform Architecture
 
 > **Comprehensive Technical Documentation**  
-> Version 2.0 | Last Updated: December 2024
+> Version 3.0 | Last Updated: January 11, 2026
 
 ## Table of Contents
 
@@ -11,90 +11,137 @@
 4. [Backend Architecture](#backend-architecture)
 5. [Frontend Architecture](#frontend-architecture)
 6. [Browser Extension (Flowstral)](#browser-extension-flowstral)
-7. [Database Schema](#database-schema)
-8. [API Reference](#api-reference)
-9. [Core Features](#core-features)
-10. [Data Flow](#data-flow)
-11. [Deployment](#deployment)
+7. [AI/ML Architecture](#aiml-architecture)
+8. [Database Schema](#database-schema)
+9. [API Reference](#api-reference)
+10. [Core Features](#core-features)
+11. [Data Flow](#data-flow)
+12. [Deployment](#deployment)
 
 ---
 
 ## System Overview
 
-QAAI is an enterprise-grade QA automation platform that combines AI-powered test generation with visual workflow building and self-healing test execution.
+QAAI/ArisTrace is an enterprise-grade QA automation platform combining AI-powered test generation, visual workflow building, self-healing test execution, and comprehensive multi-protocol API testing.
+
+### Platform Statistics
+
+| Component | Count | Description |
+|-----------|-------|-------------|
+| **Frontend Pages** | 60+ | React TypeScript components |
+| **Backend Routers** | 50+ | FastAPI API endpoints |
+| **Services** | 165+ | Business logic modules |
+| **UI Components** | 70+ | shadcn/ui + custom |
+| **AI Agents** | 6+ | Specialized task handlers |
 
 ### Key Capabilities
 
 | Feature | Description |
 |---------|-------------|
 | **Visual Test Recording** | Browser extension records user interactions and generates Playwright scripts |
-| **AI Test Generation** | Generate tests from requirements using LLM (Anthropic Claude, Ollama) |
+| **AI Test Generation** | Generate tests from requirements using LLM (Claude, Ollama, OpenAI) |
 | **Self-Healing Tests** | Automatically fix broken selectors during test execution |
-| **Multi-Framework Support** | Export to Playwright (Python/TS), Selenium, Cypress |
-| **Real-Time Execution** | WebSocket-based live test progress updates |
-| **Results Dashboard** | Comprehensive analytics and self-healing statistics |
+| **Multi-Framework Support** | Export to Playwright (Python/TS), Selenium, Cypress, K6 |
+| **Multi-Protocol API Testing** | REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP |
+| **Performance Testing** | Virtual user simulation with 8 load patterns |
+| **Accessibility Scanning** | WCAG 2.1 AA/AAA compliance with VPAT generation |
+| **Visual Regression** | 5 comparison modes with intelligent diff detection |
+| **Security Testing** | OWASP API Security Top 10 scanning |
+| **Enterprise App Support** | 25+ applications (Salesforce, ServiceNow, Workday, SAP, etc.) |
 
 ---
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              QAAI Platform                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐    │
-│  │   React Frontend │────▶│  FastAPI Backend │────▶│   PostgreSQL/    │    │
-│  │   (TypeScript)   │◀────│    (Python)      │◀────│   SQLite DB      │    │
-│  └──────────────────┘     └──────────────────┘     └──────────────────┘    │
-│          │                        │                                         │
-│          │                        ├─────────────────────────────────────┐   │
-│          │                        │                                     │   │
-│          │                        ▼                                     ▼   │
-│          │              ┌──────────────────┐              ┌─────────────┐  │
-│          │              │   LLM Services   │              │  Playwright │  │
-│          │              │ (Claude/Ollama)  │              │   Runtime   │  │
-│          │              └──────────────────┘              └─────────────┘  │
-│          │                                                                  │
-│          ▼                                                                  │
-│  ┌──────────────────┐                                                      │
-│  │ Flowstral Chrome │                                                      │
-│  │    Extension     │                                                      │
-│  └──────────────────┘                                                      │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           QAAI/ArisTrace Platform Architecture                       │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐            │
+│  │   React Frontend │────▶│  FastAPI Backend │────▶│   PostgreSQL/    │            │
+│  │   (TypeScript)   │◀────│    (Python)      │◀────│   SQLite DB      │            │
+│  │   60+ Pages      │     │   50+ Routers    │     │                  │            │
+│  │   70+ Components │     │   165+ Services  │     │                  │            │
+│  └──────────────────┘     └──────────────────┘     └──────────────────┘            │
+│          │                        │                                                  │
+│          │                        ├────────────────────────────────────┐            │
+│          │                        │                                    │            │
+│          │                        ▼                                    ▼            │
+│          │              ┌──────────────────┐              ┌──────────────────┐     │
+│          │              │   AI Layer       │              │  Test Execution  │     │
+│          │              │ ┌──────────────┐ │              │ ┌──────────────┐ │     │
+│          │              │ │ Claude       │ │              │ │ Playwright   │ │     │
+│          │              │ │ Ollama       │ │              │ │ Selenium     │ │     │
+│          │              │ │ OpenAI       │ │              │ │ K6/Artillery │ │     │
+│          │              │ │ vLLM         │ │              │ │ ZAP Scanner  │ │     │
+│          │              │ └──────────────┘ │              │ └──────────────┘ │     │
+│          │              └──────────────────┘              └──────────────────┘     │
+│          │                        │                                                  │
+│          │                        │                                                  │
+│          ▼                        ▼                                                  │
+│  ┌──────────────────┐   ┌──────────────────┐                                        │
+│  │ Flowstral Chrome │   │   AI Agents      │                                        │
+│  │    Extension     │   │ ┌──────────────┐ │                                        │
+│  │  Visual Recorder │   │ │ Test Design  │ │                                        │
+│  └──────────────────┘   │ │ Requirements │ │                                        │
+│                         │ │ Defect       │ │                                        │
+│                         │ │ Performance  │ │                                        │
+│                         │ │ Security     │ │                                        │
+│                         │ │ Accessibility│ │                                        │
+│                         │ └──────────────┘ │                                        │
+│                         └──────────────────┘                                        │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Technology Stack
 
-### Backend
-| Component | Technology | Version |
-|-----------|------------|---------|
-| Framework | FastAPI | 0.100+ |
-| Runtime | Python | 3.10+ |
-| Database | PostgreSQL / SQLite | 15+ / 3 |
-| ORM | Direct SQL (psycopg2) | - |
-| WebSocket | FastAPI WebSocket | - |
-| Test Execution | Playwright | 1.40+ |
+### Backend Stack
 
-### Frontend
-| Component | Technology | Version |
-|-----------|------------|---------|
-| Framework | React | 18+ |
-| Language | TypeScript | 5+ |
-| Build Tool | Vite | 5+ |
-| State Management | React Query + Hooks | - |
-| UI Components | shadcn/ui + Tailwind | - |
-| Routing | React Router | 6+ |
+| Component | Technology | Version | Purpose |
+|-----------|------------|---------|---------|
+| Framework | FastAPI | 0.100+ | High-performance async API |
+| Runtime | Python | 3.10+ | Backend execution |
+| Database | PostgreSQL / SQLite | 15+ / 3 | Persistent storage |
+| ORM | Direct SQL (psycopg2) | - | Database operations |
+| WebSocket | FastAPI WebSocket | - | Real-time communication |
+| Test Execution | Playwright | 1.40+ | Browser automation |
+| Performance | K6 + Go Runner | - | Load testing |
+| Security | OWASP ZAP | - | Vulnerability scanning |
+| Accessibility | Axe-core | 4.8+ | WCAG compliance |
+
+### Frontend Stack
+
+| Component | Technology | Version | Purpose |
+|-----------|------------|---------|---------|
+| Framework | React | 18+ | UI framework |
+| Language | TypeScript | 5+ | Type safety |
+| Build Tool | Vite | 5+ | Fast development |
+| State Management | React Query + Zustand | - | Data & UI state |
+| UI Components | shadcn/ui + Tailwind | - | Professional design |
+| Routing | React Router | 6+ | Navigation |
+| Editor | Monaco Editor | - | Code editing |
+| Charts | Recharts | - | Data visualization |
 
 ### Browser Extension
-| Component | Technology |
-|-----------|------------|
-| Platform | Chrome Extension (Manifest V3) |
-| UI | Vanilla JavaScript |
-| Communication | Chrome APIs + WebSocket |
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Platform | Chrome Extension (Manifest V3) | Recording interface |
+| UI | Vanilla JavaScript | Side panel interface |
+| Communication | Chrome APIs + WebSocket | Backend sync |
+
+### AI/ML Stack
+
+| Provider | Models | Use Case |
+|----------|--------|----------|
+| Anthropic | Claude 3.5 Sonnet/Opus/Haiku | Primary cloud LLM |
+| Ollama | Qwen 2.5, LLaMA, Mistral | Local/air-gapped |
+| OpenAI | GPT-4, GPT-3.5 | Alternative cloud |
+| vLLM | Custom fine-tuned | Enterprise-specific |
 
 ---
 
@@ -105,47 +152,138 @@ QAAI is an enterprise-grade QA automation platform that combines AI-powered test
 ```
 backend/
 ├── app/
-│   ├── main.py                 # FastAPI application entry point
-│   ├── config/                 # Configuration management
-│   │   └── llm_config.py       # LLM provider configuration
-│   ├── middleware/             # Request/response middleware
-│   │   ├── rbac_middleware.py  # Role-based access control
-│   │   └── tenant_middleware.py # Multi-tenancy support
-│   ├── routers/                # API endpoint handlers
-│   │   ├── test_cases_crud_api.py
-│   │   ├── test_runs_api.py
-│   │   ├── flowstral_api.py
+│   ├── main.py                     # FastAPI application entry (7000+ lines)
+│   │
+│   ├── config/
+│   │   └── llm_config.py           # LLM provider configuration
+│   │
+│   ├── middleware/
+│   │   ├── rbac_middleware.py      # Role-based access control
+│   │   └── tenant_middleware.py    # Multi-tenant isolation
+│   │
+│   ├── decorators/
+│   │   ├── audit.py                # Audit logging
+│   │   └── permissions.py          # Permission checking
+│   │
+│   ├── routers/                    # API endpoint handlers (50+ files)
+│   │   ├── test_cases_crud_api.py  # Test case CRUD
+│   │   ├── test_runs_api.py        # Test execution
+│   │   ├── flowstral_api.py        # Recording sessions
 │   │   ├── playwright_recorder_api.py
-│   │   └── ... (50+ routers)
-│   ├── schemas/                # Pydantic models
+│   │   ├── enhanced_api_testing_api.py
+│   │   ├── performance_api.py
+│   │   ├── accessibility_api.py
+│   │   ├── visual_testing_api.py
+│   │   ├── owasp_security_api.py
+│   │   ├── salesforce_api.py
+│   │   ├── llm_api.py
+│   │   ├── agents_api.py
+│   │   ├── traceability_api.py
+│   │   ├── code_alchemy_api.py
+│   │   ├── complex_verifications.py
+│   │   └── ... (35+ more)
+│   │
+│   ├── schemas/
 │   │   ├── agent_schemas.py
 │   │   └── requirement_schemas.py
-│   ├── services/               # Business logic
-│   │   ├── automation/         # Test execution & self-healing
-│   │   ├── flowstral/          # Recording pipeline
-│   │   ├── llm/                # AI services
-│   │   ├── storage/            # Database operations
-│   │   └── core/               # System services
-│   └── utils/                  # Helper functions
-├── logs/                       # Application logs
-└── requirements.txt            # Python dependencies
+│   │
+│   ├── services/                   # Business logic (165+ files)
+│   │   ├── automation/             # Test execution & self-healing
+│   │   │   ├── test_execution_service.py
+│   │   │   ├── intelligent_self_healing.py
+│   │   │   ├── auto_healing_service.py
+│   │   │   ├── visual_testing_engine.py
+│   │   │   └── ... (15+ files)
+│   │   │
+│   │   ├── flowstral/              # Recording pipeline
+│   │   │   ├── flowstral_gateway.py
+│   │   │   ├── flowstral_session.py
+│   │   │   ├── enhanced_playwright_generator.py
+│   │   │   └── ... (25+ files)
+│   │   │
+│   │   ├── llm/                    # AI services
+│   │   │   ├── ollama_service.py
+│   │   │   ├── cached_claude_service.py
+│   │   │   ├── prompt_cache.py
+│   │   │   ├── unified_llm_gateway.py
+│   │   │   └── ... (20+ files)
+│   │   │
+│   │   ├── api_testing/            # API testing engine
+│   │   │   ├── enhanced_api_test_engine.py
+│   │   │   ├── request_chaining.py
+│   │   │   ├── oauth2_authenticator.py
+│   │   │   ├── owasp_api_security.py
+│   │   │   └── ... (10+ files)
+│   │   │
+│   │   ├── performance/            # Performance testing
+│   │   │   ├── performance_engine.py
+│   │   │   ├── scenario_compiler.py
+│   │   │   ├── go_runner_client.py
+│   │   │   └── ... (25+ files)
+│   │   │
+│   │   ├── accessibility/          # WCAG scanning
+│   │   │   ├── axe_core_scanner.py
+│   │   │   └── accessibility_report_generator.py
+│   │   │
+│   │   ├── agents/                 # AI agents
+│   │   │   ├── test_design_agent.py
+│   │   │   ├── requirements_agent.py
+│   │   │   ├── defect_agent.py
+│   │   │   ├── performance_agent.py
+│   │   │   ├── security_agent.py
+│   │   │   └── accessibility_agent.py
+│   │   │
+│   │   ├── storage/                # Database operations
+│   │   │   ├── database_service.py
+│   │   │   ├── postgres_direct.py
+│   │   │   └── ... (9 files)
+│   │   │
+│   │   ├── core/                   # System services
+│   │   │   ├── agent_registry.py
+│   │   │   ├── orchestrator.py
+│   │   │   ├── cache_service.py
+│   │   │   ├── secrets_service.py
+│   │   │   └── ... (15+ files)
+│   │   │
+│   │   ├── connectors/             # External integrations
+│   │   │   ├── jira_connector.py
+│   │   │   ├── github_connector.py
+│   │   │   ├── azure_devops_connector.py
+│   │   │   └── ... (6 files)
+│   │   │
+│   │   └── complex_verifications/  # Email/PDF/File verification
+│   │       ├── email_service.py
+│   │       ├── pdf_service.py
+│   │       └── file_service.py
+│   │
+│   └── utils/
+│       ├── endpoint_helpers.py
+│       ├── rls_query.py
+│       └── ... (10+ files)
+│
+├── logs/                           # Application logs
+│   └── app.log                     # Rotating (10MB, 5 backups)
+│
+└── requirements.txt                # Python dependencies
 ```
 
 ### Key Services
 
-#### 1. Test Execution Service (`services/automation/test_execution_service.py`)
-
-Handles Playwright test execution with self-healing support.
+#### Test Execution Service
 
 ```python
 class TestExecutionService:
     """
+    Core test execution engine with self-healing support.
+    
     Responsibilities:
-    - Execute Playwright tests (Python/TypeScript)
-    - Auto-install dependencies (pytest, playwright)
-    - Capture screenshots on failure
-    - Emit real-time WebSocket updates
-    - Self-heal broken selectors
+    - Create temporary test directories
+    - Write test files (Python/TypeScript)
+    - Install dependencies (pytest, playwright)
+    - Execute tests via subprocess
+    - Parse results and screenshots
+    - Attempt self-healing on failure
+    - Emit WebSocket progress events
     """
     
     async def execute_test(
@@ -155,65 +293,65 @@ class TestExecutionService:
         browser: str = "chromium",
         headless: bool = False,
         execution_id: str = None
-    ) -> dict:
-        # 1. Create temp directory
-        # 2. Write test file
-        # 3. Ensure Playwright setup
-        # 4. Run pytest/npx playwright test
-        # 5. Parse results
-        # 6. Attempt self-healing if failed
-        # 7. Return execution result
+    ) -> dict
 ```
 
-#### 2. Flowstral Gateway (`services/flowstral/flowstral_gateway.py`)
-
-Coordinates recording sessions between browser extension and backend.
-
-```python
-class FlowstralGateway:
-    """
-    Responsibilities:
-    - Manage recording sessions
-    - Process DOM events from extension
-    - Generate Playwright scripts
-    - Build element models
-    """
-```
-
-#### 3. LLM Services (`services/llm/`)
-
-| Service | Purpose |
-|---------|---------|
-| `ollama_service.py` | Local Ollama integration |
-| `cached_claude_service.py` | Anthropic Claude with caching |
-| `prompt_cache.py` | SQLite-backed prompt caching |
-| `unified_llm_gateway.py` | Unified LLM routing |
-
-#### 4. Self-Healing Engine (`services/automation/intelligent_self_healing.py`)
+#### Self-Healing Engine
 
 ```python
 class IntelligentSelfHealingEngine:
     """
-    Strategies (in order):
-    1. AI-based selector regeneration
-    2. Text-based fallback (get_by_text)
-    3. Role-based fallback (get_by_role)
-    4. Fuzzy attribute matching
-    5. Visual/structural similarity
+    AI-powered self-healing for broken selectors.
+    
+    Strategies (in priority order):
+    1. AI regeneration - Use LLM to suggest new selector
+    2. Text fallback - get_by_text with element text
+    3. Role fallback - get_by_role with accessible name
+    4. Fuzzy attribute match - Similar attributes
+    5. Structural similarity - DOM position analysis
+    """
+    
+    async def heal_selector(
+        self,
+        failed_selector: str,
+        page_html: str,
+        error_message: str
+    ) -> Optional[str]
+```
+
+#### API Test Engine
+
+```python
+class EnhancedAPITestEngine:
+    """
+    Enterprise-grade API testing comparable to ReadyAPI.
+    
+    Supports:
+    - REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP
+    - Functional, Security, Performance, Integration tests
+    - Data-driven testing
+    - Request chaining with property transfer
+    - Service virtualization
     """
 ```
 
-### API Routers
+#### Performance Engine
 
-| Router | Prefix | Description |
-|--------|--------|-------------|
-| `test_cases_crud_api` | `/test-cases` | CRUD for test cases |
-| `test_runs_api` | `/test-runs` | Test execution management |
-| `flowstral_api` | `/api/flowstral` | Recording sessions |
-| `playwright_recorder_api` | `/api/playwright-recorder` | Script execution |
-| `llm_api` | `/api/llm` | AI generation endpoints |
-| `requirements_api` | `/requirements` | Requirements management |
-| `defects_api` | `/defects` | Defect tracking |
+```python
+class PerformanceEngine:
+    """
+    Virtual user simulation with 8 load patterns.
+    
+    Patterns:
+    - Constant, Ramp Up, Ramp Down, Spike
+    - Stress, Soak, Breakpoint, Wave
+    
+    Integrations:
+    - K6 for HTTP load testing
+    - Go Runner for custom protocols
+    - Flowstral session conversion
+    """
+```
 
 ---
 
@@ -223,52 +361,110 @@ class IntelligentSelfHealingEngine:
 
 ```
 src/
-├── App.tsx                    # Root component with routes
-├── main.tsx                   # Application entry point
-├── index.css                  # Global styles (Tailwind)
-├── components/
-│   ├── ui/                    # shadcn/ui components (50+)
-│   ├── Layout.tsx             # Main layout wrapper
-│   ├── AppSidebar.tsx         # Navigation sidebar
-│   ├── FlowstralWorkflowEditor/  # Workflow editor components
-│   └── ...
-├── pages/                     # Route components (60+)
-│   ├── Dashboard.tsx
-│   ├── TestCases.tsx
-│   ├── EnhancedWorkflowEditor.tsx
-│   ├── TestResultsDashboard.tsx
-│   └── ...
-├── hooks/                     # Custom React hooks
-│   ├── useExecutionWebSocket.ts
-│   └── use-toast.ts
-├── lib/                       # Utility libraries
-│   ├── api-config.ts          # API endpoint configuration
-│   ├── data-storage.ts        # Data persistence
-│   ├── test-execution-service.ts
-│   └── ...
-├── contexts/                  # React contexts
-│   └── AuthContext.tsx
-└── types/                     # TypeScript definitions
+├── App.tsx                         # Root component with routes
+├── main.tsx                        # Application entry point
+├── index.css                       # Global styles (Tailwind)
+│
+├── components/                     # 70+ components
+│   ├── Layout.tsx                  # Main layout wrapper
+│   ├── StreamlinedLayout.tsx       # Sidebar + content layout
+│   ├── AppSidebar.tsx              # Navigation sidebar
+│   ├── TopNav.tsx                  # Top navigation bar
+│   ├── ProtectedRoute.tsx          # Route guards
+│   ├── AIConfiguration.tsx         # LLM settings panel
+│   ├── TraceabilityMatrix.tsx      # Coverage visualization
+│   │
+│   ├── FlowstralWorkflowEditor/    # Workflow editor components
+│   │   ├── FlowstralWorkflowEditor.tsx
+│   │   ├── WorkflowNodes.tsx
+│   │   ├── LocatorBuilder.tsx
+│   │   ├── TestRunner.tsx
+│   │   ├── VariableStore.tsx
+│   │   ├── ScheduleManager.tsx
+│   │   └── CICDExporter.tsx
+│   │
+│   ├── salesforce/                 # 15+ SF components
+│   │   ├── SFContextDashboard.tsx
+│   │   ├── SmartSOQLBuilder.tsx
+│   │   ├── StageTransitionTester.tsx
+│   │   └── MetadataAssertions.tsx
+│   │
+│   ├── verifications/              # Complex verification UI
+│   │   ├── EmailVerifyStepConfig.tsx
+│   │   ├── PDFVerifyStepConfig.tsx
+│   │   └── FileVerifyStepConfig.tsx
+│   │
+│   └── ui/                         # shadcn/ui components (50+)
+│       ├── button.tsx, card.tsx, dialog.tsx
+│       └── ... (50+ components)
+│
+├── pages/                          # 60+ page components
+│   ├── Dashboard.tsx               # Main dashboard
+│   ├── Analytics.tsx               # Analytics overview
+│   ├── Results.tsx                 # Test results
+│   │
+│   ├── PlaywrightRecorderPage.tsx  # Test recording
+│   ├── UnifiedWorkflowEditor.tsx   # Visual test builder (3100+ lines)
+│   │
+│   ├── TestRepository.tsx          # Test case management
+│   ├── TestCases.tsx               # Test case list
+│   ├── TestCaseExecution.tsx       # Manual execution
+│   ├── TestRuns.tsx                # Run history
+│   ├── TestSuites.tsx              # Suite management
+│   ├── TestPlans.tsx               # Plan management
+│   │
+│   ├── EnhancedAPITesting.tsx      # API testing
+│   ├── VirtualUserGenerator.tsx    # Performance testing (2700+ lines)
+│   ├── Accessibility.tsx           # WCAG scanning
+│   ├── VisualTestingPage.tsx       # Visual regression
+│   │
+│   ├── SalesforceToolsPage.tsx     # SF tools (2500+ lines)
+│   ├── CodeAlchemy.tsx             # Repository analyzer
+│   ├── FrameworkAnalyzer.tsx       # Framework detection
+│   │
+│   ├── Requirements.tsx            # Requirements management
+│   ├── Defects.tsx                 # Defect tracking
+│   ├── Traceability.tsx            # Coverage matrix
+│   │
+│   ├── Integrations.tsx            # External integrations
+│   ├── CICDIntegration.tsx         # CI/CD configuration
+│   ├── SecretsVault.tsx            # Credential management
+│   │
+│   ├── Settings.tsx                # Application settings
+│   └── marketing/                  # Marketing pages
+│       ├── LandingPage.tsx
+│       ├── PricingPage.tsx
+│       └── ... (12 more)
+│
+├── hooks/                          # Custom React hooks
+│   ├── useExecutionWebSocket.ts    # Real-time updates
+│   ├── use-toast.ts                # Notifications
+│   └── use-mobile.tsx              # Responsive detection
+│
+├── lib/                            # Services & utilities
+│   ├── api-config.ts               # API endpoint config
+│   ├── data-storage.ts             # Data persistence
+│   ├── test-execution-service.ts   # Execution client
+│   ├── results-ingestion-service.ts # Results storage
+│   ├── salesforce-api.ts           # SF API client
+│   ├── salesforce-test-data-factory.ts
+│   └── utils.ts                    # Helpers
+│
+├── contexts/                       # React contexts
+│   ├── AuthContext.tsx             # Authentication
+│   ├── ThemeContext.tsx            # Dark/light mode
+│   └── AIContext.tsx               # AI provider settings
+│
+└── types/                          # TypeScript definitions
+    └── api.d.ts
 ```
 
 ### Key Pages
 
-#### 1. Unified Test Builder (`pages/UnifiedWorkflowEditor.tsx`) - **NEW (Dec 2024)**
+#### Unified Workflow Editor (3100+ lines)
 
-The primary test building interface with ~3100 lines of code, replacing the legacy workflow editor.
+Primary test building interface:
 
-**Key Features:**
-- **No-Code / Code View Toggle**: Switch between human-readable steps and technical selectors
-- **Multi-Export Formats**: Automation (Playwright), API, Database, Performance (K6), Manual
-- **Save / Save As**: Update existing test cases or create new ones
-- **Assertion Builder**: Structured UI for defining expected results with auto-generated code
-- **Import Test Cases as Preconditions**: Reuse common test flows
-- **Documentation Formats**: Export to ISTQB, Gherkin/BDD, Markdown
-- **Duplicate Element Handling**: Detect and target specific elements with nth() selector
-- **Robust Failure Detection**: Screenshot on failure, error message extraction, failed step identification
-- **Real Data Integration**: Dashboard shows actual test run results (not mock data)
-
-**Unified Test Case Model:**
 ```typescript
 interface UnifiedTestCase {
   id: string;
@@ -278,192 +474,135 @@ interface UnifiedTestCase {
   priority: 'critical' | 'high' | 'medium' | 'low';
   tags: string[];
   steps: TestStep[];
-  preconditions: PreconditionRef[];  // Imported test cases
+  preconditions: PreconditionRef[];
   requirements: string[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface TestStep {
   id: string;
-  type: 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'api' | 'database' | 'scroll' | 'hover' | 'select';
-  target: string;           // Human-readable description
-  selector?: string;        // Technical selector (hidden in No-Code view)
+  type: 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'api' | 'database';
+  target: string;           // Human-readable
+  selector?: string;        // Technical (hidden in no-code)
   value?: string;
-  expectedResult?: string;  // Human-readable expected result
-  elementIndex?: number;    // For duplicate elements (nth selector)
-  
-  // Assertion details
-  assertionType?: string;   // element_visible, text_contains, url_equals, etc.
-  assertionTarget?: string; // Element to verify
-  assertionValue?: string;  // Expected value
-  assertionDescription?: string;
+  expectedResult?: string;
+  elementIndex?: number;    // For nth() selector
+  assertionType?: string;
+  assertionTarget?: string;
+  assertionValue?: string;
 }
 ```
 
-**Core State Management:**
+Features:
+- No-Code / Code View toggle
+- Multi-export (Automation, API, Database, Performance, Manual)
+- Save / Save As functionality
+- Assertion builder with 20+ types
+- Import test cases as preconditions
+- Documentation export (ISTQB, Gherkin, Markdown)
+- Duplicate element handling (nth selector)
+
+#### Virtual User Generator (2700+ lines)
+
+Performance testing interface:
+
 ```typescript
-// Test case state
-const [testCase, setTestCase] = useState<UnifiedTestCase>({...});
-const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
-const [viewMode, setViewMode] = useState<'no-code' | 'code'>('no-code');
-
-// Execution state
-const [isRunning, setIsRunning] = useState(false);
-const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'passed' | 'failed'>('idle');
-const [failedStep, setFailedStep] = useState<number | null>(null);
-const [errorMessage, setErrorMessage] = useState<string | null>(null);
-const [screenshotPath, setScreenshotPath] = useState<string | null>(null);
-```
-
-**Code Generation with Duplicate Handling:**
-```python
-# Generated code for click with elementIndex
-element = page.get_by_role("button", name="Create account")
-if element.count() > 1:
-    print(f"⚠️ Multiple elements found ({element.count()}), clicking index 2")
-element.nth(2).click()  # Uses elementIndex from step
-```
-
-#### 2. Enhanced Workflow Editor (`pages/EnhancedWorkflowEditor.tsx`)
-
-Legacy visual test builder with ~2800 lines of code (maintained for compatibility).
-
-**Features:**
-- Visual node-based workflow design
-- Multi-framework code generation (Playwright Python/TS, Selenium, Cypress)
-- Real-time test execution with WebSocket progress
-- Self-healing feedback display
-- Manual/Automated/Both test modes
-- Assertion builder with 20+ assertion types
-
-**State Management:**
-```typescript
-// Core state
-const [nodes, setNodes] = useState<WorkflowNode[]>([]);
-const [framework, setFramework] = useState('playwright-python');
-const [testMode, setTestMode] = useState<'manual' | 'automated' | 'both'>('both');
-
-// Execution state
-const [isRunning, setIsRunning] = useState(false);
-const [runResult, setRunResult] = useState<any>(null);
-const [executionProgress, setExecutionProgress] = useState({...});
-
-// WebSocket for real-time updates
-const { connect, disconnect, progress } = useExecutionWebSocket({...});
-```
-
-**Code Generation:**
-```typescript
-const generateNodeCode = (node: WorkflowNode): string => {
-  const frameworkSelector = convertSelectorToFramework(node.data.selector);
-  
-  switch (framework) {
-    case 'playwright-python':
-      return `page.${frameworkSelector}.click()`;
-    case 'playwright-typescript':
-      return `await page.${frameworkSelector}.click();`;
-    // ... other frameworks
-  }
+const LOAD_PATTERNS = {
+  constant: { name: "Constant Load", icon: "➡️" },
+  ramp_up: { name: "Ramp Up", icon: "📈" },
+  ramp_down: { name: "Ramp Down", icon: "📉" },
+  spike: { name: "Spike Test", icon: "⚡" },
+  stress: { name: "Stress Test", icon: "🔥" },
+  soak: { name: "Soak/Endurance", icon: "🕐" },
+  breakpoint: { name: "Breakpoint", icon: "💥" },
+  wave: { name: "Wave Pattern", icon: "🌊" }
 };
-```
 
-#### 2. Test Results Dashboard (`pages/TestResultsDashboard.tsx`)
-
-**Data Sources:**
-- Backend API (`/test-runs`)
-- localStorage (`workflow_test_history`)
-
-**Key Metrics:**
-- Total runs, pass rate, average duration
-- Self-healing statistics
-- Screenshot gallery for failures
-- Environment comparison
-
-#### 3. Test Cases Page (`pages/TestCases.tsx`)
-
-**Data Flow:**
-1. Load from localStorage (instant)
-2. Fetch from backend API with timeout
-3. Merge results, deduplicate by ID
-4. Display in table with search/filter
-
-### Custom Hooks
-
-#### `useExecutionWebSocket`
-```typescript
-export function useExecutionWebSocket(callbacks: {
-  onStepStart: (step: number, name: string) => void;
-  onStepComplete: (step: number, status: string, duration: number) => void;
-  onSelfHealing: (step: number, original: string, healed: string) => void;
-  onComplete: (status: string) => void;
-}) {
-  // Manages WebSocket connection to /test-runs/ws/{execution_id}
-  // Parses incoming messages and triggers callbacks
-}
+const USER_PERSONAS = {
+  casual: { thinkTime: { min: 3000, max: 8000 } },
+  normal: { thinkTime: { min: 1000, max: 3000 } },
+  power: { thinkTime: { min: 500, max: 1500 } },
+  automated: { thinkTime: { min: 0, max: 100 } }
+};
 ```
 
 ---
 
 ## Browser Extension (Flowstral)
 
-### Directory Structure
+### Architecture
 
 ```
 flowstral-extension/
 ├── manifest.json              # Extension manifest (V3)
 ├── src/
 │   ├── content/
-│   │   └── content.js         # Injected into pages, captures events
+│   │   └── content.js         # Page injection, event capture
 │   ├── background/
 │   │   └── background.js      # Service worker
 │   └── sidepanel/
-│       ├── sidepanel.html     # Side panel UI
-│       └── sidepanel.js       # Side panel logic
+│       ├── sidepanel.html     # UI
+│       └── sidepanel.js       # Logic
 └── icons/                     # Extension icons
 ```
 
 ### Recording Flow
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  User       │────▶│  Content    │────▶│  Background │────▶│  Backend    │
-│  Interaction│     │  Script     │     │  Script     │     │  API        │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-                          │                    │                    │
-                          │  DOM Event         │  Chrome Message    │  HTTP/WS
-                          │  (click, input)    │  Passing           │  
-                          ▼                    ▼                    ▼
-                    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-                    │  Event      │     │  Session    │     │  Script     │
-                    │  Capture    │     │  Management │     │  Generation │
-                    └─────────────┘     └─────────────┘     └─────────────┘
+User Interaction ──▶ Content Script ──▶ Background ──▶ Backend API
+                     (DOM Events)    (Chrome Msgs)    (HTTP/WS)
+                          │                │               │
+                          ▼                ▼               ▼
+                    Event Capture    Session Mgmt    Script Gen
 ```
 
-### Event Types Captured
+### Selector Generation Priority
 
-| Event | Data Captured |
-|-------|---------------|
-| Click | Element selector, coordinates, text |
-| Input | Field selector, value entered |
-| Navigation | URL, timestamp |
-| Scroll | Position |
-| Form Submit | Form data |
+1. `data-testid` (most stable)
+2. `id` attribute (unique)
+3. `name` attribute (forms)
+4. `aria-label` (accessibility)
+5. `role + name` (Playwright recommended)
+6. Text content (visible text)
+7. CSS path (fallback)
 
-### Selector Generation Strategy
+---
 
-```javascript
-// Priority order for selector generation
-const SELECTOR_STRATEGIES = [
-  'data-testid',      // Most stable
-  'id',               // Unique identifier
-  'name',             // Form inputs
-  'aria-label',       // Accessibility
-  'role + name',      // Playwright recommended
-  'text content',     // Fallback
-  'css path'          // Last resort
-];
+## AI/ML Architecture
+
+### LLM Services
+
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                    Unified LLM Gateway                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │   Claude    │  │   Ollama    │  │   OpenAI    │         │
+│  │ (Anthropic) │  │  (Local)    │  │  (Cloud)    │         │
+│  └─────────────┘  └─────────────┘  └─────────────┘         │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Multi-Tier Prompt Cache                  │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │   │
+│  │  │ Exact    │  │Normalized│  │ Semantic │           │   │
+│  │  │ Match    │  │  Match   │  │  Match   │           │   │
+│  │  │ (100%)   │  │  (95%)   │  │  (80%)   │           │   │
+│  │  └──────────┘  └──────────┘  └──────────┘           │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### AI Agents
+
+| Agent | Purpose | Input | Output |
+|-------|---------|-------|--------|
+| Test Design | Create test strategies | Requirements | Test scenarios |
+| Requirements | Parse and structure | Natural language | Structured reqs |
+| Defect | Triage and prioritize | Bug reports | Severity/priority |
+| Performance | Analyze results | Metrics | Recommendations |
+| Security | Review findings | Scan results | Remediation |
+| Accessibility | Interpret violations | WCAG issues | Fix guidance |
 
 ---
 
@@ -514,24 +653,14 @@ CREATE TABLE test_case_steps (
 CREATE TABLE test_runs (
     id UUID PRIMARY KEY,
     project_id UUID REFERENCES projects(id),
+    test_case_id UUID REFERENCES test_cases(id),
     name VARCHAR(255),
     status VARCHAR(50) DEFAULT 'pending',
     environment VARCHAR(100),
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Test Run Steps (Execution Results)
-CREATE TABLE test_run_steps (
-    id UUID PRIMARY KEY,
-    run_id UUID REFERENCES test_runs(id),
-    step_number INTEGER,
-    status VARCHAR(50),
     duration_ms INTEGER,
-    error TEXT,
-    screenshot_path TEXT,
-    healed_selector TEXT
+    metadata JSONB
 );
 
 -- Requirements
@@ -541,8 +670,7 @@ CREATE TABLE requirements (
     title VARCHAR(500) NOT NULL,
     description TEXT,
     priority VARCHAR(50),
-    status VARCHAR(50) DEFAULT 'draft',
-    created_at TIMESTAMP DEFAULT NOW()
+    status VARCHAR(50) DEFAULT 'draft'
 );
 
 -- Defects
@@ -553,19 +681,25 @@ CREATE TABLE defects (
     description TEXT,
     severity VARCHAR(50),
     status VARCHAR(50) DEFAULT 'open',
+    test_case_id UUID REFERENCES test_cases(id)
+);
+
+-- Traceability Links
+CREATE TABLE traceability_links (
+    id UUID PRIMARY KEY,
+    requirement_id UUID REFERENCES requirements(id),
     test_case_id UUID REFERENCES test_cases(id),
-    created_at TIMESTAMP DEFAULT NOW()
+    link_type VARCHAR(50)
 );
 ```
 
-### In-Memory Fallback
+### Storage Fallback
 
-When PostgreSQL is unavailable, the system falls back to in-memory dictionaries:
-
-```python
-# In-memory storage (test_cases_crud_api.py)
-_test_cases_store: Dict[str, Dict[str, Any]] = {}
-_test_runs_store: Dict[str, Dict[str, Any]] = {}
+```
+Priority:
+1. PostgreSQL (production)
+2. SQLite (development/fallback)
+3. In-memory (last resort)
 ```
 
 ---
@@ -587,91 +721,103 @@ _test_runs_store: Dict[str, Dict[str, Any]] = {}
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/playwright-recorder/execute` | Execute Playwright script |
-| WS | `/test-runs/ws/{execution_id}` | Real-time execution updates |
+| WS | `/test-runs/ws/{execution_id}` | Real-time updates |
 | GET | `/test-runs` | List test runs |
 | GET | `/test-runs/{id}` | Get run details |
 
-### Flowstral Recording
+### API Testing
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/flowstral/sessions` | Create recording session |
-| POST | `/api/flowstral/events/batch` | Submit recorded events |
-| GET | `/api/flowstral/sessions/{id}/script` | Get generated script |
+| POST | `/api/v2/testing/test-suite/generate` | Generate API tests |
+| POST | `/api/v2/testing/execute` | Execute API tests |
+| POST | `/api/v2/testing/load-test` | Run load test |
+| GET | `/api/v2/testing/environments` | List environments |
 
-### AI Generation
+### Performance Testing
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/llm/generate-test` | Generate test from requirement |
-| GET | `/api/llm/usage-stats` | Get LLM usage statistics |
-| GET | `/api/llm/cache/stats` | Get cache statistics |
+| POST | `/api/performance/scenarios` | Create scenario |
+| POST | `/api/performance/scenarios/from-flowstral` | From recording |
+| POST | `/api/performance/scenarios/{id}/run` | Run scenario |
+| GET | `/api/performance/scenarios/{id}/results` | Get results |
+
+### Accessibility
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/accessibility/scan` | Scan URL |
+| POST | `/api/accessibility/component-scan` | Scan component |
+| POST | `/api/accessibility/site-audit` | Site-wide audit |
+| POST | `/api/accessibility/vpat/generate` | Generate VPAT |
+
+### Visual Testing
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/visual-testing/compare` | Compare images |
+| POST | `/api/visual-testing/baseline` | Save baseline |
+| GET | `/api/visual-testing/baselines` | List baselines |
+| POST | `/api/visual-testing/batch-compare` | Batch comparison |
+
+### Security
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/security/scan` | OWASP scan |
+| POST | `/api/security/quick-scan` | Quick scan |
+| GET | `/api/security/scan/{id}` | Get results |
+
+### AI/LLM
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/llm/generate-test` | Generate test |
+| POST | `/api/llm/generate-script` | Generate script |
+| GET | `/api/llm/usage-stats` | Usage stats |
+| GET | `/api/llm/cache/stats` | Cache stats |
 
 ---
 
 ## Core Features
 
-### 1. Visual Workflow Editor
+### Self-Healing Test Execution
 
-**Modes:**
-- **Manual**: Creates human-readable test cases
-- **Automated**: Generates executable Playwright scripts
-- **Both**: Generates both simultaneously
-
-**Node Types:**
-- Navigate, Click, Input, Wait, Assert
-- API calls, Database queries
-- Conditions, Loops
-- Screenshots, Visual comparison
-
-### 2. Self-Healing Test Execution
-
-**Process:**
+```
 1. Execute test normally
-2. On selector failure, detect error pattern
-3. Apply healing strategies in priority order
-4. Update test with healed selector
-5. Retry execution
+2. On selector failure:
+   └─ Detect error pattern
+   
+3. Apply healing strategies (in order):
+   ├─ AI regeneration
+   ├─ Text fallback (get_by_text)
+   ├─ Role fallback (get_by_role)
+   ├─ Attribute fuzzy match
+   └─ Structural similarity
+   
+4. Retry with healed selector
+5. Update test case
 6. Report healing in results
-
-**Healing Strategies:**
-```python
-HEALING_STRATEGIES = [
-    'ai_regeneration',      # Use LLM to suggest new selector
-    'text_fallback',        # get_by_text with element text
-    'role_fallback',        # get_by_role with accessible name
-    'attribute_fuzzy',      # Match similar attributes
-    'structural_similarity' # DOM structure analysis
-]
 ```
 
-### 3. Multi-Framework Export
+### Multi-Framework Export
 
-**Supported Frameworks:**
-| Framework | Language | File Extension |
-|-----------|----------|----------------|
+| Framework | Language | Extension |
+|-----------|----------|-----------|
 | Playwright | Python | `.py` |
 | Playwright | TypeScript | `.ts` |
 | Selenium | Java | `.java` |
 | Selenium | Python | `.py` |
 | Cypress | JavaScript | `.js` |
+| K6 | JavaScript | `.js` |
 
-### 4. LLM Integration
+### LLM Cost Optimization
 
-**Providers:**
-- Anthropic Claude (cloud)
-- Ollama (local)
-- OpenAI (optional)
-
-**Caching:**
-- Exact match: Identical prompts
-- Normalized match: Similar prompts
-- Semantic match: Related content
-
-**Cost Optimization:**
-- Multi-tier caching (90%+ cache hit rate)
-- Model tiering (use smaller models when appropriate)
+- Multi-tier caching (90%+ hit rate)
+- Model tiering (Haiku → Sonnet → Opus)
 - Response truncation
+- Task-specific TTLs
 
 ---
 
@@ -680,23 +826,23 @@ HEALING_STRATEGIES = [
 ### Test Recording & Execution
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           TEST CREATION FLOW                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────┐   Record   ┌──────────┐   Generate  ┌──────────┐             │
-│  │ Browser  │ ─────────▶ │ Flowstral│ ──────────▶ │ Workflow │             │
-│  │ Extension│            │ Backend  │             │ Editor   │             │
-│  └──────────┘            └──────────┘             └──────────┘             │
-│                                                         │                   │
-│                                                         │ Edit & Save       │
-│                                                         ▼                   │
-│  ┌──────────┐   Execute  ┌──────────┐   Results   ┌──────────┐             │
-│  │ Results  │ ◀───────── │ Test     │ ◀────────── │ Test     │             │
-│  │ Dashboard│            │ Executor │             │ Case     │             │
-│  └──────────┘            └──────────┘             └──────────┘             │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        TEST CREATION FLOW                             │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌──────────┐   Record   ┌──────────┐   Generate  ┌──────────┐      │
+│  │ Browser  │ ─────────▶ │ Flowstral│ ──────────▶ │ Workflow │      │
+│  │ Extension│            │ Backend  │             │ Editor   │      │
+│  └──────────┘            └──────────┘             └──────────┘      │
+│                                                        │             │
+│                                                        │ Edit & Save │
+│                                                        ▼             │
+│  ┌──────────┐   Execute  ┌──────────┐   Results   ┌──────────┐      │
+│  │ Results  │ ◀───────── │ Test     │ ◀────────── │ Test     │      │
+│  │ Dashboard│            │ Executor │             │ Case     │      │
+│  └──────────┘            └──────────┘             └──────────┘      │
+│                                                                       │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### WebSocket Communication
@@ -707,15 +853,10 @@ Frontend                          Backend
    │ ───── Connect WS ────────────▶│
    │                                │
    │ ◀───── step_start ───────────│
-   │                                │
    │ ◀───── step_complete ────────│
-   │                                │
-   │ ◀───── self_healing ─────────│  (if selector healed)
-   │                                │
-   │ ◀───── screenshot ───────────│  (if captured)
-   │                                │
+   │ ◀───── self_healing ─────────│
+   │ ◀───── screenshot ───────────│
    │ ◀───── execution_complete ───│
-   │                                │
 ```
 
 ---
@@ -731,28 +872,27 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Frontend
-cd ..
 npm install
 npm run dev
 
 # Extension
-# Load flowstral-extension/ as unpacked extension in Chrome
+# Load flowstral-extension/ as unpacked in Chrome
 ```
 
 ### Environment Variables
 
 ```bash
 # Backend (.env)
-ANTHROPIC_API_KEY=sk-...           # For Claude AI
-OLLAMA_URL=http://localhost:11434  # For local Ollama
-DATABASE_URL=postgresql://...       # PostgreSQL connection
-SECRET_KEY=your-secret-key         # JWT signing
+ANTHROPIC_API_KEY=sk-ant-...
+OLLAMA_URL=http://localhost:11434
+DATABASE_URL=postgresql://...
+SECRET_KEY=your-jwt-secret
 
 # Frontend (.env)
 VITE_API_URL=http://localhost:8000
 ```
 
-### Production Deployment
+### Production
 
 ```yaml
 # docker-compose.yml
@@ -777,36 +917,4 @@ services:
 
 ---
 
-## Appendix
-
-### File Size Reference
-
-| File | Lines | Description |
-|------|-------|-------------|
-| `backend/app/main.py` | 7000+ | Main FastAPI app (needs refactoring) |
-| `EnhancedWorkflowEditor.tsx` | 2700+ | Visual test builder |
-| `test_execution_service.py` | 1600+ | Test runner |
-| `flowstral_gateway.py` | 1200+ | Recording orchestration |
-
-### Performance Considerations
-
-- **Database**: Use PostgreSQL for production, SQLite for development
-- **Caching**: LLM responses cached in SQLite with TTL
-- **WebSocket**: Connection pooling for concurrent executions
-- **Screenshots**: Stored on disk, referenced by path in DB
-
----
-
-*This documentation is auto-generated and maintained. Last updated: December 2024*
-
-
-
-
-
-
-
-
-
-
-
-
+*Last updated: January 11, 2026*

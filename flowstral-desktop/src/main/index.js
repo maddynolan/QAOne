@@ -77,7 +77,7 @@ function getWebappUrl() {
   const isDev = process.argv.includes('--dev');
   
   // Check environment variable for custom port
-  const devPort = process.env.FLOWSTRAL_DEV_PORT || '8082';
+  const devPort = process.env.FLOWSTRAL_DEV_PORT || '8080';
   
   if (isDev) {
     // In dev mode, load from Vite dev server

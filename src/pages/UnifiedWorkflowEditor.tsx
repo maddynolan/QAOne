@@ -727,6 +727,34 @@ function getStepDescription(step: TestStep): string {
     case 'checkpoint':
       return step.noteText ? `🚩 ${step.noteText.slice(0, 40)}` : 'Checkpoint';
     
+    // Salesforce Testing Helper step types
+    case 'sf-navigate-record':
+      return `Navigate to ${(step as any).args?.[1] || 'record'}: ${(step as any).args?.[0] || ''}`;
+    case 'sf-navigate-soql':
+      return `Query ${(step as any).args?.[0] || 'Object'} and navigate`;
+    case 'sf-navigate-list':
+      return `Navigate to ${(step as any).args?.[0] || 'Object'} list`;
+    case 'sf-navigate-new':
+      return `Open New ${(step as any).args?.[0] || 'Record'} form`;
+    case 'sf-global-search':
+      return `Search: "${(step as any).args?.[0] || ''}"`;
+    case 'sf-app-launcher':
+      return 'Open App Launcher';
+    case 'sf-open-search':
+      return 'Focus Global Search';
+    case 'sf-wait':
+      return `Wait for Salesforce (${(step as any).args?.[0] || '3000'}ms)`;
+    case 'sf-click-tab':
+      return `Click ${(step as any).args?.[0] || 'Details'} tab`;
+    case 'sf-click-save':
+      return 'Click Save button';
+    case 'sf-click-edit':
+      return 'Click Edit button';
+    case 'sf-click-delete':
+      return 'Click Delete button';
+    case 'sf-click-clone':
+      return 'Click Clone button';
+    
     default:
       return step.description || '';
   }
@@ -8677,6 +8705,239 @@ def test_${safeName}():
         code += `${indent}    status = "PASS" if result.get("test_passed") else "FAIL"\n`;
         code += `${indent}    print(f"  {status} {name}: value={result.get('value')}")\n`;
         code += `${indent}assert _all_passed, f"Boundary tests failed: {_boundary_results}"\n`;
+        break;
+      }
+      
+      // ========== SALESFORCE TESTING HELPER STEPS ==========
+      // These are generated from the Test Helpers panel in SF Tools tab
+      
+      case 'sf-navigate-record': {
+        // Navigate to a specific Salesforce record by ID
+        const recordId = (step as any).args?.[0] || '';
+        const objectType = (step as any).args?.[1] || 'sObject';
+        const lightningPath = (step as any).args?.[2] || `/lightning/r/${objectType}/${recordId}/view`;
+        code += `${indent}# Navigate to ${objectType} record: ${recordId}\n`;
+        code += `${indent}_sf_base_url = page.url().split('/lightning')[0] if '/lightning' in page.url() else page.url().split('.com')[0] + '.com'\n`;
+        code += `${indent}page.goto(f"{_sf_base_url}${lightningPath}")\n`;
+        code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}sf.wait_for_ready()\n`;
+        code += `${indent}print(f"[+] Navigated to ${objectType}: ${recordId}")\n`;
+        break;
+      }
+      
+      case 'sf-navigate-soql': {
+        // Run SOQL query to find record, then navigate to it
+        const soqlObjectType = (step as any).args?.[0] || 'Account';
+        const soqlQuery = (step as any).args?.[1] || '';
+        const escapedSoql = soqlQuery.replace(/"/g, '\\"');
+        code += `${indent}# Navigate via SOQL: ${soqlQuery.substring(0, 50)}...\n`;
+        code += `${indent}# First execute SOQL to get record ID\n`;
+        code += `${indent}_soql_result = sf.execute_soql("${escapedSoql}")\n`;
+        code += `${indent}if _soql_result and _soql_result.get('records') and len(_soql_result['records']) > 0:\n`;
+        code += `${indent}    _found_id = _soql_result['records'][0]['Id']\n`;
+        code += `${indent}    _sf_base = page.url().split('/lightning')[0] if '/lightning' in page.url() else page.url().split('.com')[0] + '.com'\n`;
+        code += `${indent}    page.goto(f"{_sf_base}/lightning/r/${soqlObjectType}/{_found_id}/view")\n`;
+        code += `${indent}    page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}    sf.wait_for_ready()\n`;
+        code += `${indent}    print(f"[+] Navigated to ${soqlObjectType}: {_found_id}")\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    raise Exception("SOQL query returned no records")\n`;
+        break;
+      }
+      
+      case 'sf-navigate-list': {
+        // Navigate to object list view
+        const listObjectType = (step as any).args?.[0] || 'Account';
+        const listPath = (step as any).args?.[1] || `/lightning/o/${listObjectType}/list`;
+        code += `${indent}# Navigate to ${listObjectType} list view\n`;
+        code += `${indent}_sf_base_url = page.url().split('/lightning')[0] if '/lightning' in page.url() else page.url().split('.com')[0] + '.com'\n`;
+        code += `${indent}page.goto(f"{_sf_base_url}${listPath}")\n`;
+        code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}sf.wait_for_ready()\n`;
+        code += `${indent}print(f"[+] Navigated to ${listObjectType} list")\n`;
+        break;
+      }
+      
+      case 'sf-navigate-new': {
+        // Navigate to new record form
+        const newObjectType = (step as any).args?.[0] || 'Account';
+        const newPath = (step as any).args?.[1] || `/lightning/o/${newObjectType}/new`;
+        code += `${indent}# Navigate to New ${newObjectType} form\n`;
+        code += `${indent}_sf_base_url = page.url().split('/lightning')[0] if '/lightning' in page.url() else page.url().split('.com')[0] + '.com'\n`;
+        code += `${indent}page.goto(f"{_sf_base_url}${newPath}")\n`;
+        code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}sf.wait_for_ready()\n`;
+        code += `${indent}print(f"[+] Opened New ${newObjectType} form")\n`;
+        break;
+      }
+      
+      case 'sf-global-search': {
+        // Perform global search
+        const searchTerm = (step as any).args?.[0] || '';
+        const escapedSearch = searchTerm.replace(/"/g, '\\"');
+        code += `${indent}# Salesforce Global Search: "${searchTerm}"\n`;
+        code += `${indent}_sf_base_url = page.url().split('/lightning')[0] if '/lightning' in page.url() else page.url().split('.com')[0] + '.com'\n`;
+        code += `${indent}page.goto(f"{_sf_base_url}/lightning/o/GlobalSearchResults/home?term=${encodeURIComponent(escapedSearch)}")\n`;
+        code += `${indent}page.wait_for_load_state("domcontentloaded")\n`;
+        code += `${indent}sf.wait_for_ready()\n`;
+        code += `${indent}print(f"[+] Global search: ${escapedSearch}")\n`;
+        break;
+      }
+      
+      case 'sf-app-launcher': {
+        // Open App Launcher
+        code += `${indent}# Open Salesforce App Launcher\n`;
+        code += `${indent}sf.open_app_launcher()\n`;
+        code += `${indent}print("[+] Opened App Launcher")\n`;
+        break;
+      }
+      
+      case 'sf-open-search': {
+        // Focus global search input
+        code += `${indent}# Focus Global Search input\n`;
+        code += `${indent}_search_selectors = [\n`;
+        code += `${indent}    'input[placeholder*="Search" i]',\n`;
+        code += `${indent}    'button[title*="Search" i]',\n`;
+        code += `${indent}    '.forceSearchAssistant input'\n`;
+        code += `${indent}]\n`;
+        code += `${indent}for _sel in _search_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible():\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}print("[+] Opened Global Search")\n`;
+        break;
+      }
+      
+      case 'sf-wait': {
+        // Wait for Salesforce page to be ready
+        const waitMs = (step as any).args?.[0] || '3000';
+        code += `${indent}# Wait for Salesforce to be ready\n`;
+        code += `${indent}page.wait_for_timeout(${waitMs})\n`;
+        code += `${indent}sf.wait_for_ready()\n`;
+        code += `${indent}print("[+] Salesforce page ready")\n`;
+        break;
+      }
+      
+      case 'sf-click-tab': {
+        // Click record tab
+        const tabName = (step as any).args?.[0] || 'Details';
+        code += `${indent}# Click ${tabName} tab on record page\n`;
+        code += `${indent}_tab_selectors = [\n`;
+        code += `${indent}    f'a[title="${tabName}"]',\n`;
+        code += `${indent}    f'li[title="${tabName}"] a',\n`;
+        code += `${indent}    f'a[data-tab-name="${tabName}"]',\n`;
+        code += `${indent}    f'[role="tab"]:has-text("${tabName}")',\n`;
+        code += `${indent}]\n`;
+        code += `${indent}_tab_clicked = False\n`;
+        code += `${indent}for _sel in _tab_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible(timeout=2000):\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            _tab_clicked = True\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}if not _tab_clicked:\n`;
+        code += `${indent}    page.get_by_text("${tabName}").first.click()\n`;
+        code += `${indent}page.wait_for_timeout(1000)\n`;
+        code += `${indent}print(f"[+] Clicked ${tabName} tab")\n`;
+        break;
+      }
+      
+      case 'sf-click-save': {
+        // Click Save button
+        code += `${indent}# Click Save button\n`;
+        code += `${indent}_save_selectors = [\n`;
+        code += `${indent}    'button[name="SaveEdit"]',\n`;
+        code += `${indent}    'button[title="Save"]',\n`;
+        code += `${indent}    'lightning-button button:has-text("Save")',\n`;
+        code += `${indent}]\n`;
+        code += `${indent}for _sel in _save_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible(timeout=2000):\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    page.get_by_role("button", name=re.compile("save", re.I)).first.click()\n`;
+        code += `${indent}page.wait_for_timeout(2000)\n`;
+        code += `${indent}print("[+] Clicked Save")\n`;
+        break;
+      }
+      
+      case 'sf-click-edit': {
+        // Click Edit button
+        code += `${indent}# Click Edit button\n`;
+        code += `${indent}_edit_selectors = [\n`;
+        code += `${indent}    'button[name="Edit"]',\n`;
+        code += `${indent}    'button[title="Edit"]',\n`;
+        code += `${indent}    'a[title="Edit"]',\n`;
+        code += `${indent}]\n`;
+        code += `${indent}for _sel in _edit_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible(timeout=2000):\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    page.get_by_role("button", name=re.compile("edit", re.I)).first.click()\n`;
+        code += `${indent}page.wait_for_timeout(1000)\n`;
+        code += `${indent}print("[+] Clicked Edit")\n`;
+        break;
+      }
+      
+      case 'sf-click-delete': {
+        // Click Delete button
+        code += `${indent}# Click Delete button\n`;
+        code += `${indent}_del_selectors = [\n`;
+        code += `${indent}    'button[name="Delete"]',\n`;
+        code += `${indent}    'button[title="Delete"]',\n`;
+        code += `${indent}    'a[title="Delete"]',\n`;
+        code += `${indent}]\n`;
+        code += `${indent}for _sel in _del_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible(timeout=2000):\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    page.get_by_role("button", name=re.compile("delete", re.I)).first.click()\n`;
+        code += `${indent}page.wait_for_timeout(1000)\n`;
+        code += `${indent}print("[+] Clicked Delete")\n`;
+        break;
+      }
+      
+      case 'sf-click-clone': {
+        // Click Clone button
+        code += `${indent}# Click Clone button\n`;
+        code += `${indent}_clone_selectors = [\n`;
+        code += `${indent}    'button[name="Clone"]',\n`;
+        code += `${indent}    'button[title="Clone"]',\n`;
+        code += `${indent}    'a[title="Clone"]',\n`;
+        code += `${indent}]\n`;
+        code += `${indent}for _sel in _clone_selectors:\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        _el = page.locator(_sel).first\n`;
+        code += `${indent}        if _el.is_visible(timeout=2000):\n`;
+        code += `${indent}            _el.click()\n`;
+        code += `${indent}            break\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        continue\n`;
+        code += `${indent}else:\n`;
+        code += `${indent}    page.get_by_role("button", name=re.compile("clone", re.I)).first.click()\n`;
+        code += `${indent}page.wait_for_timeout(1000)\n`;
+        code += `${indent}print("[+] Clicked Clone")\n`;
         break;
       }
       

@@ -1619,6 +1619,186 @@
         </button>
       </div>
     </div>
+
+    <!-- ========== TESTING HELPERS SECTION ========== -->
+    <div class="settings-section" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 10px; padding: 10px; margin-bottom: 12px;">
+      <div class="section-title" style="color: #22c55e; display: flex; align-items: center; gap: 6px;">
+        🧪 Testing Helpers
+        <span style="font-size: 9px; background: rgba(34, 197, 94, 0.2); padding: 2px 6px; border-radius: 8px;">NEW</span>
+      </div>
+      <p style="font-size: 10px; color: rgba(255,255,255,0.6); margin-bottom: 10px;">
+        Quick navigation & record operations for faster testing.
+      </p>
+      
+      <!-- Navigate to Record by ID -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📍 Navigate to Record by ID:</label>
+        <div style="display: flex; gap: 4px;">
+          <input type="text" class="form-control" id="sfRecordIdInput" placeholder="Enter Record ID (001xxx, 003xxx...)" style="flex: 1; font-size: 10px; padding: 6px 8px;">
+          <button class="btn btn-success sf-nav-by-id" style="font-size: 10px; padding: 6px 10px; white-space: nowrap;">
+            🚀 Add Step
+          </button>
+        </div>
+        <small style="font-size: 9px; color: rgba(255,255,255,0.4); display: block; margin-top: 2px;">
+          Account (001), Contact (003), Opportunity (006), Lead (00Q), Case (500), User (005)
+        </small>
+      </div>
+      
+      <!-- Navigate via SOQL Query -->
+      <div style="margin-bottom: 10px; background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.3); padding: 8px; border-radius: 8px;">
+        <label style="font-size: 10px; color: #06b6d4; display: block; margin-bottom: 4px;">💾 Navigate via SOQL Query:</label>
+        <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+          <select class="form-control" id="sfSoqlObjectType" style="width: 100px; font-size: 10px; padding: 4px;">
+            <option value="Account">Account</option>
+            <option value="Contact">Contact</option>
+            <option value="Opportunity">Opp</option>
+            <option value="Lead">Lead</option>
+            <option value="Case">Case</option>
+            <option value="User">User</option>
+          </select>
+          <input type="text" class="form-control" id="sfSoqlWhereInput" placeholder="WHERE clause (e.g., Name = 'Acme')" style="flex: 1; font-size: 10px; padding: 4px;">
+        </div>
+        <button class="btn sf-nav-by-soql" style="width: 100%; font-size: 10px; padding: 6px; background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; border: none; border-radius: 4px;">
+          💾 Add SOQL Navigate Step
+        </button>
+        <small style="font-size: 9px; color: rgba(255,255,255,0.4); display: block; margin-top: 2px;">
+          Runs SOQL to get record ID, then navigates to result.
+        </small>
+      </div>
+      
+      <!-- Quick Navigation -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">🧭 Quick Navigate - Sales:</label>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+          <button class="btn btn-outline sf-quick-nav" data-object="Account" style="font-size: 9px; padding: 4px;">Accounts</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="Contact" style="font-size: 9px; padding: 4px;">Contacts</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="Opportunity" style="font-size: 9px; padding: 4px;">Opps</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="Lead" style="font-size: 9px; padding: 4px;">Leads</button>
+        </div>
+      </div>
+      
+      <!-- Quick Navigation - Service & Admin -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">🔧 Quick Navigate - Service & Admin:</label>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+          <button class="btn btn-outline sf-quick-nav" data-object="Case" style="font-size: 9px; padding: 4px;">Cases</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="Task" style="font-size: 9px; padding: 4px;">Tasks</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="Report" style="font-size: 9px; padding: 4px;">Reports</button>
+          <button class="btn btn-outline sf-quick-nav" data-object="SetupOneHome" style="font-size: 9px; padding: 4px;">Setup</button>
+        </div>
+      </div>
+      
+      <!-- Quick Create Records -->
+      <div style="margin-bottom: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 8px; border-radius: 8px;">
+        <label style="font-size: 10px; color: #3b82f6; display: block; margin-bottom: 4px;">➕ Quick Create Record:</label>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+          <button class="btn sf-quick-create" data-object="Account" style="font-size: 9px; padding: 4px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); color: white;">+ Account</button>
+          <button class="btn sf-quick-create" data-object="Contact" style="font-size: 9px; padding: 4px; background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); color: white;">+ Contact</button>
+          <button class="btn sf-quick-create" data-object="Opportunity" style="font-size: 9px; padding: 4px; background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.3); color: white;">+ Opp</button>
+          <button class="btn sf-quick-create" data-object="Lead" style="font-size: 9px; padding: 4px; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); color: white;">+ Lead</button>
+          <button class="btn sf-quick-create" data-object="Case" style="font-size: 9px; padding: 4px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: white;">+ Case</button>
+          <button class="btn sf-quick-create" data-object="Task" style="font-size: 9px; padding: 4px; background: rgba(6, 182, 212, 0.2); border: 1px solid rgba(6, 182, 212, 0.3); color: white;">+ Task</button>
+        </div>
+        <small style="font-size: 9px; color: rgba(255,255,255,0.4); display: block; margin-top: 4px;">
+          These steps navigate to the New record form.
+        </small>
+      </div>
+      
+      <!-- Search & Navigate -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">🔍 Search & Navigate:</label>
+        <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+          <select class="form-control" id="sfSearchObjectType" style="width: 100px; font-size: 10px; padding: 4px;">
+            <option value="Account">Account</option>
+            <option value="Contact">Contact</option>
+            <option value="Opportunity">Opp</option>
+            <option value="Lead">Lead</option>
+            <option value="Case">Case</option>
+            <option value="User">User</option>
+          </select>
+          <input type="text" class="form-control" id="sfSearchTermInput" placeholder="Search term..." style="flex: 1; font-size: 10px; padding: 4px;">
+        </div>
+        <button class="btn btn-secondary sf-search-and-nav" style="width: 100%; font-size: 10px; padding: 6px;">
+          🔍 Search & Open First Result
+        </button>
+      </div>
+      
+      <!-- Global Search -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">🌐 Global Search:</label>
+        <div style="display: flex; gap: 4px;">
+          <input type="text" class="form-control" id="sfGlobalSearchInput" placeholder="Enter search term..." style="flex: 1; font-size: 10px; padding: 6px;">
+          <button class="btn btn-secondary sf-global-search" style="font-size: 10px; padding: 6px 10px;">
+            🔍
+          </button>
+        </div>
+      </div>
+      
+      <!-- Common Test Workflows -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📋 Common Workflows (multi-step):</label>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
+          <button class="btn btn-outline sf-workflow" data-workflow="create-account" style="font-size: 9px; padding: 6px;">
+            🏢 Create Account
+          </button>
+          <button class="btn btn-outline sf-workflow" data-workflow="create-contact" style="font-size: 9px; padding: 6px;">
+            👤 Create Contact
+          </button>
+          <button class="btn btn-outline sf-workflow" data-workflow="create-opportunity" style="font-size: 9px; padding: 6px;">
+            💰 Create Opp
+          </button>
+          <button class="btn btn-outline sf-workflow" data-workflow="create-case" style="font-size: 9px; padding: 6px;">
+            📋 Create Case
+          </button>
+        </div>
+      </div>
+      
+      <!-- Record Tabs -->
+      <div style="margin-bottom: 10px;">
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">📑 Record Page Tabs:</label>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px;">
+          <button class="btn btn-outline sf-record-tab" data-tab="Details" style="font-size: 8px; padding: 4px;">Details</button>
+          <button class="btn btn-outline sf-record-tab" data-tab="Related" style="font-size: 8px; padding: 4px;">Related</button>
+          <button class="btn btn-outline sf-record-tab" data-tab="Activity" style="font-size: 8px; padding: 4px;">Activity</button>
+          <button class="btn btn-outline sf-record-tab" data-tab="News" style="font-size: 8px; padding: 4px;">News</button>
+          <button class="btn btn-outline sf-record-tab" data-tab="Chatter" style="font-size: 8px; padding: 4px;">Chatter</button>
+        </div>
+      </div>
+      
+      <!-- Utility Actions -->
+      <div>
+        <label style="font-size: 10px; color: rgba(255,255,255,0.7); display: block; margin-bottom: 4px;">⚡ Utility Actions:</label>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+          <button class="btn btn-outline sf-utility" data-action="app-launcher" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span>📱</span><span>Apps</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="global-search" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span>🔍</span><span>Search</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="wait" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span>⏱️</span><span>Wait 3s</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="screenshot" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span>📸</span><span>Screenshot</span>
+          </button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px;">
+          <button class="btn btn-outline sf-utility" data-action="save" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(34, 197, 94, 0.5);">
+            <span>💾</span><span>Save</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="edit" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(59, 130, 246, 0.5);">
+            <span>✏️</span><span>Edit</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="delete" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(239, 68, 68, 0.5);">
+            <span>🗑️</span><span>Delete</span>
+          </button>
+          <button class="btn btn-outline sf-utility" data-action="clone" style="font-size: 8px; padding: 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-color: rgba(139, 92, 246, 0.5);">
+            <span>📋</span><span>Clone</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- ========== END TESTING HELPERS SECTION ========== -->
     
     <!-- Selected Template Config -->
     <div id="sfConfigSection" class="settings-section" style="display: none;">

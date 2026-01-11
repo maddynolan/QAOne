@@ -696,3 +696,5 @@ async def capture_screenshot(
         logger.error(f"Error capturing screenshot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+

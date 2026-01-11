@@ -1,19 +1,45 @@
 # Frontend Reference Guide
 
 > **React/TypeScript Application Documentation**  
-> UI Components, Pages, Hooks, and Services
+> 60+ Pages, 70+ Components  
+> Version 3.0 | Last Updated: January 11, 2026
 
 ## Table of Contents
 
-1. [Directory Structure](#directory-structure)
-2. [Application Entry](#application-entry)
-3. [Routing](#routing)
-4. [Pages Reference](#pages-reference)
-5. [Components](#components)
-6. [Hooks](#hooks)
-7. [Services & Libraries](#services--libraries)
-8. [State Management](#state-management)
-9. [Styling](#styling)
+1. [Overview](#overview)
+2. [Directory Structure](#directory-structure)
+3. [Application Entry](#application-entry)
+4. [Routing](#routing)
+5. [Pages Reference](#pages-reference)
+6. [Components](#components)
+7. [Hooks](#hooks)
+8. [Services & Libraries](#services--libraries)
+9. [State Management](#state-management)
+10. [Styling](#styling)
+
+---
+
+## Overview
+
+The QAAI frontend is a React 18 TypeScript application with:
+
+| Component | Count |
+|-----------|-------|
+| **Pages** | 60+ |
+| **Components** | 70+ |
+| **Custom Hooks** | 5+ |
+| **Services** | 10+ |
+| **Contexts** | 3 |
+
+### Tech Stack
+
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool
+- **React Query + Zustand** - State management
+- **shadcn/ui + Tailwind** - UI components
+- **React Router 6** - Navigation
+- **Monaco Editor** - Code editing
 
 ---
 
@@ -21,135 +47,110 @@
 
 ```
 src/
-├── App.tsx                         # Root component, route definitions
+├── App.tsx                         # Root component with routes
 ├── main.tsx                        # Application entry point
-├── index.css                       # Global styles (Tailwind CSS)
-├── vite-env.d.ts                   # Vite type declarations
+├── index.css                       # Global styles (Tailwind)
 │
-├── components/
-│   ├── Layout.tsx                  # Main layout wrapper with sidebar
-│   ├── AppSidebar.tsx              # Navigation sidebar (sidebar.tsx)
+├── components/                     # 70+ components
+│   ├── Layout.tsx                  # Main layout wrapper
+│   ├── StreamlinedLayout.tsx       # Sidebar + content
+│   ├── AppSidebar.tsx              # Navigation sidebar
 │   ├── TopNav.tsx                  # Top navigation bar
-│   ├── ProtectedRoute.tsx          # Route guards (auth)
-│   ├── MetricCard.tsx              # Dashboard metric display
-│   ├── QualityRating.tsx           # Quality score display
-│   ├── TraceabilityMatrix.tsx      # Requirements traceability view
-│   ├── WorkspaceSwitcher.tsx       # Organization/project switcher
-│   ├── AIConfiguration.tsx         # LLM settings panel
-│   ├── EditAndImprove.tsx          # AI improvement suggestions
+│   ├── ProtectedRoute.tsx          # Route guards
+│   ├── AIConfiguration.tsx         # LLM settings
+│   ├── TraceabilityMatrix.tsx      # Coverage view
 │   │
-│   ├── FlowstralWorkflowEditor/    # Workflow editor components
-│   │   ├── index.ts                # Exports
+│   ├── FlowstralWorkflowEditor/    # Workflow components
 │   │   ├── FlowstralWorkflowEditor.tsx
-│   │   ├── WorkflowNodes.tsx       # Node type definitions
-│   │   ├── LocatorBuilder.tsx      # Selector builder UI
-│   │   ├── TestRunner.tsx          # Test execution panel
-│   │   ├── TestSuiteManager.tsx    # Suite organization
-│   │   ├── VariableStore.tsx       # Variable management
-│   │   ├── ScheduleManager.tsx     # Scheduled run config
-│   │   └── CICDExporter.tsx        # CI/CD pipeline export
+│   │   ├── WorkflowNodes.tsx
+│   │   ├── LocatorBuilder.tsx
+│   │   ├── TestRunner.tsx
+│   │   ├── VariableStore.tsx
+│   │   ├── ScheduleManager.tsx
+│   │   └── CICDExporter.tsx
 │   │
-│   ├── TestCaseGenerator/
-│   │   └── TestCaseGenerator.tsx   # AI test generation UI
+│   ├── salesforce/                 # 15+ SF components
+│   │   ├── SFContextDashboard.tsx
+│   │   ├── SmartSOQLBuilder.tsx
+│   │   └── StageTransitionTester.tsx
 │   │
-│   └── ui/                         # shadcn/ui components (50+)
-│       ├── button.tsx
-│       ├── card.tsx
-│       ├── dialog.tsx
-│       ├── input.tsx
-│       ├── select.tsx
-│       ├── table.tsx
-│       ├── tabs.tsx
-│       ├── toast.tsx
-│       └── ... (45+ more)
+│   ├── verifications/              # Complex verifications
+│   │   ├── EmailVerifyStepConfig.tsx
+│   │   ├── PDFVerifyStepConfig.tsx
+│   │   └── FileVerifyStepConfig.tsx
+│   │
+│   └── ui/                         # shadcn/ui (50+)
+│       ├── button.tsx, card.tsx
+│       └── ... (50+ components)
 │
-├── pages/                          # Route components (60+)
-│   ├── Dashboard.tsx               # Main dashboard
-│   ├── TestCases.tsx               # Test case list
-│   ├── CreateTestCase.tsx          # Test case creation
-│   ├── EditTestCase.tsx            # Test case editing
-│   ├── EnhancedWorkflowEditor.tsx  # Visual test builder (2700+ lines)
-│   ├── TestResultsDashboard.tsx    # Analytics dashboard
-│   ├── TestRuns.tsx                # Test run list
-│   ├── TestRunDetail.tsx           # Single run details
-│   ├── Trace.tsx                   # Recording interface
-│   ├── Requirements.tsx            # Requirements management
-│   └── ... (50+ more pages)
+├── pages/                          # 60+ pages
+│   ├── Dashboard.tsx
+│   ├── PlaywrightRecorderPage.tsx
+│   ├── UnifiedWorkflowEditor.tsx
+│   ├── TestRepository.tsx
+│   ├── EnhancedAPITesting.tsx
+│   ├── VirtualUserGenerator.tsx
+│   ├── SalesforceToolsPage.tsx
+│   └── ... (50+ more)
 │
-├── hooks/
-│   ├── useExecutionWebSocket.ts    # Real-time test updates
-│   ├── use-toast.ts                # Toast notifications
-│   └── use-mobile.tsx              # Mobile detection
+├── hooks/                          # Custom hooks
+│   ├── useExecutionWebSocket.ts
+│   ├── use-toast.ts
+│   └── use-mobile.tsx
 │
-├── lib/
-│   ├── api-config.ts               # API endpoint configuration
-│   ├── data-storage.ts             # Data persistence layer
-│   ├── test-execution-service.ts   # Test execution client
-│   ├── test-management-service.ts  # Test case CRUD
-│   ├── self-healing-service.ts     # Self-healing client
-│   ├── ai-service.ts               # AI generation client
-│   ├── utils.ts                    # Utility functions
-│   └── types.ts                    # Shared TypeScript types
+├── lib/                            # Services & utilities
+│   ├── api-config.ts
+│   ├── data-storage.ts
+│   ├── test-execution-service.ts
+│   ├── results-ingestion-service.ts
+│   ├── salesforce-api.ts
+│   └── utils.ts
 │
-├── contexts/
-│   └── AuthContext.tsx             # Authentication state
+├── contexts/                       # React contexts
+│   ├── AuthContext.tsx
+│   ├── ThemeContext.tsx
+│   └── AIContext.tsx
 │
-├── integrations/
-│   └── supabase/
-│       ├── client.ts               # Supabase client config
-│       └── types.ts                # Supabase type definitions
-│
-└── types/
-    └── api.d.ts                    # API type declarations
+└── types/                          # TypeScript types
+    └── api.d.ts
 ```
 
 ---
 
 ## Application Entry
 
-### `main.tsx`
-
-```typescript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
-```
-
 ### `App.tsx`
 
-The root component sets up:
-- React Query provider
-- Toast providers (both Toaster and Sonner)
-- Tooltip provider
-- Authentication provider
-- BrowserRouter with all routes
+Root component with module-based routing:
 
 ```typescript
-const App = () => {
-  useEffect(() => {
-    dataStorageService.initializeSampleData();
-  }, []);
+/**
+ * CORE MODULES:
+ * 1. Recorder - Browser test recording (PlaywrightRecorderPage)
+ * 2. Builder - Visual workflow editor (UnifiedWorkflowEditor)
+ * 3. Tests - Test repository (TestRepository)
+ * 4. Automation - Test execution (TestCaseExecution, TestRuns)
+ * 5. Performance - Load testing (VirtualUserGenerator)
+ * 6. API Testing - REST & GraphQL (EnhancedAPITesting)
+ * 7. Accessibility - WCAG scanning (Accessibility)
+ */
 
+const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AIProvider>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
         <AuthProvider>
           <BrowserRouter>
             <Routes>
-              {/* Routes defined here */}
+                  {/* Routes */}
             </Routes>
           </BrowserRouter>
         </AuthProvider>
       </TooltipProvider>
+        </AIProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };
@@ -159,422 +160,288 @@ const App = () => {
 
 ## Routing
 
-### Route Structure
+### Core Modules
 
-| Path | Component | Description |
-|------|-----------|-------------|
-| `/` | Dashboard | Main dashboard |
-| `/auth` | AuthPage | Login/signup |
-| `/onboarding` | OnboardingPage | New user setup |
-| `/plans` | TestPlans | Test plan list |
-| `/plans/create` | CreateTestPlan | New test plan |
-| `/plans/:id` | TestPlanDetail | Plan details |
-| `/cases` | TestCases | Test case list |
-| `/cases/create` | CreateTestCase | New test case |
-| `/cases/:id/edit` | EditTestCase | Edit test case |
-| `/runs` | TestRuns | Test run list |
-| `/runs/create` | CreateTestRun | New test run |
-| `/runs/:id` | TestRunDetail | Run details |
-| `/workflow-editor` | EnhancedWorkflowEditor | Visual builder |
-| `/results-dashboard` | TestResultsDashboard | Analytics |
-| `/trace` | Trace | Recording interface |
-| `/requirements` | Requirements | Requirements list |
-| `/defects` | Defects | Defect tracking |
-| `/self-healing` | SelfHealing | Self-healing config |
-| `/integrations` | Integrations | External integrations |
-| `/settings` | Settings | Application settings |
+| Module | Path | Component |
+|--------|------|-----------|
+| **Recorder** | `/recorder` | PlaywrightRecorderPage |
+| **Builder** | `/test-cases/builder` | UnifiedWorkflowEditor |
+| **Repository** | `/test-cases` | TestRepository |
+| **Execution** | `/test-runs` | TestRuns |
+| **API Testing** | `/api` | EnhancedAPITesting |
+| **Performance** | `/performance` | VirtualUserGenerator |
+| **Salesforce** | `/salesforce` | SalesforceToolsPage |
 
-### Protected Routes
+### Full Route Map
 
 ```typescript
-<Route path="/" element={
-  <ProtectedRoute>
-    <Layout><Dashboard /></Layout>
-  </ProtectedRoute>
-} />
-```
+// Public Routes
+<Route path="/" element={<LandingPage />} />
+<Route path="/auth" element={<AuthPage />} />
+<Route path="/pricing" element={<PricingPage />} />
+<Route path="/about" element={<AboutPage />} />
 
-### Public Routes
+// Main Application (StreamlinedLayout)
+<Route path="/recorder" element={<PlaywrightRecorderPage />} />
+<Route path="/test-cases" element={<TestRepository />} />
+<Route path="/test-cases/builder" element={<UnifiedWorkflowEditor />} />
+<Route path="/test-cases/builder/:id" element={<UnifiedWorkflowEditor />} />
+<Route path="/test-cases/execute/:testCaseId" element={<TestCaseExecution />} />
+<Route path="/test-runs" element={<TestRuns />} />
 
-```typescript
-<Route path="/auth" element={
-  <PublicRoute><AuthPage /></PublicRoute>
-} />
+// API Testing
+<Route path="/api" element={<EnhancedAPITesting />} />
+<Route path="/api/collections" element={<EnhancedAPITesting />} />
+
+// Performance
+<Route path="/performance" element={<VirtualUserGenerator />} />
+<Route path="/performance/load-test" element={<VirtualUserGenerator />} />
+
+// Salesforce
+<Route path="/salesforce" element={<SalesforceToolsPage />} />
+
+// Quality
+<Route path="/accessibility" element={<Accessibility />} />
+<Route path="/visual-testing" element={<VisualTestingPage />} />
+<Route path="/self-healing" element={<SelfHealing />} />
+
+// Management
+<Route path="/dashboard" element={<Dashboard />} />
+<Route path="/analytics" element={<Analytics />} />
+<Route path="/results" element={<Results />} />
+<Route path="/suites" element={<TestSuites />} />
+<Route path="/plans" element={<TestPlans />} />
+<Route path="/requirements" element={<Requirements />} />
+<Route path="/defects" element={<Defects />} />
+<Route path="/traceability" element={<Traceability />} />
+
+// Tools
+<Route path="/code-alchemy" element={<CodeAlchemy />} />
+<Route path="/framework-analyzer" element={<FrameworkAnalyzer />} />
+<Route path="/elements" element={<ElementRepository />} />
+<Route path="/secrets" element={<SecretsVault />} />
+<Route path="/coverage" element={<APICoverageMap />} />
+
+// Integration
+<Route path="/integrations" element={<Integrations />} />
+<Route path="/cicd" element={<CICDIntegration />} />
+<Route path="/settings" element={<Settings />} />
 ```
 
 ---
 
 ## Pages Reference
 
-### Dashboard (`pages/Dashboard.tsx`)
+### Unified Workflow Editor (`UnifiedWorkflowEditor.tsx`)
 
-**Purpose:** Main landing page with key metrics and quick actions.
+**Purpose:** Primary test building interface (3100+ lines)
 
 **Key Features:**
-- Summary statistics (test cases, runs, pass rate)
-- Recent test runs
-- Quick action buttons
+- No-Code / Code View toggle
+- Multi-export (Automation, API, Database, Performance, Manual)
+- Save / Save As functionality
+- 20+ assertion types
+- Precondition import
+- Documentation export (ISTQB, Gherkin, Markdown)
+- Duplicate element handling (nth selector)
+
+**State:**
+```typescript
+interface UnifiedTestCase {
+  id: string;
+  name: string;
+  description: string;
+  type: 'ui' | 'api' | 'database' | 'performance' | 'manual';
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  tags: string[];
+  steps: TestStep[];
+  preconditions: PreconditionRef[];
+  requirements: string[];
+}
+
+interface TestStep {
+  id: string;
+  type: 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'api' | 'database';
+  target: string;
+  selector?: string;
+  value?: string;
+  expectedResult?: string;
+  elementIndex?: number;
+  assertionType?: string;
+  assertionTarget?: string;
+  assertionValue?: string;
+}
+```
+
+### Virtual User Generator (`VirtualUserGenerator.tsx`)
+
+**Purpose:** Performance testing interface (2700+ lines)
+
+**Load Patterns:**
+```typescript
+const LOAD_PATTERNS = {
+  constant: "Constant Load",
+  ramp_up: "Ramp Up",
+  ramp_down: "Ramp Down",
+  spike: "Spike Test",
+  stress: "Stress Test",
+  soak: "Soak/Endurance",
+  breakpoint: "Breakpoint",
+  wave: "Wave Pattern"
+};
+```
+
+**User Personas:**
+```typescript
+const USER_PERSONAS = {
+  casual: { thinkTime: { min: 3000, max: 8000 } },
+  normal: { thinkTime: { min: 1000, max: 3000 } },
+  power: { thinkTime: { min: 500, max: 1500 } },
+  automated: { thinkTime: { min: 0, max: 100 } }
+};
+```
+
+### Salesforce Tools (`SalesforceToolsPage.tsx`)
+
+**Purpose:** SF testing tools (2500+ lines)
+
+**15+ Tools:**
+1. Multi-Org Manager
+2. SOQL Builder
+3. Bulk Data Loader
+4. REST API Playground
+5. Test Data Factory
+6. Schema Browser
+7. Record Inspector
+8. Apex Test Runner
+9. Data Seeding Templates
+10. Permission Analyzer
+11. Debug Log Analyzer
+12. Relationship Visualizer
+13. Record Cloner
+14. Data Diff
+15. Assertion Builder
+
+### Enhanced API Testing (`EnhancedAPITesting.tsx`)
+
+**Purpose:** Multi-protocol API testing
+
+**Features:**
+- Request builder
+- Collection management
+- Environment variables
+- Request history
+- Response assertions
+- GraphQL support
+- WebSocket testing
+
+### Accessibility (`Accessibility.tsx`)
+
+**Purpose:** WCAG compliance scanning
+
+**Features:**
+- URL scanning
+- Component scanning
+- Site-wide audit
+- VPAT generation
+- Violation reports
+- Remediation suggestions
+
+### Dashboard (`Dashboard.tsx`)
+
+**Purpose:** Executive dashboard
+
+**Metrics:**
+- Pass rate
+- Test execution count
+- Average duration
+- Automation rate
+- Recent activity
 - Trend charts
 
-### Enhanced Workflow Editor (`pages/EnhancedWorkflowEditor.tsx`)
+### Test Repository (`TestRepository.tsx`)
 
-**Purpose:** Visual test case builder with multi-framework export.
+**Purpose:** Unified test management
 
-**File Size:** ~2700 lines
-
-**Key State:**
-
-```typescript
-// Workflow state
-const [workflowName, setWorkflowName] = useState('New Workflow');
-const [appType, setAppType] = useState('generic');
-const [framework, setFramework] = useState('playwright-python');
-const [nodes, setNodes] = useState<WorkflowNode[]>([]);
-const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null);
-
-// Mode state
-const [testMode, setTestMode] = useState<'manual' | 'automated' | 'both'>('both');
-const [blackboxMode, setBlackboxMode] = useState(false);
-
-// Execution state
-const [isRunning, setIsRunning] = useState(false);
-const [runResult, setRunResult] = useState<any>(null);
-const [executionProgress, setExecutionProgress] = useState({...});
-
-// Save state
-const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
-```
-
-**Key Functions:**
-
-```typescript
-// Convert JS selectors to framework-specific
-const convertSelectorToFramework = useCallback((sel: string): string => {
-  // Handles: getByRole, getByText, getByLabel, page.getByX, CSS selectors
-});
-
-// Generate code for single node
-const generateNodeCode = useCallback((node: WorkflowNode): string => {
-  switch (framework) {
-    case 'playwright-python': // Python syntax
-    case 'playwright-typescript': // TS syntax
-    case 'selenium-java': // Java syntax
-    case 'cypress': // Cypress syntax
-  }
-});
-
-// Run the workflow
-const runWorkflow = async () => {
-  // 1. Generate full script
-  // 2. Connect WebSocket
-  // 3. POST to /api/playwright-recorder/execute
-  // 4. Update progress from WebSocket
-  // 5. Handle results
-};
-
-// Save test case
-const saveUnifiedTestCase = useCallback(async (customName?: string) => {
-  // POST to /test-cases (create) or PUT (update)
-});
-```
-
-**Node Types:**
-
-| Type | Description |
-|------|-------------|
-| navigate | Go to URL |
-| click | Click element |
-| input | Enter text |
-| wait | Wait for time/element |
-| assert | Verify condition |
-| api | Make API call |
-| database | Query database |
-| condition | If/else branch |
-| loop | Repeat steps |
-| screenshot | Capture screen |
-
-**Assertion Types:**
-
-| Type | Description |
-|------|-------------|
-| visible | Element is visible |
-| hidden | Element is hidden |
-| enabled | Element is enabled |
-| disabled | Element is disabled |
-| text_equals | Text exactly matches |
-| text_contains | Text contains substring |
-| url_equals | URL matches |
-| url_contains | URL contains |
-| title_equals | Page title matches |
-| element_count | Number of elements |
-| value_equals | Input value matches |
-| checked | Checkbox is checked |
-
-### Test Cases (`pages/TestCases.tsx`)
-
-**Purpose:** List and manage test cases.
-
-**Data Loading:**
-
-```typescript
-const loadTestCases = async () => {
-  const allCases: TestCase[] = [];
-  
-  // 1. Load from localStorage (instant)
-  const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
-  allCases.push(...local);
-  
-  // 2. Fetch from backend (with timeout)
-  const response = await fetch(`${API_BASE_URL}/test-cases`, {
-    signal: AbortSignal.timeout(3000)
-  });
-  
-  if (response.ok) {
-    const data = await response.json();
-    const backendCases = Array.isArray(data) ? data : (data.value || data.test_cases || []);
-    // Merge, dedupe by ID
-  }
-  
-  setTestCases(allCases);
-};
-```
-
-### Test Results Dashboard (`pages/TestResultsDashboard.tsx`)
-
-**Purpose:** Comprehensive analytics and self-healing statistics.
-
-**Data Sources:**
-- Backend API (`/test-runs`)
-- localStorage (`workflow_test_history`)
-
-**Key Metrics:**
-- Total runs, pass rate
-- Average duration
-- Self-healing count and success rate
-- Runs by environment
-- Screenshot gallery
-
-### Trace (Recording) (`pages/Trace.tsx`)
-
-**Purpose:** Interface for Flowstral recording sessions.
-
-**Key Features:**
-- Session management
-- Event visualization
-- Script preview
-- Export to Workflow Editor
-
-### Unified Test Builder (`pages/UnifiedWorkflowEditor.tsx`) - **NEW (Dec 2024)**
-
-**Purpose:** Primary test building interface, replacing legacy workflow editor.
-
-**File Size:** ~3100 lines
-
-**Key Features:**
-- **No-Code / Code View Toggle**: Hide/show technical selectors
-- **Multi-Export Formats**: Automation, API, Database, Performance, Manual
-- **Save / Save As**: Update existing or create new test cases
-- **Assertion Builder**: Structured expected results with code generation
-- **Import Test Cases**: Use other test cases as preconditions
-- **Documentation Formats**: ISTQB, Gherkin/BDD, Markdown export
-- **Duplicate Element Handling**: nth() selector for multiple matches
-- **Robust Failure Detection**: Screenshots, error extraction, step identification
-
-**Core State:**
-```typescript
-// Test case state
-const [testCase, setTestCase] = useState<UnifiedTestCase>({...});
-const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
-const [viewMode, setViewMode] = useState<'no-code' | 'code'>('no-code');
-
-// Execution state  
-const [isRunning, setIsRunning] = useState(false);
-const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'passed' | 'failed'>('idle');
-const [failedStep, setFailedStep] = useState<number | null>(null);
-const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-// Dialog states
-const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
-const [showImportDialog, setShowImportDialog] = useState(false);
-const [showFormatDialog, setShowFormatDialog] = useState(false);
-```
-
-**Key Functions:**
-```typescript
-// Save test case (create or update)
-const saveTestCase = async () => {
-  if (savedTestCaseId) {
-    // PUT to update existing
-    await fetch(`${API_BASE_URL}/test-cases/${savedTestCaseId}`, {
-      method: 'PUT',
-      body: JSON.stringify(buildTestCaseData())
-    });
-  } else {
-    // POST to create new
-    const response = await fetch(`${API_BASE_URL}/test-cases`, {
-      method: 'POST',
-      body: JSON.stringify(buildTestCaseData())
-    });
-    const data = await response.json();
-    setSavedTestCaseId(data.id);
-  }
-};
-
-// Run test with failure detection
-const runTest = async () => {
-  const code = generateAutomationCode();
-  const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
-    method: 'POST',
-    body: JSON.stringify({ script: code, language: 'python' })
-  });
-  
-  const result = await response.json();
-  
-  // Parse output for failure indicators
-  const fullOutput = result.output || '';
-  const patterns = ['TEST FAILED', 'FAILED:', 'Step \\d+ FAILED', 'Traceback'];
-  // ... detect failedStep, errorMessage, screenshotPath
-  
-  // Ingest results
-  resultsIngestionService.ingestResults({
-    test_case_id: savedTestCaseId,
-    status: passed ? 'passed' : 'failed',
-    metadata: { failed_step: failedStep, error_message, screenshot_path }
-  });
-};
-
-// Generate documentation formats
-const generateISTQBFormat = () => { /* ISTQB format output */ };
-const generateGherkinFormat = () => { /* Gherkin BDD format */ };
-const generateMarkdownFormat = () => { /* Markdown documentation */ };
-```
-
-### Dashboard (`pages/Dashboard.tsx`) - **Updated (Dec 2024)**
-
-**Purpose:** Executive dashboard with real-time quality metrics.
-
-**Key Updates:**
-- Now uses `resultsIngestionService` for real data (no more mock data)
-- Dynamic pass rate, execution time, and automation rate calculations
-- Recent activity shows actual test runs
-
-```typescript
-const loadDashboardData = () => {
-  const results = resultsIngestionService.getAllResults();
-  
-  const passed = results.filter(r => r.status === 'passed').length;
-  const passRate = results.length > 0 ? (passed / results.length * 100) : 0;
-  
-  const avgDuration = results.reduce((sum, r) => sum + r.duration_ms, 0) / results.length;
-  
-  setStats({
-    passRate: passRate.toFixed(1),
-    testsRun: results.length,
-    avgExecutionTime: `${(avgDuration / 1000).toFixed(1)}s`,
-    // ...
-  });
-};
-```
-
-### Results Page (`pages/Results.tsx`) - **Updated (Dec 2024)**
-
-**Purpose:** Display test run history with failure details.
-
-**Key Updates:**
-- Shows `failedStep`, `errorMessage`, `screenshotPath` from metadata
-- Refresh and Clear All buttons
-- View Screenshot functionality
+**Features:**
+- Test case list
+- Search and filter
+- Bulk operations
+- Suite assignment
+- Quick execution
+- Import/export
 
 ---
 
 ## Components
 
-### Layout (`components/Layout.tsx`)
+### Layout Components
 
-Wraps pages with consistent layout:
+| Component | Purpose |
+|-----------|---------|
+| `StreamlinedLayout` | Main app layout with sidebar |
+| `AppSidebar` | Navigation sidebar |
+| `TopNav` | Top navigation bar |
+| `Layout` | Legacy layout wrapper |
 
-```typescript
-export function Layout({ children }: { children: React.ReactNode }) {
-  return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col">
-          <TopNav />
-          <main className="flex-1 p-6 bg-gray-50 overflow-auto">
-            {children}
-          </main>
-        </div>
-      </div>
-    </SidebarProvider>
-  );
-}
-```
+### Workflow Components
 
-### AppSidebar (`components/AppSidebar.tsx`)
+| Component | Purpose |
+|-----------|---------|
+| `FlowstralWorkflowEditor` | Visual workflow builder |
+| `WorkflowNodes` | Node type definitions |
+| `LocatorBuilder` | Selector construction |
+| `TestRunner` | Execution panel |
+| `VariableStore` | Variable management |
+| `ScheduleManager` | Scheduled runs |
+| `CICDExporter` | Pipeline export |
 
-Navigation sidebar with sections:
+### Salesforce Components
 
-```typescript
-const navItems = [
-  // OVERVIEW
-  { title: "Dashboard", url: "/", icon: Home },
-  { title: "Projects", url: "/projects", icon: Folder },
-  { title: "Analytics", url: "/analytics", icon: BarChart2 },
-  
-  // CREATE & BUILD
-  { title: "Trace (Record)", url: "/trace", icon: Video },
-  { title: "Workflow Editor", url: "/workflow-editor", icon: Workflow },
-  
-  // EXECUTE
-  { title: "Test Execution", url: "/test-execution", icon: Play },
-  { title: "Results Dashboard", url: "/results-dashboard", icon: BarChart3 },
-  { title: "Test Cases", url: "/cases", icon: FileText },
-  
-  // QUALITY
-  { title: "Self-Healing", url: "/self-healing", icon: Wrench },
-  { title: "Requirements", url: "/requirements", icon: ClipboardList },
-  { title: "Defects", url: "/defects", icon: Bug },
-  
-  // SETTINGS
-  { title: "Integrations", url: "/integrations", icon: Plug },
-  { title: "Settings", url: "/settings", icon: Settings },
-];
-```
+| Component | Purpose |
+|-----------|---------|
+| `SFContextDashboard` | Org overview |
+| `SmartSOQLBuilder` | Visual SOQL |
+| `StageTransitionTester` | Process testing |
+| `SalesforceRelationshipVisualizer` | ERD |
+| `SalesforceDebugLogAnalyzer` | Log parser |
+| `SalesforceAssertionBuilder` | SF assertions |
+| `SalesforceRecordCloner` | Deep clone |
+| `SalesforceDataDiff` | Record comparison |
+| `SalesforceApexExecutor` | Anonymous Apex |
+| `SalesforceFieldAnalyzer` | Field analysis |
+| `SalesforceReportRunner` | Report execution |
+| `SoqlEditor` | SOQL with autocomplete |
 
-### UI Components (`components/ui/`)
+### Verification Components
 
-Based on [shadcn/ui](https://ui.shadcn.com/), includes:
+| Component | Purpose |
+|-----------|---------|
+| `EmailVerifyStepConfig` | Email verification setup |
+| `PDFVerifyStepConfig` | PDF verification setup |
+| `FileVerifyStepConfig` | File verification setup |
+
+### UI Components (shadcn/ui)
+
+50+ components including:
 
 | Component | Usage |
 |-----------|-------|
-| Button | Actions, submit, cancel |
-| Card | Content containers |
-| Dialog | Modal windows |
-| Input | Text input fields |
-| Select | Dropdown selection |
-| Table | Data tables |
-| Tabs | Tabbed content |
-| Toast | Notifications |
-| Badge | Status indicators |
-| Progress | Loading/progress bars |
-
-**Example Usage:**
-
-```typescript
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-<Card>
-  <CardHeader>
-    <CardTitle>Test Results</CardTitle>
-  </CardHeader>
-  <CardContent>
-    <Button onClick={runTest}>Run Test</Button>
-  </CardContent>
-</Card>
-```
+| `Button` | Actions |
+| `Card` | Containers |
+| `Dialog` | Modals |
+| `Input` | Text fields |
+| `Select` | Dropdowns |
+| `Table` | Data tables |
+| `Tabs` | Tab navigation |
+| `Toast` | Notifications |
+| `Badge` | Status indicators |
+| `Progress` | Loading bars |
+| `Slider` | Range input |
+| `Switch` | Toggles |
+| `Checkbox` | Boolean input |
+| `Textarea` | Multi-line |
+| `Popover` | Floating content |
 
 ---
 
@@ -582,87 +449,36 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 ### `useExecutionWebSocket`
 
-Real-time test execution updates via WebSocket.
-
-**File:** `hooks/useExecutionWebSocket.ts`
+Real-time test execution updates:
 
 ```typescript
 interface UseExecutionWebSocketOptions {
   onStepStart?: (step: number, name: string) => void;
-  onStepComplete?: (step: number, status: string, duration: number, error?: string, screenshot?: string) => void;
+  onStepComplete?: (step: number, status: string, duration: number) => void;
   onSelfHealing?: (step: number, original: string, healed: string) => void;
-  onScreenshot?: (step: number, type: string, data?: string, path?: string) => void;
-  onComplete?: (status: string, totalSteps: number, passedSteps: number, failedSteps: number) => void;
+  onScreenshot?: (step: number, type: string, path?: string) => void;
+  onComplete?: (status: string, total: number, passed: number, failed: number) => void;
   onLog?: (level: string, message: string) => void;
 }
 
 export function useExecutionWebSocket(options: UseExecutionWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [progress, setProgress] = useState({...});
-  const wsRef = useRef<WebSocket | null>(null);
 
   const connect = useCallback((executionId: string) => {
     const ws = new WebSocket(`ws://localhost:8000/test-runs/ws/${executionId}`);
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
-      switch (data.type) {
-        case 'step_start':
-          options.onStepStart?.(data.step, data.name);
-          break;
-        case 'step_complete':
-          options.onStepComplete?.(data.step, data.status, data.duration_ms);
-          break;
-        case 'self_healing':
-          options.onSelfHealing?.(data.step, data.original_selector, data.healed_selector);
-          break;
-        case 'execution_complete':
-          options.onComplete?.(data.status, data.total_steps, data.passed_steps, data.failed_steps);
-          break;
-      }
-    };
-    
-    wsRef.current = ws;
-  }, [options]);
-
-  const disconnect = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
-    setIsConnected(false);
+    // Handle messages
   }, []);
 
-  return { connect, disconnect, isConnected, progress, reset };
+  return { connect, disconnect, isConnected, progress };
 }
-```
-
-**Usage:**
-
-```typescript
-const { connect, disconnect, isConnected, progress } = useExecutionWebSocket({
-  onStepStart: (step, name) => {
-    setExecutionProgress(prev => ({ ...prev, currentStep: step, stepName: name }));
-  },
-  onStepComplete: (step, status, duration) => {
-    // Update step result
-  },
-  onSelfHealing: (step, original, healed) => {
-    toast.info(`Step ${step}: Selector healed`);
-  },
-  onComplete: (status) => {
-    setIsRunning(false);
-    if (status === 'passed') toast.success('Test passed!');
-  }
-});
 ```
 
 ### `use-toast`
 
-Toast notification hook (from shadcn/ui).
+Toast notifications:
 
 ```typescript
-import { useToast } from "@/hooks/use-toast";
-
 const { toast } = useToast();
 
 toast({
@@ -672,85 +488,47 @@ toast({
 });
 ```
 
+### `use-mobile`
+
+Responsive detection:
+
+```typescript
+const isMobile = useMobile();
+```
+
 ---
 
 ## Services & Libraries
 
-### API Configuration (`lib/api-config.ts`)
+### API Configuration (`api-config.ts`)
 
 ```typescript
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export const API_ENDPOINTS = {
-  // Test Cases
   TEST_CASES: `${API_BASE_URL}/test-cases`,
-  TEST_CASE: (id: string) => `${API_BASE_URL}/test-cases/${id}`,
-  
-  // Test Runs
   TEST_RUNS: `${API_BASE_URL}/test-runs`,
-  TEST_RUN: (id: string) => `${API_BASE_URL}/test-runs/${id}`,
-  
-  // Flowstral
   FLOWSTRAL_SESSIONS: `${API_BASE_URL}/api/flowstral/sessions`,
   FLOWSTRAL_EXECUTE: `${API_BASE_URL}/api/playwright-recorder/execute`,
-  
-  // LLM
   LLM_GENERATE: `${API_BASE_URL}/api/llm/generate-test`,
 };
 ```
 
-### Data Storage (`lib/data-storage.ts`)
-
-Handles data persistence with backend fallback.
+### Data Storage (`data-storage.ts`)
 
 ```typescript
 class DataStorageService {
-  private baseUrl = API_BASE_URL;
-
-  async createTestCase(testCase: Omit<TestCase, 'id'>): Promise<TestCase> {
-    const response = await fetch(`${this.baseUrl}/test-cases`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(testCase)
-    });
-    return response.json();
-  }
-
-  async getTestCases(planId?: string): Promise<TestCase[]> {
-    // Fetch from multiple sources, merge, dedupe
-  }
-
-  initializeSampleData(): void {
-    // Initialize sample data for demo
-  }
+  async createTestCase(testCase: Omit<TestCase, 'id'>): Promise<TestCase>
+  async getTestCases(planId?: string): Promise<TestCase[]>
+  async updateTestCase(id: string, updates: Partial<TestCase>): Promise<TestCase>
+  async deleteTestCase(id: string): Promise<void>
+  initializeSampleData(): void
 }
 
 export const dataStorageService = new DataStorageService();
 ```
 
-### Test Execution Service (`lib/test-execution-service.ts`)
-
-Client for test execution API.
-
-```typescript
-class TestExecutionService {
-  async executeTest(request: ExecuteTestRequest): Promise<ExecutionResult> {
-    const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request)
-    });
-    return response.json();
-  }
-
-  async getTestRun(id: string): Promise<TestRun> {
-    const response = await fetch(`${API_BASE_URL}/test-runs/${id}`);
-    return response.json();
-  }
-
-### Results Ingestion Service (`lib/results-ingestion-service.ts`) - **NEW (Dec 2024)**
-
-Persists test run results to localStorage with rich metadata.
+### Results Ingestion (`results-ingestion-service.ts`)
 
 ```typescript
 interface TestRunData {
@@ -761,127 +539,56 @@ interface TestRunData {
   duration_ms: number;
   started_at: string;
   completed_at: string;
-  environment?: string;
   metadata?: {
-    failed_step?: number | null;
-    error_message?: string | null;
-    screenshot_path?: string | null;
-    browser?: string;
-    steps_total?: number;
-    steps_passed?: number;
+    failed_step?: number;
+    error_message?: string;
+    screenshot_path?: string;
   };
 }
 
 class ResultsIngestionService {
-  private results: TestRunData[] = [];
-  private readonly STORAGE_KEY = 'qaai_test_results';
-  private readonly MAX_RESULTS = 100;
-
-  constructor() {
-    this.loadFromStorage();
-  }
-
-  async ingestResults(data: TestRunData): Promise<void> {
-    this.results.unshift(data);
-    this.saveToStorage();
-  }
-
-  getAllResults(): TestRunData[] {
-    return this.results;
-  }
-
-  getResultsByStatus(status: string): TestRunData[] {
-    return this.results.filter(r => r.status === status);
-  }
-
-  clearResults(): void {
-    this.results = [];
-    localStorage.removeItem(this.STORAGE_KEY);
-  }
-
-  private loadFromStorage(): void {
-    const stored = localStorage.getItem(this.STORAGE_KEY);
-    if (stored) {
-      this.results = JSON.parse(stored);
-    }
-  }
-
-  private saveToStorage(): void {
-    // Keep only last MAX_RESULTS to prevent localStorage overflow
-    const toSave = this.results.slice(0, this.MAX_RESULTS);
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(toSave));
-  }
+  async ingestResults(data: TestRunData): Promise<void>
+  getAllResults(): TestRunData[]
+  getResultsByStatus(status: string): TestRunData[]
+  clearResults(): void
 }
 
 export const resultsIngestionService = new ResultsIngestionService();
 ```
 
-**Usage in Dashboard/Results:**
+### Salesforce API (`salesforce-api.ts`)
+
 ```typescript
-// In Dashboard.tsx
-const results = resultsIngestionService.getAllResults();
-const passed = results.filter(r => r.status === 'passed').length;
-const passRate = (passed / results.length * 100).toFixed(1);
-
-// In UnifiedWorkflowEditor.tsx after test run
-resultsIngestionService.ingestResults({
-  id: `run_${Date.now()}`,
-  test_case_id: savedTestCaseId,
-  test_name: testCase.name,
-  status: passed ? 'passed' : 'failed',
-  duration_ms: executionTime,
-  metadata: {
-    failed_step: failedStep,
-    error_message: errorMessage,
-    screenshot_path: screenshotPath
-  }
-});
-```
-}
-
-export const testExecutionService = new TestExecutionService();
+export const salesforceApi = {
+  // Connection
+  getAuthStatus(): Promise<AuthStatus>
+  connectOAuth(): void
+  disconnect(): Promise<void>
+  
+  // Data
+  query(soql: string): Promise<QueryResult>
+  getObject(name: string): Promise<SObjectDescribe>
+  createRecord(object: string, data: any): Promise<string>
+  updateRecord(object: string, id: string, data: any): Promise<void>
+  
+  // Testing
+  runApexTests(testClasses: string[]): Promise<ApexTestResult>
+  executeAnonymous(code: string): Promise<ExecutionResult>
+};
 ```
 
 ---
 
 ## State Management
 
-### Pattern: useState + useCallback
-
-Most components use React hooks for local state:
+### React Query (Server State)
 
 ```typescript
-// Simple state
-const [items, setItems] = useState<Item[]>([]);
-const [loading, setLoading] = useState(false);
-
-// Computed state via useMemo
-const filteredItems = useMemo(() => 
-  items.filter(i => i.name.includes(search)),
-  [items, search]
-);
-
-// Actions via useCallback
-const addItem = useCallback((item: Item) => {
-  setItems(prev => [...prev, item]);
-}, []);
-```
-
-### Pattern: React Query (Async Data)
-
-For server data fetching:
-
-```typescript
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-// Fetch data
 const { data, isLoading, error } = useQuery({
   queryKey: ['testCases'],
   queryFn: () => fetch('/test-cases').then(r => r.json())
 });
 
-// Mutations
-const queryClient = useQueryClient();
 const mutation = useMutation({
   mutationFn: (newCase) => fetch('/test-cases', {
     method: 'POST',
@@ -893,60 +600,42 @@ const mutation = useMutation({
 });
 ```
 
-### Pattern: Context (Global State)
-
-For cross-component state like auth:
+### Zustand (Client State)
 
 ```typescript
-// contexts/AuthContext.tsx
-interface AuthContextType {
-  user: User | null;
-  login: (credentials: Credentials) => Promise<void>;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType>(null!);
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  
-  const login = async (credentials: Credentials) => {
-    // API call, set user
-  };
-  
-  const logout = () => {
-    setUser(null);
-  };
-  
-  return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export const useAuth = () => useContext(AuthContext);
+// Example store
+const useStore = create((set) => ({
+  selectedTestCase: null,
+  setSelectedTestCase: (tc) => set({ selectedTestCase: tc })
+}));
 ```
 
-### Pattern: localStorage Persistence
-
-For persisting state across sessions:
+### Context (Global State)
 
 ```typescript
-// Initialize from localStorage
-const [testHistory, setTestHistory] = useState<TestHistoryEntry[]>(() => {
-  try {
-    const saved = localStorage.getItem('workflow_test_history');
+// AuthContext
+const { user, login, logout } = useAuth();
+
+// ThemeContext  
+const { theme, setTheme } = useTheme();
+
+// AIContext
+const { provider, model, setProvider, setModel } = useAI();
+```
+
+### localStorage (Persistence)
+
+```typescript
+// Initialize from storage
+const [history, setHistory] = useState(() => {
+  const saved = localStorage.getItem('test_history');
     return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
 });
 
-// Save to localStorage on change
+// Save on change
 useEffect(() => {
-  localStorage.setItem('workflow_test_history', JSON.stringify(testHistory));
-}, [testHistory]);
+  localStorage.setItem('test_history', JSON.stringify(history));
+}, [history]);
 ```
 
 ---
@@ -955,8 +644,6 @@ useEffect(() => {
 
 ### Tailwind CSS
 
-Primary styling via Tailwind utility classes:
-
 ```typescript
 <div className="flex items-center gap-4 p-6 bg-white rounded-lg shadow-sm">
   <h1 className="text-2xl font-bold text-gray-900">Title</h1>
@@ -964,57 +651,33 @@ Primary styling via Tailwind utility classes:
 </div>
 ```
 
-### CSS Variables (Theme)
-
-Defined in `index.css`:
+### CSS Variables
 
 ```css
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
   --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
   --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
   --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
   --accent: 210 40% 96%;
-  --accent-foreground: 222.2 47.4% 11.2%;
   --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
   --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
   --radius: 0.5rem;
 }
 ```
 
-### Custom Classes
+### Dark Mode
 
-```css
-.gradient-text {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+```typescript
+// ThemeContext handles dark/light toggle
+const { theme, setTheme } = useTheme();
+
+// CSS classes
+className="bg-background text-foreground"
+className="dark:bg-gray-900 dark:text-white"
 ```
 
 ---
 
-*Last updated: December 2024*
-
-
-
-
-
-
-
-
-
-
-
-
+*Last updated: January 11, 2026*

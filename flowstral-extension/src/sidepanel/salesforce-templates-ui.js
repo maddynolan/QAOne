@@ -388,6 +388,285 @@
     // Option toggles
     elements.includeNavigation?.addEventListener('change', () => renderPreview());
     elements.includeVerification?.addEventListener('change', () => renderPreview());
+    
+    // ========== TESTING HELPERS EVENT HANDLERS ==========
+    // NOTE: These use the same sf-* action types as the desktop recorder for consistency
+    
+    // Navigate to Record by ID
+    document.querySelector('.sf-nav-by-id')?.addEventListener('click', () => {
+      const recordId = document.getElementById('sfRecordIdInput')?.value?.trim();
+      if (!recordId) {
+        showToast('Please enter a Record ID', 'error');
+        return;
+      }
+      
+      // Map ID prefix to object type
+      const prefix = recordId.substring(0, 3);
+      const prefixMap = {
+        '001': 'Account', '003': 'Contact', '006': 'Opportunity', '00Q': 'Lead',
+        '500': 'Case', '00T': 'Task', '00U': 'Event', '005': 'User',
+        '701': 'Campaign', '01t': 'Product2', '0Q0': 'Quote', '800': 'Contract'
+      };
+      const objectType = prefixMap[prefix] || 'sObject';
+      const lightningPath = `/lightning/r/${objectType}/${recordId}/view`;
+      
+      addTestingHelperStep({
+        type: 'sf-navigate-record',
+        qword: 'NavigateToRecordById',
+        args: [recordId, objectType, lightningPath],
+        description: `Navigate to ${objectType}: ${recordId}`
+      });
+      
+      // Clear the input
+      document.getElementById('sfRecordIdInput').value = '';
+    });
+    
+    // Navigate via SOQL Query
+    document.querySelector('.sf-nav-by-soql')?.addEventListener('click', () => {
+      const objectType = document.getElementById('sfSoqlObjectType')?.value || 'Account';
+      const whereClause = document.getElementById('sfSoqlWhereInput')?.value?.trim();
+      
+      // Construct SOQL query
+      const soqlQuery = whereClause 
+        ? `SELECT Id FROM ${objectType} WHERE ${whereClause} LIMIT 1`
+        : `SELECT Id FROM ${objectType} LIMIT 1`;
+      
+      addTestingHelperStep({
+        type: 'sf-navigate-soql',
+        qword: 'NavigateToRecordBySOQL',
+        args: [objectType, soqlQuery],
+        description: `Query ${objectType} and navigate to result`
+      });
+      
+      // Clear the input
+      if (document.getElementById('sfSoqlWhereInput')) {
+        document.getElementById('sfSoqlWhereInput').value = '';
+      }
+    });
+    
+    // Quick Navigate buttons (list views)
+    document.querySelectorAll('.sf-quick-nav').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const objectName = e.target.dataset.object;
+        // Setup uses a different path
+        const lightningPath = objectName === 'SetupOneHome' 
+          ? '/lightning/setup/SetupOneHome/home'
+          : `/lightning/o/${objectName}/list`;
+        const displayName = objectName === 'SetupOneHome' ? 'Setup' : objectName;
+        
+        addTestingHelperStep({
+          type: 'sf-navigate-list',
+          qword: 'NavigateToObjectList',
+          args: [objectName, lightningPath],
+          description: `Navigate to ${displayName}${objectName !== 'SetupOneHome' ? ' list' : ''}`
+        });
+      });
+    });
+    
+    // Quick Create Record buttons
+    document.querySelectorAll('.sf-quick-create').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const objectName = e.target.dataset.object;
+        const lightningPath = `/lightning/o/${objectName}/new`;
+        
+        addTestingHelperStep({
+          type: 'sf-navigate-new',
+          qword: 'NavigateToNewRecord',
+          args: [objectName, lightningPath],
+          description: `Create New ${objectName}`
+        });
+      });
+    });
+    
+    // Global Search
+    document.querySelector('.sf-global-search')?.addEventListener('click', () => {
+      const searchTerm = document.getElementById('sfGlobalSearchInput')?.value?.trim();
+      
+      if (!searchTerm) {
+        showToast('Please enter a search term', 'error');
+        return;
+      }
+      
+      addTestingHelperStep({
+        type: 'sf-global-search',
+        qword: 'SalesforceGlobalSearch',
+        args: [searchTerm],
+        description: `Global search for: "${searchTerm}"`
+      });
+      
+      // Clear the input
+      document.getElementById('sfGlobalSearchInput').value = '';
+    });
+    
+    // Common Workflows
+    document.querySelectorAll('.sf-workflow').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const workflow = e.target.dataset.workflow;
+        const workflowSteps = getWorkflowSteps(workflow);
+        
+        workflowSteps.forEach(step => {
+          addTestingHelperStep(step);
+        });
+        
+        showToast(`Added ${workflowSteps.length} steps for ${workflow}`, 'success');
+      });
+    });
+    
+    // Record Tabs
+    document.querySelectorAll('.sf-record-tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tabName = e.target.dataset.tab;
+        addTestingHelperStep({
+          type: 'sf-click-tab',
+          qword: 'ClickRecordTab',
+          args: [tabName],
+          description: `Click ${tabName} tab`
+        });
+      });
+    });
+    
+    // Utility Actions
+    document.querySelectorAll('.sf-utility').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const action = e.target.closest('.sf-utility').dataset.action;
+        const utilityAction = getUtilityAction(action);
+        if (utilityAction) {
+          addTestingHelperStep(utilityAction);
+        }
+      });
+    });
+  }
+  
+  // Helper function to add a testing helper step
+  function addTestingHelperStep(stepData) {
+    const step = {
+      id: `test_helper_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      type: stepData.type || 'click',
+      qword: stepData.qword,
+      args: stepData.args || [],
+      description: stepData.description,
+      timestamp: Date.now()
+    };
+    
+    // Try to add to workflow steps if available
+    if (window.workflowSteps && Array.isArray(window.workflowSteps)) {
+      window.workflowSteps.push(step);
+      
+      if (typeof window.renderWorkflowSteps === 'function') {
+        window.renderWorkflowSteps();
+      }
+      
+      // Show workflow section if hidden
+      const workflowSection = document.getElementById('workflowSection');
+      if (workflowSection) workflowSection.style.display = 'block';
+      
+      showToast(`Added: ${step.description}`, 'success');
+      
+      // Switch to Suggest tab to see workflow
+      const suggestTab = document.querySelector('[data-tab="suggest"]');
+      if (suggestTab) suggestTab.click();
+    } else {
+      // Fallback: add to main actions if sidepanel controller is available
+      if (window.sidebarController?.state?.actions) {
+        window.sidebarController.state.actions.push(step);
+        if (typeof window.sidebarController.renderActionsList === 'function') {
+          window.sidebarController.renderActionsList();
+        }
+        showToast(`Added: ${step.description}`, 'success');
+      } else {
+        // Last resort: copy to clipboard
+        navigator.clipboard.writeText(JSON.stringify(step, null, 2));
+        showToast('Step copied to clipboard!', 'info');
+      }
+    }
+  }
+  
+  // Get workflow steps for common workflows
+  // NOTE: These use the same sf-* action types as the desktop recorder for consistency
+  function getWorkflowSteps(workflow) {
+    const now = Date.now();
+    
+    const workflows = {
+      'create-account': [
+        { type: 'sf-navigate-list', qword: 'NavigateToObjectList', args: ['Account', '/lightning/o/Account/list'], description: 'Navigate to Accounts list' },
+        { type: 'sf-navigate-new', qword: 'NavigateToNewRecord', args: ['Account', '/lightning/o/Account/new'], description: 'Open New Account form' },
+        { type: 'sf-wait', qword: 'WaitForSalesforceReady', args: ['3000'], description: 'Wait for form to load' }
+      ],
+      'create-contact': [
+        { type: 'sf-navigate-list', qword: 'NavigateToObjectList', args: ['Contact', '/lightning/o/Contact/list'], description: 'Navigate to Contacts list' },
+        { type: 'sf-navigate-new', qword: 'NavigateToNewRecord', args: ['Contact', '/lightning/o/Contact/new'], description: 'Open New Contact form' },
+        { type: 'sf-wait', qword: 'WaitForSalesforceReady', args: ['3000'], description: 'Wait for form to load' }
+      ],
+      'create-opportunity': [
+        { type: 'sf-navigate-list', qword: 'NavigateToObjectList', args: ['Opportunity', '/lightning/o/Opportunity/list'], description: 'Navigate to Opportunities list' },
+        { type: 'sf-navigate-new', qword: 'NavigateToNewRecord', args: ['Opportunity', '/lightning/o/Opportunity/new'], description: 'Open New Opportunity form' },
+        { type: 'sf-wait', qword: 'WaitForSalesforceReady', args: ['3000'], description: 'Wait for form to load' }
+      ],
+      'create-case': [
+        { type: 'sf-navigate-list', qword: 'NavigateToObjectList', args: ['Case', '/lightning/o/Case/list'], description: 'Navigate to Cases list' },
+        { type: 'sf-navigate-new', qword: 'NavigateToNewRecord', args: ['Case', '/lightning/o/Case/new'], description: 'Open New Case form' },
+        { type: 'sf-wait', qword: 'WaitForSalesforceReady', args: ['3000'], description: 'Wait for form to load' }
+      ]
+    };
+    
+    return workflows[workflow] || [];
+  }
+  
+  // Get utility action step
+  // NOTE: These use the same sf-* action types as the desktop recorder for consistency
+  function getUtilityAction(action) {
+    const actions = {
+      'app-launcher': {
+        type: 'sf-app-launcher',
+        qword: 'OpenAppLauncher',
+        args: [],
+        description: 'Open App Launcher'
+      },
+      'global-search': {
+        type: 'sf-open-search',
+        qword: 'OpenGlobalSearch',
+        args: [],
+        description: 'Open Global Search'
+      },
+      'wait': {
+        type: 'sf-wait',
+        qword: 'WaitForSalesforceReady',
+        args: ['3000'],
+        description: 'Wait 3 seconds'
+      },
+      'screenshot': {
+        type: 'screenshot',
+        qword: 'TakeScreenshot',
+        args: [`screenshot_${Date.now()}.png`],
+        description: 'Take screenshot'
+      },
+      'save': {
+        type: 'sf-click-save',
+        qword: 'ClickSaveButton',
+        args: [],
+        description: 'Click Save button'
+      },
+      'edit': {
+        type: 'sf-click-edit',
+        qword: 'ClickEditButton',
+        args: [],
+        description: 'Click Edit button'
+      },
+      'delete': {
+        type: 'sf-click-delete',
+        qword: 'ClickDeleteButton',
+        args: [],
+        description: 'Click Delete button'
+      },
+      'clone': {
+        type: 'sf-click-clone',
+        qword: 'ClickCloneButton',
+        args: [],
+        description: 'Click Clone button'
+      }
+    };
+    
+    return actions[action];
   }
   
   // Detect Salesforce
@@ -452,6 +731,7 @@
     init();
   }
 })();
+
 
 
 

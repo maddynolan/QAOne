@@ -1,1091 +1,723 @@
-# ArisTrace Platform Documentation
+# QAAI/ArisTrace - Enterprise AI-Powered QA Platform
 
-> **Living Document** - Last Updated: December 12, 2024
-> 
-> This document is continuously updated as features are added or modified.
+> **Complete Product Documentation**  
+> Version 3.0 | Last Updated: January 11, 2026
+
+<p align="center">
+  <strong>The Most Comprehensive AI-Powered Test Automation Platform</strong>
+</p>
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
-1. [Platform Overview](#platform-overview)
-2. [Architecture](#architecture)
-3. [Quick Start](#quick-start)
-4. [Core Workflow](#core-workflow)
-5. [Features](#features)
-   - [Trace (Record)](#trace-record)
-   - [Workflow Editor](#workflow-editor)
-   - [Test Cases](#test-cases)
-   - [Requirements](#requirements)
-   - [Test Execution (Releases, Plans, Runs)](#test-execution)
-   - [Test Case Executor](#test-case-executor)
-   - [Traceability](#traceability)
-   - [Defects](#defects)
-   - [Performance & Load Testing](#performance--load-testing)
-   - [API Testing (APEX)](#api-testing-apex)
-   - [Blaze (Exploration)](#blaze-exploration)
-   - [Project Management](#project-management)
-   - [Settings & Data Management](#settings--data-management)
-6. [Data Models](#data-models)
-7. [API Reference](#api-reference)
-8. [Browser Extension](#browser-extension)
-9. [PDF Verification](#pdf-verification)
-10. [Configuration](#configuration)
-11. [Troubleshooting](#troubleshooting)
+1. [Executive Summary](#executive-summary)
+2. [Platform Overview](#platform-overview)
+3. [Core Modules](#core-modules)
+4. [Feature Deep Dive](#feature-deep-dive)
+5. [AI & Intelligence Features](#ai--intelligence-features)
+6. [Enterprise Capabilities](#enterprise-capabilities)
+7. [Integrations](#integrations)
+8. [Technical Specifications](#technical-specifications)
+9. [Getting Started](#getting-started)
+10. [Competitive Advantages](#competitive-advantages)
+
+---
+
+## Executive Summary
+
+**QAAI/ArisTrace** is an enterprise-grade, AI-powered Quality Assurance platform that revolutionizes software testing through intelligent automation, self-healing capabilities, and comprehensive multi-protocol support. Built for modern enterprises, it combines the power of:
+
+- **Visual Test Recording** - No-code test creation via browser extension
+- **AI Test Generation** - LLM-powered test case generation from requirements
+- **Self-Healing Execution** - Automatic selector repair during test runs
+- **Multi-Protocol API Testing** - REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket
+- **Performance Testing** - Virtual user generation with 8 load patterns
+- **Accessibility Scanning** - WCAG 2.1 AA/AAA compliance with VPAT generation
+- **Visual Regression** - 5 comparison modes with baseline management
+- **Security Testing** - OWASP API Security Top 10 scanning
+- **Salesforce-Native Tools** - 15+ specialized SF testing components
+
+### Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| **Supported Frameworks** | Playwright, Selenium, Cypress, K6 |
+| **Enterprise Apps Supported** | 25+ (Salesforce, ServiceNow, Workday, SAP, etc.) |
+| **API Protocols** | 8 (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WS, AMQP) |
+| **AI Providers** | Anthropic Claude, Ollama, OpenAI, vLLM |
+| **Accessibility Standards** | WCAG 2.0/2.1 A/AA/AAA, Section 508 |
+| **Visual Comparison Modes** | 5 (Pixel, Anti-aliased, Perceptual, Structural, Layout) |
+| **Load Test Patterns** | 8 (Constant, Ramp, Spike, Stress, Soak, Breakpoint, Wave, Custom) |
 
 ---
 
 ## Platform Overview
 
-ArisTrace is a comprehensive QA platform that combines:
-- **Recording-based test creation** via browser extension
-- **Visual workflow editing** for test flows
-- **Complete test execution** with step-by-step executor
-- **Performance & load testing** with virtual users
-- **Full traceability** from requirements to defects
-- **Project management** with Jira-like capabilities
+### Architecture
 
-### Key Differentiators
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           QAAI/ArisTrace Platform Architecture                       │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐                │
+│  │   React Frontend │──▶│  FastAPI Backend │──▶│  PostgreSQL/     │                │
+│  │   (TypeScript)   │◀──│    (Python)      │◀──│  SQLite DB       │                │
+│  │   60+ Pages      │   │   50+ Routers    │   │                  │                │
+│  │   70+ Components │   │   165+ Services  │   │                  │                │
+│  └──────────────────┘   └──────────────────┘   └──────────────────┘                │
+│          │                       │                                                   │
+│          │                       ├────────────────────────────────────────┐         │
+│          │                       │                                        │         │
+│          │                       ▼                                        ▼         │
+│          │             ┌──────────────────┐                    ┌──────────────────┐ │
+│          │             │   AI Layer       │                    │  Test Execution  │ │
+│          │             │ ┌──────────────┐ │                    │ ┌──────────────┐ │ │
+│          │             │ │Claude/Ollama │ │                    │ │ Playwright   │ │ │
+│          │             │ │ OpenAI/vLLM  │ │                    │ │ Selenium     │ │ │
+│          │             │ └──────────────┘ │                    │ │ K6/Artillery │ │ │
+│          │             └──────────────────┘                    │ │ ZAP Scanner  │ │ │
+│          ▼                                                      │ └──────────────┘ │ │
+│  ┌──────────────────┐                                          └──────────────────┘ │
+│  │ Flowstral Chrome │                                                               │
+│  │    Extension     │◀──────────────────────────────────────────────────────────────│
+│  │  Visual Recorder │         Real-time WebSocket Communication                      │
+│  └──────────────────┘                                                               │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-| Feature | ArisTrace | Traditional Tools |
-|---------|-----------|-------------------|
-| Recording → Test Case | Automatic approval workflow | Manual copy/paste |
-| Test Execution | Step-by-step with evidence capture | Pass/Fail only |
-| Load Testing | Import from Test Cases library | Separate scripts |
-| Traceability | Built-in matrix with gap analysis | External plugins |
-| Defect Linking | Link at step level | Test level only |
+### Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | React 18 + TypeScript | Modern UI with 60+ pages |
+| **Styling** | Tailwind CSS + shadcn/ui | Professional enterprise design |
+| **State** | React Query + Zustand | Efficient data management |
+| **Backend** | FastAPI (Python 3.10+) | High-performance API server |
+| **Database** | PostgreSQL / SQLite | Persistent data storage |
+| **Real-time** | WebSocket | Live test execution updates |
+| **AI/ML** | Claude, Ollama, OpenAI | Intelligent test generation |
+| **Browser Automation** | Playwright | Cross-browser test execution |
+| **Performance** | K6 / Go Runner | Virtual user simulation |
+| **Security** | OWASP ZAP | Vulnerability scanning |
 
 ---
 
-## Architecture
+## Core Modules
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              FRONTEND (React + Vite)                         │
-│                              Port: 5173 (dev) / 8080 (prod)                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  src/                                                                        │
-│  ├── components/          # Reusable UI components                          │
-│  │   ├── AppSidebar.tsx   # Navigation sidebar                              │
-│  │   ├── FlowstralWorkflowEditor/  # Visual workflow editor                 │
-│  │   └── ui/              # shadcn/ui components                            │
-│  ├── pages/               # Route components                                │
-│  │   ├── Flowstral.tsx    # Trace (Record) page                             │
-│  │   ├── TestExecution.tsx # Releases, Plans management                     │
-│  │   ├── TestCaseExecutor.tsx # Step-by-step test execution                 │
-│  │   ├── TestPlanDetail.tsx # Test plan details & execution                 │
-│  │   ├── Traceability.tsx # Traceability matrix                             │
-│  │   ├── CreateTestCase.tsx # Test case creation                            │
-│  │   ├── CreateRequirement.tsx # Requirement creation                       │
-│  │   ├── CreateDefect.tsx # Defect creation                                 │
-│  │   └── Settings.tsx     # Settings & data management                      │
-│  └── lib/                 # Services and utilities                          │
-│      ├── data-storage.ts  # Data models & storage                           │
-│      └── test-management-service.ts  # Test management API                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              BACKEND (FastAPI + Python)                      │
-│                              Port: 8000                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  backend/app/                                                                │
-│  ├── routers/             # API endpoints                                   │
-│  │   ├── playwright_recorder_api.py  # Recording & script generation        │
-│  │   ├── requirements_api.py         # Requirements CRUD                    │
-│  │   ├── defects_api.py              # Defects CRUD                         │
-│  │   ├── test_case_api.py            # Test case CRUD                       │
-│  │   ├── traceability_api.py         # Traceability matrix                  │
-│  │   ├── sample_data_api.py          # Sample data loading                  │
-│  │   └── ...                                                                │
-│  └── services/            # Business logic                                  │
-│      ├── flowstral/       # Recording processing                            │
-│      └── llm/             # AI services (Ollama)                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           BROWSER EXTENSION                                  │
-│                           flowstral-extension/                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  src/                                                                        │
-│  ├── sidepanel/           # Extension UI                                    │
-│  │   ├── sidepanel.html   # Side panel HTML (Base URL + controls)           │
-│  │   └── sidepanel.js     # Side panel logic                                │
-│  ├── content/             # Page injection scripts                          │
-│  │   └── content.js       # Captures user interactions                      │
-│  └── background/          # Service worker                                  │
-│      └── background.js    # Backend communication, saves sessions           │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### 1. 🎬 Test Recorder (Flowstral)
+
+**Browser extension for visual test recording with enterprise app support.**
+
+| Feature | Description |
+|---------|-------------|
+| **No-Code Recording** | Record user interactions without writing code |
+| **Smart Selectors** | Automatic selector generation with 8+ strategies |
+| **Enterprise Apps** | Optimized for Salesforce, ServiceNow, Workday, SAP |
+| **Shadow DOM Support** | Penetrates complex component architectures |
+| **Multi-Tab Recording** | Record across multiple browser tabs |
+| **Event Capture** | Click, input, scroll, navigation, form submit |
+| **Session Management** | Persistent sessions with auto-reconnect |
+
+**Selector Generation Priority:**
+1. `data-testid` (most stable)
+2. `id` attribute
+3. `name` attribute
+4. `aria-label` (accessibility)
+5. `role + name` (Playwright recommended)
+6. Text content
+7. CSS path (fallback)
+
+### 2. 🔧 Visual Test Builder
+
+**No-code/low-code test case construction with multi-framework export.**
+
+| Feature | Description |
+|---------|-------------|
+| **No-Code View** | Human-readable step descriptions |
+| **Code View** | Technical selector visibility |
+| **Multi-Framework** | Export to Playwright, Selenium, Cypress |
+| **Assertion Builder** | 20+ assertion types with visual configuration |
+| **Variable Store** | Dynamic data across test steps |
+| **Preconditions** | Import other test cases as setup |
+| **Documentation Export** | ISTQB, Gherkin/BDD, Markdown formats |
+
+**Supported Node Types:**
+- Navigate, Click, Input, Wait, Scroll, Hover, Select
+- Assert (visibility, text, URL, element count, value)
+- API Call, Database Query
+- Screenshot, Visual Comparison
+- Conditional Logic, Loops
+
+### 3. 📊 Test Repository
+
+**Enterprise test management with full CRUD operations.**
+
+| Feature | Description |
+|---------|-------------|
+| **Test Cases** | Create, edit, clone, delete with versioning |
+| **Test Suites** | Logical grouping with batch execution |
+| **Test Plans** | Release-based planning with scheduling |
+| **Test Runs** | Execution history with detailed results |
+| **Search & Filter** | Full-text search, tag-based filtering |
+| **Import/Export** | JSON, CSV, Excel support |
+
+### 4. 🚀 Test Execution Engine
+
+**Self-healing test runner with real-time WebSocket updates.**
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Browser** | Chromium, Firefox, WebKit |
+| **Headed/Headless** | Visual or background execution |
+| **Parallel Execution** | Concurrent test runs |
+| **Self-Healing** | Automatic selector repair |
+| **Screenshots** | Automatic capture on failure |
+| **Video Recording** | Full execution capture (optional) |
+| **Real-time Updates** | WebSocket progress streaming |
+
+**Self-Healing Strategies:**
+1. AI-based selector regeneration
+2. Text-based fallback (`get_by_text`)
+3. Role-based fallback (`get_by_role`)
+4. Fuzzy attribute matching
+5. Structural DOM similarity
+
+### 5. 🌐 API Testing Suite
+
+**Enterprise-grade API testing comparable to ReadyAPI.**
+
+| Protocol | Support Level |
+|----------|---------------|
+| **REST** | Full (GET, POST, PUT, DELETE, PATCH) |
+| **SOAP** | Full (WSDL import, envelope generation) |
+| **GraphQL** | Full (queries, mutations, subscriptions) |
+| **gRPC** | Full (protobuf support, streaming) |
+| **Kafka** | Full (producer/consumer testing) |
+| **MQTT** | Full (pub/sub testing) |
+| **WebSocket** | Full (bi-directional) |
+| **AMQP** | Full (RabbitMQ compatible) |
+
+**API Testing Features:**
+- OpenAPI/Swagger spec import
+- Data-driven testing with CSV/JSON
+- Request chaining with property transfer
+- Environment management (dev/staging/prod)
+- Service virtualization / mocking
+- OAuth2/JWT authentication
+- Response assertions (JSONPath, XPath)
+- Test data generators (Faker integration)
+
+### 6. ⚡ Performance Testing
+
+**Virtual user simulation with 8 load patterns.**
+
+| Load Pattern | Use Case |
+|--------------|----------|
+| **Constant** | Baseline steady-state testing |
+| **Ramp Up** | Gradual user increase |
+| **Ramp Down** | Graceful load decrease |
+| **Spike** | Sudden traffic burst |
+| **Stress** | Beyond-capacity testing |
+| **Soak** | Memory leak detection |
+| **Breakpoint** | Find system limits |
+| **Wave** | Cyclic load patterns |
+
+**User Personas:**
+- Casual Browser (slow, exploratory)
+- Normal User (average interaction)
+- Power User (fast, experienced)
+- Automated Bot (machine speed)
+
+**Metrics Captured:**
+- Response time (avg, p50, p95, p99)
+- Throughput (requests/second)
+- Error rate
+- Concurrent users
+- Resource utilization
+
+### 7. ♿ Accessibility Testing
+
+**WCAG compliance scanning with VPAT generation.**
+
+| Standard | Supported Levels |
+|----------|------------------|
+| **WCAG 2.0** | A, AA, AAA |
+| **WCAG 2.1** | A, AA, AAA |
+| **Section 508** | Full compliance |
+| **ADA** | Title III compliance |
+
+**Scan Types:**
+- Full page scan
+- Component-specific scan
+- Site-wide audit (multi-page)
+- Continuous monitoring
+
+**Outputs:**
+- Violation reports with WCAG references
+- Remediation suggestions
+- VPAT document generation
+- Accessibility score trending
+
+### 8. 👁️ Visual Regression Testing
+
+**Pixel-perfect comparison with intelligent diff detection.**
+
+| Comparison Mode | Best For |
+|-----------------|----------|
+| **Pixel Perfect** | Exact match requirements |
+| **Anti-Aliased** | Font rendering differences |
+| **Perceptual** | Minor visual changes OK |
+| **Structural** | Layout stability |
+| **Layout Only** | Content-agnostic comparison |
+
+**Features:**
+- Baseline management (CRUD)
+- Ignore regions (timestamps, ads)
+- Threshold configuration
+- Diff image generation
+- Batch comparison
+- Historical comparison
+
+### 9. 🔒 Security Testing
+
+**OWASP API Security Top 10 scanning.**
+
+| Scan Type | OWASP Category |
+|-----------|----------------|
+| BOLA | Broken Object Level Authorization |
+| Broken Auth | Broken Authentication |
+| BOPLA | Broken Object Property Level Auth |
+| Resource Consumption | Unrestricted Resource Consumption |
+| BFLA | Broken Function Level Authorization |
+| SSRF | Server-Side Request Forgery |
+| Misconfig | Security Misconfiguration |
+| Inventory | Improper Inventory Management |
+
+### 10. 🌩️ Salesforce Testing Tools
+
+**15+ specialized components for Salesforce testing.**
+
+| Tool | Purpose |
+|------|---------|
+| **Multi-Org Manager** | Manage multiple SF org connections |
+| **SOQL Builder** | Visual query builder |
+| **Bulk Data Loader** | CSV import/export |
+| **REST API Playground** | Test API calls |
+| **Test Data Factory** | Generate realistic test data |
+| **Schema Browser** | Explore objects and fields |
+| **Record Inspector** | View record details |
+| **Apex Test Runner** | Run and monitor tests |
+| **Permission Analyzer** | Check user permissions |
+| **Debug Log Analyzer** | Parse and analyze logs |
+| **Relationship Visualizer** | ERD generation |
+| **Record Cloner** | Deep clone with relationships |
+| **Data Diff** | Compare record versions |
+| **Assertion Builder** | SF-specific validations |
+| **Stage Transition Tester** | Process automation testing |
 
 ---
 
-## Quick Start
+## Feature Deep Dive
 
-### Prerequisites
+### Self-Healing Test Execution
 
-- Node.js 18+
-- Python 3.9+
-- Chrome/Edge browser (for extension)
+When a selector fails during test execution:
 
-### Installation
+```
+1. Detect failure pattern
+   └─ "Element not found", "Timeout", "Selector not visible"
+   
+2. Extract failed selector
+   └─ Parse from error message or step definition
+   
+3. Apply healing strategies (in order):
+   ├─ AI Regeneration (LLM suggests new selector)
+   ├─ Text Fallback (get_by_text with element text)
+   ├─ Role Fallback (get_by_role with accessible name)
+   ├─ Attribute Fuzzy Match (similar attributes)
+   └─ Structural Similarity (DOM position analysis)
+   
+4. Retry with healed selector
+   └─ Update test case with new selector
+   
+5. Report healing in results
+   └─ Original selector, healed selector, strategy used
+```
+
+### Complex Verifications
+
+**Email Verification:**
+- Microsoft 365 / Outlook integration
+- Gmail integration
+- Subject/sender filtering
+- OTP extraction
+- Link extraction
+- Wait with timeout
+
+**PDF Verification:**
+- Text content assertions
+- Page count validation
+- Table data extraction
+- Metadata verification
+- Regex pattern matching
+
+**File Verification:**
+- CSV: Row count, column headers, cell values
+- Excel: Sheet existence, cell values, formulas
+- JSON: JSONPath assertions, array length
+- XML: XPath validation
+- Images: Dimensions, format verification
+
+### Traceability Matrix
+
+Comprehensive linking:
+```
+Requirements ──────┬──────▶ Test Plans
+                   │
+                   ├──────▶ Test Cases
+                   │
+                   ├──────▶ Test Runs
+                   │
+                   └──────▶ Defects
+
+Coverage metrics:
+- Requirements without test cases (gaps)
+- Test cases without requirements (orphans)
+- Requirements with failed tests (at-risk)
+- Overall coverage percentage
+```
+
+### Code Alchemy (Repository Analyzer)
+
+Import existing tests from any repository:
+
+**Supported Platforms:**
+- GitHub (public & private)
+- GitLab (cloud & self-hosted)
+- Bitbucket (cloud & server)
+- Azure DevOps
+
+**Detected Frameworks:**
+- JUnit / TestNG (Java)
+- pytest / unittest (Python)
+- Jest / Mocha (JavaScript)
+- RSpec (Ruby)
+- NUnit / xUnit (.NET)
+
+**Process:**
+1. Analyze repository structure
+2. Detect test frameworks
+3. Extract test methods and assertions
+4. Preview before import
+5. Import selected tests to QAAI
+
+---
+
+## AI & Intelligence Features
+
+### AI Test Generation
+
+Generate tests from natural language requirements:
+
+```
+Input: "User should be able to login with valid credentials
+        and see their dashboard with profile information"
+
+Output:
+- Navigate to login page
+- Enter valid username
+- Enter valid password  
+- Click login button
+- Verify URL contains /dashboard
+- Verify profile name is visible
+- Verify profile picture is displayed
+```
+
+### AI Providers
+
+| Provider | Models | Use Case |
+|----------|--------|----------|
+| **Anthropic Claude** | Claude 3.5 Sonnet, Opus, Haiku | Primary production LLM |
+| **Ollama** | Qwen 2.5, LLaMA, Mistral | Local/air-gapped deployment |
+| **OpenAI** | GPT-4, GPT-3.5 | Alternative cloud option |
+| **vLLM** | Custom fine-tuned | Enterprise-specific models |
+
+### LLM Cost Optimization
+
+Multi-tier caching achieves 90%+ cache hit rate:
+
+```
+Cache Layers:
+1. Exact Match - Identical prompts (100% savings)
+2. Normalized Match - Whitespace/format normalized (95% savings)
+3. Semantic Match - Similar meaning via embeddings (80% savings)
+
+Model Tiering:
+- Haiku for simple classification tasks
+- Sonnet for standard generation
+- Opus for complex reasoning
+
+Response Truncation:
+- Limit token output where appropriate
+```
+
+### AI Agents
+
+| Agent | Purpose |
+|-------|---------|
+| **Test Design Agent** | Creates test strategies and scenarios |
+| **Requirements Agent** | Parses and structures requirements |
+| **Defect Agent** | Triages and prioritizes bugs |
+| **Performance Agent** | Analyzes performance results |
+| **Security Agent** | Reviews security scan findings |
+| **Accessibility Agent** | Interprets WCAG violations |
+
+---
+
+## Enterprise Capabilities
+
+### Multi-Tenancy
+
+- Organization isolation
+- Project-level access control
+- Role-based permissions (RBAC)
+- Row-level security (RLS)
+
+### Integrations
+
+| Category | Integrations |
+|----------|-------------|
+| **CI/CD** | Jenkins, GitHub Actions, GitLab CI, Azure DevOps, CircleCI |
+| **Issue Tracking** | Jira, Azure Boards, GitHub Issues |
+| **Documentation** | Confluence |
+| **Messaging** | Slack, Microsoft Teams |
+| **APM** | Datadog, New Relic, Dynatrace |
+| **Source Control** | GitHub, GitLab, Bitbucket, Azure Repos |
+
+### CI/CD Pipeline Export
+
+Generate pipeline configurations:
+- GitHub Actions YAML
+- GitLab CI YAML
+- Jenkins Groovy
+- Azure DevOps YAML
+- CircleCI config
+
+### Scheduled Runs
+
+- Cron-based scheduling
+- Timezone support
+- Email notifications
+- Slack/Teams alerts
+- Auto-retry on failure
+
+### Secrets Vault
+
+- Encrypted credential storage
+- Environment-based secrets
+- API key management
+- Connection string storage
+- Rotation support
+
+---
+
+## Technical Specifications
+
+### Backend API Routers (50+)
+
+| Router | Prefix | Purpose |
+|--------|--------|---------|
+| `test_cases_crud_api` | `/test-cases` | Test case CRUD |
+| `test_runs_api` | `/test-runs` | Execution management |
+| `flowstral_api` | `/api/flowstral` | Recording sessions |
+| `playwright_recorder_api` | `/api/playwright-recorder` | Script execution |
+| `enhanced_api_testing_api` | `/api/v2/testing` | API testing |
+| `performance_api` | `/api/performance` | Load testing |
+| `accessibility_api` | `/api/accessibility` | WCAG scanning |
+| `visual_testing_api` | `/api/visual-testing` | Visual regression |
+| `owasp_security_api` | `/api/security` | Security scanning |
+| `salesforce_api` | `/api/salesforce` | SF integration |
+| `llm_api` | `/api/llm` | AI generation |
+| `agents_api` | `/agents` | AI agents |
+| `traceability_api` | `/traceability` | Coverage matrix |
+| `code_alchemy_api` | `/api/code-alchemy` | Repo analysis |
+| `complex_verifications` | `/api/complex-verify` | Email/PDF/File verify |
+
+### Frontend Pages (60+)
+
+| Category | Pages |
+|----------|-------|
+| **Core** | Dashboard, Analytics, Results |
+| **Test Cases** | Repository, Create, Edit, Builder |
+| **Execution** | Test Runs, Test Case Execution |
+| **Planning** | Test Plans, Test Suites, Scheduled Runs |
+| **API** | Enhanced API Testing, Coverage Map |
+| **Performance** | Virtual User Generator |
+| **Quality** | Accessibility, Visual Testing, Self-Healing |
+| **Salesforce** | SF Tools (15+ components) |
+| **Integration** | Integrations, CI/CD, Secrets Vault |
+| **Management** | Requirements, Defects, Traceability |
+| **Tools** | Code Alchemy, Framework Analyzer, Element Repository |
+| **Settings** | Settings, Project Management |
+
+### Services (165+)
+
+| Category | Services |
+|----------|----------|
+| **Automation** | Test execution, self-healing, selector engine |
+| **Flowstral** | Recording gateway, script generation |
+| **LLM** | Ollama, Claude, prompt caching, unified gateway |
+| **API Testing** | Request chaining, virtualization, OAuth2 |
+| **Performance** | Scenario compiler, Go runner, metrics |
+| **Accessibility** | Axe-core scanner, WCAG pipeline |
+| **Agents** | Test design, requirements, defect triage |
+| **Storage** | PostgreSQL, SQLite, in-memory |
+
+### System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **Node.js** | 18+ | 20+ |
+| **Python** | 3.10+ | 3.11+ |
+| **RAM** | 4GB | 8GB+ |
+| **Storage** | 10GB | 50GB+ |
+| **Browser** | Chrome 100+ | Latest Chrome |
+
+---
+
+## Getting Started
+
+### Quick Start (5 minutes)
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd QAAI
+# 1. Clone repository
+git clone https://github.com/maddynolan/QAOne.git
+cd QAOne
 
-# Install frontend
-npm install
-
-# Install backend
+# 2. Start Backend
 cd backend
 pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Start services
-npm run dev          # Frontend on :5173 or :8080
-uvicorn app.main:app --reload --port 8000  # Backend
+# 3. Start Frontend (new terminal)
+cd ..  # back to root
+npm install
+npm run dev
+
+# 4. Open browser
+# Frontend: http://localhost:8080
+# API Docs: http://localhost:8000/docs
 ```
 
-### Load Extension
+### Install Browser Extension
 
 1. Open Chrome → `chrome://extensions`
 2. Enable "Developer mode"
 3. Click "Load unpacked"
-4. Select `flowstral-extension` folder
+4. Select `flowstral-extension` directory
+5. Pin extension to toolbar
 
----
-
-## Core Workflow
-
-### Test Management Lifecycle
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         COMPLETE TEST LIFECYCLE                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  REQUIREMENTS ──────► TEST CASES ──────► TEST PLANS ──────► TEST RUNS       │
-│       │                    │                  │                  │           │
-│       │                    │                  │                  │           │
-│       └────────────────────┴──────────────────┴──────────────────┴───────┐  │
-│                                                                          │  │
-│                              DEFECTS ◄───────────────────────────────────┘  │
-│                                  │                                          │
-│                                  └──► Linked to Requirements                │
-│                                                                              │
-│                           TRACEABILITY MATRIX                               │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Recording to Test Case Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         RECORDING → TEST CASE WORKFLOW                       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  1. RECORD                    2. REVIEW                   3. APPROVE        │
-│  ┌─────────────┐             ┌─────────────┐             ┌─────────────┐    │
-│  │ Extension   │────────────►│ Trace Page  │────────────►│ Test Case   │    │
-│  │             │             │             │             │ Library     │    │
-│  │ • Base URL  │             │ • View steps│             │             │    │
-│  │ • Record    │             │ • Add asserts│            │ • Automated │    │
-│  │ • Stop      │             │ • Edit flow │             │ • Manual    │    │
-│  └─────────────┘             └─────────────┘             └─────────────┘    │
-│                                                                │            │
-│                                                                ▼            │
-│  4. EXECUTE                                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                                                                     │    │
-│  │  Test Plans    │    Test Runs    │    Load Testing    │    CI/CD   │    │
-│  │                                                                     │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Test Execution Hierarchy
-
-```
-Release (Test Cycle)           e.g., "December 2024 Release", "Sprint 24"
- │
- └── Test Plans                e.g., Smoke, Regression, Functional
-      │
-      └── Test Cases           Linked from test case library
-           │
-           └── Test Runs       Individual execution records
-                │
-                └── Defects    Created from failed steps (step-level linking)
-```
-
-### Recording Statuses
-
-| Status | Description | Next Action |
-|--------|-------------|-------------|
-| 🟡 Draft | Just recorded | Review or Approve |
-| 🔵 In Review | Being reviewed | Edit Flow or Approve |
-| 🟢 Approved | Ready for use | Linked to Test Case |
-| 🔴 Rejected | Needs re-recording | Delete or Re-record |
-
----
-
-## Features
-
-### Trace (Record)
-
-**Path:** `/flowstral`
-
-The main recording interface showing all recorded sessions from the browser extension.
-
-#### Recording a Test
-
-1. **Open Extension** - Click extension icon, opens side panel
-2. **Set Base URL** - Enter the starting URL for your test (e.g., `http://localhost:3000`)
-3. **Start Recording** - Click "Start Recording"
-4. **Perform Actions** - Navigate, click, type on the page
-5. **Stop Recording** - Click "Stop & Save"
-6. **View in Trace** - Recording appears in Trace page (auto-refreshes every 5 seconds)
-
-#### Session Actions
-
-| Action | Description |
-|--------|-------------|
-| 👁 View | See recording details and steps |
-| ⚡ Edit Flow | Open in Workflow Editor for visual editing |
-| ✅ Approve → Test Case | Create test case from recording |
-| ❌ Reject | Mark as rejected |
-
-#### Quick Assertions
-
-Add assertions directly in session details:
-- Text is visible on page
-- Element is visible
-- URL contains
-- Page title equals
-
----
-
-### Workflow Editor
-
-**Path:** `/flowstral/workflow-editor?sessionId=xxx` or `/flowstral/workflow-editor?import=trace`
-
-Visual editor for test flows with drag-and-drop capabilities.
-
-#### Features
-
-- **Drag & drop** step reordering
-- **Add/edit/delete** steps
-- **Add assertion** nodes
-- **Visual flow** diagram
-- **Export** to Playwright code
-- **Auto-load** from URL parameters (sessionId or import source)
-
-#### Loading Workflows
-
-| Source | URL Parameter | Description |
-|--------|---------------|-------------|
-| Direct session | `?sessionId=xxx` | Load by session ID |
-| From Trace page | `?import=trace` | Load from localStorage |
-| From Extension | `?import=extension` | Load pending import |
-
----
-
-### Test Cases
-
-**Path:** `/cases`
-
-Central library of all test cases (manual and automated).
-
-#### Creating Test Cases
-
-**Path:** `/cases/new`
-
-Modern interface with:
-- **Templates** (Login Flow, CRUD Operations, E2E Flow, API Testing)
-- **Drag-and-drop** step reordering
-- **Import steps** from previous test cases
-- **Flowstral integration** for automated tests
-- **Requirement linking** for traceability
-
-#### Test Case Fields
-
-```typescript
-interface TestCase {
-  id: string;
-  name: string;
-  description: string;
-  type: 'manual' | 'automated';
-  category: 'functional' | 'regression' | 'smoke' | 'e2e' | 'integration' | 'api';
-  status: 'draft' | 'active' | 'deprecated';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  steps: Array<{
-    stepNumber: number;
-    action: string;
-    testData?: string;
-    expectedResult: string;
-  }>;
-  preconditions: string[];
-  expectedResult: string;
-  linkedRequirements: string[];  // REQ IDs for traceability
-  tags: string[];
-  automationScript?: string;    // Playwright code for automated tests
-  source?: {
-    type: 'manual' | 'flowstral' | 'import';
-    recordingId?: string;
-  };
-}
-```
-
----
-
-### Requirements
-
-**Path:** `/requirements`
-
-#### Creating Requirements
-
-**Path:** `/requirements/new`
-
-Features:
-- **Templates** (User Story, Functional, Non-Functional, Business Rule)
-- **Acceptance Criteria** builder with "Given/When/Then" format
-- **Traceability** links to test cases
-- **Drag-and-drop** criteria reordering
-
-#### Requirement Fields
-
-```typescript
-interface Requirement {
-  id: string;
-  title: string;
-  description: string;
-  type: 'functional' | 'non_functional' | 'business' | 'technical';
-  priority: 'must_have' | 'should_have' | 'could_have' | 'wont_have';
-  status: 'draft' | 'approved' | 'implemented' | 'verified' | 'rejected';
-  acceptanceCriteria: Array<{
-    id: string;
-    description: string;
-    type: 'given' | 'when' | 'then';
-  }>;
-  linkedTestCases: string[];  // TC IDs
-  tags: string[];
-  source: 'jira' | 'manual' | 'import';
-  source_ref?: string;        // External reference
-}
-```
-
----
-
-### Test Execution
-
-**Path:** `/execution`
-
-Comprehensive test execution management following TestRail/Zephyr standards.
-
-#### Tabs
-
-| Tab | Purpose |
-|-----|---------|
-| **Releases** | Manage test cycles (versions, sprints) |
-| **Test Plans** | Organize test cases by objective |
-| **Execute** | View and run linked test cases |
-| **Results** | View execution history |
-
-#### Release (Test Cycle)
-
-A release represents a version, sprint, or time-bounded testing period.
-
-| Field | Description |
-|-------|-------------|
-| Name | e.g., "December 2024 Release", "Sprint 24", "v2.1.0" |
-| Start/End Date | Testing period boundaries |
-| Status | Planning → Active → Completed |
-| Test Plans | Plans assigned to this release |
-
-#### Test Plans
-
-Group test cases by testing objective within a release.
-
-| Plan Type | Purpose |
-|-----------|---------|
-| 🔥 Smoke | Critical path verification |
-| 🔄 Regression | Ensure no breaking changes |
-| ⚙️ Functional | Feature-specific testing |
-| 🔗 Integration | System interaction testing |
-| 🎯 E2E | Full user journey testing |
-
-#### Test Plan Detail Page
-
-**Path:** `/execution/plan/{planId}`
-
-Features:
-- **Overview stats** (total, passed, failed, pending)
-- **Test case list** with multi-select
-- **Import Test Cases** from library
-- **Create New** test case
-- **Execute Selected** (batch execution)
-- **Individual Execute** buttons
-- **Remove from Plan** (keeps test case in library)
-
----
-
-### Test Case Executor
-
-**Path:** `/execution/run/{testCaseId}?planId=xxx&releaseId=xxx`
-
-Step-by-step test execution interface.
-
-#### Features
-
-| Feature | Description |
-|---------|-------------|
-| **Step-by-step execution** | Mark each step Pass/Fail/Blocked/Skipped |
-| **Actual results** | Record what actually happened |
-| **Notes** | Add observations per step |
-| **Screenshot capture** | Capture evidence (via paste or upload) |
-| **Defect linking** | Link existing defects or create new ones |
-| **Multi-test queue** | Execute multiple tests in sequence |
-| **Auto-populate defects** | Failed step details auto-fill defect form |
-
-#### Execution Queue (Multi-test)
-
-When executing multiple tests from a plan:
-1. All selected tests appear in collapsible queue panel
-2. Click any test to switch to it (progress is saved)
-3. **Save & Exit** - Save current, return to plan
-4. **Save & Next** - Save current, move to next in queue
-5. **Complete All** - Mark remaining as completed/skipped
-
-#### Defect Creation from Step
-
-When creating a defect from a failed step:
-- **Title** pre-filled: `[Test Name] Step X Failed`
-- **Description** pre-filled with failure context
-- **Steps to Reproduce** auto-populated with all test steps up to failure point
-- **Linked automatically** to the test case and step
-
----
-
-### Traceability
-
-**Path:** `/traceability`
-
-Full traceability matrix from requirements to defects.
-
-#### Tabs
-
-| Tab | Description |
-|-----|-------------|
-| **Overview** | Stats, coverage %, recent activity |
-| **Matrix** | Requirement ↔ Test Case ↔ Test Run ↔ Defect links |
-| **Gaps** | Missing test coverage, untested requirements |
-| **Impact** | Change impact analysis |
-
-#### Coverage Calculation
-
-```
-Requirement Coverage % = 
-  (Requirements with at least 1 linked Test Case with at least 1 passed Test Run) 
-  / (Total Requirements) × 100
-
-Test Coverage Status:
-- FULL: Has test cases, in plan, executed, passed
-- PARTIAL: Has test cases but not executed or failed
-- NONE: No test cases linked
-```
-
-#### Gap Analysis
-
-Each requirement shows gaps:
-- "No test cases linked"
-- "Not in any test plan"
-- "Not executed yet"
-- "All test runs failed"
-
-#### Navigation
-
-All elements are clickable:
-- Click requirement → `/requirements/{id}`
-- Click test case → `/cases/{id}`
-- Click defect → `/defects/{id}`
-- Coverage stats → Filter matrix
-
----
-
-### Defects
-
-**Path:** `/defects`
-
-Bug tracking with full traceability.
-
-#### Creating Defects
-
-**Path:** `/defects/new`
-
-Features:
-- **Templates** (Functional Bug, UI Issue, Performance, Security)
-- **Steps to Reproduce** builder
-- **Traceability** links to test cases, requirements
-- **Priority/Severity** matrix
-- **Attachments** support
-
-#### Defect Fields
-
-```typescript
-interface Defect {
-  id: string;
-  title: string;
-  description: string;
-  severity: 'critical' | 'major' | 'minor' | 'trivial';
-  priority: 'urgent' | 'high' | 'medium' | 'low';
-  status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'deferred';
-  stepsToReproduce: string[];
-  expectedResult: string;
-  actualResult: string;
-  environment?: string;
-  linkedTestCases: string[];
-  linkedRequirements: string[];
-  linkedTestSteps?: Array<{ testCaseId: string; stepNumber: number }>;
-  assignee?: string;
-  reporter: string;
-  attachments?: string[];
-  deferredToRelease?: string;  // For deferred defects
-}
-```
-
-#### What Happens with Deferred Defects?
-
-1. Defect marked as "Deferred" with target release
-2. Original requirement shows "Known Issue" status
-3. Defect auto-appears in next release's scope
-4. Creates audit trail for postponement reason
-
----
-
-### Performance & Load Testing
-
-**Path:** `/load-testing`
-
-Comprehensive performance testing with virtual users.
-
-#### Quick Start Scenarios
-
-| Scenario | Users | Duration | Purpose |
-|----------|-------|----------|---------|
-| 🚀 API Load Test | 50 | 60s | Normal load |
-| ⚡ Spike Test | 200 | 120s | Sudden traffic |
-| 🔥 Stress Test | 500 | 180s | Breaking point |
-| ⏱️ Endurance Test | 30 | 600s | Memory leaks |
-| 💨 Quick Smoke | 5 | 30s | Health check |
-
-#### Importing Test Cases
-
-1. Go to Load Testing → Import
-2. Select **Test Cases** tab (supports multi-select!)
-3. Check test cases to include
-4. Click "Import X Test Cases"
-
-#### Metrics Collected
-
-- Response Time (avg, min, max, p50, p90, p95, p99)
-- Throughput (requests/second)
-- Error Rate
-- Active Users
-- Bytes Sent/Received
-- Failed Requests (with details)
-
-#### How It Works
-
-- Uses browser-level simulation (like real users)
-- Executes test steps with configurable delays
-- Tracks response times and failures
-- Supports ramp-up patterns (Linear, Step, Spike, Custom)
-
----
-
-### API Testing (APEX)
-
-**Path:** `/enhanced-api-testing`
-
-Enterprise API testing capabilities.
-
-#### Features
-
-- OpenAPI/Swagger import
-- Request builder (GET, POST, PUT, DELETE, PATCH)
-- Environment variables
-- Test chaining
-- Response validation
-- Mock services
-- Import from Flowstral recordings
-
----
-
-### Blaze (Exploration)
-
-**Path:** `/nexus`
-
-Autonomous exploratory testing.
-
-#### How It Works
-
-1. Enter target URL
-2. Configure exploration depth
-3. Start exploration
-4. AI navigates and discovers bugs
-5. Review findings
-
----
-
-### Project Management
-
-**Path:** `/project-management`
-
-Jira-like project management with drag-and-drop.
-
-#### Tabs
-
-| Tab | Purpose |
-|-----|---------|
-| **Issues** | Bugs, tasks, stories |
-| **Board** | Kanban view (drag-and-drop) |
-| **Requirements** | Quick requirement management |
-| **Gherkin** | BDD test generation with templates |
-
-#### Gherkin Templates
-
-| Template | Description |
-|----------|-------------|
-| Login Flow | Authentication scenarios |
-| CRUD Operations | Create, Read, Update, Delete |
-| E2E Flow | End-to-end user journey |
-| API Testing | API endpoint scenarios |
-| Error Handling | Error and edge cases |
-
-#### Quick Actions
-
-- **New Requirement** → `/requirements/new`
-- **New Test Case** → `/cases/new`
-- **New Defect** → `/defects/new`
-
----
-
-### Settings & Data Management
-
-**Path:** `/settings`
-
-Configuration and data management.
-
-#### Data Management Section
-
-| Action | Description |
-|--------|-------------|
-| **Clear All Data** | Removes all localStorage and sessionStorage data |
-| **View Counts** | Shows stored items (Releases, Plans, Runs, Cases, Requirements, Defects) |
-
-#### When to Use Clear All Data
-
-- Testing fresh scenarios
-- Resetting after development
-- Clearing cached/stale data
-- Troubleshooting data issues
-
----
-
-## Data Models
-
-### Storage Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         DATA STORAGE                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Backend API (Primary)          localStorage (Fallback/Offline)    │
-│  ├── In-memory stores           ├── releases                       │
-│  │   ├── _requirements_store    ├── test_plans                     │
-│  │   ├── _test_cases_store      ├── test_runs                      │
-│  │   ├── _defects_store         ├── test_cases                     │
-│  │   └── _sessions (recordings) ├── requirements                   │
-│  └── SQLite (optional)          ├── defects                        │
-│                                 └── execution_queue                │
-│                                                                     │
-│  Merged on Load: API + localStorage → Deduplicated → Display       │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Recording Session
-
-```typescript
-interface RecordingSession {
-  session_id: string;
-  name: string;
-  initial_url: string;
-  status: 'draft' | 'in_review' | 'approved' | 'rejected';
-  actions: RecordingAction[];
-  action_graph?: {
-    nodes: Node[];
-    edges: Edge[];
-  };
-  script?: string;           // Generated Playwright code
-  start_timestamp: string;
-  created_at: string;
-  metadata: {
-    baseUrl?: string;
-    browser?: string;
-  };
-}
-```
-
-### Test Plan
-
-```typescript
-interface TestPlan {
-  id: string;
-  name: string;
-  description: string;
-  type: 'smoke' | 'regression' | 'functional' | 'integration' | 'e2e';
-  status: 'draft' | 'active' | 'completed' | 'archived';
-  releaseId: string;
-  testCaseIds: string[];
-  environment: string;
-}
-```
-
-### Test Run
-
-```typescript
-interface TestRun {
-  id: string;
-  testCaseId: string;
-  testPlanId: string;
-  releaseId: string;
-  status: 'pending' | 'in_progress' | 'passed' | 'failed' | 'blocked' | 'skipped';
-  executedBy: string;
-  executedAt: string;
-  duration?: number;
-  stepResults: Array<{
-    stepNumber: number;
-    status: 'passed' | 'failed' | 'blocked' | 'skipped';
-    actualResult?: string;
-    notes?: string;
-    defectIds?: string[];
-    attachments?: string[];
-  }>;
-}
-```
-
----
-
-## API Reference
-
-### Base URL
-
-```
-http://localhost:8000
-```
-
-### Recording Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/flowstral/sessions` | List all recordings |
-| POST | `/api/flowstral/save-session` | Save new recording |
-| GET | `/api/flowstral/session/{id}/status` | Get recording status |
-| PATCH | `/api/flowstral/session/{id}/status` | Update status |
-| DELETE | `/api/flowstral/session/{id}` | Delete recording |
-| GET | `/api/flowstral/session/{id}/artifacts` | Get generated artifacts & action_graph |
-
-### Test Case Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/test-cases` | List test cases |
-| POST | `/test-cases` | Create test case |
-| GET | `/test-cases/{id}` | Get test case |
-| PUT | `/test-cases/{id}` | Update test case |
-| DELETE | `/test-cases/{id}` | Delete test case |
-
-### Requirement Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/requirements` | List requirements |
-| POST | `/requirements` | Create requirement |
-| GET | `/requirements/{id}` | Get requirement |
-| PUT | `/requirements/{id}` | Update requirement |
-| DELETE | `/requirements/{id}` | Delete requirement |
-
-### Defect Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/defects` | List defects |
-| POST | `/defects` | Create defect |
-| GET | `/defects/{id}` | Get defect |
-| PUT | `/defects/{id}` | Update defect |
-| DELETE | `/defects/{id}` | Delete defect |
-
-### Traceability Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/traceability` | Get full matrix |
-| GET | `/api/traceability/gaps` | Get coverage gaps |
-| GET | `/api/traceability/impact/{req_id}` | Get change impact |
-| POST | `/api/traceability/link` | Create link |
-
-### Sample Data
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/sample-data/load` | Load sample data (10 reqs, 10 cases, 10 defects) |
-
----
-
-## Browser Extension
-
-### UI Overview
-
-```
-┌─────────────────────────────────────────┐
-│ 🎬 Flowstral Recorder                   │
-│                                         │
-│ Base URL: [http://localhost:3000    ]   │
-│                                         │
-│ [▶ Start Recording]                     │
-│                                         │
-│ Recording: 5 steps                      │
-│ Duration: 00:32                         │
-│                                         │
-│ [⏹ Stop & Save]                        │
-│                                         │
-│ Status: Recording saved ✓               │
-└─────────────────────────────────────────┘
-```
-
-### How Recording Works
-
-1. **Start Recording** - Extension injects content script
-2. **Capture Events** - Click, type, navigate events captured
-3. **Build Selectors** - Smart selectors generated for each element
-4. **Stop & Save** - Session sent to backend `/api/flowstral/save-session`
-5. **View in Trace** - Appears in Trace page (auto-refresh enabled)
-
-### Selector Generation
-
-The extension generates robust selectors in this priority:
-1. `data-testid` or `data-cy` attributes
-2. Unique `id` attribute
-3. `name` attribute for form fields
-4. `aria-label` for accessibility
-5. Role-based (e.g., `getByRole('button', { name: 'Submit' })`)
-6. CSS path as fallback
-
----
-
-## PDF Verification
-
-ArisTrace supports PDF verification in automated tests using various approaches:
-
-### Text Content Verification (Python)
-
-```python
-import PyPDF2
-
-def verify_pdf_text(pdf_path, expected_text):
-    with open(pdf_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        full_text = ""
-        for page in reader.pages:
-            full_text += page.extract_text()
-        
-        assert expected_text in full_text, f"Expected text not found in PDF"
-        return True
-```
-
-### With Playwright (Download & Verify)
-
-```python
-from playwright.sync_api import sync_playwright
-import PyPDF2
-
-def test_pdf_download_and_verify(page):
-    # Click download button and wait for download
-    with page.expect_download() as download_info:
-        page.click("button#download-pdf")
-    
-    download = download_info.value
-    pdf_path = download.path()
-    
-    # Verify PDF content
-    with open(pdf_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        text = reader.pages[0].extract_text()
-        
-        assert "Invoice #12345" in text
-        assert "Total: $100.00" in text
-```
-
-### Supported Libraries
-
-| Language | Libraries |
-|----------|-----------|
-| Python | PyPDF2, pdfplumber, PyMuPDF |
-| Java | Apache PDFBox, iText |
-| JavaScript | pdf-parse, pdf.js |
-| C# | iTextSharp, PdfSharp |
-
----
-
-## Configuration
-
-### Environment Variables
+### Configure AI (Optional)
 
 ```bash
-# Backend (.env)
-ENABLE_POSTGRES=false        # Set to true to enable PostgreSQL
-DATABASE_URL=sqlite:///./qaai.db
-SECRET_KEY=your-secret-key
+# backend/.env
 
-# Frontend (.env)
-VITE_API_URL=http://localhost:8000
+# Anthropic Claude (recommended)
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+
+# Local Ollama (air-gapped)
+OLLAMA_URL=http://localhost:11434
 ```
 
-### Extension Settings
+---
 
-- **Server URL**: Backend API URL (default: http://localhost:8000)
-- **Base URL**: Test application URL (entered before each recording)
+## Competitive Advantages
+
+### vs. Selenium IDE
+- ✅ AI-powered test generation
+- ✅ Self-healing execution
+- ✅ Multi-framework export
+- ✅ Enterprise app support
+- ✅ API testing integration
+
+### vs. Playwright Codegen
+- ✅ Visual workflow builder
+- ✅ Test management integration
+- ✅ Real-time execution dashboard
+- ✅ Self-healing on failure
+- ✅ Documentation export
+
+### vs. ReadyAPI
+- ✅ UI test recording
+- ✅ AI test generation
+- ✅ Visual regression testing
+- ✅ Accessibility scanning
+- ✅ Single unified platform
+
+### vs. Tricentis Tosca
+- ✅ Modern cloud-native architecture
+- ✅ Open-source friendly
+- ✅ AI-first approach
+- ✅ Lower total cost of ownership
+- ✅ Rapid deployment
+
+### vs. Micro Focus UFT
+- ✅ Browser-based (no desktop install)
+- ✅ Native Playwright support
+- ✅ Modern UI/UX
+- ✅ AI-powered maintenance
+- ✅ Developer-friendly
 
 ---
 
-## Troubleshooting
+## Support & Resources
 
-### Recording Issues
-
-**Problem:** Recording not showing in Trace page
-- **Solution:** 
-  1. Check backend is running (`http://localhost:8000/health`)
-  2. Check browser console for errors
-  3. Wait for auto-refresh (5 seconds) or manually refresh
-
-**Problem:** `body` selector in generated script
-- **Solution:** Extension content script issue. Ensure you're clicking on actual input elements, not the page background.
-
-**Problem:** Initial URL not captured
-- **Solution:** Set Base URL in extension before recording
-
-### Workflow Editor Issues
-
-**Problem:** Shows cached/old workflow instead of selected recording
-- **Solution:** Fixed in v2024-12-12. Editor auto-loads from URL params. Clear localStorage if persists.
-
-**Problem:** "No action graph found" error
-- **Solution:** Session may not have recorded actions. Check Trace page for step count.
-
-### Load Testing Issues
-
-**Problem:** No test cases in import dialog
-- **Solution:** Create test cases first (either manually or by approving recordings)
-
-**Problem:** Test shows 0 requests / empty results
-- **Solution:** Ensure steps have valid URLs/actions. Check console for errors.
-
-### Test Execution Issues
-
-**Problem:** Test runs showing after deletion
-- **Solution:** Fixed cascade delete in v2024-12-12. Use "Clear All Execution Data" in Test Execution dropdown.
-
-**Problem:** Previous test cases showing in Execute tab
-- **Solution:** Execute tab only shows test cases linked to selected plan. Select a plan first.
-
-### Data Issues
-
-**Problem:** Stale data showing
-- **Solution:** Go to Settings → Data Management → Clear All Data
-
-**Problem:** Requirements showing undefined source
-- **Solution:** Fixed in v2024-12-12. Sample data now includes source field.
-
-### Extension Issues
-
-**Problem:** Extension not connecting
-- **Solution:** Check backend is running on port 8000
-
-**Problem:** Recording stops unexpectedly
-- **Solution:** Check browser console for errors, ensure page allows scripting
+| Resource | Location |
+|----------|----------|
+| **API Documentation** | `http://localhost:8000/docs` |
+| **Architecture Guide** | `docs/ARCHITECTURE.md` |
+| **Backend Reference** | `docs/BACKEND_REFERENCE.md` |
+| **Frontend Reference** | `docs/FRONTEND_REFERENCE.md` |
+| **User Manual** | `docs/USER_MANUAL.md` |
+| **Salesforce Guide** | `docs/SALESFORCE_TESTING_GUIDE.md` |
+| **API Testing Guide** | `docs/API_AND_PERFORMANCE_TESTING_GUIDE.md` |
 
 ---
 
-## Sidebar Navigation
+## Changelog
 
-```
-Overview
-├── 📊 Dashboard
-├── 📁 Projects
-└── 📈 Analytics
+### January 2026 (v3.0)
+- Complete documentation refresh
+- 60+ frontend pages documented
+- 50+ backend routers documented
+- 165+ services cataloged
+- Competitive analysis updated
 
-Create & Build
-├── 🎬 Trace (Record) ★
-├── 🔀 Workflow Editor
-└── 🖱️ Elements
+### December 2024 (v2.5)
+- Unified Test Builder with No-Code/Code views
+- Complex verifications (Email, PDF, File)
+- Salesforce auto-connect
+- Results ingestion service
+- Dashboard real data integration
 
-Exploration
-├── ⚡ Blaze (Auto) ★
-└── 🧭 Discovery
-
-Execute
-├── 🚀 Test Execution ★    (Releases, Plans, Runs)
-└── ✅ Test Cases
-
-Quality
-├── 🔗 Traceability ★
-├── 📖 Requirements
-└── 🐛 Defects
-
-Tools
-├── 🌐 API Testing
-├── ⚡ Performance & Load
-├── ♿ Accessibility
-├── 📝 Gherkin
-└── 🔬 Framework Analyzer
-
-Configure
-├── 🔄 CI/CD Pipeline
-├── 🔌 Integrations
-└── ⚙️ Settings
-```
-
-★ = Key Features (highlighted in sidebar)
+### November 2024 (v2.0)
+- Performance testing with 8 load patterns
+- Accessibility scanning with VPAT
+- Visual regression with 5 modes
+- Security scanning (OWASP Top 10)
+- Code Alchemy repository analyzer
 
 ---
 
-## Version History
-
-| Date | Changes |
-|------|---------|
-| 2024-12-12 | Added PDF verification documentation |
-| 2024-12-12 | Fixed recordings not showing in Trace page |
-| 2024-12-12 | Fixed Workflow Editor loading from Trace page |
-| 2024-12-12 | Added Settings page with Clear All Data |
-| 2024-12-12 | Enhanced Test Case Executor with multi-test queue |
-| 2024-12-12 | Auto-populate defect form with test steps |
-| 2024-12-12 | Fixed cascade delete for releases/plans |
-| 2024-12-12 | Improved Traceability accuracy and navigation |
-| 2024-12-12 | Fixed localStorage fallback for all entities |
-| 2024-12-11 | Created lightweight EditTestCase.tsx |
-| 2024-12-11 | Fixed Workflow Editor auto-load from sessionId URL param |
-| 2024-12-11 | Merged Load Testing + Performance pages |
-| 2024-12-11 | Added recording approval workflow |
-| 2024-12-11 | Added multi-select Test Case import for load testing |
-| 2024-12-11 | Simplified extension UI |
-| 2024-12-11 | Added quick assertions to Trace page |
-| 2024-12-11 | Added Traceability matrix with gap analysis |
-| 2024-12-11 | Reorganized sidebar navigation |
+<p align="center">
+  <strong>QAAI/ArisTrace - Enterprise QA Excellence</strong><br>
+  <em>AI-Powered • Self-Healing • Multi-Protocol • Enterprise-Ready</em>
+</p>
 
 ---
 
-*This is a living document. Update it whenever features change.*
+*This documentation is maintained as living documentation and updated regularly.*  
+*Last Updated: January 11, 2026*

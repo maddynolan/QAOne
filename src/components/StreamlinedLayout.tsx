@@ -115,7 +115,7 @@ function FlowstralLogo() {
   const { theme } = useTheme();
   
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5 shrink-0">
       {/* Logo icon - Blue in light, Orange in dark */}
       <div className={cn(
         "relative w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm",
@@ -150,7 +150,7 @@ function TabButton({ item, isActive }: TabButtonProps) {
     <NavLink
       to={item.path}
       className={cn(
-        "relative px-4 py-2 text-sm font-medium transition-all duration-200 rounded-md",
+        "relative px-3 py-2 text-sm font-medium transition-all duration-200 rounded-md whitespace-nowrap",
         // Light mode
         theme === 'light' && (
           isActive 
@@ -169,7 +169,7 @@ function TabButton({ item, isActive }: TabButtonProps) {
       {/* Active indicator line */}
       {isActive && (
         <div className={cn(
-          "absolute bottom-0 left-2 right-2 h-0.5 rounded-full",
+          "absolute bottom-0 left-1.5 right-1.5 h-0.5 rounded-full",
           theme === 'light' ? "bg-blue-600" : "bg-gradient-to-r from-amber-400 to-orange-500"
         )} />
       )}
@@ -226,23 +226,23 @@ function Header() {
 
   return (
     <header className={cn(
-      "h-14 border-b px-4 flex items-center justify-between sticky top-0 z-50",
+      "h-14 min-h-[56px] shrink-0 border-b px-4 flex items-center justify-between sticky top-0 z-50",
       theme === 'light' 
         ? "bg-white border-gray-200 shadow-sm" 
         : "bg-gray-950 border-gray-800/80"
     )}>
       {/* Left: Logo + Navigation */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4 flex-1 min-w-0 overflow-hidden">
         <FlowstralLogo />
         
         {/* Divider */}
         <div className={cn(
-          "h-6 w-px",
+          "h-6 w-px shrink-0",
           theme === 'light' ? "bg-gray-200" : "bg-gray-800"
         )} />
         
         {/* Main Navigation Tabs - Clean text only */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {mainNavItems.map(item => {
             // Smart path matching
             let isActive = false;
@@ -304,7 +304,7 @@ function Header() {
       </div>
       
       {/* Right: Actions */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0 ml-2">
         {/* Theme Toggle */}
         <ThemeToggle />
         
