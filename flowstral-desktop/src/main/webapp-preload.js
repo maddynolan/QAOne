@@ -174,7 +174,8 @@ contextBridge.exposeInMainWorld('flowstral', {
   
   // Playwright Recorder API (standalone browser window)
   playwrightRecorder: {
-    start: (url) => ipcRenderer.invoke('playwright-recorder-start', url),
+    // Recording controls
+    start: (url, options) => ipcRenderer.invoke('playwright-recorder-start', url, options),
     stop: () => ipcRenderer.invoke('playwright-recorder-stop'),
     pause: () => ipcRenderer.invoke('playwright-recorder-pause'),
     resume: () => ipcRenderer.invoke('playwright-recorder-resume'),
@@ -185,7 +186,22 @@ contextBridge.exposeInMainWorld('flowstral', {
     analyze: () => ipcRenderer.invoke('playwright-recorder-analyze'),
     executeAction: (action) => ipcRenderer.invoke('playwright-recorder-execute-action', action),
     addManualAction: (action) => ipcRenderer.invoke('playwright-recorder-add-manual-action', action),
+    
+    // Test execution - Run mode
     runTest: (options) => ipcRenderer.invoke('playwright-recorder-run-test', options),
+    
+    // Debug mode controls
+    pauseTest: () => ipcRenderer.invoke('playwright-recorder-pause-test'),
+    resumeTest: (options) => ipcRenderer.invoke('playwright-recorder-resume-test', options),
+    skipStep: (options) => ipcRenderer.invoke('playwright-recorder-skip-step', options),
+    retryStep: (options) => ipcRenderer.invoke('playwright-recorder-retry-step', options),
+    stopTest: (options) => ipcRenderer.invoke('playwright-recorder-stop-test', options),
+    
+    // Step-by-step execution
+    runSingleStep: (options) => ipcRenderer.invoke('playwright-recorder-run-single-step', options),
+    
+    // Status
+    getTestStatus: () => ipcRenderer.invoke('playwright-recorder-get-test-status'),
   },
   
   // Export API
@@ -198,18 +214,29 @@ contextBridge.exposeInMainWorld('flowstral', {
   // Event listeners for Playwright recorder
   on: (channel, callback) => {
     const validChannels = [
+      // Recording events
       'playwright-recorder-action',
       'playwright-recorder-stopped',
       'playwright-recorder-paused',
       'playwright-recorder-resumed',
       'playwright-recorder-suggestions',
       'playwright-recorder-navigation',
+      // Test execution events
       'playwright-test-step-start',
       'playwright-test-step-complete',
       'playwright-test-complete',
       'test-step-start',
       'test-step-complete',
       'test-complete',
+      // Debug mode events
+      'test-runner:step-start',
+      'test-runner:step-complete',
+      'test-runner:step-failed',
+      'test-runner:test-paused',
+      'test-runner:test-resumed',
+      'test-runner:test-complete',
+      'test-runner:test-stopped',
+      // General events
       'action-recorded',
       'recording-status',
       'execution-status',

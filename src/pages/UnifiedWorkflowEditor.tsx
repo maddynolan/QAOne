@@ -2697,6 +2697,50 @@ export default function UnifiedWorkflowEditor() {
     }));
   };
 
+  /**
+   * Handle "Record This Step" - Opens recorder in step-specific mode
+   * Saves current test case and navigates to recorder with step context
+   */
+  const handleRecordStep = useCallback(async (stepId: string, stepIndex: number) => {
+    const step = testCase.steps.find(s => s.id === stepId);
+    if (!step) return;
+    
+    try {
+      // Save current test case first
+      const savedTestCase = {
+        ...testCase,
+        metadata: { ...testCase.metadata, updatedAt: new Date().toISOString() }
+      };
+      
+      // Store in localStorage for recorder to pick up
+      localStorage.setItem('recordForStep', JSON.stringify({
+        testCaseId: testCase.id,
+        testCaseName: testCase.name,
+        stepId,
+        stepIndex,
+        stepName: step.name,
+        stepType: step.type,
+        manualDescription: (step as any).manualAction || step.description || step.name,
+        expectedResult: (step as any).expectedResult,
+        timestamp: Date.now(),
+      }));
+      
+      // Also save the full test case for potential auto-save
+      localStorage.setItem('pendingTestCase', JSON.stringify(savedTestCase));
+      
+      toast.success(`Opening recorder for step ${stepIndex + 1}: ${step.name}`, {
+        description: 'Record actions to automate this step',
+      });
+      
+      // Navigate to recorder in "existing" mode with step context
+      window.open(`/flowstral?mode=existing&stepId=${stepId}&stepIndex=${stepIndex}`, '_blank');
+      
+    } catch (err) {
+      console.error('Failed to setup recording:', err);
+      toast.error('Failed to open recorder');
+    }
+  }, [testCase]);
+
   const duplicateStep = (stepId: string) => {
     const step = testCase.steps.find(s => s.id === stepId);
     if (!step) return;
@@ -4007,6 +4051,7 @@ export default function UnifiedWorkflowEditor() {
                           isFirst={index === 0}
                           isLast={index === testCase.steps.length - 1}
                           executionStatus={executionResult.results.find(r => r.stepId === step.id)?.status}
+                          onRecordStep={handleRecordStep}
                         />
                       ))}
                     </div>
@@ -5084,7 +5129,8 @@ function StepCard({
   isFirst,
   isLast,
   executionStatus,
-}: StepCardProps) {
+  onRecordStep,
+}: StepCardProps & { onRecordStep?: (stepId: string, stepIndex: number) => void }) {
   const info = getStepInfo(step.type);
   
   // Get human-readable description (NO selectors shown)
@@ -5167,6 +5213,13 @@ function StepCard({
               Script
             </Badge>
           )}
+          {/* Manual step indicator */}
+          {step.type === 'manual_step' && !((step as any).qword && (step as any).args?.length > 0) && (
+            <Badge variant="outline" className="text-xs bg-slate-500/20 text-slate-400 border-slate-500/30">
+              <ClipboardList className="h-3 w-3 mr-1" />
+              Manual
+            </Badge>
+          )}
         </div>
         {/* Show human-readable description, not selector */}
         {description && (
@@ -5184,6 +5237,20 @@ function StepCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Record This Step button - shown for manual/automatable steps without existing automation */}
+        {onRecordStep && !((step as any).qword && (step as any).args?.length > 0) && 
+         ['click', 'input', 'select', 'hover', 'navigate', 'manual_step'].includes(step.type) && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-7 px-2 text-xs bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300"
+            onClick={(e) => { e.stopPropagation(); onRecordStep(step.id, index); }}
+            title="Record automation for this step"
+          >
+            <Video className="h-3 w-3 mr-1" />
+            Record
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onMove('up'); }} disabled={isFirst}>
           <ArrowUp className="h-4 w-4" />
         </Button>
@@ -5197,6 +5264,19 @@ function StepCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="bg-popover border-border">
+            {/* Record This Step option in menu */}
+            {onRecordStep && !((step as any).qword && (step as any).args?.length > 0) && (
+              <>
+                <DropdownMenuItem 
+                  onClick={() => onRecordStep(step.id, index)}
+                  className="text-purple-400 hover:bg-purple-500/10 focus:bg-purple-500/10 cursor-pointer"
+                >
+                  <Video className="h-4 w-4 mr-2" />
+                  Record This Step
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+              </>
+            )}
             <DropdownMenuItem 
               onClick={onDuplicate}
               className="text-foreground hover:bg-accent focus:bg-accent cursor-pointer"

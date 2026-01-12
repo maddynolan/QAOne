@@ -804,25 +804,124 @@ ipcMain.handle('playwright-recorder-run-test', async (event, options) => {
   try {
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
-      
-      // Set up events for test execution feedback
-      playwrightRecorder.on('test-step-start', ({ stepIndex, step }) => {
-        webappView?.webContents.send('playwright-test-step-start', { stepIndex, step });
-      });
-      
-      playwrightRecorder.on('test-step-complete', ({ stepIndex, success, error }) => {
-        webappView?.webContents.send('playwright-test-step-complete', { stepIndex, success, error });
-      });
-      
-      playwrightRecorder.on('test-complete', ({ success, passedSteps, failedStep, error }) => {
-        webappView?.webContents.send('playwright-test-complete', { success, passedSteps, failedStep, error });
-      });
+      setupRecorderEvents(playwrightRecorder);
+    }
+    
+    // Check if debug mode requested
+    if (options.debugMode) {
+      return await playwrightRecorder.runTestDebug(options);
     }
     
     return await playwrightRecorder.runTest(options);
   } catch (error) {
     console.error('[IPC] Run test error:', error);
     return { success: false, error: error.message };
+  }
+});
+
+// Helper to set up recorder events (including debug mode events)
+function setupRecorderEvents(recorder) {
+  // Test execution feedback
+  recorder.on('test-step-start', ({ stepIndex, step, isRetry }) => {
+    webappView?.webContents.send('playwright-test-step-start', { stepIndex, step, isRetry });
+    webappView?.webContents.send('test-runner:step-start', { index: stepIndex, step, isRetry });
+  });
+  
+  recorder.on('test-step-complete', ({ stepIndex, success, error, isRetry }) => {
+    webappView?.webContents.send('playwright-test-step-complete', { stepIndex, success, error, isRetry });
+    webappView?.webContents.send('test-runner:step-complete', { index: stepIndex, status: success ? 'passed' : 'failed', error, isRetry });
+  });
+  
+  recorder.on('test-complete', ({ success, passedSteps, failedStep, error, stepResults }) => {
+    webappView?.webContents.send('playwright-test-complete', { success, passedSteps, failedStep, error, stepResults });
+    webappView?.webContents.send('test-runner:test-complete', { success, passedSteps, failedStep, error, stepResults });
+  });
+  
+  // Debug mode events
+  recorder.on('test-paused', ({ stepIndex, step, error }) => {
+    webappView?.webContents.send('test-runner:test-paused', { stepIndex, step, error });
+  });
+  
+  recorder.on('test-resumed', ({ stepIndex }) => {
+    webappView?.webContents.send('test-runner:test-resumed', { stepIndex });
+  });
+  
+  recorder.on('test-stopped', ({ stepIndex }) => {
+    webappView?.webContents.send('test-runner:test-stopped', { stepIndex });
+  });
+  
+  recorder.on('test-runner:step-failed', ({ index, error, screenshot, isRetry }) => {
+    webappView?.webContents.send('test-runner:step-failed', { index, error, screenshot, isRetry });
+  });
+}
+
+// Debug mode: Pause test
+ipcMain.handle('playwright-recorder-pause-test', async () => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return playwrightRecorder.pauseTest();
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Resume test
+ipcMain.handle('playwright-recorder-resume-test', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return playwrightRecorder.resumeTest(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Skip step
+ipcMain.handle('playwright-recorder-skip-step', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return playwrightRecorder.skipStep(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Retry step
+ipcMain.handle('playwright-recorder-retry-step', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.retryStep(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Stop test
+ipcMain.handle('playwright-recorder-stop-test', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.stopTest(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Run single step
+ipcMain.handle('playwright-recorder-run-single-step', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.runSingleStep(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Debug mode: Get test status
+ipcMain.handle('playwright-recorder-get-test-status', async () => {
+  try {
+    if (!playwrightRecorder) return { isRunning: false, isPaused: false, currentStep: -1, debugMode: false };
+    return playwrightRecorder.getTestStatus();
+  } catch (error) {
+    return { isRunning: false, isPaused: false, currentStep: -1, debugMode: false };
   }
 });
 

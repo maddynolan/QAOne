@@ -33,6 +33,15 @@ class PlaywrightRecorder extends EventEmitter {
     this.seenActionIds = new Set();
     this.lastSuggestionHash = '';
     
+    // Debug mode state
+    this._debugMode = false;
+    this._testPaused = false;
+    this._pausedAtStep = -1;
+    this._pauseResolver = null;
+    this._stopRequested = false;
+    this._currentTestSteps = [];
+    this._stepByStep = false;
+    
     // Load recorder engine code once
     this.recorderEngineCode = '';
     try {
@@ -1884,6 +1893,476 @@ class PlaywrightRecorder extends EventEmitter {
       }
     }
   }
+
+  // ============================================================================
+  // DEBUG MODE METHODS
+  // ============================================================================
+
+  /**
+   * Run test in debug mode - supports pause/resume/step-by-step
+   */
+  async runTestDebug(options = {}) {
+    const { url, steps, headless = false, timeout = 30000, stepByStep = false } = options;
+    
+    console.log('[PlaywrightRecorder] Running test in DEBUG MODE with', steps?.length || 0, 'steps');
+    
+    this._isRunningTest = true;
+    this._debugMode = true;
+    this._stepByStep = stepByStep;
+    this._stopRequested = false;
+    this._testPaused = false;
+    this._pausedAtStep = -1;
+    this._currentTestSteps = steps || [];
+    
+    const stepResults = steps.map((_, idx) => ({
+      index: idx,
+      status: 'pending',
+    }));
+    
+    try {
+      // Launch browser if needed
+      let needsNewBrowser = !this.page || this.page.isClosed();
+      
+      if (needsNewBrowser) {
+        console.log('[PlaywrightRecorder] Launching browser for debug mode...');
+        const { chromium } = require('playwright');
+        const { app } = require('electron');
+        const path = require('path');
+        const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
+        
+        this.context = await chromium.launchPersistentContext(userDataDir, {
+          headless,
+          viewport: null,
+          args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          ignoreHTTPSErrors: true,
+        });
+        
+        const pages = this.context.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+        this.browser = null;
+      }
+      
+      // Navigate to URL if provided
+      if (url) {
+        const currentUrl = this.page.url();
+        if (!currentUrl.includes(new URL(url).hostname)) {
+          console.log('[PlaywrightRecorder] Debug: Navigating to:', url);
+          await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+        }
+      }
+      
+      // Execute steps
+      let passedSteps = 0;
+      let failedStep = -1;
+      let failError = '';
+      
+      for (let i = 0; i < steps.length; i++) {
+        // Check if stop requested
+        if (this._stopRequested) {
+          console.log('[PlaywrightRecorder] Debug: Stop requested, aborting');
+          for (let j = i; j < steps.length; j++) {
+            stepResults[j] = { index: j, status: 'skipped' };
+          }
+          break;
+        }
+        
+        // Check if step-by-step mode (pause before each step after first)
+        if (this._stepByStep && i > 0) {
+          this._testPaused = true;
+          this._pausedAtStep = i;
+          this.emit('test-paused', { stepIndex: i, step: steps[i] });
+          
+          await this._waitForResume();
+          
+          if (this._stopRequested) {
+            for (let j = i; j < steps.length; j++) {
+              stepResults[j] = { index: j, status: 'skipped' };
+            }
+            break;
+          }
+        }
+        
+        const step = steps[i];
+        console.log(`[PlaywrightRecorder] Debug: Step ${i + 1}: ${step.description || step.qword}`);
+        
+        this.emit('test-step-start', { stepIndex: i, step });
+        this.emit('test-runner:step-start', { index: i, step });
+        
+        const stepStart = Date.now();
+        
+        try {
+          await this._executeStepInternal(step, timeout);
+          
+          const duration = Date.now() - stepStart;
+          stepResults[i] = { index: i, status: 'passed', duration };
+          passedSteps++;
+          
+          this.emit('test-step-complete', { stepIndex: i, success: true });
+          this.emit('test-runner:step-complete', { index: i, status: 'passed', duration });
+          
+          // Brief pause between steps
+          await this.page.waitForTimeout(500);
+          
+        } catch (stepError) {
+          console.error(`[PlaywrightRecorder] Debug: Step ${i + 1} failed:`, stepError.message);
+          
+          const duration = Date.now() - stepStart;
+          let screenshot = null;
+          try {
+            const buf = await this.page.screenshot();
+            screenshot = `data:image/png;base64,${buf.toString('base64')}`;
+          } catch (e) {}
+          
+          stepResults[i] = { index: i, status: 'failed', error: stepError.message, screenshot, duration };
+          
+          this.emit('test-step-complete', { stepIndex: i, success: false, error: stepError.message });
+          this.emit('test-runner:step-failed', { index: i, error: stepError.message, screenshot });
+          
+          // In debug mode, pause on failure
+          this._testPaused = true;
+          this._pausedAtStep = i;
+          this.emit('test-paused', { stepIndex: i, step, error: stepError.message });
+          this.emit('test-runner:test-paused', { stepIndex: i, step, error: stepError.message });
+          
+          await this._waitForResume();
+          
+          if (this._stopRequested) {
+            failedStep = i;
+            failError = stepError.message;
+            for (let j = i + 1; j < steps.length; j++) {
+              stepResults[j] = { index: j, status: 'skipped' };
+            }
+            break;
+          }
+          
+          // If they didn't stop, check if step was retried successfully
+          if (stepResults[i].status === 'passed') {
+            passedSteps++;
+            continue;
+          }
+          
+          // Otherwise mark as failed and continue (they skipped)
+          if (stepResults[i].status === 'skipped') {
+            continue;
+          }
+          
+          failedStep = i;
+          failError = stepError.message;
+          break;
+        }
+      }
+      
+      const success = failedStep === -1 && !this._stopRequested;
+      
+      console.log(`[PlaywrightRecorder] Debug: Test ${success ? 'PASSED' : 'FAILED'}: ${passedSteps}/${steps.length}`);
+      
+      const result = {
+        success,
+        passedSteps,
+        failedStep,
+        totalSteps: steps.length,
+        error: failError || undefined,
+        stepResults
+      };
+      
+      this.emit('test-complete', result);
+      this.emit('test-runner:test-complete', result);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('[PlaywrightRecorder] Debug: Error:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        passedSteps: 0,
+        failedStep: 0,
+        totalSteps: steps?.length || 0,
+        stepResults
+      };
+    } finally {
+      this._isRunningTest = false;
+      this._debugMode = false;
+      
+      // In debug mode, DON'T close browser automatically - let user inspect
+      // Browser will be closed when stopTest is called
+      if (!this._testPaused) {
+        console.log('[PlaywrightRecorder] Debug: Test complete, closing browser...');
+        try {
+          if (this.context) {
+            await this.context.close().catch(() => {});
+          }
+          this.page = null;
+          this.context = null;
+          this.browser = null;
+        } catch (e) {}
+      }
+    }
+  }
+
+  /**
+   * Pause test execution (debug mode)
+   */
+  pauseTest() {
+    if (!this._debugMode) {
+      console.log('[PlaywrightRecorder] pauseTest: Not in debug mode');
+      return { success: false, error: 'Not in debug mode' };
+    }
+    
+    console.log('[PlaywrightRecorder] Test pause requested');
+    this._testPaused = true;
+    return { success: true };
+  }
+
+  /**
+   * Resume test execution (debug mode)
+   */
+  resumeTest(options = {}) {
+    if (!this._testPaused) {
+      console.log('[PlaywrightRecorder] resumeTest: Not paused');
+      return { success: false, error: 'Not paused' };
+    }
+    
+    console.log('[PlaywrightRecorder] Resuming test from step', this._pausedAtStep);
+    
+    // Apply updated steps if provided
+    if (options.steps) {
+      this._currentTestSteps = options.steps;
+    }
+    
+    this._testPaused = false;
+    
+    this.emit('test-resumed', { stepIndex: this._pausedAtStep });
+    this.emit('test-runner:test-resumed', { stepIndex: this._pausedAtStep });
+    
+    // Unblock
+    if (this._pauseResolver) {
+      this._pauseResolver();
+      this._pauseResolver = null;
+    }
+    
+    return { success: true };
+  }
+
+  /**
+   * Skip current step (debug mode)
+   */
+  skipStep(options = {}) {
+    if (!this._testPaused) {
+      return { success: false, error: 'Not paused' };
+    }
+    
+    console.log('[PlaywrightRecorder] Skipping step', this._pausedAtStep);
+    
+    this._testPaused = false;
+    
+    // Unblock
+    if (this._pauseResolver) {
+      this._pauseResolver();
+      this._pauseResolver = null;
+    }
+    
+    return { success: true };
+  }
+
+  /**
+   * Retry current step with optional updates (debug mode)
+   */
+  async retryStep(options = {}) {
+    if (!this._testPaused || !this.page) {
+      return { success: false, error: 'Not paused or no page' };
+    }
+    
+    const stepIndex = this._pausedAtStep;
+    const step = options.step || this._currentTestSteps[stepIndex];
+    
+    console.log('[PlaywrightRecorder] Retrying step', stepIndex);
+    
+    // Update step in list if provided
+    if (options.step) {
+      this._currentTestSteps[stepIndex] = options.step;
+    }
+    
+    this.emit('test-step-start', { stepIndex, step, isRetry: true });
+    this.emit('test-runner:step-start', { index: stepIndex, step, isRetry: true });
+    
+    const startTime = Date.now();
+    
+    try {
+      await this._executeStepInternal(step, options.timeout || 30000);
+      
+      const duration = Date.now() - startTime;
+      
+      this.emit('test-step-complete', { stepIndex, success: true, isRetry: true });
+      this.emit('test-runner:step-complete', { index: stepIndex, status: 'passed', duration, isRetry: true });
+      
+      return { success: true, index: stepIndex, status: 'passed', duration };
+      
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      let screenshot = null;
+      try {
+        const buf = await this.page.screenshot();
+        screenshot = `data:image/png;base64,${buf.toString('base64')}`;
+      } catch (e) {}
+      
+      this.emit('test-step-complete', { stepIndex, success: false, error: error.message, isRetry: true });
+      this.emit('test-runner:step-failed', { index: stepIndex, error: error.message, screenshot, isRetry: true });
+      
+      return { success: false, index: stepIndex, status: 'failed', error: error.message, screenshot, duration };
+    }
+  }
+
+  /**
+   * Stop test execution (debug mode)
+   */
+  async stopTest(options = {}) {
+    console.log('[PlaywrightRecorder] Stop test requested');
+    
+    this._stopRequested = true;
+    this._testPaused = false;
+    
+    // Unblock if waiting
+    if (this._pauseResolver) {
+      this._pauseResolver();
+      this._pauseResolver = null;
+    }
+    
+    this.emit('test-stopped', { stepIndex: this._pausedAtStep });
+    this.emit('test-runner:test-stopped', { stepIndex: this._pausedAtStep });
+    
+    // Close browser if requested
+    if (options.closeBrowser !== false) {
+      try {
+        if (this.context) {
+          await this.context.close().catch(() => {});
+        }
+        this.page = null;
+        this.context = null;
+        this.browser = null;
+        console.log('[PlaywrightRecorder] Browser closed');
+      } catch (e) {}
+    }
+    
+    return { success: true };
+  }
+
+  /**
+   * Run a single step (for step-by-step mode)
+   */
+  async runSingleStep(options = {}) {
+    const { step, index, timeout = 30000 } = options;
+    
+    if (!this.page || this.page.isClosed()) {
+      return { success: false, error: 'No browser page' };
+    }
+    
+    console.log('[PlaywrightRecorder] Running single step', index);
+    
+    this.emit('test-step-start', { stepIndex: index, step });
+    this.emit('test-runner:step-start', { index, step });
+    
+    const startTime = Date.now();
+    
+    try {
+      await this._executeStepInternal(step, timeout);
+      
+      const duration = Date.now() - startTime;
+      
+      this.emit('test-step-complete', { stepIndex: index, success: true });
+      this.emit('test-runner:step-complete', { index, status: 'passed', duration });
+      
+      return { success: true, index, status: 'passed', duration };
+      
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      let screenshot = null;
+      try {
+        const buf = await this.page.screenshot();
+        screenshot = `data:image/png;base64,${buf.toString('base64')}`;
+      } catch (e) {}
+      
+      this.emit('test-step-complete', { stepIndex: index, success: false, error: error.message });
+      this.emit('test-runner:step-failed', { index, error: error.message, screenshot });
+      
+      return { success: false, index, status: 'failed', error: error.message, screenshot, duration };
+    }
+  }
+
+  /**
+   * Get test status (debug mode)
+   */
+  getTestStatus() {
+    return {
+      isRunning: this._isRunningTest || false,
+      isPaused: this._testPaused || false,
+      currentStep: this._pausedAtStep,
+      debugMode: this._debugMode || false,
+      stepByStep: this._stepByStep || false
+    };
+  }
+
+  /**
+   * Wait for resume signal (internal)
+   */
+  _waitForResume() {
+    return new Promise((resolve) => {
+      this._pauseResolver = resolve;
+    });
+  }
+
+  /**
+   * Execute a single step (internal helper)
+   */
+  async _executeStepInternal(step, timeout) {
+    const stepType = step.type || 
+                     (step.qword?.toLowerCase() === 'goto' ? 'navigate' :
+                      step.qword?.toLowerCase() === 'fill' ? 'fill' :
+                      step.qword?.toLowerCase() === 'select' ? 'select' :
+                      step.qword?.toLowerCase() === 'asserttext' ? 'assert' :
+                      step.qword?.toLowerCase() === 'wait' ? 'wait' :
+                      step.qword?.toLowerCase() || 'click');
+    
+    const fillValue = step.value || step.args?.[1] || '';
+    const urlValue = step.url || step.args?.[0] || '';
+    const labelValue = step.target || step.args?.[0] || step.description || '';
+    
+    const normalizedSelector = typeof step.selector === 'string'
+      ? step.selector
+      : (step.selector?.selector || step.selectorObj?.selector || '');
+    
+    const action = {
+      type: stepType,
+      label: labelValue,
+      text: labelValue,
+      value: fillValue,
+      url: ['navigate', 'goto'].includes(stepType) ? urlValue : undefined,
+      selector: normalizedSelector,
+      timeout,
+      args: step.args
+    };
+    
+    const result = await this.executeAction(action);
+    
+    if (result.success === false) {
+      throw new Error(result.error || 'Step failed');
+    }
+    
+    // Execute assertions if defined
+    if (step.assertion && step.assertion.type && step.assertion.enabled !== false) {
+      const assertionResult = await this.executeAssertion(step.assertion, normalizedSelector);
+      if (!assertionResult.success) {
+        throw new Error(`Assertion failed: ${assertionResult.error || step.assertion.expected}`);
+      }
+    }
+  }
+
+  // ============================================================================
+  // END DEBUG MODE METHODS
+  // ============================================================================
 
   /**
    * Execute action from browser overlay (called via IPC)
@@ -4916,10 +5395,445 @@ class PlaywrightRecorder extends EventEmitter {
           return { success: true, data: apexExecResult.data };
         }
 
+        // ============ SALESFORCE TESTING HELPER ACTION TYPES ============
+        // These are generated by the Test Helpers panel in the desktop app
+
+        case 'sf-navigate-record':
+        case 'NavigateToRecordById': {
+          // Navigate to a specific record by ID
+          const recordId = action.args?.[0] || action.value;
+          const objectType = action.args?.[1] || 'sObject';
+          const lightningPath = action.args?.[2];
+          
+          console.log(`[PlaywrightRecorder] Navigate to ${objectType} record: ${recordId}`);
+          
+          // Get base URL from current page
+          const currentPageUrl = this.page.url();
+          const baseMatch = currentPageUrl.match(/(https:\/\/[^\/]+)/);
+          
+          if (!baseMatch) {
+            return { success: false, error: 'Cannot determine Salesforce base URL' };
+          }
+          
+          const baseUrl = baseMatch[1];
+          const targetUrl = lightningPath 
+            ? `${baseUrl}${lightningPath}`
+            : `${baseUrl}/lightning/r/${objectType}/${recordId}/view`;
+          
+          console.log(`[PlaywrightRecorder] Navigating to: ${targetUrl}`);
+          await this.page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout });
+          
+          // Wait for Lightning to load
+          await this.page.waitForTimeout(2000);
+          try {
+            await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+          } catch (e) {}
+          
+          return { success: true };
+        }
+
+        case 'sf-navigate-soql':
+        case 'NavigateToRecordBySOQL': {
+          // Run SOQL query to get record ID, then navigate to it
+          const queryObjectType = action.args?.[0] || 'Account';
+          const soqlQuery = action.args?.[1];
+          
+          console.log(`[PlaywrightRecorder] Navigate via SOQL: ${soqlQuery}`);
+          
+          // Execute SOQL query via API
+          const queryResult = await this._sfApiCall('GET', `/query?q=${encodeURIComponent(soqlQuery)}`);
+          
+          if (!queryResult.success) {
+            return { success: false, error: `SOQL query failed: ${queryResult.error}` };
+          }
+          
+          if (!queryResult.data?.records?.length) {
+            return { success: false, error: `No records found for query: ${soqlQuery}` };
+          }
+          
+          const foundRecordId = queryResult.data.records[0].Id;
+          console.log(`[PlaywrightRecorder] Found record ID: ${foundRecordId}`);
+          
+          // Navigate to the record
+          const soqlBaseMatch = this.page.url().match(/(https:\/\/[^\/]+)/);
+          if (!soqlBaseMatch) {
+            return { success: false, error: 'Cannot determine Salesforce base URL' };
+          }
+          
+          const soqlTargetUrl = `${soqlBaseMatch[1]}/lightning/r/${queryObjectType}/${foundRecordId}/view`;
+          console.log(`[PlaywrightRecorder] Navigating to: ${soqlTargetUrl}`);
+          
+          await this.page.goto(soqlTargetUrl, { waitUntil: 'domcontentloaded', timeout });
+          await this.page.waitForTimeout(2000);
+          
+          return { success: true, recordId: foundRecordId };
+        }
+
+        case 'sf-navigate-list':
+        case 'NavigateToObjectList': {
+          // Navigate to object list view
+          const listObjectType = action.args?.[0] || 'Account';
+          const listLightningPath = action.args?.[1];
+          
+          console.log(`[PlaywrightRecorder] Navigate to ${listObjectType} list`);
+          
+          const listBaseMatch = this.page.url().match(/(https:\/\/[^\/]+)/);
+          if (!listBaseMatch) {
+            return { success: false, error: 'Cannot determine Salesforce base URL' };
+          }
+          
+          const listTargetUrl = listLightningPath
+            ? `${listBaseMatch[1]}${listLightningPath}`
+            : `${listBaseMatch[1]}/lightning/o/${listObjectType}/list`;
+          
+          console.log(`[PlaywrightRecorder] Navigating to: ${listTargetUrl}`);
+          await this.page.goto(listTargetUrl, { waitUntil: 'domcontentloaded', timeout });
+          await this.page.waitForTimeout(2000);
+          
+          return { success: true };
+        }
+
+        case 'sf-navigate-new':
+        case 'NavigateToNewRecord': {
+          // Navigate to new record form
+          const newObjectType = action.args?.[0] || 'Account';
+          const newLightningPath = action.args?.[1];
+          
+          console.log(`[PlaywrightRecorder] Navigate to New ${newObjectType} form`);
+          
+          const newBaseMatch = this.page.url().match(/(https:\/\/[^\/]+)/);
+          if (!newBaseMatch) {
+            return { success: false, error: 'Cannot determine Salesforce base URL' };
+          }
+          
+          const newTargetUrl = newLightningPath
+            ? `${newBaseMatch[1]}${newLightningPath}`
+            : `${newBaseMatch[1]}/lightning/o/${newObjectType}/new`;
+          
+          console.log(`[PlaywrightRecorder] Navigating to: ${newTargetUrl}`);
+          await this.page.goto(newTargetUrl, { waitUntil: 'domcontentloaded', timeout });
+          await this.page.waitForTimeout(2000);
+          
+          return { success: true };
+        }
+
+        case 'sf-global-search':
+        case 'SalesforceGlobalSearch': {
+          // Perform global search in Salesforce
+          const searchTerm = action.args?.[0] || action.value;
+          console.log(`[PlaywrightRecorder] Global search: ${searchTerm}`);
+          
+          const searchBaseMatch = this.page.url().match(/(https:\/\/[^\/]+)/);
+          if (!searchBaseMatch) {
+            return { success: false, error: 'Cannot determine Salesforce base URL' };
+          }
+          
+          const searchUrl = `${searchBaseMatch[1]}/lightning/o/GlobalSearchResults/home?term=${encodeURIComponent(searchTerm)}`;
+          await this.page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout });
+          await this.page.waitForTimeout(2000);
+          
+          return { success: true };
+        }
+
+        case 'sf-app-launcher':
+        case 'OpenAppLauncher': {
+          // Open the Salesforce App Launcher
+          console.log(`[PlaywrightRecorder] Opening App Launcher`);
+          
+          // Find and click the App Launcher button
+          const appLauncherBtn = this.page.locator('button[title="App Launcher"]');
+          await appLauncherBtn.click({ timeout: 10000 });
+          await this.page.waitForTimeout(1000);
+          
+          return { success: true };
+        }
+
+        case 'sf-open-search':
+        case 'OpenGlobalSearch': {
+          // Focus the global search input
+          console.log(`[PlaywrightRecorder] Opening Global Search`);
+          
+          const searchInput = this.page.locator('input[placeholder*="Search" i], button[title*="Search" i]');
+          await searchInput.first().click({ timeout: 10000 });
+          await this.page.waitForTimeout(500);
+          
+          return { success: true };
+        }
+
+        case 'sf-wait':
+        case 'WaitForSalesforceReady': {
+          // Wait for Salesforce page to be ready
+          const waitMs = parseInt(action.args?.[0] || '3000');
+          console.log(`[PlaywrightRecorder] Waiting ${waitMs}ms for Salesforce to be ready`);
+          
+          await this.page.waitForTimeout(waitMs);
+          
+          // Also try to wait for network idle
+          try {
+            await this.page.waitForLoadState('networkidle', { timeout: 5000 });
+          } catch (e) {}
+          
+          return { success: true };
+        }
+
+        case 'sf-click-tab':
+        case 'ClickRecordTab': {
+          // Click a tab on the record page (Details, Related, Activity, etc.)
+          const tabName = action.args?.[0] || 'Details';
+          console.log(`[PlaywrightRecorder] Clicking ${tabName} tab`);
+          
+          // Try multiple selectors for Lightning tabs
+          const tabSelectors = [
+            `a[title="${tabName}"]`,
+            `li[title="${tabName}"] a`,
+            `[data-tab-name="${tabName}"]`,
+            `button:has-text("${tabName}")`,
+            `a:has-text("${tabName}")`
+          ];
+          
+          let tabClicked = false;
+          for (const tabSelector of tabSelectors) {
+            try {
+              const tab = this.page.locator(tabSelector).first();
+              if (await tab.isVisible({ timeout: 2000 })) {
+                await tab.click();
+                tabClicked = true;
+                break;
+              }
+            } catch (e) {}
+          }
+          
+          if (!tabClicked) {
+            // Fallback: use getByText
+            await this.page.getByText(tabName, { exact: false }).first().click({ timeout: 10000 });
+          }
+          
+          await this.page.waitForTimeout(1000);
+          return { success: true };
+        }
+
+        case 'sf-click-save':
+        case 'ClickSaveButton': {
+          console.log(`[PlaywrightRecorder] Clicking Save button`);
+          
+          const saveSelectors = [
+            'button[name="SaveEdit"]',
+            'button[title="Save"]',
+            'button:has-text("Save"):not(:has-text("Save &"))',
+            '[data-aura-class*="Save"]',
+            'lightning-button button:has-text("Save")'
+          ];
+          
+          for (const sel of saveSelectors) {
+            try {
+              const btn = this.page.locator(sel).first();
+              if (await btn.isVisible({ timeout: 2000 })) {
+                await btn.click();
+                await this.page.waitForTimeout(2000);
+                return { success: true };
+              }
+            } catch (e) {}
+          }
+          
+          // Fallback
+          await this.page.getByRole('button', { name: /save/i }).first().click({ timeout: 10000 });
+          await this.page.waitForTimeout(2000);
+          return { success: true };
+        }
+
+        case 'sf-click-edit':
+        case 'ClickEditButton': {
+          console.log(`[PlaywrightRecorder] Clicking Edit button`);
+          
+          const editSelectors = [
+            'button[name="Edit"]',
+            'button[title="Edit"]',
+            'a[title="Edit"]',
+            'button:has-text("Edit")',
+            '[data-aura-class*="Edit"]'
+          ];
+          
+          for (const sel of editSelectors) {
+            try {
+              const btn = this.page.locator(sel).first();
+              if (await btn.isVisible({ timeout: 2000 })) {
+                await btn.click();
+                await this.page.waitForTimeout(1000);
+                return { success: true };
+              }
+            } catch (e) {}
+          }
+          
+          // Fallback
+          await this.page.getByRole('button', { name: /edit/i }).first().click({ timeout: 10000 });
+          await this.page.waitForTimeout(1000);
+          return { success: true };
+        }
+
+        case 'sf-click-delete':
+        case 'ClickDeleteButton': {
+          console.log(`[PlaywrightRecorder] Clicking Delete button`);
+          
+          const deleteSelectors = [
+            'button[name="Delete"]',
+            'button[title="Delete"]',
+            'a[title="Delete"]',
+            'button:has-text("Delete")'
+          ];
+          
+          for (const sel of deleteSelectors) {
+            try {
+              const btn = this.page.locator(sel).first();
+              if (await btn.isVisible({ timeout: 2000 })) {
+                await btn.click();
+                await this.page.waitForTimeout(1000);
+                return { success: true };
+              }
+            } catch (e) {}
+          }
+          
+          // Fallback
+          await this.page.getByRole('button', { name: /delete/i }).first().click({ timeout: 10000 });
+          await this.page.waitForTimeout(1000);
+          return { success: true };
+        }
+
+        case 'sf-click-clone':
+        case 'ClickCloneButton': {
+          console.log(`[PlaywrightRecorder] Clicking Clone button`);
+          
+          const cloneSelectors = [
+            'button[name="Clone"]',
+            'button[title="Clone"]',
+            'a[title="Clone"]',
+            'button:has-text("Clone")'
+          ];
+          
+          for (const sel of cloneSelectors) {
+            try {
+              const btn = this.page.locator(sel).first();
+              if (await btn.isVisible({ timeout: 2000 })) {
+                await btn.click();
+                await this.page.waitForTimeout(1000);
+                return { success: true };
+              }
+            } catch (e) {}
+          }
+          
+          // Fallback
+          await this.page.getByRole('button', { name: /clone/i }).first().click({ timeout: 10000 });
+          await this.page.waitForTimeout(1000);
+          return { success: true };
+        }
+
+        case 'screenshot':
+        case 'TakeScreenshot': {
+          const screenshotName = action.args?.[0] || `screenshot_${Date.now()}.png`;
+          console.log(`[PlaywrightRecorder] Taking screenshot: ${screenshotName}`);
+          await this.page.screenshot({ path: screenshotName, fullPage: false });
+          return { success: true };
+        }
+
         default:
           // Try to handle by normalizing the action type
           const normalizedType = (action.type || '').toLowerCase();
           console.warn(`[PlaywrightRecorder] Unknown action type: ${action.type}, trying normalized: ${normalizedType}`);
+          
+          // ============ EXPLICIT HANDLING FOR SF- ACTION TYPES ============
+          // These should be caught by the case statements above, but handle them here as fallback
+          if (normalizedType.startsWith('sf-')) {
+            console.log(`[PlaywrightRecorder] Handling sf- type in default handler: ${normalizedType}`);
+            const sfBaseMatch = this.page.url().match(/(https:\/\/[^\/]+)/);
+            
+            if (!sfBaseMatch) {
+              return { success: false, error: 'Cannot determine Salesforce base URL for sf- action' };
+            }
+            
+            const sfBaseUrl = sfBaseMatch[1];
+            
+            // sf-navigate-list: Navigate to object list view
+            if (normalizedType === 'sf-navigate-list') {
+              const listObj = action.args?.[0] || label || 'Account';
+              const listPath = action.args?.[1] || `/lightning/o/${listObj}/list`;
+              const listUrl = listPath.startsWith('http') ? listPath : `${sfBaseUrl}${listPath}`;
+              console.log(`[PlaywrightRecorder] SF Navigate to list: ${listUrl}`);
+              await this.page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout });
+              await this.page.waitForTimeout(2000);
+              return { success: true };
+            }
+            
+            // sf-navigate-new: Navigate to new record form
+            if (normalizedType === 'sf-navigate-new') {
+              const newObj = action.args?.[0] || label || 'Account';
+              const newPath = action.args?.[1] || `/lightning/o/${newObj}/new`;
+              const newUrl = newPath.startsWith('http') ? newPath : `${sfBaseUrl}${newPath}`;
+              console.log(`[PlaywrightRecorder] SF Navigate to new form: ${newUrl}`);
+              await this.page.goto(newUrl, { waitUntil: 'domcontentloaded', timeout });
+              await this.page.waitForTimeout(2000);
+              return { success: true };
+            }
+            
+            // sf-navigate-record: Navigate to specific record
+            if (normalizedType === 'sf-navigate-record') {
+              const recordId = action.args?.[0] || action.value;
+              const recObjType = action.args?.[1] || 'sObject';
+              const recPath = action.args?.[2] || `/lightning/r/${recObjType}/${recordId}/view`;
+              const recUrl = recPath.startsWith('http') ? recPath : `${sfBaseUrl}${recPath}`;
+              console.log(`[PlaywrightRecorder] SF Navigate to record: ${recUrl}`);
+              await this.page.goto(recUrl, { waitUntil: 'domcontentloaded', timeout });
+              await this.page.waitForTimeout(2000);
+              return { success: true };
+            }
+            
+            // sf-wait: Wait for page ready
+            if (normalizedType === 'sf-wait') {
+              const waitMs = parseInt(action.args?.[0] || '3000');
+              console.log(`[PlaywrightRecorder] SF Wait: ${waitMs}ms`);
+              await this.page.waitForTimeout(waitMs);
+              return { success: true };
+            }
+            
+            // sf-click-tab: Click a record tab
+            if (normalizedType === 'sf-click-tab') {
+              const tabName = action.args?.[0] || label;
+              console.log(`[PlaywrightRecorder] SF Click tab: ${tabName}`);
+              const tabLocator = this.page.locator(`li.slds-tabs_default__item a:has-text("${tabName}"), [role="tab"]:has-text("${tabName}")`).first();
+              await tabLocator.click({ timeout: 10000 });
+              return { success: true };
+            }
+            
+            // sf-click-save/edit/delete/clone: Standard buttons
+            if (normalizedType === 'sf-click-save') {
+              const saveBtn = this.page.locator('button:has-text("Save"):not(:has-text("&")), [name="SaveEdit"]').first();
+              await saveBtn.click({ timeout: 10000 });
+              return { success: true };
+            }
+            if (normalizedType === 'sf-click-edit') {
+              const editBtn = this.page.locator('button:has-text("Edit"), [name="Edit"]').first();
+              await editBtn.click({ timeout: 10000 });
+              return { success: true };
+            }
+            
+            // sf-global-search: Perform global search
+            if (normalizedType === 'sf-global-search') {
+              const searchTerm = action.args?.[0] || action.value || label;
+              console.log(`[PlaywrightRecorder] SF Global Search: ${searchTerm}`);
+              const searchUrl = `${sfBaseUrl}/lightning/o/Account/list?q=${encodeURIComponent(searchTerm)}`;
+              await this.page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout });
+              return { success: true };
+            }
+            
+            // sf-app-launcher: Open app launcher
+            if (normalizedType === 'sf-app-launcher') {
+              const appLauncher = this.page.locator('button[title="App Launcher"], [aria-label="App Launcher"], .appLauncher button').first();
+              await appLauncher.click({ timeout: 10000 });
+              await this.page.waitForTimeout(1000);
+              return { success: true };
+            }
+            
+            console.warn(`[PlaywrightRecorder] Unhandled sf- action type: ${normalizedType}`);
+            return { success: false, error: `Unhandled sf- action type: ${normalizedType}` };
+          }
           
           // Try click-based actions
           if (normalizedType.includes('click')) {
@@ -4939,10 +5853,10 @@ class PlaywrightRecorder extends EventEmitter {
             }
           }
           
-          // Try navigation
-          if (normalizedType.includes('goto') || normalizedType.includes('nav')) {
+          // Try navigation (but NOT for sf- types which are handled above)
+          if ((normalizedType.includes('goto') || normalizedType.includes('nav')) && !normalizedType.startsWith('sf-')) {
             const navUrl = action.url || action.args?.[0];
-            if (navUrl) {
+            if (navUrl && navUrl.startsWith('http')) {
               await this.page.goto(navUrl, { waitUntil: 'domcontentloaded', timeout });
               return { success: true };
             }

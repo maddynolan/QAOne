@@ -19,10 +19,11 @@ import {
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
   MousePointer, Keyboard, Eye, Target, Cloud, Link,
   Hash, Type, CircleDot, FormInput, Database, Copy,
-  Shield, Wand2, CheckSquare, Plus, Circle, Hand,
+  Shield, Wand2, CheckSquare, Plus, Circle, Hand, SkipForward,
   PenLine, LayoutGrid, ArrowRight, Upload, Activity,
   Navigation, Building2, Users, User, Contact, Briefcase,
-  FileBox, MapPin, Compass, Route, TestTube, FlaskConical
+  FileBox, MapPin, Compass, Route, TestTube, FlaskConical,
+  Accessibility, Scan, Link2, Bug
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +54,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
 import { SoqlEditor } from "@/components/SoqlEditor";
 import { salesforceApi } from "@/lib/salesforce-api";
@@ -61,6 +63,18 @@ import { SFContextDashboard } from "@/components/salesforce/SFContextDashboard";
 import { SmartSOQLBuilder } from "@/components/salesforce/SmartSOQLBuilder";
 import { MetadataAssertions } from "@/components/salesforce/MetadataAssertions";
 import { StageTransitionTester } from "@/components/salesforce/StageTransitionTester";
+// Automation Linking System
+import { 
+  AutomationAction, 
+  LinkMode,
+  LinkedStep,
+  createLinkedStep,
+  mergeToStep,
+  generateActionDescription,
+  generateGroupDescription,
+  convertRecordedAction,
+  calculateCoverage as calculateAutomationCoverage,
+} from "@/lib/automation-linking";
 
 // Types
 interface RecordedAction {
@@ -228,6 +242,24 @@ export default function PlaywrightRecorderPage() {
   const [captureForApiTest, setCaptureForApiTest] = useState(false);
   const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
   
+  // Accessibility scanning state
+  const [isA11yScanning, setIsA11yScanning] = useState(false);
+  const [a11yIssues, setA11yIssues] = useState<Array<{
+    page: string;
+    timestamp: Date;
+    issues: Array<{
+      id: string;
+      rule: string;
+      impact: 'critical' | 'serious' | 'moderate' | 'minor';
+      description: string;
+      element: string;
+      suggested_fix: string;
+      wcag_criterion: string;
+      help_url: string;
+    }>;
+    summary: { critical: number; serious: number; moderate: number; minor: number; total: number };
+  }>>([]);
+  
   // Suggestions state
   const [suggestResult, setSuggestResult] = useState<SuggestResult | null>(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -264,7 +296,20 @@ export default function PlaywrightRecorderPage() {
   // Step-by-step automation state (for "Automate Existing" mode)
   // Tracks which manual step we're currently recording for
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
-  // Maps manual step index -> automation data (recorded action, suggestion, or skipped)
+  
+  // Enhanced step linking: supports multiple actions per step (many-to-one)
+  const [stepLinks, setStepLinks] = useState<Record<number, {
+    actions: AutomationAction[];
+    linkMode: LinkMode;
+    isComplete: boolean;
+  }>>({});
+  
+  // Link mode and grouping settings
+  const [defaultLinkMode, setDefaultLinkMode] = useState<LinkMode>('document');
+  const [groupingEnabled, setGroupingEnabled] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  
+  // Legacy compatibility - maps manual step index -> automation data
   const [stepAutomation, setStepAutomation] = useState<Record<number, {
     type: 'recorded' | 'suggested' | 'skipped';
     data?: RecordedAction | Suggestion;
@@ -273,13 +318,25 @@ export default function PlaywrightRecorderPage() {
   // Test execution state
   const [showTestResultModal, setShowTestResultModal] = useState(false);
   const [testExecutionResult, setTestExecutionResult] = useState<{
-    status: 'running' | 'passed' | 'failed';
+    status: 'running' | 'passed' | 'failed' | 'paused';
     currentStep: number;
     stepResults: { index: number; status: string; error?: string; screenshot?: string }[];
     totalSteps: number;
     error?: string;
     selectedScreenshot?: string;
   } | null>(null);
+  
+  // Pause/Resume/Debug execution state
+  const [isTestPaused, setIsTestPaused] = useState(false);
+  const [pausedAtStep, setPausedAtStep] = useState<number | null>(null);
+  const [stepByStepMode, setStepByStepMode] = useState(false);
+  const [editingPausedStep, setEditingPausedStep] = useState<RecordedAction | null>(null);
+  const [pauseRequested, setPauseRequested] = useState(false);
+  const pauseResolverRef = useRef<(() => void) | null>(null);
+  
+  // Debug Mode - when true, shows pause/edit controls during test execution
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [showRunMenu, setShowRunMenu] = useState(false);
   
   // Export dropdown
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -313,6 +370,10 @@ export default function PlaywrightRecorderPage() {
   // Selected action for keyboard shortcuts
   const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
   
+  // Multi-select state for bulk linking recorded steps to manual steps
+  const [selectedActionIndices, setSelectedActionIndices] = useState<Set<number>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  
   // Clipboard for action copy/paste
   const [actionClipboard, setActionClipboard] = useState<RecordedAction[] | null>(null);
   
@@ -330,6 +391,13 @@ export default function PlaywrightRecorderPage() {
   useEffect(() => { selectedTestCaseRef.current = selectedTestCase; }, [selectedTestCase]);
   useEffect(() => { currentStepIndexRef.current = currentStepIndex; }, [currentStepIndex]);
 
+  // Auto-switch to Automate tab when entering 'existing' mode with a selected test case
+  useEffect(() => {
+    if (mode === 'existing' && selectedTestCase) {
+      setRightPanelTab('automate');
+    }
+  }, [mode, selectedTestCase]);
+
   // Detect if current URL is Salesforce
   const isSalesforceUrl = useMemo(() => {
     const urlToCheck = currentUrl || url;
@@ -338,6 +406,73 @@ export default function PlaywrightRecorderPage() {
            urlToCheck.includes('lightning.force') ||
            urlToCheck.includes('.my.salesforce');
   }, [currentUrl, url]);
+
+  // State for "Record This Step" mode from Builder
+  const [recordForStepContext, setRecordForStepContext] = useState<{
+    testCaseId: string;
+    testCaseName: string;
+    stepId: string;
+    stepIndex: number;
+    stepName: string;
+    stepType: string;
+    manualDescription: string;
+    expectedResult?: string;
+  } | null>(null);
+
+  // Check for "Record This Step" context from Builder on mount
+  useEffect(() => {
+    try {
+      // Check URL params first
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get('mode');
+      const stepIdParam = urlParams.get('stepId');
+      const stepIndexParam = urlParams.get('stepIndex');
+      
+      if (modeParam === 'existing' && stepIdParam) {
+        setMode('existing');
+      }
+      
+      // Check localStorage for step context
+      const recordForStepData = localStorage.getItem('recordForStep');
+      if (recordForStepData) {
+        const context = JSON.parse(recordForStepData);
+        // Only use if recent (within 5 minutes)
+        if (context.timestamp && Date.now() - context.timestamp < 5 * 60 * 1000) {
+          setRecordForStepContext(context);
+          setMode('existing');
+          
+          // Try to load the pending test case
+          const pendingTestCase = localStorage.getItem('pendingTestCase');
+          if (pendingTestCase) {
+            const tc = JSON.parse(pendingTestCase);
+            if (tc.id === context.testCaseId) {
+              setSelectedTestCase({
+                id: tc.id,
+                name: tc.name,
+                description: tc.description,
+                steps: tc.steps || [],
+                tags: tc.tags || [],
+                automationStatus: tc.automationStatus || 'none',
+              });
+              // Set current step index
+              if (typeof context.stepIndex === 'number') {
+                setCurrentStepIndex(context.stepIndex);
+              }
+            }
+          }
+          
+          toast.info(`Recording for step ${context.stepIndex + 1}: ${context.stepName}`, {
+            duration: 5000,
+          });
+        } else {
+          // Clear stale data
+          localStorage.removeItem('recordForStep');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load recordForStep context:', e);
+    }
+  }, []);
 
   // Recording timer
   useEffect(() => {
@@ -716,20 +851,274 @@ export default function PlaywrightRecorderPage() {
       delete updated[stepIndex];
       return updated;
     });
+    // Also clear from enhanced links
+    setStepLinks(prev => {
+      const updated = { ...prev };
+      delete updated[stepIndex];
+      return updated;
+    });
   }, []);
+
+  // Link a recorded action to a step (enhanced - supports multiple actions)
+  const linkActionToStep = useCallback((stepIndex: number, action: RecordedAction | Suggestion, source: 'recorded' | 'suggested' = 'recorded') => {
+    const automationAction = convertRecordedAction({
+      ...action,
+      source,
+    });
+    
+    setStepLinks(prev => {
+      const existing = prev[stepIndex] || { actions: [], linkMode: defaultLinkMode, isComplete: false };
+      
+      // If grouping disabled, replace existing action
+      if (!groupingEnabled) {
+        return {
+          ...prev,
+          [stepIndex]: {
+            ...existing,
+            actions: [automationAction],
+          }
+        };
+      }
+      
+      // Otherwise add to existing actions
+      return {
+        ...prev,
+        [stepIndex]: {
+          ...existing,
+          actions: [...existing.actions, automationAction],
+        }
+      };
+    });
+    
+    // Auto-advance to next step if enabled
+    if (autoAdvance && selectedTestCase) {
+      const manualSteps = selectedTestCase.steps || [];
+      let nextIdx = -1;
+      for (let i = stepIndex + 1; i < manualSteps.length; i++) {
+        if (!stepLinks[i] || stepLinks[i].actions.length === 0) {
+          nextIdx = i;
+          break;
+        }
+      }
+      if (nextIdx !== -1) {
+        setCurrentStepIndex(nextIdx);
+      }
+    }
+    
+    toast.success(`Action linked to step ${stepIndex + 1}`, { duration: 1500 });
+  }, [defaultLinkMode, groupingEnabled, autoAdvance, selectedTestCase, stepLinks]);
+
+  // Remove a specific action from a step's linked actions
+  const removeActionFromStep = useCallback((stepIndex: number, actionId: string) => {
+    setStepLinks(prev => {
+      const existing = prev[stepIndex];
+      if (!existing) return prev;
+      
+      const newActions = existing.actions.filter(a => a.id !== actionId);
+      if (newActions.length === 0) {
+        const { [stepIndex]: _, ...rest } = prev;
+        return rest;
+      }
+      return {
+        ...prev,
+        [stepIndex]: { ...existing, actions: newActions }
+      };
+    });
+  }, []);
+
+  // Change link mode for a step
+  const changeStepLinkMode = useCallback((stepIndex: number, mode: LinkMode) => {
+    setStepLinks(prev => {
+      const existing = prev[stepIndex];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [stepIndex]: { ...existing, linkMode: mode }
+      };
+    });
+  }, []);
+
+  // Mark step linking as complete
+  const markStepComplete = useCallback((stepIndex: number) => {
+    setStepLinks(prev => {
+      const existing = prev[stepIndex];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [stepIndex]: { ...existing, isComplete: true }
+      };
+    });
+  }, []);
+
+  // Toggle selection of an action for multi-select
+  const toggleActionSelection = useCallback((index: number, event?: React.MouseEvent) => {
+    setSelectedActionIndices(prev => {
+      const newSet = new Set(prev);
+      
+      // Shift+click for range selection
+      if (event?.shiftKey && prev.size > 0) {
+        const lastSelected = Math.max(...prev);
+        const start = Math.min(lastSelected, index);
+        const end = Math.max(lastSelected, index);
+        for (let i = start; i <= end; i++) {
+          newSet.add(i);
+        }
+      } else if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Select all actions
+  const selectAllActions = useCallback(() => {
+    setSelectedActionIndices(new Set(actions.map((_, i) => i)));
+  }, [actions]);
+
+  // Clear all selections
+  const clearAllSelections = useCallback(() => {
+    setSelectedActionIndices(new Set());
+  }, []);
+
+  // Select range of actions
+  const selectActionRange = useCallback((start: number, end: number) => {
+    const indices = new Set<number>();
+    for (let i = start; i <= end; i++) {
+      indices.add(i);
+    }
+    setSelectedActionIndices(indices);
+  }, []);
+
+  // Link all selected actions to the current manual step
+  const linkSelectedActionsToStep = useCallback(() => {
+    if (!selectedTestCase || selectedActionIndices.size === 0) return;
+    
+    const sortedIndices = Array.from(selectedActionIndices).sort((a, b) => a - b);
+    const selectedActions = sortedIndices.map(i => actions[i]);
+    
+    // Convert to AutomationActions and link to current step
+    const automationActions = selectedActions.map(action => convertRecordedAction({
+      ...action,
+      source: 'recorded',
+    }));
+    
+    setStepLinks(prev => {
+      const existing = prev[currentStepIndex] || { actions: [], linkMode: defaultLinkMode, isComplete: false };
+      return {
+        ...prev,
+        [currentStepIndex]: {
+          ...existing,
+          actions: [...existing.actions, ...automationActions],
+        }
+      };
+    });
+    
+    toast.success(`Linked ${selectedActionIndices.size} action(s) to step ${currentStepIndex + 1}`, {
+      duration: 2000,
+    });
+    
+    // Clear selection after linking
+    setSelectedActionIndices(new Set());
+    
+    // Auto-advance to next step if enabled
+    if (autoAdvance && selectedTestCase) {
+      const manualSteps = selectedTestCase.steps || [];
+      for (let i = currentStepIndex + 1; i < manualSteps.length; i++) {
+        if (!stepLinks[i] || stepLinks[i].actions.length === 0) {
+          setCurrentStepIndex(i);
+          break;
+        }
+      }
+    }
+  }, [selectedTestCase, selectedActionIndices, actions, currentStepIndex, defaultLinkMode, autoAdvance, stepLinks]);
+
+  // Link selected actions to a SPECIFIC step (used when clicking a step in the Automate tab)
+  const handleLinkSelectedActions = useCallback((targetStepIndex: number) => {
+    if (!selectedTestCase || selectedActionIndices.size === 0) return;
+    
+    const sortedIndices = Array.from(selectedActionIndices).sort((a, b) => a - b);
+    const selectedActions = sortedIndices.map(i => actions[i]);
+    
+    // Convert to AutomationActions
+    const automationActions = selectedActions.map(action => convertRecordedAction({
+      ...action,
+      source: 'recorded',
+    }));
+    
+    // Link to the TARGET step index (not currentStepIndex)
+    setStepLinks(prev => {
+      const existing = prev[targetStepIndex] || { actions: [], linkMode: defaultLinkMode, isComplete: false };
+      return {
+        ...prev,
+        [targetStepIndex]: {
+          ...existing,
+          actions: [...existing.actions, ...automationActions],
+        }
+      };
+    });
+    
+    const stepName = selectedTestCase.steps?.[targetStepIndex]?.name || `Step ${targetStepIndex + 1}`;
+    toast.success(`Linked ${selectedActionIndices.size} action(s) to "${stepName}"`, {
+      duration: 2000,
+    });
+    
+    // Clear selection after linking
+    setSelectedActionIndices(new Set());
+    setIsMultiSelectMode(false);
+    
+    // Auto-advance to next unlinked step if enabled
+    if (autoAdvance && selectedTestCase) {
+      const manualSteps = selectedTestCase.steps || [];
+      for (let i = targetStepIndex + 1; i < manualSteps.length; i++) {
+        if (!stepLinks[i] || stepLinks[i].actions.length === 0) {
+          setCurrentStepIndex(i);
+          break;
+        }
+      }
+    }
+  }, [selectedTestCase, selectedActionIndices, actions, defaultLinkMode, autoAdvance, stepLinks]);
   
-  // Smart merge using stepAutomation mapping instead of position-based
+  // Smart merge using enhanced step linking (supports many-to-one)
   const performMerge = useCallback(() => {
     if (!selectedTestCase) return;
     
     const manualSteps = selectedTestCase.steps || [];
     const merged: any[] = [];
     
-    // Check if we have any step automation mappings
-    const hasStepMappings = Object.keys(stepAutomation).length > 0;
+    // Check for new enhanced step links first
+    const hasEnhancedLinks = Object.keys(stepLinks).length > 0;
+    const hasLegacyMappings = Object.keys(stepAutomation).length > 0;
     
-    if (hasStepMappings) {
-      // Use explicit step mappings
+    if (hasEnhancedLinks) {
+      // Use enhanced linking system (supports multiple actions per step)
+      for (let i = 0; i < manualSteps.length; i++) {
+        const manualStep = manualSteps[i];
+        const link = stepLinks[i];
+        
+        if (link && link.actions.length > 0) {
+          // Create linked step using the automation-linking library
+          const linkedStep = createLinkedStep(manualStep, link.actions, link.linkMode);
+          const mergedStep = mergeToStep(linkedStep);
+          
+          merged.push({
+            ...mergedStep,
+            _merged: true,
+            _hasMultipleActions: link.actions.length > 1,
+            _linkMode: link.linkMode,
+          });
+        } else {
+          // No automation - keep as manual
+          merged.push({
+            ...manualStep,
+            automationStatus: manualStep.qword ? 'automated' : 'manual',
+            _manualOnly: !manualStep.qword
+          });
+        }
+      }
+    } else if (hasLegacyMappings) {
+      // Legacy step automation mappings (single action per step)
       for (let i = 0; i < manualSteps.length; i++) {
         const manualStep = manualSteps[i];
         const automation = stepAutomation[i];
@@ -818,7 +1207,7 @@ export default function PlaywrightRecorderPage() {
     
     setMergedSteps(merged);
     setShowMergePreview(true);
-  }, [selectedTestCase, stepAutomation, actions]);
+  }, [selectedTestCase, stepLinks, stepAutomation, actions]);
 
   // Map qword to Builder step type
   const qwordToType = (qword: string): string => {
@@ -1649,6 +2038,55 @@ export default function PlaywrightRecorderPage() {
     toast.info("Cleared");
   };
 
+  // Accessibility scan handler - scans current page during recording
+  const handleA11yScan = async () => {
+    if (!currentUrl) {
+      toast.error("No page loaded to scan");
+      return;
+    }
+    
+    setIsA11yScanning(true);
+    try {
+      const response = await fetch("http://localhost:8000/api/accessibility/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: currentUrl,
+          scan_type: "full_page",
+          wcag_level: "AA"
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Scan failed: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      // Add to accumulated issues
+      setA11yIssues(prev => [...prev, {
+        page: currentUrl,
+        timestamp: new Date(),
+        issues: result.issues || [],
+        summary: result.summary || { critical: 0, serious: 0, moderate: 0, minor: 0, total: 0 }
+      }]);
+      
+      const { critical, serious, moderate, minor, total } = result.summary || {};
+      if (total === 0) {
+        toast.success("✓ No accessibility issues found on this page!");
+      } else {
+        const severity = critical > 0 ? "error" : serious > 0 ? "warning" : "info";
+        const toastFn = severity === "error" ? toast.error : severity === "warning" ? toast.warning : toast.info;
+        toastFn(`Found ${total} a11y issues: ${critical} critical, ${serious} serious, ${moderate} moderate, ${minor} minor`);
+      }
+    } catch (error) {
+      console.error("[A11y Scan] Error:", error);
+      toast.error(`Accessibility scan failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsA11yScanning(false);
+    }
+  };
+
   // Drag and drop handlers for reordering steps
   const handleDragStart = (index: number) => {
     setDraggedIndex(index);
@@ -2207,10 +2645,20 @@ Recorded Test
     navigate('/test-cases');
   };
 
-  const handleRunTest = async () => {
+  const handleRunTest = async (debugMode: boolean = false) => {
     if (actions.length === 0) {
       toast.error("No steps to run");
       return;
+    }
+    
+    // Set debug mode state
+    setIsDebugMode(debugMode);
+    setShowRunMenu(false);
+    
+    // If debug mode, start paused at first step for step-by-step execution
+    if (debugMode) {
+      setStepByStepMode(true);
+      toast.info('🐛 Debug mode: Step-by-step execution enabled', { duration: 2000 });
     }
     
     const flowstral = (window as any).flowstral;
@@ -2329,6 +2777,314 @@ Recorded Test
       toast.error('Failed to run test', { id: 'run' });
     }
   };
+
+  // ========== PAUSE/RESUME/DEBUG HANDLERS ==========
+  // 
+  // These handlers enable pausing a test mid-execution, editing steps, and resuming.
+  // The key insight: Playwright keeps the browser context alive, so we can resume!
+  //
+  // BACKEND IMPLEMENTATION REQUIRED:
+  // The Electron backend needs to implement these methods:
+  //
+  // 1. pauseTest() - Sets a flag that the execution loop checks after each step
+  //    - When flag is set, loop pauses and waits for resume signal
+  //    - Browser/page stays open (DO NOT close context!)
+  //
+  // 2. resumeTest({ fromStep, steps, totalSteps }) - Continues execution
+  //    - Simply continues the for-loop from `fromStep` index
+  //    - Uses updated `steps` array (user may have edited a step)
+  //
+  // 3. skipStep({ skippedStep, continueFrom, isComplete }) - Skips current step
+  //    - Marks step as skipped, continues from `continueFrom`
+  //    - If isComplete=true, close browser
+  //
+  // 4. retryStep({ step, index }) - Re-runs the current step
+  //    - Execute just this one step with potentially modified data
+  //    - Then pause again (or continue based on stepByStepMode)
+  //
+  // 5. stopTest({ closeBrowser }) - Aborts execution
+  //    - Closes browser context if closeBrowser=true
+  //
+  // Example backend pseudo-code:
+  // ```
+  // let isPaused = false;
+  // let currentStepIndex = 0;
+  // 
+  // async function runTest(steps) {
+  //   for (let i = currentStepIndex; i < steps.length; i++) {
+  //     await executeStep(steps[i]);
+  //     currentStepIndex = i;
+  //     
+  //     if (isPaused) {
+  //       await waitForResume(); // Returns when resumeTest() is called
+  //     }
+  //   }
+  //   await browser.close();
+  // }
+  // ```
+  //
+  // ================================================================
+  
+  // Request pause during test execution
+  const handlePauseTest = useCallback(() => {
+    if (!testExecutionResult || testExecutionResult.status !== 'running') return;
+    
+    setPauseRequested(true);
+    toast.info('⏸️ Pause requested... waiting for current step to complete', { duration: 2000 });
+    
+    // Notify backend to pause after current step
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.pauseTest) {
+      flowstral.playwrightRecorder.pauseTest();
+    }
+    
+    // Update state to paused
+    setIsTestPaused(true);
+    setPausedAtStep(testExecutionResult.currentStep);
+    setTestExecutionResult(prev => prev ? { ...prev, status: 'paused' } : null);
+    
+    // Set the step being edited
+    if (actions[testExecutionResult.currentStep]) {
+      setEditingPausedStep({ ...actions[testExecutionResult.currentStep] });
+    }
+  }, [testExecutionResult, actions]);
+
+  // Resume test execution from paused state
+  // This continues from the NEXT step after where we paused
+  // The browser is still open with the page state preserved
+  const handleResumeTest = useCallback(() => {
+    if (!isTestPaused || pausedAtStep === null) return;
+    
+    // Apply any edits made to the paused step BEFORE resuming
+    let updatedActions = actions;
+    if (editingPausedStep && pausedAtStep !== null) {
+      updatedActions = [...actions];
+      updatedActions[pausedAtStep] = editingPausedStep;
+      setActions(updatedActions);
+    }
+    
+    // Determine which step to resume FROM
+    // If current step was already executed, resume from next step
+    // If current step failed/needs retry, resume from current step
+    const stepResult = testExecutionResult?.stepResults.find(r => r.index === pausedAtStep);
+    const resumeFromStep = stepResult?.status === 'passed' ? pausedAtStep + 1 : pausedAtStep;
+    
+    setIsTestPaused(false);
+    setPauseRequested(false);
+    setEditingPausedStep(null);
+    setTestExecutionResult(prev => prev ? { 
+      ...prev, 
+      status: 'running',
+      currentStep: resumeFromStep 
+    } : null);
+    
+    toast.success(`▶️ Resuming from step ${resumeFromStep + 1}...`, { duration: 1500 });
+    
+    // Notify backend to resume execution from the specific step
+    // Backend keeps the browser/page context alive during pause
+    // and simply continues the execution loop from resumeFromStep
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.resumeTest) {
+      flowstral.playwrightRecorder.resumeTest({
+        fromStep: resumeFromStep,
+        steps: updatedActions, // Pass updated steps in case user edited
+        totalSteps: actions.length
+      });
+    }
+    
+    // Resolve the pause promise if using step-by-step
+    if (pauseResolverRef.current) {
+      pauseResolverRef.current();
+      pauseResolverRef.current = null;
+    }
+  }, [isTestPaused, pausedAtStep, editingPausedStep, actions, testExecutionResult]);
+
+  // Skip current step and continue from the NEXT step
+  // Browser stays open, just moves to next step in queue
+  const handleSkipPausedStep = useCallback(() => {
+    if (!isTestPaused || pausedAtStep === null) return;
+    
+    const nextStep = pausedAtStep + 1;
+    const isLastStep = nextStep >= actions.length;
+    
+    // Mark current step as skipped
+    setTestExecutionResult(prev => {
+      if (!prev) return null;
+      const stepResults = [...prev.stepResults];
+      stepResults[pausedAtStep] = { index: pausedAtStep, status: 'skipped' };
+      
+      // If this was the last step, test is complete
+      if (isLastStep) {
+        const passedCount = stepResults.filter(r => r.status === 'passed').length;
+        const totalSteps = prev.totalSteps;
+        return { 
+          ...prev, 
+          status: passedCount === totalSteps - 1 ? 'passed' : 'failed',
+          currentStep: pausedAtStep,
+          stepResults 
+        };
+      }
+      
+      return { 
+        ...prev, 
+        status: 'running',
+        currentStep: nextStep,
+        stepResults 
+      };
+    });
+    
+    setIsTestPaused(false);
+    setPauseRequested(false);
+    setEditingPausedStep(null);
+    
+    if (isLastStep) {
+      toast.info(`⏭️ Skipped step ${pausedAtStep + 1}. Test complete.`, { duration: 2000 });
+    } else {
+      toast.info(`⏭️ Skipped step ${pausedAtStep + 1}, continuing from step ${nextStep + 1}...`, { duration: 1500 });
+    }
+    
+    // Notify backend to skip and continue from next step
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.skipStep) {
+      flowstral.playwrightRecorder.skipStep({
+        skippedStep: pausedAtStep,
+        continueFrom: nextStep,
+        isComplete: isLastStep
+      });
+    }
+    
+    // Advance and resolve
+    if (pauseResolverRef.current) {
+      pauseResolverRef.current();
+      pauseResolverRef.current = null;
+    }
+  }, [isTestPaused, pausedAtStep, actions.length]);
+
+  // Retry the current failed/paused step
+  const handleRetryPausedStep = useCallback(() => {
+    if (!isTestPaused || pausedAtStep === null) return;
+    
+    // Apply edits first
+    if (editingPausedStep) {
+      setActions(prev => {
+        const updated = [...prev];
+        updated[pausedAtStep] = editingPausedStep;
+        return updated;
+      });
+    }
+    
+    // Reset step result to pending
+    setTestExecutionResult(prev => {
+      if (!prev) return null;
+      const stepResults = [...prev.stepResults];
+      stepResults[pausedAtStep] = { index: pausedAtStep, status: 'pending' };
+      return { ...prev, status: 'running', stepResults };
+    });
+    
+    setIsTestPaused(false);
+    setPauseRequested(false);
+    setEditingPausedStep(null);
+    
+    toast.info(`🔄 Retrying step ${pausedAtStep + 1}...`, { duration: 1500 });
+    
+    // Notify backend to retry current step
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.retryStep) {
+      flowstral.playwrightRecorder.retryStep({ 
+        step: editingPausedStep || actions[pausedAtStep],
+        index: pausedAtStep 
+      });
+    }
+  }, [isTestPaused, pausedAtStep, editingPausedStep, actions]);
+
+  // Stop test execution and close browser
+  const handleStopTest = useCallback(() => {
+    setIsTestPaused(false);
+    setPauseRequested(false);
+    setPausedAtStep(null);
+    setEditingPausedStep(null);
+    setStepByStepMode(false);
+    
+    // Mark remaining steps as skipped
+    setTestExecutionResult(prev => {
+      if (!prev) return null;
+      const stepResults = prev.stepResults.map((r, idx) => 
+        r.status === 'pending' || !r.status ? { ...r, status: 'skipped' } : r
+      );
+      return { ...prev, status: 'failed', stepResults, error: 'Test stopped by user' };
+    });
+    
+    toast.info('🛑 Test stopped. Closing browser...', { duration: 2000 });
+    
+    // Notify backend to stop and close browser
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.stopTest) {
+      flowstral.playwrightRecorder.stopTest({ closeBrowser: true });
+    }
+  }, []);
+
+  // Toggle step-by-step execution mode
+  const toggleStepByStepMode = useCallback(() => {
+    setStepByStepMode(prev => !prev);
+    toast.info(stepByStepMode ? '▶️ Continuous mode' : '⏯️ Step-by-step mode enabled', { duration: 1500 });
+  }, [stepByStepMode]);
+
+  // Update the paused step's automation
+  const updatePausedStepField = useCallback((field: keyof RecordedAction, value: any) => {
+    setEditingPausedStep(prev => prev ? { ...prev, [field]: value } : null);
+  }, []);
+
+  // Run single step (for step-by-step mode)
+  const handleRunSingleStep = useCallback(async () => {
+    if (pausedAtStep === null || !testExecutionResult) return;
+    
+    const stepToRun = editingPausedStep || actions[pausedAtStep];
+    
+    toast.loading(`Running step ${pausedAtStep + 1}...`, { id: 'single-step' });
+    
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.runSingleStep) {
+      try {
+        const result = await flowstral.playwrightRecorder.runSingleStep({
+          step: stepToRun,
+          index: pausedAtStep
+        });
+        
+        // Update step result
+        setTestExecutionResult(prev => {
+          if (!prev) return null;
+          const stepResults = [...prev.stepResults];
+          stepResults[pausedAtStep] = { 
+            index: pausedAtStep, 
+            status: result?.success ? 'passed' : 'failed',
+            error: result?.error,
+            screenshot: result?.screenshot
+          };
+          return { ...prev, stepResults };
+        });
+        
+        if (result?.success) {
+          toast.success(`✅ Step ${pausedAtStep + 1} passed`, { id: 'single-step' });
+          
+          // Auto-advance to next step if there are more
+          if (pausedAtStep < actions.length - 1) {
+            setPausedAtStep(pausedAtStep + 1);
+            setEditingPausedStep({ ...actions[pausedAtStep + 1] });
+          } else {
+            // Test complete
+            setTestExecutionResult(prev => prev ? { ...prev, status: 'passed' } : null);
+            toast.success('🎉 All steps completed!', { duration: 3000 });
+          }
+        } else {
+          toast.error(`❌ Step ${pausedAtStep + 1} failed: ${result?.error || 'Unknown error'}`, { id: 'single-step' });
+        }
+      } catch (error: any) {
+        toast.error(`Failed: ${error?.message}`, { id: 'single-step' });
+      }
+    }
+  }, [pausedAtStep, editingPausedStep, actions, testExecutionResult]);
+  
+  // ========== END PAUSE/RESUME/DEBUG HANDLERS ==========
 
   const getActionIcon = (qword: string, small = false) => {
     const size = small ? "h-3 w-3" : "h-4 w-4";
@@ -2461,15 +3217,42 @@ Recorded Test
             <Code className="h-3.5 w-3.5 mr-1.5" />
             Code
           </Button>
-                    <Button
-            onClick={handleRunTest}
-                      size="sm"
-            className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700"
-            disabled={actions.length === 0}
-                    >
-            <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
-            Run
-                    </Button>
+          {/* Run / Debug Dropdown */}
+          <Popover open={showRunMenu} onOpenChange={setShowRunMenu}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700"
+                disabled={actions.length === 0}
+              >
+                <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                Run
+                <ChevronDown className="h-3 w-3 ml-1.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-1">
+              <button
+                onClick={() => handleRunTest(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-emerald-500/20 text-left transition-colors"
+              >
+                <Play className="h-4 w-4 text-emerald-400" />
+                <div>
+                  <div className="font-medium">Run</div>
+                  <div className="text-[10px] text-muted-foreground">Execute all steps</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleRunTest(true)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-500/20 text-left transition-colors"
+              >
+                <Bug className="h-4 w-4 text-amber-400" />
+                <div>
+                  <div className="font-medium">Debug</div>
+                  <div className="text-[10px] text-muted-foreground">Pause, edit, step-by-step</div>
+                </div>
+              </button>
+            </PopoverContent>
+          </Popover>
                     <Button
             onClick={handleExportToBuilder}
                       size="sm"
@@ -2684,114 +3467,140 @@ Recorded Test
                       </>
                     )}
                   </Button>
+                  <Button
+                    onClick={handleA11yScan}
+                    disabled={isA11yScanning || !currentUrl}
+                    variant="outline"
+                    className={cn(
+                      "h-10 px-3 border-blue-500/50 hover:bg-blue-500/10",
+                      a11yIssues.length > 0 && a11yIssues.some(p => p.summary.total > 0)
+                        ? "text-amber-400 border-amber-500/50"
+                        : "text-blue-400"
+                    )}
+                    title="Scan current page for accessibility issues"
+                  >
+                    {isA11yScanning ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Accessibility className="h-4 w-4" />
+                    )}
+                    <span className="ml-1.5 text-xs">A11y</span>
+                    {a11yIssues.length > 0 && (
+                      <Badge 
+                        variant="secondary" 
+                        className={cn(
+                          "ml-1 h-5 min-w-5 px-1 text-xs",
+                          a11yIssues.reduce((acc, p) => acc + p.summary.critical, 0) > 0
+                            ? "bg-red-500/20 text-red-400"
+                            : a11yIssues.reduce((acc, p) => acc + p.summary.serious, 0) > 0
+                            ? "bg-orange-500/20 text-orange-400"
+                            : "bg-blue-500/20 text-blue-400"
+                        )}
+                      >
+                        {a11yIssues.reduce((acc, p) => acc + p.summary.total, 0)}
+                      </Badge>
+                    )}
+                  </Button>
                 </>
               )}
             </div>
             </div>
 
-          {/* Manual Steps Panel - Only in 'existing' mode */}
+          {/* Compact Linking Status Bar - Only in 'existing' mode */}
           {mode === 'existing' && selectedTestCase && (
-            <div className="border-b border-border">
-              <div className="px-4 py-2 flex items-center justify-between bg-purple-500/10">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-purple-400" />
-                  <span className="text-sm font-medium text-purple-300">Manual Steps to Automate</span>
-                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
-                    {Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
-                  </Badge>
+            <div className="border-b border-border bg-purple-500/5">
+              {/* Compact Status Bar */}
+              <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-purple-400" />
+                    <span className="text-sm font-medium text-purple-300">Automating:</span>
+                  </div>
+                  
+                  {/* Progress indicator */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-1.5 bg-purple-500/20 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-purple-500 to-emerald-500 transition-all duration-300"
+                        style={{ 
+                          width: `${((Object.keys(stepLinks).length || Object.keys(stepAutomation).length) / (selectedTestCase.steps?.length || 1)) * 100}%` 
+                        }}
+                      />
+                    </div>
+                    <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                      {Object.keys(stepLinks).length || Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
+                    </Badge>
+                  </div>
                 </div>
+                
+                {/* Quick action to open Automate tab */}
                 <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => { setStepAutomation({}); setCurrentStepIndex(0); }}
-                  className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setRightPanelTab('automate')}
+                  className="h-7 px-3 text-xs border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
                 >
-                  <RotateCcw className="h-3 w-3 mr-1" />
-                  Reset
+                  <Layers className="h-3 w-3 mr-1.5" />
+                  View All Steps
+                  <ChevronRight className="h-3 w-3 ml-1" />
                 </Button>
               </div>
-              <ScrollArea className="max-h-[250px]">
-                <div className="px-2 py-2 space-y-1">
-                  {(selectedTestCase.steps || []).map((step: any, idx: number) => {
-                    const automation = stepAutomation[idx];
-                    const isCurrent = currentStepIndex === idx;
-                    const isAutomated = automation?.type === 'recorded' || automation?.type === 'suggested';
-                    const isSkipped = automation?.type === 'skipped';
-                    
-                    return (
-                      <div
-                        key={step.id || idx}
-                        onClick={() => setCurrentStepIndex(idx)}
-                        className={cn(
-                          "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all",
-                          isCurrent && "bg-purple-500/20 border border-purple-500/50 ring-1 ring-purple-500/30",
-                          !isCurrent && isAutomated && "bg-green-500/10 border border-green-500/30",
-                          !isCurrent && isSkipped && "bg-yellow-500/10 border border-yellow-500/30",
-                          !isCurrent && !automation && "bg-card border border-transparent hover:border-white/10"
-                        )}
-                      >
-                        {/* Step number */}
-                        <div className={cn(
-                          "flex items-center justify-center w-6 h-6 rounded text-xs font-mono shrink-0",
-                          isCurrent && "bg-purple-500 text-white",
-                          !isCurrent && isAutomated && "bg-green-500/20 text-green-400",
-                          !isCurrent && isSkipped && "bg-yellow-500/20 text-yellow-400",
-                          !isCurrent && !automation && "bg-white/5 text-muted-foreground"
-                        )}>
-                          {String(idx + 1).padStart(2, '0')}
-                        </div>
-                        
-                        {/* Status icon */}
-                        {isAutomated && <CheckCircle className="h-4 w-4 text-green-400 shrink-0" />}
-                        {isSkipped && <Circle className="h-4 w-4 text-yellow-400 shrink-0" />}
-                        {isCurrent && !automation && <ArrowRight className="h-4 w-4 text-purple-400 shrink-0 animate-pulse" />}
-                        
-                        {/* Step name */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm truncate">{step.name || step.description || `Step ${idx + 1}`}</p>
-                          {automation?.data && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {automation.type === 'recorded' ? '🎬 ' : '✨ '}
-                              {(automation.data as any).description || (automation.data as any).qword}
-                            </p>
-                          )}
-                        </div>
-                        
-                        {/* Action buttons for current step */}
-                        {isCurrent && !automation && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => { e.stopPropagation(); skipCurrentStep(); }}
-                            className="h-6 px-2 text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/20"
-                          >
-                            Skip
-                          </Button>
-                        )}
-                        
-                        {/* Clear button for automated steps */}
-                        {automation && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => { e.stopPropagation(); clearStepAutomation(idx); }}
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
               
-              {/* Quick tip */}
-              <div className="px-4 py-2 border-t border-border/50 bg-muted/30">
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-purple-400">Tip:</span> Record actions or add suggestions from the overlay - they'll be assigned to step {currentStepIndex + 1}
-                </p>
-              </div>
+              {/* Current Step Indicator */}
+              {selectedTestCase.steps && selectedTestCase.steps[currentStepIndex] && (
+                <div className="px-4 py-2 bg-purple-500/10 border-t border-purple-500/20 flex items-center gap-3">
+                  <div className="flex items-center justify-center w-6 h-6 rounded bg-purple-500 text-white text-xs font-bold">
+                    {String(currentStepIndex + 1).padStart(2, '0')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-purple-200 truncate">
+                      {selectedTestCase.steps[currentStepIndex].name || selectedTestCase.steps[currentStepIndex].description || `Step ${currentStepIndex + 1}`}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {stepLinks[currentStepIndex]?.actions.length 
+                        ? `${stepLinks[currentStepIndex].actions.length} action(s) linked` 
+                        : 'Select recorded actions to link'}
+                    </p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      // Go to next unlinked step
+                      const steps = selectedTestCase.steps || [];
+                      for (let i = currentStepIndex + 1; i < steps.length; i++) {
+                        if (!stepLinks[i] || stepLinks[i].actions.length === 0) {
+                          setCurrentStepIndex(i);
+                          return;
+                        }
+                      }
+                      // Wrap to beginning if no unlinked found
+                      for (let i = 0; i < currentStepIndex; i++) {
+                        if (!stepLinks[i] || stepLinks[i].actions.length === 0) {
+                          setCurrentStepIndex(i);
+                          return;
+                        }
+                      }
+                    }}
+                    className="h-6 px-2 text-xs text-purple-400 hover:bg-purple-500/20"
+                  >
+                    Next Step
+                    <ChevronRight className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              )}
+              
+              {/* Recording for specific step context */}
+              {recordForStepContext && (
+                <div className="px-3 py-2 bg-blue-500/10 border-t border-blue-500/30">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Video className="h-3 w-3 text-blue-400 animate-pulse" />
+                    <span className="text-blue-300">
+                      Recording for: <strong>{recordForStepContext.stepName}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2801,15 +3610,110 @@ Recorded Test
               <span className="text-sm font-medium">Recorded Steps</span>
               <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
                 {actions.length}
+              </Badge>
+              {selectedActionIndices.size > 0 && (
+                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                  {selectedActionIndices.size} selected
                 </Badge>
-              </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {/* Multi-select toggle */}
+              {actions.length > 0 && mode === 'existing' && selectedTestCase && (
+                <Button
+                  variant={isMultiSelectMode ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => {
+                    setIsMultiSelectMode(!isMultiSelectMode);
+                    if (isMultiSelectMode) {
+                      setSelectedActionIndices(new Set());
+                    }
+                  }}
+                  className={cn(
+                    "h-6 px-2 text-xs",
+                    isMultiSelectMode && "bg-purple-500 hover:bg-purple-600 text-white"
+                  )}
+                >
+                  <CheckSquare className="h-3 w-3 mr-1" />
+                  Select
+                </Button>
+              )}
               {actions.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-3 w-3 mr-1" />
-                    Clear
-                  </Button>
-            )}
+                <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
+          
+          {/* Multi-select action bar - shown when actions are selected */}
+          {isMultiSelectMode && mode === 'existing' && selectedTestCase && (
+            <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllActions}
+                    className="h-6 px-2 text-xs border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
+                  >
+                    Select All
+                  </Button>
+                  {selectedActionIndices.size > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllSelections}
+                      className="h-6 px-2 text-xs text-muted-foreground"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {selectedActionIndices.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-purple-300">Link to:</span>
+                    <Select 
+                      value={String(currentStepIndex)} 
+                      onValueChange={(v) => setCurrentStepIndex(parseInt(v))}
+                    >
+                      <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs bg-purple-500/20 border-purple-500/30">
+                        <SelectValue placeholder="Select step" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(selectedTestCase.steps || []).map((step: any, idx: number) => (
+                          <SelectItem key={idx} value={String(idx)} className="text-xs">
+                            <span className="flex items-center gap-2">
+                              <span className="font-mono text-purple-400">{String(idx + 1).padStart(2, '0')}</span>
+                              <span className="truncate max-w-[150px]">{step.name || step.description || `Step ${idx + 1}`}</span>
+                              {stepLinks[idx]?.actions.length > 0 && (
+                                <Badge variant="outline" className="text-[9px] h-4 px-1 ml-1">
+                                  {stepLinks[idx].actions.length}
+                                </Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={linkSelectedActionsToStep}
+                      className="h-7 px-3 text-xs bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                    >
+                      <Link className="h-3 w-3 mr-1.5" />
+                      Link {selectedActionIndices.size}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {/* Range selection hint */}
+              <p className="text-[10px] text-purple-300/70 mt-1">
+                💡 Hold Shift+Click for range selection
+              </p>
+            </div>
+          )}
 
           {/* Recorded Steps List */}
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -2827,37 +3731,67 @@ Recorded Test
                   const displayAction = maskSensitiveAction(action);
                   const isPw = isPasswordField(action);
                   const isSelected = selectedActionIndex === index;
+                  const isMultiSelected = selectedActionIndices.has(index);
                   const isNewlyAdded = index === actions.length - 1;
                   
                   return (
                   <div
                     key={action.id || `action_${index}_${action.timestamp}`}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => setSelectedActionIndex(isSelected ? null : index)}
+                    draggable={!isMultiSelectMode}
+                    onDragStart={() => !isMultiSelectMode && handleDragStart(index)}
+                    onDragOver={(e) => !isMultiSelectMode && handleDragOver(e, index)}
+                    onDragEnd={() => !isMultiSelectMode && handleDragEnd()}
+                    onClick={(e) => {
+                      if (isMultiSelectMode) {
+                        toggleActionSelection(index, e);
+                      } else {
+                        setSelectedActionIndex(isSelected ? null : index);
+                      }
+                    }}
                     className={cn(
-                      "flex items-center gap-2 p-2.5 rounded-lg bg-card hover:bg-accent border group cursor-pointer active:cursor-grabbing transition-all",
-                      isSelected && "border-primary bg-primary/10 ring-1 ring-primary/30",
+                      "flex items-center gap-2 p-2.5 rounded-lg bg-card hover:bg-accent border group cursor-pointer transition-all",
+                      !isMultiSelectMode && "active:cursor-grabbing",
+                      isSelected && !isMultiSelectMode && "border-primary bg-primary/10 ring-1 ring-primary/30",
+                      isMultiSelected && "border-purple-500 bg-purple-500/20 ring-1 ring-purple-500/30",
                       draggedIndex === index && "opacity-50 border-cyan-500/50",
                       dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
-                      !isSelected && draggedIndex === null && "border-transparent hover:border-white/5",
-                      isNewlyAdded && "animate-pulse-once"
+                      !isSelected && !isMultiSelected && draggedIndex === null && "border-transparent hover:border-white/5",
+                      isNewlyAdded && !isMultiSelectMode && "animate-pulse-once"
                     )}
                   >
-                    {/* Drag handle */}
-                    <div className="flex flex-col gap-0.5 text-muted-foreground group-hover:text-foreground shrink-0 cursor-grab">
-                      <div className="flex gap-0.5">
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
+                    {/* Checkbox for multi-select mode */}
+                    {isMultiSelectMode ? (
+                      <div 
+                        className={cn(
+                          "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+                          isMultiSelected 
+                            ? "bg-purple-500 border-purple-500" 
+                            : "border-muted-foreground/50 hover:border-purple-400"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleActionSelection(index, e);
+                        }}
+                      >
+                        {isMultiSelected && <Check className="h-3 w-3 text-white" />}
                       </div>
-                      <div className="flex gap-0.5">
-                        <div className="w-1 h-1 rounded-full bg-current" />
-                        <div className="w-1 h-1 rounded-full bg-current" />
+                    ) : (
+                      /* Drag handle */
+                      <div className="flex flex-col gap-0.5 text-muted-foreground group-hover:text-foreground shrink-0 cursor-grab">
+                        <div className="flex gap-0.5">
+                          <div className="w-1 h-1 rounded-full bg-current" />
+                          <div className="w-1 h-1 rounded-full bg-current" />
+                        </div>
+                        <div className="flex gap-0.5">
+                          <div className="w-1 h-1 rounded-full bg-current" />
+                          <div className="w-1 h-1 rounded-full bg-current" />
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-center w-6 h-6 rounded bg-white/5 text-xs text-muted-foreground font-mono shrink-0">
+                    )}
+                    <div className={cn(
+                      "flex items-center justify-center w-6 h-6 rounded text-xs font-mono shrink-0",
+                      isMultiSelected ? "bg-purple-500/30 text-purple-300" : "bg-white/5 text-muted-foreground"
+                    )}>
                       {String(index + 1).padStart(2, '0')}
                     </div>
                     {getActionIcon(action.qword || action.type || '')}
@@ -2872,17 +3806,46 @@ Recorded Test
                         </p>
                       )}
                     </div>
-                  <Button
+                    {/* Quick link button - shown when hovering in existing mode */}
+                    {mode === 'existing' && selectedTestCase && !isMultiSelectMode && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5 opacity-0 group-hover:opacity-100 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          linkActionToStep(currentStepIndex, action, 'recorded');
+                          // Remove from actions list after linking
+                          setActions(prev => prev.filter((_, i) => i !== index));
+                        }}
+                        title={`Link to Step ${currentStepIndex + 1}`}
+                      >
+                        <Link className="h-3 w-3 mr-0.5" />
+                        <span className="text-[10px]">{currentStepIndex + 1}</span>
+                      </Button>
+                    )}
+                    <Button
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         setActions(prev => prev.filter((_, i) => i !== index));
+                        // Also remove from selection if multi-selected
+                        if (selectedActionIndices.has(index)) {
+                          setSelectedActionIndices(prev => {
+                            const newSet = new Set(prev);
+                            newSet.delete(index);
+                            // Adjust indices for items after the deleted one
+                            const adjusted = new Set<number>();
+                            newSet.forEach(i => adjusted.add(i > index ? i - 1 : i));
+                            return adjusted;
+                          });
+                        }
                       }}
                     >
                       <Trash2 className="h-3 w-3" />
-                  </Button>
+                    </Button>
                   </div>
                   );
                 })}
@@ -2917,6 +3880,30 @@ Recorded Test
                   <Target className="h-3 w-3 mr-1" />
                   SF Context
                 </TabsTrigger>
+                <TabsTrigger value="a11y" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">
+                  <Accessibility className="h-3 w-3 mr-1" />
+                  A11y
+                  {a11yIssues.length > 0 && a11yIssues.reduce((acc, p) => acc + p.summary.total, 0) > 0 && (
+                    <Badge className={cn(
+                      "ml-1 h-4 text-[9px] px-1",
+                      a11yIssues.reduce((acc, p) => acc + p.summary.critical, 0) > 0
+                        ? "bg-red-500/30 text-red-400"
+                        : "bg-amber-500/30 text-amber-400"
+                    )}>
+                      {a11yIssues.reduce((acc, p) => acc + p.summary.total, 0)}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                {/* Automate Tab - Only when automating existing test */}
+                {mode === 'existing' && selectedTestCase && (
+                  <TabsTrigger value="automate" className="h-7 px-2.5 text-[11px] data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                    <Link2 className="h-3 w-3 mr-1" />
+                    Automate
+                    <Badge className="ml-1 h-4 bg-purple-500/30 text-purple-400 text-[9px] px-1">
+                      {Object.keys(stepLinks).length || Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0}
+                    </Badge>
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -4398,6 +5385,425 @@ Recorded Test
                 className="h-full"
               />
             </TabsContent>
+
+            {/* ========== ACCESSIBILITY TAB ========== */}
+            <TabsContent value="a11y" className="flex-1 m-0 p-0 overflow-hidden flex flex-col data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
+                <div className="flex items-center gap-2">
+                  <Accessibility className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-semibold">Accessibility Issues</span>
+                  {a11yIssues.length > 0 && (
+                    <Badge className={cn(
+                      "text-[10px] px-1.5",
+                      a11yIssues.reduce((acc, p) => acc + p.summary.critical, 0) > 0
+                        ? "bg-red-500/20 text-red-400 border-red-500/30"
+                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                    )}>
+                      {a11yIssues.reduce((acc, p) => acc + p.summary.total, 0)} total
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    onClick={handleA11yScan}
+                    disabled={isA11yScanning || !currentUrl}
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                  >
+                    {isA11yScanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Scan className="h-3 w-3" />}
+                    <span className="ml-1">Scan Page</span>
+                  </Button>
+                  {a11yIssues.length > 0 && (
+                    <Button
+                      onClick={() => setA11yIssues([])}
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="p-3 space-y-3">
+                  {a11yIssues.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Accessibility className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">No accessibility scans yet</p>
+                      <p className="text-xs mt-1">Click "A11y" button or "Scan Page" to check the current page</p>
+                    </div>
+                  ) : (
+                    a11yIssues.map((pageScan, pageIdx) => (
+                      <Collapsible key={pageIdx} defaultOpen={pageIdx === a11yIssues.length - 1}>
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between p-2 bg-secondary/50 rounded-lg hover:bg-secondary/80 transition-colors">
+                            <div className="flex items-center gap-2 text-left">
+                              <ChevronRight className="h-4 w-4 transition-transform ui-open:rotate-90" />
+                              <div>
+                                <p className="text-xs font-medium truncate max-w-[200px]">{pageScan.page}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {new Date(pageScan.timestamp).toLocaleTimeString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              {pageScan.summary.critical > 0 && (
+                                <Badge className="bg-red-500/20 text-red-400 text-[9px] px-1">{pageScan.summary.critical} crit</Badge>
+                              )}
+                              {pageScan.summary.serious > 0 && (
+                                <Badge className="bg-orange-500/20 text-orange-400 text-[9px] px-1">{pageScan.summary.serious} ser</Badge>
+                              )}
+                              {pageScan.summary.moderate > 0 && (
+                                <Badge className="bg-yellow-500/20 text-yellow-400 text-[9px] px-1">{pageScan.summary.moderate} mod</Badge>
+                              )}
+                              {pageScan.summary.minor > 0 && (
+                                <Badge className="bg-blue-500/20 text-blue-400 text-[9px] px-1">{pageScan.summary.minor} min</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-2 space-y-2 pl-4">
+                            {pageScan.issues.map((issue, issueIdx) => (
+                              <div 
+                                key={issueIdx} 
+                                className={cn(
+                                  "p-2 rounded-lg border-l-2 bg-secondary/30",
+                                  issue.impact === 'critical' ? "border-l-red-500" :
+                                  issue.impact === 'serious' ? "border-l-orange-500" :
+                                  issue.impact === 'moderate' ? "border-l-yellow-500" :
+                                  "border-l-blue-500"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <Badge className={cn(
+                                        "text-[9px] px-1",
+                                        issue.impact === 'critical' ? "bg-red-500/20 text-red-400" :
+                                        issue.impact === 'serious' ? "bg-orange-500/20 text-orange-400" :
+                                        issue.impact === 'moderate' ? "bg-yellow-500/20 text-yellow-400" :
+                                        "bg-blue-500/20 text-blue-400"
+                                      )}>
+                                        {issue.impact}
+                                      </Badge>
+                                      <span className="text-[10px] font-medium truncate">{issue.rule}</span>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground mb-1">{issue.description}</p>
+                                    {issue.element && (
+                                      <code className="block text-[9px] bg-black/30 px-1.5 py-0.5 rounded text-muted-foreground truncate mb-1">
+                                        {issue.element.slice(0, 80)}{issue.element.length > 80 ? '...' : ''}
+                                      </code>
+                                    )}
+                                    {issue.suggested_fix && (
+                                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded p-1.5 mt-1">
+                                        <p className="text-[9px] text-emerald-400 font-medium mb-0.5">✓ Fix:</p>
+                                        <p className="text-[10px] text-emerald-300/80">{issue.suggested_fix}</p>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-[9px] text-purple-400">{issue.wcag_criterion}</span>
+                                      {issue.help_url && (
+                                        <a 
+                                          href={issue.help_url} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="text-[9px] text-blue-400 hover:underline"
+                                        >
+                                          Learn more →
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* ========== AUTOMATE TAB - Link Manual Steps with Recordings ========== */}
+            {mode === 'existing' && selectedTestCase && (
+              <TabsContent value="automate" className="flex-1 m-0 p-0 overflow-hidden flex flex-col data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
+                {/* Header with Settings */}
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-purple-400" />
+                    <span className="text-sm font-semibold">Link Steps</span>
+                    <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] px-1.5">
+                      {Object.keys(stepLinks).length || Object.keys(stepAutomation).length}/{selectedTestCase.steps?.length || 0} linked
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {/* Settings Popover */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px] border-border">
+                          <Settings className="h-3 w-3 mr-1" />
+                          Settings
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" side="bottom" className="w-64 p-3">
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-medium text-foreground">Linking Options</h4>
+                          
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="grouping-tab" className="text-[11px] text-muted-foreground">
+                              Allow action grouping
+                            </Label>
+                            <Switch
+                              id="grouping-tab"
+                              checked={groupingEnabled}
+                              onCheckedChange={setGroupingEnabled}
+                            />
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="autoadvance-tab" className="text-[11px] text-muted-foreground">
+                              Auto-advance steps
+                            </Label>
+                            <Switch
+                              id="autoadvance-tab"
+                              checked={autoAdvance}
+                              onCheckedChange={setAutoAdvance}
+                            />
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">Link mode</Label>
+                            <Select value={defaultLinkMode} onValueChange={(v) => setDefaultLinkMode(v as LinkMode)}>
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="document">📝 Document - Keep manual text</SelectItem>
+                                <SelectItem value="replace">🔄 Replace - Use generated text</SelectItem>
+                                <SelectItem value="hybrid">🔀 Hybrid - Both</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          <p className="text-[10px] text-muted-foreground">
+                            {groupingEnabled 
+                              ? "Multiple recordings can be linked to one step" 
+                              : "One recording per step"}
+                          </p>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => { setStepAutomation({}); setStepLinks({}); setCurrentStepIndex(0); }}
+                      className="h-6 px-2 text-[10px] border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Reset All
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Selection Info Bar - When actions are selected on left */}
+                {selectedActionIndices.size > 0 && (
+                  <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-blue-300">
+                        {selectedActionIndices.size} recorded action{selectedActionIndices.size > 1 ? 's' : ''} selected
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Click a step below to link</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedActionIndices(new Set())}
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Clear Selection
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recording Context Banner */}
+                {recordForStepContext && (
+                  <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/30">
+                    <div className="flex items-center gap-2 text-xs">
+                      <Video className="h-3 w-3 text-purple-400 animate-pulse" />
+                      <span className="text-purple-300">
+                        Recording for: <strong>{recordForStepContext.stepName}</strong>
+                      </span>
+                    </div>
+                    {recordForStepContext.manualDescription && (
+                      <p className="text-[10px] text-muted-foreground mt-1 pl-5">
+                        📝 {recordForStepContext.manualDescription}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Scrollable Manual Steps List */}
+                <ScrollArea className="flex-1">
+                  <div className="p-3 space-y-2">
+                    {(selectedTestCase.steps || []).map((step: any, idx: number) => {
+                      const legacyAutomation = stepAutomation[idx];
+                      const enhancedLink = stepLinks[idx];
+                      const isCurrent = currentStepIndex === idx;
+                      const hasEnhancedLink = enhancedLink && enhancedLink.actions.length > 0;
+                      const isAutomated = hasEnhancedLink || legacyAutomation?.type === 'recorded' || legacyAutomation?.type === 'suggested';
+                      const isSkipped = legacyAutomation?.type === 'skipped';
+                      const actionCount = enhancedLink?.actions.length || 0;
+                      const hasSelectedActions = selectedActionIndices.size > 0;
+                      
+                      return (
+                        <div
+                          key={step.id || idx}
+                          onClick={() => {
+                            setCurrentStepIndex(idx);
+                            // If actions are selected, link them to this step
+                            if (hasSelectedActions) {
+                              handleLinkSelectedActions(idx);
+                            }
+                          }}
+                          className={cn(
+                            "group relative flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all border",
+                            isCurrent && "bg-purple-500/15 border-purple-500/50 ring-1 ring-purple-500/30",
+                            !isCurrent && isAutomated && "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/15",
+                            !isCurrent && isSkipped && "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15",
+                            !isCurrent && !isAutomated && !isSkipped && "bg-card border-border hover:border-purple-500/30 hover:bg-purple-500/5",
+                            hasSelectedActions && !isCurrent && "hover:border-blue-500/50 hover:bg-blue-500/10"
+                          )}
+                        >
+                          {/* Step Number Badge */}
+                          <div className={cn(
+                            "flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold shrink-0",
+                            isCurrent && "bg-purple-500 text-white",
+                            !isCurrent && isAutomated && "bg-emerald-500/20 text-emerald-400",
+                            !isCurrent && isSkipped && "bg-amber-500/20 text-amber-400",
+                            !isCurrent && !isAutomated && !isSkipped && "bg-white/5 text-muted-foreground"
+                          )}>
+                            {String(idx + 1).padStart(2, '0')}
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {/* Status Icon */}
+                              {isAutomated && <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />}
+                              {isSkipped && <Circle className="h-4 w-4 text-amber-400 shrink-0" />}
+                              {isCurrent && !isAutomated && !isSkipped && <ArrowRight className="h-4 w-4 text-purple-400 shrink-0 animate-pulse" />}
+                              
+                              {/* Step Name */}
+                              <p className="text-sm font-medium truncate">{step.name || step.description || `Step ${idx + 1}`}</p>
+                              
+                              {/* Link Mode Badge */}
+                              {hasEnhancedLink && (
+                                <Badge variant="outline" className="text-[9px] h-4 px-1 border-emerald-500/30 text-emerald-400">
+                                  {enhancedLink.linkMode}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {/* Step Description (manual action) */}
+                            {step.action && (
+                              <p className="text-xs text-muted-foreground mb-1 line-clamp-2">
+                                📝 {step.action}
+                              </p>
+                            )}
+                            
+                            {/* Linked Actions Info */}
+                            {hasEnhancedLink && (
+                              <div className="mt-2 p-2 rounded bg-emerald-500/5 border border-emerald-500/20">
+                                <div className="flex items-center gap-2 text-xs text-emerald-400 mb-1">
+                                  <Layers className="h-3 w-3" />
+                                  <span>{actionCount} linked action{actionCount > 1 ? 's' : ''}</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {enhancedLink.actions.slice(0, 3).map((action: any, actIdx: number) => (
+                                    <div key={actIdx} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                      {getActionIcon(action.qword, true)}
+                                      <span className="truncate">{action.description || action.qword}</span>
+                                    </div>
+                                  ))}
+                                  {actionCount > 3 && (
+                                    <p className="text-[10px] text-muted-foreground">+{actionCount - 3} more...</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Legacy Automation Info */}
+                            {!hasEnhancedLink && legacyAutomation?.data && (
+                              <div className="mt-2 p-2 rounded bg-emerald-500/5 border border-emerald-500/20">
+                                <div className="flex items-center gap-1 text-xs text-emerald-400">
+                                  {legacyAutomation.type === 'recorded' ? <Video className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                                  <span className="truncate">{(legacyAutomation.data as any).description || (legacyAutomation.data as any).qword}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {/* Link hint when actions selected */}
+                            {hasSelectedActions && (
+                              <Badge className="bg-blue-500/20 text-blue-400 text-[9px] px-2 animate-pulse">
+                                Click to link
+                              </Badge>
+                            )}
+                            
+                            {/* Skip button for current step */}
+                            {isCurrent && !isAutomated && !isSkipped && !hasSelectedActions && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); skipCurrentStep(); }}
+                                className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/20"
+                              >
+                                Skip
+                              </Button>
+                            )}
+                            
+                            {/* Clear button for automated/skipped steps */}
+                            {(isAutomated || isSkipped) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => { e.stopPropagation(); clearStepAutomation(idx); }}
+                                className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/20"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+
+                {/* Bottom Help */}
+                <div className="px-3 py-2 border-t border-border bg-muted/30">
+                  <p className="text-xs text-muted-foreground text-center">
+                    {selectedActionIndices.size > 0 
+                      ? `🔗 Click any step above to link ${selectedActionIndices.size} selected action${selectedActionIndices.size > 1 ? 's' : ''}`
+                      : groupingEnabled 
+                        ? '💡 Select multiple recorded actions on the left panel, then click a step to link them'
+                        : '💡 Select recorded actions on the left, then click a step to link'}
+                  </p>
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       </div>
@@ -4657,66 +6063,262 @@ Recorded Test
         </DialogContent>
       </Dialog>
 
-      {/* Test Execution Result Modal */}
-      <Dialog open={showTestResultModal} onOpenChange={setShowTestResultModal}>
-        <DialogContent className="max-w-2xl bg-card border-border overflow-hidden">
+      {/* Test Execution Result Modal - Enhanced with Pause/Resume/Debug */}
+      <Dialog open={showTestResultModal} onOpenChange={(open) => {
+        if (!open && testExecutionResult?.status === 'running') {
+          // Don't allow closing while running - must stop first
+          return;
+        }
+        if (!open && isTestPaused) {
+          // If closing while paused, stop the test
+          handleStopTest();
+        }
+        setShowTestResultModal(open);
+      }}>
+        <DialogContent className="max-w-3xl bg-card border-border overflow-hidden">
           <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              {testExecutionResult?.status === 'running' && (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-                  Running Test...
-                </>
-              )}
-              {testExecutionResult?.status === 'passed' && (
-                <>
-                  <CheckCircle className="h-5 w-5 text-emerald-400" />
-                  Test Passed!
-                </>
-              )}
-              {testExecutionResult?.status === 'failed' && (
-                <>
-                  <AlertCircle className="h-5 w-5 text-red-400" />
-                  Test Failed
-                </>
+            <DialogTitle className="text-foreground flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {testExecutionResult?.status === 'running' && !isTestPaused && (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+                    {isDebugMode ? (
+                      <>
+                        <span>Debug Mode</span>
+                        <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                          <Bug className="h-3 w-3 mr-1" />
+                          Running
+                        </Badge>
+                      </>
+                    ) : (
+                      'Running Test...'
+                    )}
+                  </>
+                )}
+                {(testExecutionResult?.status === 'paused' || isTestPaused) && (
+                  <>
+                    <Bug className="h-5 w-5 text-amber-400" />
+                    <span className="text-amber-400">Debug Paused</span>
+                    <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs ml-2">
+                      Step {(pausedAtStep || 0) + 1}
+                    </Badge>
+                  </>
+                )}
+                {testExecutionResult?.status === 'passed' && (
+                  <>
+                    <CheckCircle className="h-5 w-5 text-emerald-400" />
+                    Test Passed!
+                  </>
+                )}
+                {testExecutionResult?.status === 'failed' && !isTestPaused && (
+                  <>
+                    <AlertCircle className="h-5 w-5 text-red-400" />
+                    Test Failed
+                  </>
+                )}
+              </div>
+              
+              {/* Step-by-step mode toggle - Only in Debug mode */}
+              {isDebugMode && testExecutionResult?.status === 'running' && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="step-mode" className="text-xs text-muted-foreground">Step-by-step</Label>
+                  <Switch
+                    id="step-mode"
+                    checked={stepByStepMode}
+                    onCheckedChange={toggleStepByStepMode}
+                  />
+                </div>
               )}
             </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4 overflow-hidden max-w-full">
-            {/* Progress */}
-            {testExecutionResult?.status === 'running' && (
+            {/* Progress Bar */}
+            {(testExecutionResult?.status === 'running' || isTestPaused) && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Step {(testExecutionResult?.currentStep || 0) + 1} of {testExecutionResult?.totalSteps}</span>
-                  <span className="text-muted-foreground">{Math.round(((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100)}%</span>
+                  <span className="text-muted-foreground">
+                    Step {(isTestPaused ? pausedAtStep || 0 : testExecutionResult?.currentStep || 0) + 1} of {testExecutionResult?.totalSteps}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {Math.round(((isTestPaused ? pausedAtStep || 0 : testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100)}%
+                  </span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-blue-500 transition-all duration-300"
-                    style={{ width: `${((testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100}%` }}
+                    className={cn(
+                      "h-full transition-all duration-300",
+                      isTestPaused ? "bg-amber-500" : "bg-blue-500"
+                    )}
+                    style={{ width: `${((isTestPaused ? pausedAtStep || 0 : testExecutionResult?.currentStep || 0) + 1) / (testExecutionResult?.totalSteps || 1) * 100}%` }}
                   />
                 </div>
+                
+                {/* Execution Controls - Only in Debug Mode */}
+                {testExecutionResult?.status === 'running' && !isTestPaused && (
+                  <div className="flex items-center gap-2 pt-2">
+                    {isDebugMode ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePauseTest}
+                          className="flex-1 h-8 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                        >
+                          <div className="h-3 w-3 bg-amber-400 rounded-sm mr-2" />
+                          Pause
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleStopTest}
+                          className="h-8 px-3 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                        >
+                          <Square className="h-3 w-3 mr-1" />
+                          Stop
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleStopTest}
+                        className="h-8 px-3 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                      >
+                        <Square className="h-3 w-3 mr-1" />
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             
-            {/* Step Results */}
+            {/* PAUSED STATE - Edit Step Panel */}
+            {isTestPaused && editingPausedStep && pausedAtStep !== null && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded bg-amber-500 flex items-center justify-center text-amber-900 text-xs font-bold">
+                      {pausedAtStep + 1}
+                    </div>
+                    <span className="text-sm font-medium text-amber-300">Edit Step Before Continuing</span>
+                  </div>
+                  <Badge className="bg-purple-500/20 text-purple-400 text-xs">Browser is open</Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Action Type */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Action</Label>
+                    <Input 
+                      value={editingPausedStep.qword || ''}
+                      onChange={(e) => updatePausedStepField('qword', e.target.value)}
+                      className="h-8 text-sm bg-background border-border"
+                    />
+                  </div>
+                  
+                  {/* Selector */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Selector</Label>
+                    <Input 
+                      value={editingPausedStep.selectorObj?.selector || ''}
+                      onChange={(e) => updatePausedStepField('selectorObj', { 
+                        ...editingPausedStep.selectorObj, 
+                        selector: e.target.value 
+                      })}
+                      className="h-8 text-sm bg-background border-border font-mono text-[11px]"
+                      placeholder="CSS selector or XPath"
+                    />
+                  </div>
+                </div>
+                
+                {/* Value/Args */}
+                {(editingPausedStep.qword?.includes('fill') || editingPausedStep.args?.length) && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Value</Label>
+                    <Input 
+                      value={editingPausedStep.args?.[0] || ''}
+                      onChange={(e) => updatePausedStepField('args', [e.target.value])}
+                      className="h-8 text-sm bg-background border-border"
+                      placeholder="Value to input"
+                    />
+                  </div>
+                )}
+                
+                {/* Description */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Description</Label>
+                  <Input 
+                    value={editingPausedStep.description || ''}
+                    onChange={(e) => updatePausedStepField('description', e.target.value)}
+                    className="h-8 text-sm bg-background border-border"
+                    placeholder="Step description"
+                  />
+                </div>
+                
+                {/* Pause Controls */}
+                <div className="flex items-center gap-2 pt-2 border-t border-amber-500/20">
+                  <Button
+                    onClick={handleResumeTest}
+                    className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Resume
+                  </Button>
+                  <Button
+                    onClick={handleRetryPausedStep}
+                    variant="outline"
+                    className="h-9 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Retry Step
+                  </Button>
+                  <Button
+                    onClick={handleSkipPausedStep}
+                    variant="outline"
+                    className="h-9 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <SkipForward className="h-4 w-4 mr-1" />
+                    Skip
+                  </Button>
+                  <Button
+                    onClick={handleStopTest}
+                    variant="outline"
+                    className="h-9 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  >
+                    <Square className="h-4 w-4 mr-1" />
+                    Stop
+                  </Button>
+                </div>
+                
+                <p className="text-[10px] text-amber-400/70 text-center">
+                  💡 The browser is still open. You can inspect the page, modify the step above, then Resume or Retry.
+                </p>
+              </div>
+            )}
+            
+            {/* Step Results List */}
             <div className="flex gap-4 overflow-hidden max-w-full">
-              <ScrollArea className="h-[350px] flex-1 overflow-hidden">
+              <ScrollArea className={cn("flex-1 overflow-hidden", isTestPaused ? "h-[200px]" : "h-[350px]")}>
                 <div className="space-y-1 pr-2 overflow-hidden max-w-full">
                   {actions.map((action, idx) => {
                     const stepResult = testExecutionResult?.stepResults.find(r => r.index === idx);
-                    const isCurrent = testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx;
+                    const isCurrent = (testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx) || 
+                                     (isTestPaused && pausedAtStep === idx);
                     const hasScreenshot = !!stepResult?.screenshot;
+                    const isPausedHere = isTestPaused && pausedAtStep === idx;
                     
                     return (
                       <div 
                         key={action.id || idx}
                         className={cn(
                           "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all overflow-clip relative",
-                          isCurrent && "bg-blue-500/20 border border-blue-500/30",
+                          isPausedHere && "bg-amber-500/20 border border-amber-500/50 ring-1 ring-amber-500/30",
+                          isCurrent && !isPausedHere && "bg-blue-500/20 border border-blue-500/30",
                           stepResult?.status === 'passed' && "bg-emerald-500/10 hover:bg-emerald-500/20",
                           stepResult?.status === 'failed' && "bg-red-500/10 hover:bg-red-500/20",
+                          stepResult?.status === 'skipped' && "bg-gray-500/10 opacity-60",
                           testExecutionResult?.selectedScreenshot === stepResult?.screenshot && "ring-2 ring-blue-500"
                         )}
                         onClick={() => {
@@ -4728,19 +6330,26 @@ Recorded Test
                           }
                         }}
                       >
-                        <span className="text-muted-foreground w-6 shrink-0 pt-0.5">{idx + 1}</span>
+                        <span className={cn(
+                          "w-6 shrink-0 pt-0.5 text-center",
+                          isPausedHere ? "text-amber-400 font-bold" : "text-muted-foreground"
+                        )}>{idx + 1}</span>
                         <div className="shrink-0 pt-0.5">
-                          {isCurrent && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
-                          {stepResult?.status === 'passed' && <Check className="h-4 w-4 text-emerald-400" />}
-                          {stepResult?.status === 'failed' && <X className="h-4 w-4 text-red-400" />}
-                          {!isCurrent && !stepResult && <Circle className="h-4 w-4 text-muted-foreground" />}
+                          {isPausedHere && <div className="h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center"><div className="h-1.5 w-1.5 bg-amber-900 rounded-sm" /></div>}
+                          {isCurrent && !isPausedHere && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
+                          {stepResult?.status === 'passed' && !isPausedHere && <Check className="h-4 w-4 text-emerald-400" />}
+                          {stepResult?.status === 'failed' && !isPausedHere && <X className="h-4 w-4 text-red-400" />}
+                          {stepResult?.status === 'skipped' && <SkipForward className="h-4 w-4 text-gray-400" />}
+                          {!isCurrent && !stepResult && !isPausedHere && <Circle className="h-4 w-4 text-muted-foreground" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className={cn(
                             "break-words",
-                            stepResult?.status === 'passed' && "text-emerald-400",
-                            stepResult?.status === 'failed' && "text-red-400",
-                            !stepResult && "text-muted-foreground"
+                            isPausedHere && "text-amber-300",
+                            stepResult?.status === 'passed' && !isPausedHere && "text-emerald-400",
+                            stepResult?.status === 'failed' && !isPausedHere && "text-red-400",
+                            stepResult?.status === 'skipped' && "text-gray-400",
+                            !stepResult && !isPausedHere && "text-muted-foreground"
                           )}>
                             {(() => {
                               const displayAction = maskSensitiveAction(action);
@@ -4766,7 +6375,7 @@ Recorded Test
                 <div className="w-[300px] shrink-0 bg-gray-900 rounded-lg p-2 border border-border">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-muted-foreground">Step Screenshot</span>
-            <Button
+                    <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 w-6 p-0"
@@ -4785,31 +6394,48 @@ Recorded Test
             </div>
             
             {/* Error Message */}
-            {testExecutionResult?.status === 'failed' && testExecutionResult?.error && (
+            {testExecutionResult?.status === 'failed' && testExecutionResult?.error && !isTestPaused && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-sm text-red-400">{testExecutionResult.error}</p>
               </div>
             )}
             
-            {/* Summary */}
-            {testExecutionResult?.status !== 'running' && (
+            {/* Summary Footer */}
+            {testExecutionResult?.status !== 'running' && !isTestPaused && (
               <div className="flex justify-between items-center pt-2 border-t border-border">
                 <span className="text-sm text-muted-foreground">
                   {testExecutionResult?.stepResults.filter(r => r.status === 'passed').length || 0} / {testExecutionResult?.totalSteps || actions.length} steps passed
+                  {testExecutionResult?.stepResults.filter(r => r.status === 'skipped').length > 0 && (
+                    <span className="text-gray-500 ml-2">
+                      ({testExecutionResult?.stepResults.filter(r => r.status === 'skipped').length} skipped)
+                    </span>
+                  )}
                 </span>
-            <Button
-                  onClick={() => setShowTestResultModal(false)}
-                  className={testExecutionResult?.status === 'passed' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-600 hover:bg-gray-700"}
-                >
-                  {testExecutionResult?.status === 'passed' ? "Done" : "Close"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {testExecutionResult?.status === 'failed' && (
+                    <Button
+                      onClick={() => handleRunTest(false)}
+                      variant="outline"
+                      className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Retry All
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => setShowTestResultModal(false)}
+                    className={testExecutionResult?.status === 'passed' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-600 hover:bg-gray-700"}
+                  >
+                    {testExecutionResult?.status === 'passed' ? "Done" : "Close"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Merge Preview Dialog */}
+      {/* Merge Preview Dialog - Enhanced with Link Mode visualization */}
       <Dialog open={showMergePreview} onOpenChange={setShowMergePreview}>
         <DialogContent className="max-w-3xl h-[80vh] bg-card border-border flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
@@ -4820,10 +6446,14 @@ Recorded Test
           </DialogHeader>
           
           <div className="text-sm text-muted-foreground pb-3 border-b border-border shrink-0">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 Automated ({mergedSteps.filter(s => s.qword && !s._manualOnly).length})
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                Grouped ({mergedSteps.filter(s => s._hasMultipleActions).length})
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-muted-foreground" />
@@ -4833,6 +6463,12 @@ Recorded Test
                 <span className="w-2 h-2 rounded-full bg-purple-500" />
                 Extra Recorded ({mergedSteps.filter(s => s._extra).length})
               </span>
+            </div>
+            <div className="flex items-center gap-2 mt-2 text-xs">
+              <span className="text-muted-foreground">Link Mode:</span>
+              <Badge variant="outline" className="text-[10px]">{defaultLinkMode}</Badge>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">Grouping: {groupingEnabled ? 'On' : 'Off'}</span>
             </div>
           </div>
           
@@ -4844,22 +6480,33 @@ Recorded Test
                 <div
                   key={step.id || idx}
                   className={cn(
-                    "p-3 rounded-lg border",
+                    "p-3 rounded-lg border transition-all",
                     step._merged && "bg-emerald-500/10 border-emerald-500/30",
+                    step._hasMultipleActions && "bg-blue-500/10 border-blue-500/30",
                     step._manualOnly && "bg-muted-foreground/10 border-gray-500/30",
                     step._extra && "bg-purple-500/10 border-purple-500/30",
                     !step._merged && !step._manualOnly && !step._extra && step.qword && "bg-emerald-500/10 border-emerald-500/30"
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-sm text-muted-foreground w-6 shrink-0">{idx + 1}</span>
+                    <span className="text-sm text-muted-foreground w-6 shrink-0 font-mono">{String(idx + 1).padStart(2, '0')}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-foreground text-sm truncate">
                           {step.name || step.description || `${step.qword} ${step.args?.[0] || ''}`}
                         </span>
                         {step._merged && (
                           <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Merged</Badge>
+                        )}
+                        {step._hasMultipleActions && (
+                          <Badge className="bg-blue-500/20 text-blue-400 text-[10px]">
+                            {step.automationActions?.length || 0} Actions
+                          </Badge>
+                        )}
+                        {step._linkMode && (
+                          <Badge variant="outline" className="text-[10px] border-white/20">
+                            {step._linkMode}
+                          </Badge>
                         )}
                         {step._manualOnly && (
                           <Badge className="bg-muted-foreground/20 text-muted-foreground text-[10px]">Manual</Badge>
@@ -4868,7 +6515,28 @@ Recorded Test
                           <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">New Step</Badge>
                         )}
                       </div>
-                      {step.qword && (
+                      
+                      {/* Show manual description if in document/hybrid mode */}
+                      {step.manualAction && step._linkMode !== 'replace' && (
+                        <div className="mt-1 text-xs text-muted-foreground bg-black/20 rounded p-1.5">
+                          📝 {step.manualAction}
+                        </div>
+                      )}
+                      
+                      {/* Show automation actions */}
+                      {step._hasMultipleActions && step.automationActions?.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {step.automationActions.map((action: any, actionIdx: number) => (
+                            <div key={action.id || actionIdx} className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="text-[10px] text-muted-foreground/60">{actionIdx + 1}.</span>
+                              <Badge variant="outline" className="text-[10px] border-white/20">
+                                {action.qword}
+                              </Badge>
+                              <span className="truncate">{action.description || action.args?.join(' → ')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : step.qword && (
                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                           <Badge variant="outline" className="text-[10px] border-white/20">
                             {step.qword}
@@ -4877,7 +6545,7 @@ Recorded Test
                         </div>
                       )}
                     </div>
-                    {step.qword ? (
+                    {step.qword || step._hasMultipleActions ? (
                       <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
                     ) : (
                       <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -4890,12 +6558,17 @@ Recorded Test
           </div>
           
           <DialogFooter className="border-t border-border pt-4 shrink-0">
+            <div className="flex-1 text-xs text-muted-foreground">
+              {mergedSteps.filter(s => s._hasMultipleActions).length > 0 && (
+                <span>💡 Steps with grouped actions will execute all linked actions in sequence</span>
+              )}
+            </div>
             <Button variant="outline" onClick={() => setShowMergePreview(false)} className="border-white/20">
               Cancel
             </Button>
             <Button onClick={saveMergedTest} className="bg-gradient-to-r from-purple-500 to-purple-600">
               <Save className="h-4 w-4 mr-2" />
-              Save Merged Test ({mergedSteps.filter(s => s.qword).length}/{mergedSteps.length} automated)
+              Save Merged Test ({mergedSteps.filter(s => s.qword || s._hasMultipleActions).length}/{mergedSteps.length} automated)
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5363,3 +7036,4 @@ function SuggestionItem({
     </div>
   );
 }
+

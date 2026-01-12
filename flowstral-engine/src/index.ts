@@ -86,16 +86,36 @@ export { PlaywrightScriptGenerator, PageObjectGenerator } from './generator/Play
 // Collector
 export { ElementCollector } from './collector/ElementCollector';
 
+// Runner - Test execution with pause/resume/debug
+export { 
+  TestRunner,
+  testRunnerHandlers,
+  playwrightRecorderAPI,
+  registerTestRunnerIPC,
+  setEventCallback,
+  preloadScript
+} from './runner';
+export type { 
+  TestStep, 
+  TestConfig, 
+  StepResult, 
+  TestResult,
+  TestRunnerEvent 
+} from './runner';
+
 /**
  * Quick start helper
  */
 export function createFlowstral(config?: Partial<import('./core/FlowstralEngine').FlowstralConfig>) {
   const engine = new (require('./core/FlowstralEngine').FlowstralEngine)(config);
   const sessionManager = new (require('./core/SessionManager').SessionManager)();
+  const { TestRunner: Runner } = require('./runner');
+  const testRunner = new Runner();
   
   return {
     engine,
     sessionManager,
+    testRunner,
     
     // Convenience methods
     startRecording: (name?: string) => {
@@ -115,7 +135,15 @@ export function createFlowstral(config?: Partial<import('./core/FlowstralEngine'
       const session = sessionManager.getActiveSession();
       if (session) return engine.generateScript(session);
       return null;
-    }
+    },
+    
+    // Test execution methods
+    runTest: (steps: TestStep[], options?: TestConfig) => testRunner.runTest(steps, options),
+    pauseTest: () => testRunner.pauseTest(),
+    resumeTest: (options?: any) => testRunner.resumeTest(options),
+    stopTest: (options?: any) => testRunner.stopTest(options),
+    skipStep: () => testRunner.skipStep(),
+    retryStep: (step?: TestStep) => testRunner.retryStep(step),
   };
 }
 
