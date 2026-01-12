@@ -204,6 +204,15 @@ contextBridge.exposeInMainWorld('flowstral', {
     getTestStatus: () => ipcRenderer.invoke('playwright-recorder-get-test-status'),
   },
   
+  // Network Capture API (ported from browser extension)
+  networkCapture: {
+    start: (sessionId) => ipcRenderer.invoke('network-capture-start', sessionId),
+    stop: () => ipcRenderer.invoke('network-capture-stop'),
+    getStatus: () => ipcRenderer.invoke('network-capture-status'),
+    exportHAR: () => ipcRenderer.invoke('network-capture-export-har'),
+    linkAction: (data) => ipcRenderer.invoke('network-capture-link-action', data),
+  },
+  
   // Export API
   export: {
     toTestBuilder: (testName) => ipcRenderer.invoke('export-to-test-builder', testName),
@@ -236,6 +245,11 @@ contextBridge.exposeInMainWorld('flowstral', {
       'test-runner:test-resumed',
       'test-runner:test-complete',
       'test-runner:test-stopped',
+      // Network capture events
+      'network-request-start',
+      'network-request-complete',
+      'network-websocket-created',
+      'network-capture-complete',
       // General events
       'action-recorded',
       'recording-status',

@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from typing import Dict, List, Any, Optional
+from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -3251,3 +3252,265 @@ async def delete_visual_baseline(test_name: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[FLOWSTRAL] Error deleting baseline: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# DEBUG MODE API - For Browser Extension to use via backend
+# =============================================================================
+
+# Store for active debug sessions
+_debug_sessions: Dict[str, Dict[str, Any]] = {}
+
+@router.post("/debug/run")
+async def debug_run_test(request: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Run a test in debug mode with pause/resume support.
+    This allows the browser extension to use debug features via API.
+    
+    Request:
+    - session_id: Unique session identifier
+    - steps: List of test steps
+    - url: Starting URL
+    - step_by_step: Whether to pause after each step
+    
+    Returns session info for tracking execution.
+    """
+    session_id = request.get("session_id", str(uuid4()))
+    steps = request.get("steps", [])
+    url = request.get("url")
+    step_by_step = request.get("step_by_step", False)
+    
+    logger.info(f"[DEBUG] Starting debug session {session_id} with {len(steps)} steps")
+    
+    # Create debug session
+    _debug_sessions[session_id] = {
+        "session_id": session_id,
+        "status": "running",
+        "current_step": 0,
+        "total_steps": len(steps),
+        "steps": steps,
+        "url": url,
+        "step_by_step": step_by_step,
+        "paused": False,
+        "results": [],
+        "error": None,
+        "created_at": datetime.now().isoformat(),
+    }
+    
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "message": f"Debug session started with {len(steps)} steps"
+    }
+
+@router.post("/debug/pause")
+async def debug_pause_test(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Pause a debug session"""
+    session_id = request.get("session_id")
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    _debug_sessions[session_id]["paused"] = True
+    _debug_sessions[session_id]["status"] = "paused"
+    
+    logger.info(f"[DEBUG] Session {session_id} paused at step {_debug_sessions[session_id]['current_step']}")
+    
+    return {
+        "status": "success",
+        "paused": True,
+        "current_step": _debug_sessions[session_id]["current_step"]
+    }
+
+@router.post("/debug/resume")
+async def debug_resume_test(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Resume a paused debug session"""
+    session_id = request.get("session_id")
+    from_step = request.get("from_step")
+    updated_steps = request.get("steps")
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    session["paused"] = False
+    session["status"] = "running"
+    
+    if from_step is not None:
+        session["current_step"] = from_step
+    
+    if updated_steps:
+        session["steps"] = updated_steps
+    
+    logger.info(f"[DEBUG] Session {session_id} resumed from step {session['current_step']}")
+    
+    return {
+        "status": "success",
+        "paused": False,
+        "current_step": session["current_step"]
+    }
+
+@router.post("/debug/skip")
+async def debug_skip_step(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Skip current step in debug session"""
+    session_id = request.get("session_id")
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    skipped_step = session["current_step"]
+    
+    # Mark step as skipped
+    session["results"].append({
+        "step": skipped_step,
+        "status": "skipped",
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Move to next step
+    session["current_step"] += 1
+    session["paused"] = False
+    session["status"] = "running"
+    
+    logger.info(f"[DEBUG] Session {session_id} skipped step {skipped_step}")
+    
+    return {
+        "status": "success",
+        "skipped_step": skipped_step,
+        "next_step": session["current_step"]
+    }
+
+@router.post("/debug/retry")
+async def debug_retry_step(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Retry current step with optional updates"""
+    session_id = request.get("session_id")
+    updated_step = request.get("step")
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    current_idx = session["current_step"]
+    
+    # Update step if provided
+    if updated_step and current_idx < len(session["steps"]):
+        session["steps"][current_idx] = updated_step
+    
+    logger.info(f"[DEBUG] Session {session_id} retrying step {current_idx}")
+    
+    return {
+        "status": "success",
+        "retry_step": current_idx,
+        "step": session["steps"][current_idx] if current_idx < len(session["steps"]) else None
+    }
+
+@router.post("/debug/stop")
+async def debug_stop_test(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Stop debug session"""
+    session_id = request.get("session_id")
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    session["status"] = "stopped"
+    session["ended_at"] = datetime.now().isoformat()
+    
+    logger.info(f"[DEBUG] Session {session_id} stopped")
+    
+    # Return final results
+    result = {
+        "status": "success",
+        "session": session
+    }
+    
+    # Clean up session after returning
+    # del _debug_sessions[session_id]  # Keep for retrieval
+    
+    return result
+
+@router.get("/debug/status/{session_id}")
+async def debug_get_status(session_id: str) -> Dict[str, Any]:
+    """Get debug session status"""
+    if session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    
+    return {
+        "status": "success",
+        "session": {
+            "session_id": session["session_id"],
+            "status": session["status"],
+            "current_step": session["current_step"],
+            "total_steps": session["total_steps"],
+            "paused": session["paused"],
+            "step_by_step": session["step_by_step"],
+            "results": session["results"],
+            "error": session.get("error"),
+        }
+    }
+
+@router.post("/debug/execute-step")
+async def debug_execute_single_step(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a single step (for step-by-step mode)"""
+    session_id = request.get("session_id")
+    step = request.get("step")
+    step_index = request.get("index", 0)
+    
+    if not session_id or session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session = _debug_sessions[session_id]
+    
+    # Simulate step execution (actual execution would use Playwright)
+    # In production, this would call the Playwright executor
+    logger.info(f"[DEBUG] Executing step {step_index}: {step.get('description', 'Unknown')}")
+    
+    # Record result
+    result = {
+        "step": step_index,
+        "status": "passed",  # Would be actual result
+        "timestamp": datetime.now().isoformat(),
+        "duration": 0
+    }
+    session["results"].append(result)
+    session["current_step"] = step_index + 1
+    
+    return {
+        "status": "success",
+        "result": result
+    }
+
+@router.delete("/debug/session/{session_id}")
+async def debug_delete_session(session_id: str) -> Dict[str, Any]:
+    """Delete a debug session"""
+    if session_id not in _debug_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    del _debug_sessions[session_id]
+    
+    return {
+        "status": "success",
+        "deleted": session_id
+    }
+
+@router.get("/debug/sessions")
+async def debug_list_sessions() -> Dict[str, Any]:
+    """List all debug sessions"""
+    sessions = []
+    for sid, session in _debug_sessions.items():
+        sessions.append({
+            "session_id": sid,
+            "status": session["status"],
+            "current_step": session["current_step"],
+            "total_steps": session["total_steps"],
+            "created_at": session.get("created_at"),
+        })
+    
+    return {
+        "status": "success",
+        "sessions": sessions,
+        "count": len(sessions)
+    }

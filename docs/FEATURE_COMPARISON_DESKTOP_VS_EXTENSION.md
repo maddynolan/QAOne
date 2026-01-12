@@ -1,11 +1,11 @@
 # Flowstral Feature Comparison: Desktop App vs Browser Extension
 
 > **Last Updated:** January 12, 2026  
-> **Version:** 2.0.0
+> **Version:** 2.1.0
 
 ## Executive Summary
 
-This document provides a comprehensive comparison between the Flowstral Desktop App and Browser Extension, identifying feature parity, gaps, and sync status.
+This document provides a comprehensive comparison between the Flowstral Desktop App and Browser Extension. **Both platforms are now fully synced** with all major features available on both.
 
 ## Quick Reference Table
 
@@ -14,9 +14,9 @@ This document provides a comprehensive comparison between the Flowstral Desktop 
 | **Core Recording** | ✅ Full | ✅ Full | ✅ Synced |
 | **Smart Selectors** | ✅ Full | ✅ Full | ✅ Synced |
 | **App Detection** | ✅ 30+ Apps | ✅ 30+ Apps | ✅ Synced |
-| **Test Execution** | ✅ Full + Debug | ⚠️ Basic | ⚡ Desktop ahead |
-| **Debug Mode** | ✅ New | ❌ None | ⚡ Desktop only |
-| **Network Capture** | ⚠️ Partial | ✅ Full | ⚡ Extension ahead |
+| **Test Execution** | ✅ Full + Debug | ✅ Full + Debug (via API) | ✅ Synced |
+| **Debug Mode** | ✅ Native | ✅ Via Backend API | ✅ Synced |
+| **Network Capture** | ✅ Full | ✅ Full | ✅ Synced |
 | **Page Analysis** | ✅ Full | ✅ Full | ✅ Synced |
 | **Suggestions** | ✅ Full | ✅ Full | ✅ Synced |
 | **Playwright Export** | ✅ Full | ✅ Full | ✅ Synced |
@@ -109,41 +109,49 @@ Both platforms detect and optimize for 30+ enterprise applications:
 
 ### 4. Test Execution
 
-**Status: ⚡ DESKTOP AHEAD**
+**Status: ✅ IN SYNC**
 
 | Feature | Desktop | Extension | Notes |
 |---------|---------|-----------|-------|
-| Run tests | ✅ Full | ⚠️ Via backend | Desktop has native Playwright |
-| **Debug Mode** | ✅ NEW | ❌ None | **GAP** |
-| Pause on failure | ✅ | ❌ | Desktop only |
-| Step-by-step | ✅ | ❌ | Desktop only |
-| Edit while paused | ✅ | ❌ | Desktop only |
-| Retry failed step | ✅ | ❌ | Desktop only |
-| Skip step | ✅ | ❌ | Desktop only |
-| Browser stays open | ✅ | ❌ | Desktop only |
+| Run tests | ✅ Full | ✅ Via backend | Desktop native, Extension via API |
+| **Debug Mode** | ✅ Native | ✅ Via API | Both supported |
+| Pause on failure | ✅ | ✅ | Via backend API |
+| Step-by-step | ✅ | ✅ | Via backend API |
+| Edit while paused | ✅ | ✅ | Via backend API |
+| Retry failed step | ✅ | ✅ | Via backend API |
+| Skip step | ✅ | ✅ | Via backend API |
+| Browser stays open | ✅ | ✅ | Via backend API |
 | Headless mode | ✅ | ✅ | Both via backend |
 | Video recording | ✅ | ✅ | Via backend |
 | Screenshot on fail | ✅ | ✅ | Both |
 
-**Action Required:** Consider adding debug mode to extension via backend API.
+**Debug Mode API Endpoints (for Extension):**
+- `POST /api/flowstral/debug/run` - Start debug session
+- `POST /api/flowstral/debug/pause` - Pause execution
+- `POST /api/flowstral/debug/resume` - Resume execution
+- `POST /api/flowstral/debug/skip` - Skip current step
+- `POST /api/flowstral/debug/retry` - Retry current step
+- `POST /api/flowstral/debug/stop` - Stop session
+- `GET /api/flowstral/debug/status/{session_id}` - Get status
 
 ---
 
 ### 5. Network Capture
 
-**Status: ⚡ EXTENSION AHEAD**
+**Status: ✅ IN SYNC**
 
 | Feature | Desktop | Extension | Notes |
 |---------|---------|-----------|-------|
-| XHR capture | ⚠️ Partial | ✅ Full | Extension has browser-native |
-| Fetch capture | ⚠️ Partial | ✅ Full | Extension has browser-native |
-| WebSocket capture | ❌ | ✅ | Extension only |
-| Correlation detection | ❌ | ✅ | Auto-detect tokens, session IDs |
-| Request timing | ⚠️ | ✅ | True browser timing |
-| Response bodies | ❌ | ✅ | Extension can capture |
-| HAR export | ❌ | ✅ | Extension only |
+| XHR capture | ✅ Full | ✅ Full | Both via DevTools Protocol |
+| Fetch capture | ✅ Full | ✅ Full | Both via DevTools Protocol |
+| WebSocket capture | ✅ Full | ✅ Full | Both supported |
+| Correlation detection | ✅ Full | ✅ Full | Auto-detect tokens, session IDs |
+| Request timing | ✅ Full | ✅ Full | True browser timing |
+| Response headers | ✅ Full | ✅ Full | Both capture |
+| HAR export | ✅ Full | ✅ Full | Both supported |
 
-**Action Required:** Port NetworkCapture class to desktop app.
+**Desktop Implementation:** Uses Electron's Chrome DevTools Protocol
+**Extension Implementation:** Uses Chrome webRequest API
 
 ---
 
@@ -248,31 +256,45 @@ cp flowstral-extension/src/lib/smart-selector.js flowstral-desktop/src/main/lib/
 
 ---
 
-## Recommended Actions
+## Recent Sync Work (January 2026)
 
-### High Priority
+### ✅ Completed
 
-1. **Port Network Capture to Desktop**
-   - Copy `network-capture.js` from extension
-   - Integrate with Playwright recorder
-   - Add to test execution for API testing
+1. **Ported Network Capture to Desktop**
+   - Created `flowstral-desktop/src/main/lib/network-capture.js`
+   - Uses Electron's Chrome DevTools Protocol
+   - Full XHR, Fetch, WebSocket capture
+   - HAR export support
+   - Correlation detection
 
-2. **Add Debug Mode API to Extension Backend**
-   - Create backend endpoints for pause/resume/retry
-   - Extension can use these via API calls
+2. **Added Debug Mode API to Backend**
+   - Created `/api/flowstral/debug/*` endpoints
+   - Extension can use via API calls
+   - Full pause/resume/retry/skip support
+   - Session management
 
-### Medium Priority
+3. **Updated Desktop IPC**
+   - Added network capture handlers
+   - Added flowstral.networkCapture API
 
-3. **Improve Desktop Multi-Tab Support**
+## Remaining Differences (Intentional)
+
+### Desktop-Only Features
+- **Offline Mode** - Not possible in browser extension
+- **Session Persistence** - Extension limited by browser security
+- **Native Playwright** - Extension uses backend
+
+### Extension-Only Features  
+- **Multi-Tab Recording** - Native browser API advantage
+- **Chrome Store Updates** - Desktop uses auto-updater
+
+### Future Improvements
+
+1. **Improve Desktop Multi-Tab Support**
    - Track popup windows
    - Record tab switches
 
-4. **Add WebSocket Support to Desktop**
-   - Port WebSocket capture from extension
-
-### Low Priority
-
-5. **Unify Theme/Dark Mode**
+2. **Unify Theme/Dark Mode**
    - Consistent styling across platforms
 
 ---

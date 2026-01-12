@@ -925,6 +925,98 @@ ipcMain.handle('playwright-recorder-get-test-status', async () => {
   }
 });
 
+// ============================================================================
+// NETWORK CAPTURE (ported from browser extension)
+// ============================================================================
+
+const NetworkCapture = require('./lib/network-capture');
+let networkCapture = null;
+
+// Start network capture
+ipcMain.handle('network-capture-start', async (event, sessionId) => {
+  try {
+    // Get webContents from embedded browser or playwright recorder
+    let webContents = null;
+    
+    if (playwrightRecorder?.page) {
+      // Use playwright page's webContents equivalent
+      console.log('[IPC] Starting network capture for Playwright page');
+      // Note: For Playwright, we'll inject capture script instead
+      return { success: true, note: 'Playwright uses injected capture' };
+    }
+    
+    if (embeddedBrowser?.view?.webContents) {
+      webContents = embeddedBrowser.view.webContents;
+    }
+    
+    if (!webContents) {
+      return { success: false, error: 'No browser to capture' };
+    }
+    
+    networkCapture = new NetworkCapture();
+    
+    // Forward events to renderer
+    networkCapture.on('request-start', (data) => {
+      webappView?.webContents.send('network-request-start', data);
+    });
+    networkCapture.on('request-complete', (data) => {
+      webappView?.webContents.send('network-request-complete', data);
+    });
+    networkCapture.on('websocket-created', (data) => {
+      webappView?.webContents.send('network-websocket-created', data);
+    });
+    
+    return await networkCapture.start(webContents, sessionId);
+  } catch (error) {
+    console.error('[IPC] Network capture start error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop network capture
+ipcMain.handle('network-capture-stop', async () => {
+  try {
+    if (!networkCapture) {
+      return { requests: [], websockets: [], correlations: [] };
+    }
+    
+    const result = await networkCapture.stop();
+    networkCapture = null;
+    return result;
+  } catch (error) {
+    console.error('[IPC] Network capture stop error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get network capture status
+ipcMain.handle('network-capture-status', async () => {
+  if (!networkCapture) {
+    return { enabled: false, requestCount: 0 };
+  }
+  return networkCapture.getStatus();
+});
+
+// Export as HAR
+ipcMain.handle('network-capture-export-har', async () => {
+  if (!networkCapture) {
+    return { success: false, error: 'No capture running' };
+  }
+  return networkCapture.exportAsHAR();
+});
+
+// Link user action to network requests
+ipcMain.handle('network-capture-link-action', async (event, { timestamp, type, description }) => {
+  if (!networkCapture) {
+    return [];
+  }
+  return networkCapture.linkUserAction(timestamp, type, description);
+});
+
+// ============================================================================
+// END NETWORK CAPTURE
+// ============================================================================
+
 // Execute a suggestion action in the browser (click, fill, etc.)
 ipcMain.handle('embedded-browser-execute-action', async (event, action) => {
   if (!embeddedBrowser?.view) return { success: false, error: 'No browser' };
