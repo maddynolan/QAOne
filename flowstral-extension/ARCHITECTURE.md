@@ -1,7 +1,7 @@
 # Flowstral Browser Extension - Architecture Documentation
 
-> **Last Updated:** December 22, 2024  
-> **Version:** 1.0.0
+> **Last Updated:** January 12, 2026  
+> **Version:** 1.1.0
 
 ## Overview
 
@@ -11,6 +11,8 @@ Flowstral Browser Extension is a Chrome/Edge extension for recording, suggesting
 - **Suggestions**: Analyzes pages to suggest testable actions
 - **App-Specific Optimization**: Special handling for Salesforce, ServiceNow, Workday, etc.
 - **Playwright Export**: Generate Playwright test code from recordings
+- **Network Capture**: Browser-native HTTP/WebSocket recording for load testing
+- **Multi-Tab Recording**: Track interactions across multiple browser tabs
 
 ## Architecture Diagram
 
@@ -372,8 +374,42 @@ Required browser permissions (manifest.json):
 # Just zip the folder for distribution
 ```
 
+### 8. `lib/network-capture.js` - HTTP/WebSocket Recording (507 lines)
+
+Browser-native network capture for load testing and API testing.
+
+```javascript
+class NetworkCapture {
+  start(sessionId)              // Start capturing network traffic
+  stop()                        // Stop and return captured data
+  
+  // Captured data includes:
+  // - XHR/Fetch requests with full headers
+  // - WebSocket messages
+  // - Request/response timing
+  // - Auto-detected correlations (tokens, session IDs)
+}
+```
+
+**Key Features:**
+- No proxy configuration needed
+- True browser timing (not proxy-delayed)
+- Full WebSocket support
+- Automatic correlation detection for:
+  - Session IDs
+  - Auth tokens
+  - CSRF tokens
+  - Request IDs
+
+## Recent Updates
+
+- [x] Network capture for protocol-level testing (Dec 2024)
+- [x] Multi-tab recording support (Dec 2024)
+- [x] 30+ enterprise app optimizations (Dec 2024)
+
 ## Future Improvements
 
+- [ ] Add Debug Mode via backend API (match desktop)
 - [ ] Migrate to TypeScript
 - [ ] Add unit tests for selectors
 - [ ] Create npm package for shared lib

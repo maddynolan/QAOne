@@ -1,7 +1,7 @@
 # Flowstral Desktop - Architecture Documentation
 
-> **Last Updated:** December 22, 2024  
-> **Version:** 1.0.0
+> **Last Updated:** January 12, 2026  
+> **Version:** 2.0.0
 
 ## Overview
 
@@ -9,6 +9,7 @@ Flowstral Desktop is an Electron application that provides a native desktop expe
 
 - **Embedded Browser**: A dockable browser for recording user interactions
 - **Native Test Execution**: Run Playwright tests locally without cloud dependencies
+- **Debug Mode**: Pause, resume, retry, and skip test steps during execution (NEW)
 - **Offline Support**: Full functionality without internet connection
 - **Session Persistence**: Login states are preserved across app restarts
 
@@ -168,6 +169,58 @@ The `injectRecorder()` method injects JavaScript into the page that:
 - Runs Playwright tests
 - Captures screenshots/videos
 - Returns detailed results
+
+### 3.1 `playwright-recorder.js` - Debug Mode Execution (NEW)
+
+**Responsibilities:**
+- Run tests in debug mode with pause/resume support
+- Step-by-step execution
+- Retry/skip individual steps
+- Keep browser open during pause for inspection
+
+**Key Methods:**
+
+```javascript
+class PlaywrightRecorder {
+  // Normal execution
+  runTest(options)              // Run test (closes browser after)
+  
+  // Debug mode execution
+  runTestDebug(options)         // Run with pause/resume support
+  pauseTest()                   // Request pause after current step
+  resumeTest(options)           // Resume from paused state
+  skipStep(options)             // Skip current step, continue
+  retryStep(options)            // Retry current step with edits
+  stopTest(options)             // Stop and optionally close browser
+  runSingleStep(options)        // Execute single step
+  getTestStatus()               // Get current execution state
+}
+```
+
+**Debug Mode IPC Channels:**
+
+| Channel | Description |
+|---------|-------------|
+| `playwright-recorder-run-test` | Run test (pass `debugMode: true` for debug) |
+| `playwright-recorder-pause-test` | Pause execution |
+| `playwright-recorder-resume-test` | Resume execution |
+| `playwright-recorder-skip-step` | Skip current step |
+| `playwright-recorder-retry-step` | Retry current step |
+| `playwright-recorder-stop-test` | Stop and close browser |
+| `playwright-recorder-run-single-step` | Execute single step |
+| `playwright-recorder-get-test-status` | Get execution status |
+
+**Debug Mode Events:**
+
+| Event | Data |
+|-------|------|
+| `test-runner:step-start` | `{ index, step, isRetry }` |
+| `test-runner:step-complete` | `{ index, status, duration }` |
+| `test-runner:step-failed` | `{ index, error, screenshot }` |
+| `test-runner:test-paused` | `{ stepIndex, step, error }` |
+| `test-runner:test-resumed` | `{ stepIndex }` |
+| `test-runner:test-complete` | `{ success, stepResults }` |
+| `test-runner:test-stopped` | `{ stepIndex }` |
 
 ### 4. `webapp-preload.js` - Context Bridge (161 lines)
 
@@ -334,11 +387,17 @@ ELECTRON_ENABLE_LOGGING=1 npm run dev
 npm run dev -- --inspect
 ```
 
+## Recent Updates
+
+- [x] **Debug Mode** - Pause/resume/retry/skip during test execution (Jan 2026)
+- [x] **Automation Linking** - Link recorded steps to manual test cases (Jan 2026)
+- [x] **Run vs Debug Toggle** - Choose execution mode in UI (Jan 2026)
+
 ## Future Improvements
 
-- [ ] Extract IPC handlers to separate modules
+- [ ] Port NetworkCapture from extension for full HTTP/WebSocket capture
+- [ ] Improve multi-window/popup recording
 - [ ] Create shared npm package for recorder-core
 - [ ] Add unit tests for selector generation
-- [ ] Implement hot-reload for development
 - [ ] Add telemetry/analytics module
 
