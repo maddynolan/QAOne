@@ -64,8 +64,29 @@ const USERS = [
 // MAIN COMPONENT
 // ============================================================================
 
+// Shared cart state type
+type CartItem = typeof PRODUCTS[0] & { quantity: number };
+
 export default function TestPlayground() {
   const [activeTab, setActiveTab] = useState('products');
+  
+  // Lifted cart state - shared between Products and Cart sections
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  
+  const addToCart = (product: typeof PRODUCTS[0]) => {
+    setCartItems(items => {
+      const existing = items.find(item => item.id === product.id);
+      if (existing) {
+        return items.map(item => 
+          item.id === product.id 
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...items, { ...product, quantity: 1 }];
+    });
+    toast.success(`Added ${product.name} to cart!`);
+  };
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -86,7 +107,14 @@ export default function TestPlayground() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-1 h-auto p-1 bg-white dark:bg-slate-800 shadow-sm">
             <TabsTrigger value="products" data-testid="tab-products" className="text-xs px-2 py-1.5">Products</TabsTrigger>
-            <TabsTrigger value="cart" data-testid="tab-cart" className="text-xs px-2 py-1.5">Cart</TabsTrigger>
+            <TabsTrigger value="cart" data-testid="tab-cart" className="text-xs px-2 py-1.5 relative">
+              Cart
+              {cartItems.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center" data-testid="cart-count">
+                  {cartItems.length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="tables" data-testid="tab-tables" className="text-xs px-2 py-1.5">Tables</TabsTrigger>
             <TabsTrigger value="forms" data-testid="tab-forms" className="text-xs px-2 py-1.5">Forms</TabsTrigger>
             <TabsTrigger value="login" data-testid="tab-login" className="text-xs px-2 py-1.5">Login</TabsTrigger>
@@ -99,12 +127,12 @@ export default function TestPlayground() {
 
           {/* Products Tab - Dynamic Selection & Pricing */}
           <TabsContent value="products">
-            <ProductsSection />
+            <ProductsSection addToCart={addToCart} cartItemCount={cartItems.length} />
           </TabsContent>
 
           {/* Cart Tab - Calculations & Checkout */}
           <TabsContent value="cart">
-            <CartSection />
+            <CartSection cartItems={cartItems} setCartItems={setCartItems} />
           </TabsContent>
 
           {/* Tables Tab - Row Operations */}
@@ -156,7 +184,12 @@ export default function TestPlayground() {
 // PRODUCTS SECTION - Dynamic Selection & Smart Select Testing
 // ============================================================================
 
-function ProductsSection() {
+interface ProductsSectionProps {
+  addToCart: (product: typeof PRODUCTS[0]) => void;
+  cartItemCount: number;
+}
+
+function ProductsSection({ addToCart, cartItemCount }: ProductsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000]);
@@ -274,7 +307,7 @@ function ProductsSection() {
                 disabled={product.stock === 0}
                 onClick={(e) => {
                   e.stopPropagation();
-                  toast.success(`Added ${product.name} to cart!`);
+                  addToCart(product);
                 }}
               >
                 <ShoppingCart className="h-4 w-4 mr-1" />
@@ -317,11 +350,12 @@ function ProductsSection() {
 // CART SECTION - Pricing Calculations Testing
 // ============================================================================
 
-function CartSection() {
-  const [cartItems, setCartItems] = useState([
-    { ...PRODUCTS[0], quantity: 1 },
-    { ...PRODUCTS[2], quantity: 2 },
-  ]);
+interface CartSectionProps {
+  cartItems: CartItem[];
+  setCartItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
+}
+
+function CartSection({ cartItems, setCartItems }: CartSectionProps) {
   const [promoCode, setPromoCode] = useState('');
   const [discount, setDiscount] = useState(0);
   const [shippingMethod, setShippingMethod] = useState('standard');
@@ -387,6 +421,13 @@ function CartSection() {
           {/* Cart Items */}
           <div className="lg:col-span-2 space-y-4">
             <h3 className="font-semibold">Cart Items</h3>
+            {cartItems.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/50 rounded-lg border-2 border-dashed">
+                <ShoppingCart className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Your cart is empty</p>
+                <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Go to Products tab to add items</p>
+              </div>
+            ) : null}
             {cartItems.map(item => (
               <div key={item.id} className="flex items-center gap-4 p-4 bg-white dark:bg-slate-800 rounded-lg border" data-cart-item={item.id}>
                 <div className="text-3xl">{item.image}</div>
