@@ -126,7 +126,7 @@ function HeroSection() {
                 { value: '5', label: 'Testing Types' },
                 { value: '10k+', label: 'Virtual Users' },
                 { value: '0', label: 'Lines of Code' },
-                { value: '20+', label: 'Salesforce Tools' },
+                { value: '10+', label: 'Salesforce Tools' },
               ].map((stat, idx) => (
                 <div key={idx} className="text-center lg:text-left">
                   <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
