@@ -409,8 +409,15 @@ function CartSection() {
                   <p className="font-bold" data-testid={`cart-item-total-${item.id}`}>
                     ${(item.price * item.quantity).toFixed(2)}
                   </p>
-                  <Button variant="ghost" size="sm" className="text-red-500" onClick={() => removeItem(item.id)}>
-                    <Trash2 className="h-4 w-4" />
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50" 
+                    onClick={() => removeItem(item.id)}
+                    data-testid={`remove-item-${item.id}`}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Remove
                   </Button>
                 </div>
               </div>
@@ -474,7 +481,21 @@ function CartSection() {
                 </div>
               </div>
 
-              <Button className="w-full" size="lg" data-testid="checkout-button">
+              <Button 
+                className="w-full" 
+                size="lg" 
+                data-testid="checkout-button"
+                onClick={() => {
+                  if (cartItems.length === 0) {
+                    toast.error('Your cart is empty!');
+                    return;
+                  }
+                  toast.success(`Order placed! Total: $${total.toFixed(2)}`);
+                  setCartItems([]);
+                  setDiscount(0);
+                  setPromoCode('');
+                }}
+              >
                 <CreditCard className="h-4 w-4 mr-2" />
                 Proceed to Checkout
               </Button>
