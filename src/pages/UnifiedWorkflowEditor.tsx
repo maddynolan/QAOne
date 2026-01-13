@@ -11088,7 +11088,7 @@ function generateAssertionCode(assertion: StepAssertion, step: TestStep, stepInd
   return code;
 }
 
-// Helper function to escape text for Python strings (handles newlines, quotes, special chars)
+// Helper function to escape text for Python strings (handles newlines, quotes, special chars, emojis)
 function escapeForPython(text: string): string {
   if (!text) return '';
   return text
@@ -11097,6 +11097,8 @@ function escapeForPython(text: string): string {
     .replace(/\n/g, '\\n')      // Escape newlines
     .replace(/\r/g, '\\r')      // Escape carriage returns
     .replace(/\t/g, '\\t')      // Escape tabs
+    .replace(/[^\x00-\x7F]/g, '') // Strip non-ASCII (emojis, unicode) for Windows compatibility
+    .trim()                     // Remove leading/trailing whitespace after emoji removal
     .slice(0, 100);             // Limit length to avoid huge selectors
 }
 

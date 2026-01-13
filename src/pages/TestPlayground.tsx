@@ -85,16 +85,16 @@ export default function TestPlayground() {
       <main className="max-w-7xl mx-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-1 h-auto p-1 bg-white dark:bg-slate-800 shadow-sm">
-            <TabsTrigger value="products" className="text-xs px-2 py-1.5">🛒 Products</TabsTrigger>
-            <TabsTrigger value="cart" className="text-xs px-2 py-1.5">🛍️ Cart</TabsTrigger>
-            <TabsTrigger value="tables" className="text-xs px-2 py-1.5">📊 Tables</TabsTrigger>
-            <TabsTrigger value="forms" className="text-xs px-2 py-1.5">📝 Forms</TabsTrigger>
-            <TabsTrigger value="login" className="text-xs px-2 py-1.5">🔐 Login</TabsTrigger>
-            <TabsTrigger value="interactions" className="text-xs px-2 py-1.5">🎯 Interactions</TabsTrigger>
-            <TabsTrigger value="frames" className="text-xs px-2 py-1.5">🖼️ Frames</TabsTrigger>
-            <TabsTrigger value="downloads" className="text-xs px-2 py-1.5">📥 Downloads</TabsTrigger>
-            <TabsTrigger value="alerts" className="text-xs px-2 py-1.5">⚠️ Alerts</TabsTrigger>
-            <TabsTrigger value="advanced" className="text-xs px-2 py-1.5">🚀 Advanced</TabsTrigger>
+            <TabsTrigger value="products" data-testid="tab-products" className="text-xs px-2 py-1.5">Products</TabsTrigger>
+            <TabsTrigger value="cart" data-testid="tab-cart" className="text-xs px-2 py-1.5">Cart</TabsTrigger>
+            <TabsTrigger value="tables" data-testid="tab-tables" className="text-xs px-2 py-1.5">Tables</TabsTrigger>
+            <TabsTrigger value="forms" data-testid="tab-forms" className="text-xs px-2 py-1.5">Forms</TabsTrigger>
+            <TabsTrigger value="login" data-testid="tab-login" className="text-xs px-2 py-1.5">Login</TabsTrigger>
+            <TabsTrigger value="interactions" data-testid="tab-interactions" className="text-xs px-2 py-1.5">Interactions</TabsTrigger>
+            <TabsTrigger value="frames" data-testid="tab-frames" className="text-xs px-2 py-1.5">Frames</TabsTrigger>
+            <TabsTrigger value="downloads" data-testid="tab-downloads" className="text-xs px-2 py-1.5">Downloads</TabsTrigger>
+            <TabsTrigger value="alerts" data-testid="tab-alerts" className="text-xs px-2 py-1.5">Alerts</TabsTrigger>
+            <TabsTrigger value="advanced" data-testid="tab-advanced" className="text-xs px-2 py-1.5">Advanced</TabsTrigger>
           </TabsList>
 
           {/* Products Tab - Dynamic Selection & Pricing */}
