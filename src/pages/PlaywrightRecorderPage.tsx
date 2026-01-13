@@ -323,7 +323,7 @@ const createRobustSelectors = (selectorObj: any, description: string): string[] 
 
 /**
  * Normalizes a single step for robust playback
- * Enhances selectorObj with normalized text and multiple fallbacks
+ * DIRECTLY REPLACES selector fields so backend uses normalized values
  */
 const normalizeStepForPlayback = (action: RecordedAction): RecordedAction => {
   const selectorObj = action.selectorObj || {};
@@ -332,39 +332,56 @@ const normalizeStepForPlayback = (action: RecordedAction): RecordedAction => {
   // Create robust selectors
   const robustSelectors = createRobustSelectors(selectorObj, description);
   
-  // Normalize the primary text
-  const normalizedText = normalizeText(selectorObj.text || '');
+  // Normalize the primary text - CRITICAL: this replaces the original
+  const originalText = selectorObj.text || '';
+  const normalizedText = normalizeText(originalText);
   
-  // Build enhanced selectorObj
+  // Normalize args[0] if it contains the element name (for click actions)
+  const normalizedArgs = action.args ? [...action.args] : [];
+  if (normalizedArgs[0] && typeof normalizedArgs[0] === 'string') {
+    normalizedArgs[0] = normalizeText(normalizedArgs[0]);
+  }
+  
+  // Build enhanced selectorObj - REPLACE original fields, not just add new ones
   const enhancedSelectorObj = {
     ...selectorObj,
-    // Add normalized text
-    textNormalized: normalizedText,
-    // Add robust selector as primary (prioritize testId)
+    // REPLACE text with normalized version (backend uses this!)
+    text: normalizedText || selectorObj.text,
+    // REPLACE selector with normalized text selector
+    selector: robustSelectors[0] || selectorObj.selector,
+    // REPLACE playwright with best robust selector  
     playwright: robustSelectors[0] || selectorObj.playwright,
-    // Store all fallbacks
-    fallbacks: robustSelectors.slice(1).map(sel => ({
+    // Store ALL fallbacks for backend to try
+    fallbacks: robustSelectors.map(sel => ({
       playwright: sel,
       selector: sel
     })),
-    // Mark as normalized
+    // Keep original for debugging
+    _originalText: originalText,
     _normalized: true
   };
   
-  // Also normalize the description for display
+  // Normalize the description - REPLACE dynamic numbers
   const normalizedDesc = description
-    .replace(/["']([^"']+\d+)["']/g, (match, text) => `"${normalizeText(text)}"`)
+    .replace(/["']([^"']+)["']/g, (match, text) => {
+      const normalized = normalizeText(text);
+      return normalized ? `"${normalized}"` : match;
+    })
     .replace(/\s+/g, ' ')
     .trim();
   
+  console.log(`[Normalize] "${originalText}" → "${normalizedText}", selectors:`, robustSelectors.slice(0, 3));
+  
   return {
     ...action,
+    args: normalizedArgs,
     selectorObj: enhancedSelectorObj,
     description: normalizedDesc,
     // Store original for debugging
     _original: {
       description: action.description,
-      selectorObj: action.selectorObj
+      selectorObj: action.selectorObj,
+      args: action.args
     }
   } as RecordedAction;
 };
