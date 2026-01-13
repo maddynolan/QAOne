@@ -221,6 +221,175 @@ const cleanCorruptedString = (str: string, isPassword: boolean): string => {
   return str;
 };
 
+// ============================================================================
+// ROBUST STEP NORMALIZER - Option B + C Implementation
+// Normalizes steps before playback for consistent, reliable test execution
+// ============================================================================
+
+/**
+ * Normalizes text by removing dynamic content that may change between recordings
+ * - Strips trailing numbers (badge counts like "Cart 2" → "Cart")
+ * - Strips leading/trailing whitespace
+ * - Handles emojis and special characters
+ */
+const normalizeText = (text: string | undefined): string => {
+  if (!text) return '';
+  return text
+    .replace(/\s*\d+\s*$/, '')           // Strip trailing numbers (badge counts)
+    .replace(/^\s*\d+\s*/, '')           // Strip leading numbers
+    .replace(/[^\x00-\x7F]/g, '')        // Strip non-ASCII (emojis)
+    .replace(/\s+/g, ' ')                // Normalize whitespace
+    .trim();
+};
+
+/**
+ * Creates robust fallback selectors from a selectorObj
+ * Prioritizes: data-testid > aria-label > role > text > css
+ */
+const createRobustSelectors = (selectorObj: any, description: string): string[] => {
+  const selectors: string[] = [];
+  
+  // 1. HIGHEST PRIORITY: data-testid (most stable)
+  if (selectorObj?.testId) {
+    selectors.push(`[data-testid="${selectorObj.testId}"]`);
+  }
+  
+  // 2. aria-label (accessibility, stable)
+  if (selectorObj?.ariaLabel) {
+    selectors.push(`[aria-label="${selectorObj.ariaLabel}"]`);
+  }
+  
+  // 3. Role + name (semantic, robust)
+  if (selectorObj?.role) {
+    const role = selectorObj.role;
+    const name = normalizeText(selectorObj.name || selectorObj.text);
+    if (name) {
+      selectors.push(`role=${role}[name="${name}"]`);
+      selectors.push(`role=${role}[name*="${name}"]`); // Partial match
+    } else {
+      selectors.push(`role=${role}`);
+    }
+  }
+  
+  // 4. Original playwright selector (if valid)
+  if (selectorObj?.playwright && !selectorObj.playwright.includes('undefined')) {
+    selectors.push(selectorObj.playwright);
+  }
+  
+  // 5. Text selector - NORMALIZED (strip numbers, emojis)
+  const originalText = selectorObj?.text || '';
+  const normalizedText = normalizeText(originalText);
+  if (normalizedText && normalizedText.length > 1) {
+    selectors.push(`text="${normalizedText}"`);
+    selectors.push(`text=${normalizedText}`);  // Without quotes (partial match)
+  }
+  
+  // 6. ID selector
+  if (selectorObj?.id) {
+    selectors.push(`#${selectorObj.id}`);
+  }
+  
+  // 7. Name attribute
+  if (selectorObj?.name) {
+    selectors.push(`[name="${selectorObj.name}"]`);
+  }
+  
+  // 8. CSS selector from selectorObj
+  if (selectorObj?.selector && typeof selectorObj.selector === 'string') {
+    selectors.push(selectorObj.selector);
+  }
+  
+  // 9. Extract from description as last resort
+  // "Click "Cart"" → text="Cart"
+  const descMatch = description?.match(/["']([^"']+)["']/);
+  if (descMatch && descMatch[1]) {
+    const descText = normalizeText(descMatch[1]);
+    if (descText && descText.length > 1 && !selectors.some(s => s.includes(descText))) {
+      selectors.push(`text="${descText}"`);
+    }
+  }
+  
+  // 10. Include original fallbacks
+  if (selectorObj?.fallbacks && Array.isArray(selectorObj.fallbacks)) {
+    selectorObj.fallbacks.forEach((fb: any) => {
+      if (fb?.playwright) selectors.push(fb.playwright);
+      if (fb?.selector) selectors.push(fb.selector);
+    });
+  }
+  
+  // Deduplicate and filter empty
+  return [...new Set(selectors)].filter(s => s && s.length > 0);
+};
+
+/**
+ * Normalizes a single step for robust playback
+ * Enhances selectorObj with normalized text and multiple fallbacks
+ */
+const normalizeStepForPlayback = (action: RecordedAction): RecordedAction => {
+  const selectorObj = action.selectorObj || {};
+  const description = action.description || '';
+  
+  // Create robust selectors
+  const robustSelectors = createRobustSelectors(selectorObj, description);
+  
+  // Normalize the primary text
+  const normalizedText = normalizeText(selectorObj.text || '');
+  
+  // Build enhanced selectorObj
+  const enhancedSelectorObj = {
+    ...selectorObj,
+    // Add normalized text
+    textNormalized: normalizedText,
+    // Add robust selector as primary (prioritize testId)
+    playwright: robustSelectors[0] || selectorObj.playwright,
+    // Store all fallbacks
+    fallbacks: robustSelectors.slice(1).map(sel => ({
+      playwright: sel,
+      selector: sel
+    })),
+    // Mark as normalized
+    _normalized: true
+  };
+  
+  // Also normalize the description for display
+  const normalizedDesc = description
+    .replace(/["']([^"']+\d+)["']/g, (match, text) => `"${normalizeText(text)}"`)
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  return {
+    ...action,
+    selectorObj: enhancedSelectorObj,
+    description: normalizedDesc,
+    // Store original for debugging
+    _original: {
+      description: action.description,
+      selectorObj: action.selectorObj
+    }
+  } as RecordedAction;
+};
+
+/**
+ * Normalizes all steps before playback
+ * This ensures consistent, robust test execution
+ */
+const normalizeStepsForPlayback = (actions: RecordedAction[]): RecordedAction[] => {
+  return actions.map(action => {
+    // Skip if already normalized
+    if ((action.selectorObj as any)?._normalized) return action;
+    
+    // Only normalize click/input actions that have selectors
+    const actionType = (action.qword || action.type || '').toLowerCase();
+    const needsNormalization = ['click', 'fill', 'type', 'input', 'select', 'check', 'hover'].includes(actionType);
+    
+    if (needsNormalization) {
+      return normalizeStepForPlayback(action);
+    }
+    
+    return action;
+  });
+};
+
 export default function PlaywrightRecorderPage() {
   const navigate = useNavigate();
   
@@ -2766,6 +2935,11 @@ Recorded Test
       toast.info('🐛 Debug mode: Step-by-step execution enabled', { duration: 2000 });
     }
     
+    // ROBUST PLAYBACK: Normalize all steps before execution
+    // This handles dynamic content like badge numbers, emojis, and creates fallback selectors
+    const normalizedActions = normalizeStepsForPlayback(actions);
+    console.log('[Test] Normalized steps for robust playback:', normalizedActions.length);
+    
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
     
@@ -2796,19 +2970,21 @@ Recorded Test
       let result: any;
       
       if (flowstral?.playwrightRecorder?.runTest) {
+        // Use normalized actions for robust playback
         result = await flowstral.playwrightRecorder.runTest({
-          steps: actions,
+          steps: normalizedActions,
           url: url
         });
       } else if (electronAPI?.testRunner?.executeTest) {
+        // Use normalized actions with enhanced selectorObj for fallbacks
         result = await electronAPI.testRunner.executeTest({
           name: 'Recorded Test',
-          steps: actions.map(a => ({
+          steps: normalizedActions.map(a => ({
             type: a.type || a.qword,  // Use sf-* type if available, fallback to qword
             qword: a.qword,
             args: a.args,
-            selector: a.selectorObj?.selector,
-            selectorObj: a.selectorObj,
+            selector: a.selectorObj?.playwright || a.selectorObj?.selector,  // Use enhanced selector
+            selectorObj: a.selectorObj,  // Contains normalized text and fallbacks
             description: a.description
           })),
           settings: { baseUrl: url }
