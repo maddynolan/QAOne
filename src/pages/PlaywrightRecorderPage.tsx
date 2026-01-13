@@ -387,24 +387,71 @@ const normalizeStepForPlayback = (action: RecordedAction): RecordedAction => {
 };
 
 /**
+ * Checks if an action is garbage/invalid (internal framework code, etc.)
+ * These get accidentally captured sometimes and should be filtered out
+ */
+const isGarbageAction = (action: RecordedAction): boolean => {
+  const desc = (action.description || '').toLowerCase();
+  const text = (action.selectorObj?.text || '').toLowerCase();
+  const arg0 = (action.args?.[0] || '').toString().toLowerCase();
+  
+  // Patterns that indicate garbage/internal framework captures
+  const garbagePatterns = [
+    /import\s*\{.*\}\s*from/i,           // ES6 imports
+    /@react-refr/i,                       // React refresh
+    /injectintoglobalhook/i,              // React internals
+    /webpack/i,                           // Webpack internals
+    /hot-update/i,                        // HMR
+    /\[hmr\]/i,                           // Hot Module Replacement
+    /__vite/i,                            // Vite internals
+    /node_modules/i,                      // Node modules paths
+    /sourcemappingurl/i,                  // Source maps
+    /use strict/i,                        // JS directives
+    /export\s*(default|const|function)/i, // ES6 exports
+    /^function\s*\(/i,                    // Raw function code
+    /^\(\s*\)\s*=>/i,                     // Arrow functions
+  ];
+  
+  const allText = `${desc} ${text} ${arg0}`;
+  
+  for (const pattern of garbagePatterns) {
+    if (pattern.test(allText)) {
+      console.log(`[Normalize] FILTERED garbage action: "${desc.slice(0, 50)}..."`);
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+/**
  * Normalizes all steps before playback
- * This ensures consistent, robust test execution
+ * - Filters out garbage/invalid actions
+ * - Normalizes selectors for robust execution
  */
 const normalizeStepsForPlayback = (actions: RecordedAction[]): RecordedAction[] => {
-  return actions.map(action => {
-    // Skip if already normalized
-    if ((action.selectorObj as any)?._normalized) return action;
-    
-    // Only normalize click/input actions that have selectors
-    const actionType = (action.qword || action.type || '').toLowerCase();
-    const needsNormalization = ['click', 'fill', 'type', 'input', 'select', 'check', 'hover'].includes(actionType);
-    
-    if (needsNormalization) {
-      return normalizeStepForPlayback(action);
-    }
-    
-    return action;
-  });
+  return actions
+    .filter(action => {
+      // Remove garbage actions (React internals, imports, etc.)
+      if (isGarbageAction(action)) {
+        return false;
+      }
+      return true;
+    })
+    .map(action => {
+      // Skip if already normalized
+      if ((action.selectorObj as any)?._normalized) return action;
+      
+      // Only normalize click/input actions that have selectors
+      const actionType = (action.qword || action.type || '').toLowerCase();
+      const needsNormalization = ['click', 'fill', 'type', 'input', 'select', 'check', 'hover'].includes(actionType);
+      
+      if (needsNormalization) {
+        return normalizeStepForPlayback(action);
+      }
+      
+      return action;
+    });
 };
 
 export default function PlaywrightRecorderPage() {
@@ -1680,6 +1727,11 @@ export default function PlaywrightRecorderPage() {
     
     if (electronAPI?.on) {
       const unsubAction = electronAPI.on('action-recorded', (action: RecordedAction) => {
+        // Filter out garbage actions during recording (React internals, imports, etc.)
+        if (isGarbageAction(action)) {
+          console.log('[Record] BLOCKED garbage action:', action.description?.slice(0, 50));
+          return;
+        }
         setActions(prev => [...prev, action]);
       });
       const unsubUrl = electronAPI.on('browser-url-changed', (newUrl: string) => {
