@@ -584,67 +584,179 @@ class TestExecutor {
           break;
         }
           
-        // Click element action (normalized)
-        case 'ClickElement':
-          let clickSelector = resolvedStep.selectorObj?.selector || this.normalizeSelector(resolvedStep.selector) || resolvedStep.args?.[0];
-          const clickAriaLabel = resolvedStep.selectorObj?.ariaLabel;
-          const clickTitle = resolvedStep.selectorObj?.title;
-          const clickDataId = resolvedStep.selectorObj?.dataId;
+        // Click element action - ROBUST with fallback selectors
+        case 'ClickElement': {
+          const clickSelectorObj = resolvedStep.selectorObj || {};
+          const clickText = clickSelectorObj.text || resolvedStep.args?.[0] || '';
           
-          // If selector is a simple tag name (LWC element), build better selector
-          if (clickSelector && /^[a-z]+-[a-z-]+$/.test(clickSelector)) {
-            console.log(`[Executor] Detected LWC element: ${clickSelector}, looking for better selector`);
-            if (clickAriaLabel) {
-              clickSelector = `[aria-label="${clickAriaLabel}"]`;
-            } else if (clickTitle) {
-              clickSelector = `[title="${clickTitle}"]`;
-            } else if (clickDataId) {
-              clickSelector = `[data-id="${clickDataId}"]`;
-            } else {
-              // Use text-based selector
-              const text = resolvedStep.selectorObj?.text || resolvedStep.args?.[0];
-              if (text) {
-                console.log(`[Executor] Using text selector for LWC: "${text}"`);
-                await this.page.getByText(text, { exact: false }).first().click();
-                break;
+          // Normalize text: strip trailing numbers, emojis (badge counts, etc.)
+          const normalizedClickText = clickText
+            .replace(/\s*\d+\s*$/, '')    // Strip trailing numbers
+            .replace(/[^\x00-\x7F]/g, '') // Strip emojis/non-ASCII
+            .trim();
+          
+          // Build list of selectors to try (in PRIORITY order)
+          const clickSelectorsToTry = [];
+          
+          // 1. HIGHEST PRIORITY: data-testid (most stable)
+          if (clickSelectorObj.testId) {
+            clickSelectorsToTry.push(`[data-testid="${clickSelectorObj.testId}"]`);
+          }
+          // Also check common data-test attributes
+          if (clickSelectorObj.dataTestId) clickSelectorsToTry.push(`[data-testid="${clickSelectorObj.dataTestId}"]`);
+          if (clickSelectorObj.dataTest) clickSelectorsToTry.push(`[data-test="${clickSelectorObj.dataTest}"]`);
+          
+          // 2. aria-label (accessibility, very stable)
+          if (clickSelectorObj.ariaLabel) {
+            clickSelectorsToTry.push(`[aria-label="${clickSelectorObj.ariaLabel}"]`);
+          }
+          
+          // 3. ID (if not dynamic)
+          if (clickSelectorObj.id && !/^[a-f0-9]{8,}|^\d{6,}|^:r/.test(clickSelectorObj.id)) {
+            clickSelectorsToTry.push(`#${clickSelectorObj.id}`);
+          }
+          
+          // 4. Role + name (semantic)
+          if (clickSelectorObj.role && normalizedClickText) {
+            clickSelectorsToTry.push(`[role="${clickSelectorObj.role}"][aria-label="${normalizedClickText}"]`);
+          }
+          
+          // 5. Original playwright selector
+          if (clickSelectorObj.playwright) {
+            clickSelectorsToTry.push(clickSelectorObj.playwright);
+          }
+          
+          // 6. Original CSS selector
+          if (clickSelectorObj.selector) {
+            clickSelectorsToTry.push(clickSelectorObj.selector);
+          }
+          if (resolvedStep.selector) {
+            clickSelectorsToTry.push(this.normalizeSelector(resolvedStep.selector));
+          }
+          
+          // 7. Text-based selectors (NORMALIZED to avoid badge issues)
+          if (normalizedClickText && normalizedClickText.length > 0) {
+            clickSelectorsToTry.push(`text="${normalizedClickText}"`);
+            clickSelectorsToTry.push(`text=${normalizedClickText}`);
+          }
+          
+          // 8. Title attribute
+          if (clickSelectorObj.title) {
+            clickSelectorsToTry.push(`[title="${clickSelectorObj.title}"]`);
+          }
+          
+          // 9. Fallbacks from recording
+          if (clickSelectorObj.fallbacks && Array.isArray(clickSelectorObj.fallbacks)) {
+            clickSelectorObj.fallbacks.forEach(fb => {
+              if (fb?.selector) clickSelectorsToTry.push(fb.selector);
+              if (fb?.playwright) clickSelectorsToTry.push(fb.playwright);
+            });
+          }
+          
+          // Remove duplicates and empty
+          const uniqueClickSelectors = [...new Set(clickSelectorsToTry.filter(s => s && s.length > 0))];
+          console.log(`[Executor] ClickElement: trying ${uniqueClickSelectors.length} selectors for "${normalizedClickText || 'element'}"`);
+          
+          // Try each selector until one works
+          let clickSuccess = false;
+          let lastClickError = '';
+          
+          for (const selector of uniqueClickSelectors) {
+            try {
+              console.log(`[Executor] Trying click selector: ${selector.substring(0, 60)}...`);
+              
+              let locator;
+              // Handle Playwright-style selectors
+              if (selector.startsWith('getBy') || selector.startsWith('locator(')) {
+                // This is a Playwright method call, need to eval it
+                locator = this.page.locator(selector.replace(/^locator\(['"](.+)['"]\)$/, '$1'));
+              } else {
+                locator = this.page.locator(selector);
               }
+              
+              const count = await locator.count();
+              if (count === 0) {
+                console.log(`[Executor] Selector found 0 elements, trying next...`);
+                continue;
+              }
+              
+              // Get first visible element
+              const element = locator.first();
+              
+              // Scroll into view
+              await element.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+              
+              // Wait for visible
+              await element.waitFor({ state: 'visible', timeout: 5000 });
+              
+              // Click with force to bypass actionability checks
+              await element.click({ force: true, timeout: 5000 });
+              
+              console.log(`[Executor] ✅ Click succeeded with selector: ${selector.substring(0, 50)}...`);
+              clickSuccess = true;
+              break;
+            } catch (e) {
+              lastClickError = e.message;
+              console.log(`[Executor] ❌ Click selector failed: ${selector.substring(0, 40)}... - ${e.message.substring(0, 50)}`);
+              continue;
             }
           }
           
-          console.log(`[Executor] ClickElement: ${clickSelector}`);
-          await this.page.locator(clickSelector).first().click();
+          if (!clickSuccess) {
+            throw new Error(`Click failed: Could not find element "${normalizedClickText}". Tried ${uniqueClickSelectors.length} selectors. Last error: ${lastClickError}`);
+          }
           break;
+        }
           
-        // Input actions
+        // Input actions - ROBUST with data-testid priority
         case 'Fill':
         case 'input': {
-          const fieldName = resolvedStep.args?.[0];
+          const fieldName = resolvedStep.args?.[0] || '';
           const inputValue = resolvedStep.args?.[1] || resolvedStep.value || '';
           const fillSelectorObj = resolvedStep.selectorObj || {};
           
-          // Build list of selectors to try (in priority order)
+          // Build list of selectors to try (in PRIORITY order)
           const selectorsToTry = [];
           
-          // 1. Explicit selector from recording
+          // 1. HIGHEST PRIORITY: data-testid (most stable, unique)
+          if (fillSelectorObj.testId) {
+            selectorsToTry.push(`[data-testid="${fillSelectorObj.testId}"]`);
+          }
+          if (fillSelectorObj.dataTestId) selectorsToTry.push(`[data-testid="${fillSelectorObj.dataTestId}"]`);
+          if (fillSelectorObj.dataTest) selectorsToTry.push(`[data-test="${fillSelectorObj.dataTest}"]`);
+          
+          // 2. ID (most reliable if not dynamic)
+          if (fillSelectorObj.id && !/^[a-f0-9]{8,}|^\d{6,}|^:r/.test(fillSelectorObj.id)) {
+            selectorsToTry.push(`#${fillSelectorObj.id}`);
+          }
+          
+          // 3. Name attribute (unique per form)
+          if (fillSelectorObj.name) selectorsToTry.push(`[name="${fillSelectorObj.name}"]`);
+          
+          // 4. Aria-label (accessibility, unique)
+          if (fillSelectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${fillSelectorObj.ariaLabel}"]`);
+          
+          // 5. Explicit selector from recording
           if (resolvedStep.selector) selectorsToTry.push(this.normalizeSelector(resolvedStep.selector));
           if (fillSelectorObj.selector) selectorsToTry.push(fillSelectorObj.selector);
           
-          // 2. ID (most reliable)
-          if (fillSelectorObj.id) selectorsToTry.push(`#${fillSelectorObj.id}`);
+          // 6. EXACT Placeholder match (no partial - too risky!)
+          if (fillSelectorObj.placeholder) {
+            selectorsToTry.push(`[placeholder="${fillSelectorObj.placeholder}"]`);
+          }
           
-          // 3. Name attribute
-          if (fillSelectorObj.name) selectorsToTry.push(`[name="${fillSelectorObj.name}"]`);
-          if (fieldName && fieldName !== fillSelectorObj.name) selectorsToTry.push(`[name="${fieldName}"]`);
-          
-          // 4. Placeholder (common for modern UIs)
-          if (fillSelectorObj.placeholder) selectorsToTry.push(`[placeholder="${fillSelectorObj.placeholder}"]`);
-          if (fieldName) selectorsToTry.push(`[placeholder*="${fieldName}"]`);
-          
-          // 5. Aria-label (accessibility)
-          if (fillSelectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${fillSelectorObj.ariaLabel}"]`);
-          
-          // 6. Label text (Playwright's label= selector)
+          // 7. Label association (Playwright's label= selector)
           if (fieldName) selectorsToTry.push(`label=${fieldName}`);
+          
+          // 8. Fallbacks from recording
+          if (fillSelectorObj.fallbacks && Array.isArray(fillSelectorObj.fallbacks)) {
+            fillSelectorObj.fallbacks.forEach(fb => {
+              if (fb?.selector) selectorsToTry.push(fb.selector);
+            });
+          }
+          
+          // NOTE: Removed risky partial placeholder match [placeholder*=...] 
+          // It was matching wrong inputs!
           
           // Remove duplicates and empty values
           const uniqueSelectors = [...new Set(selectorsToTry.filter(s => s && s.length > 0))];
