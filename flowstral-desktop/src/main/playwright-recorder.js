@@ -977,6 +977,12 @@ class PlaywrightRecorder extends EventEmitter {
             const role = bestElement.getAttribute('role') || '';
             const href = bestElement.getAttribute('href') || '';
             
+            // HIGHEST PRIORITY: data-testid and variants (most stable selectors)
+            const testId = bestElement.getAttribute('data-testid') || '';
+            const dataTestId = bestElement.getAttribute('data-test-id') || '';
+            const dataTest = bestElement.getAttribute('data-test') || '';
+            const dataCy = bestElement.getAttribute('data-cy') || '';
+            
             // Skip text inputs (fill will be recorded separately)
             if (tag === 'input' && ['text','email','password','search','tel','url','number'].includes(type)) {
               return;
@@ -1163,6 +1169,11 @@ class PlaywrightRecorder extends EventEmitter {
               placeholder: placeholder,
               role: role,
               href: href,
+              // HIGHEST PRIORITY: data-testid and variants for stable selectors
+              testId: testId,
+              dataTestId: dataTestId || testId,
+              dataTest: dataTest,
+              dataCy: dataCy,
               description: 'Click "' + desc + '"',
               x: e.clientX,
               y: e.clientY,
@@ -1322,6 +1333,11 @@ class PlaywrightRecorder extends EventEmitter {
               placeholder: input.placeholder || input.getAttribute('placeholder') || '',
               ariaLabel: input.getAttribute('aria-label') || '',
               title: input.getAttribute('title') || '',
+              // HIGHEST PRIORITY: data-testid for stable selectors
+              testId: input.getAttribute('data-testid') || '',
+              dataTestId: input.getAttribute('data-test-id') || input.getAttribute('data-testid') || '',
+              dataTest: input.getAttribute('data-test') || '',
+              dataCy: input.getAttribute('data-cy') || '',
               fromShadow: path.some(p => p.nodeType === 11),
               key: key
             };
@@ -1559,6 +1575,12 @@ class PlaywrightRecorder extends EventEmitter {
         description: `Fill "${label}": "${displayValue}"`,
         displayArgs: [label, displayValue],
         selectorObj: {
+          // HIGHEST PRIORITY: data-testid for stable selectors
+          testId: inp.testId || inp.dataTestId,
+          dataTestId: inp.dataTestId || inp.testId,
+          dataTest: inp.dataTest,
+          dataCy: inp.dataCy,
+          // Standard attributes
           tag: 'input',
           id: inp.id,
           name: inp.name,
@@ -1637,13 +1659,24 @@ class PlaywrightRecorder extends EventEmitter {
         ? `${click.description} (${this._ordinal(elementIndex + 1)} of ${click.totalMatching})`
         : click.description,
       selectorObj: {
+        // Highest priority selectors
+        testId: click.testId || click.dataTestId,       // data-testid
+        dataTestId: click.dataTestId || click.testId,   // alias
+        dataTest: click.dataTest,                        // data-test
+        // Standard attributes
         tag: click.tag,
         id: click.id,
         name: click.name,
         title: click.title,
         ariaLabel: click.ariaLabel,
         placeholder: click.placeholder,
-        role: click.role
+        role: click.role,
+        // Additional useful info
+        text: clickLabel,                                // Store the text
+        selector: click.selector,                        // CSS selector if available
+        playwright: click.playwright,                    // Playwright selector if available
+        // Fallbacks from recording
+        fallbacks: click.fallbacks || [],
       },
       raw: click,
       timestamp: click.timestamp,
