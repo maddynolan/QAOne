@@ -36,7 +36,9 @@ import {
   Home, Briefcase, Gamepad2, BarChart3,
   Activity, FileJson, Link2, Key, Timer,
   ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
-  Pencil, Flag, FileDown, Cloud, File
+  Pencil, Flag, FileDown, Cloud, File,
+  // Advanced UI icons
+  Table, Move, Sliders, Keyboard, Layout, Maximize2, CheckSquare, GripVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -168,14 +170,22 @@ type StepType =
   | 'note' | 'manual_step' | 'checkpoint'
   | 'screenshot' | 'visual_compare'
   | 'extract' | 'store_variable'
-  | 'condition' | 'loop'
+  | 'condition' | 'loop' | 'foreach'
   | 'module'
   | 'custom'
   // Salesforce step types
   | 'sf_connect' | 'sf_query' | 'sf_assert' | 'sf_navigate' 
   | 'sf_metadata_assert' | 'sf_login_as' | 'sf_create_record'
   // Complex Verification step types
-  | 'email_verify' | 'pdf_verify' | 'file_verify';
+  | 'email_verify' | 'pdf_verify' | 'file_verify'
+  // Advanced UI - Dynamic Selection & Data Extraction
+  | 'smart_select' | 'extract_variable' | 'computed_assert'
+  // Advanced UI - Table Operations
+  | 'table_find' | 'table_extract' | 'table_assert'
+  // Advanced UI - Complex Interactions
+  | 'drag_drop' | 'slider' | 'date_picker' | 'keyboard'
+  // Advanced UI - Multi-context
+  | 'frame_switch' | 'new_tab' | 'alert_handle' | 'multi_select';
 
 interface StepAssertion {
   id?: string;  // For multiple assertions
@@ -310,6 +320,65 @@ interface TestStep {
   
   // Module reference
   moduleId?: string;
+  
+  // ========== Advanced UI - Smart Selection ==========
+  findBy?: 'text' | 'attribute' | 'contains' | 'index' | 'css' | 'xpath';
+  findCriteria?: string;        // The value to match (text, attribute value, etc.)
+  findAttribute?: string;       // For attribute-based selection (e.g., 'data-product-id')
+  findWithin?: string;          // Container selector to search within
+  findIndex?: number;           // For index-based selection
+  
+  // ========== Advanced UI - Data Extraction ==========
+  extractType?: 'text' | 'number' | 'attribute' | 'count' | 'html' | 'list';
+  extractAttribute?: string;    // Which attribute to extract (for attribute type)
+  extractRegex?: string;        // Optional regex to extract part of the value
+  variableName?: string;        // Name of the variable to store the extracted value
+  
+  // ========== Advanced UI - Computed Assertions ==========
+  expression?: string;          // Math/string expression: "${price} * ${quantity}"
+  compareOperator?: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'matches';
+  compareValue?: string;        // Expected value or expression: "${total}"
+  tolerance?: number;           // For floating point comparisons
+  
+  // ========== Advanced UI - Table Operations ==========
+  tableSelector?: string;       // Selector for the table element
+  columnName?: string;          // Column to search in (for table_find)
+  rowCriteria?: string;         // Value to find in the column
+  actionColumn?: string;        // Column containing the action button (for table_find)
+  actionButton?: string;        // Button text to click (e.g., "Edit", "Delete")
+  extractColumns?: string[];    // Columns to extract values from
+  
+  // ========== Advanced UI - Complex Interactions ==========
+  targetSelector?: string;      // Drop target for drag_drop
+  sliderValue?: number;         // Value to set slider to (0-100 or custom range)
+  sliderMin?: number;           // Min value of slider
+  sliderMax?: number;           // Max value of slider
+  dateValue?: string;           // Date to select (ISO format)
+  dateFormat?: string;          // Expected format in the date picker
+  keyToPress?: string;          // Key to press (e.g., 'Enter', 'Tab', 'ArrowDown')
+  keyModifiers?: ('ctrl' | 'shift' | 'alt' | 'meta')[];  // Modifier keys
+  
+  // ========== Advanced UI - Multi-Context ==========
+  frameSelector?: string;       // Frame/iframe selector or index
+  frameIndex?: number;          // Frame index (0-based)
+  tabAction?: 'new' | 'switch' | 'close';  // Tab action type
+  tabIndex?: number;            // Tab index for switch/close
+  alertAction?: 'accept' | 'dismiss' | 'getText' | 'type';  // Alert handling action
+  alertText?: string;           // Text to type into prompt
+  
+  // ========== Advanced UI - Loops & Conditions ==========
+  loopType?: 'count' | 'foreach' | 'while';
+  loopCount?: number;           // For count-based loops
+  loopSelector?: string;        // Selector for elements to iterate (foreach)
+  loopVariable?: string;        // Variable name for current iteration
+  conditionExpression?: string; // Expression to evaluate for condition/while
+  thenSteps?: TestStep[];       // Steps to run if condition is true
+  elseSteps?: TestStep[];       // Steps to run if condition is false
+  loopSteps?: TestStep[];       // Steps to run in each iteration
+  
+  // ========== Advanced UI - Multi-Select ==========
+  selectMultiple?: boolean;     // Whether to select multiple elements
+  selectValues?: string[];      // Multiple values to select
 }
 
 interface TestVariable {
@@ -451,6 +520,56 @@ const STEP_CATEGORIES = {
       { type: 'generate_data', label: 'Generate Data', icon: Wand2, color: 'bg-violet-500', desc: 'Random/fake data' },
       { type: 'extract_text', label: 'Extract from Page', icon: FileText, color: 'bg-violet-600', desc: 'Get page data' },
       { type: 'use_data_row', label: 'Data Row', icon: ClipboardList, color: 'bg-violet-600', desc: 'Use dataset row' },
+    ]
+  },
+  // ADVANCED UI - Dynamic selection and data extraction
+  advanced_ui: {
+    label: 'Advanced UI',
+    icon: Target,
+    color: 'emerald',
+    description: 'Dynamic selection, extraction & computed assertions',
+    steps: [
+      { type: 'smart_select', label: 'Smart Select', icon: Target, color: 'bg-emerald-500', desc: 'Find by text/attribute' },
+      { type: 'extract_variable', label: 'Extract Value', icon: Download, color: 'bg-emerald-500', desc: 'Store element value' },
+      { type: 'computed_assert', label: 'Computed Assert', icon: Calculator, color: 'bg-emerald-600', desc: 'Math assertions' },
+    ]
+  },
+  // TABLE OPERATIONS - Find rows, extract data
+  table_ops: {
+    label: 'Table Ops',
+    icon: Table,
+    color: 'teal',
+    description: 'Table navigation and data extraction',
+    steps: [
+      { type: 'table_find', label: 'Find Row', icon: Search, color: 'bg-teal-500', desc: 'Find row by column' },
+      { type: 'table_extract', label: 'Extract Row', icon: Download, color: 'bg-teal-500', desc: 'Get row data' },
+      { type: 'table_assert', label: 'Assert Table', icon: CheckCircle, color: 'bg-teal-600', desc: 'Verify table data' },
+    ]
+  },
+  // COMPLEX INTERACTIONS - Drag, slider, date picker
+  complex_ui: {
+    label: 'Complex UI',
+    icon: Move,
+    color: 'amber',
+    description: 'Drag-drop, sliders, date pickers, keyboard',
+    steps: [
+      { type: 'drag_drop', label: 'Drag & Drop', icon: Move, color: 'bg-amber-500', desc: 'Drag to target' },
+      { type: 'slider', label: 'Slider', icon: Sliders, color: 'bg-amber-500', desc: 'Set slider value' },
+      { type: 'date_picker', label: 'Date Picker', icon: Calendar, color: 'bg-amber-600', desc: 'Select date' },
+      { type: 'keyboard', label: 'Keyboard', icon: Keyboard, color: 'bg-amber-600', desc: 'Press keys' },
+      { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, color: 'bg-amber-700', desc: 'Select multiple' },
+    ]
+  },
+  // MULTI-CONTEXT - Frames, tabs, alerts
+  multi_context: {
+    label: 'Multi-Context',
+    icon: Layout,
+    color: 'fuchsia',
+    description: 'iFrames, browser tabs, alerts',
+    steps: [
+      { type: 'frame_switch', label: 'Switch Frame', icon: Layout, color: 'bg-fuchsia-500', desc: 'Enter iframe' },
+      { type: 'new_tab', label: 'Tab Control', icon: Maximize2, color: 'bg-fuchsia-500', desc: 'Manage tabs' },
+      { type: 'alert_handle', label: 'Handle Alert', icon: AlertCircle, color: 'bg-fuchsia-600', desc: 'Accept/dismiss' },
     ]
   },
   // EVIDENCE - Documentation & Visual Testing
@@ -2618,6 +2737,110 @@ export default function UnifiedWorkflowEditor() {
         submitSelector: '',
         errorSelector: '',
         expectedResult: 'Boundary values should be validated correctly'
+      },
+      // ========== ADVANCED UI - Dynamic Selection & Extraction ==========
+      smart_select: {
+        name: 'Smart Select: [element]',
+        findBy: 'text',
+        findCriteria: '',
+        findWithin: '',
+        expectedResult: 'Element found and clicked'
+      },
+      extract_variable: {
+        name: 'Extract: [value] → ${variable}',
+        extractType: 'text',
+        variableName: 'extracted_value',
+        expectedResult: 'Value extracted and stored in variable'
+      },
+      computed_assert: {
+        name: 'Assert: [expression]',
+        expression: '',
+        compareOperator: '==',
+        compareValue: '',
+        tolerance: 0.01,
+        expectedResult: 'Computed assertion passed'
+      },
+      // ========== ADVANCED UI - Table Operations ==========
+      table_find: {
+        name: 'Table: Find row where [column] = [value]',
+        tableSelector: 'table',
+        columnName: '',
+        rowCriteria: '',
+        actionButton: '',
+        expectedResult: 'Row found and action performed'
+      },
+      table_extract: {
+        name: 'Table: Extract row data',
+        tableSelector: 'table',
+        columnName: '',
+        rowCriteria: '',
+        extractColumns: [],
+        variableName: 'table_row',
+        expectedResult: 'Row data extracted'
+      },
+      table_assert: {
+        name: 'Table: Verify data',
+        tableSelector: 'table',
+        expectedResult: 'Table data verified'
+      },
+      // ========== ADVANCED UI - Complex Interactions ==========
+      drag_drop: {
+        name: 'Drag: [source] → [target]',
+        selector: '',
+        targetSelector: '',
+        expectedResult: 'Element dragged to target'
+      },
+      slider: {
+        name: 'Slider: Set to [value]',
+        selector: '',
+        sliderValue: 50,
+        sliderMin: 0,
+        sliderMax: 100,
+        expectedResult: 'Slider value set'
+      },
+      date_picker: {
+        name: 'Date: Select [date]',
+        selector: '',
+        dateValue: '',
+        dateFormat: 'YYYY-MM-DD',
+        expectedResult: 'Date selected'
+      },
+      keyboard: {
+        name: 'Press: [key]',
+        keyToPress: 'Enter',
+        keyModifiers: [],
+        expectedResult: 'Key pressed'
+      },
+      multi_select: {
+        name: 'Multi-Select: [options]',
+        selector: '',
+        selectValues: [],
+        expectedResult: 'Multiple options selected'
+      },
+      // ========== ADVANCED UI - Multi-Context ==========
+      frame_switch: {
+        name: 'Switch to Frame: [frame]',
+        frameSelector: '',
+        expectedResult: 'Switched to iframe'
+      },
+      new_tab: {
+        name: 'Tab: [action]',
+        tabAction: 'new',
+        expectedResult: 'Tab action completed'
+      },
+      alert_handle: {
+        name: 'Alert: [action]',
+        alertAction: 'accept',
+        expectedResult: 'Alert handled'
+      },
+      // ========== ADVANCED UI - Loops ==========
+      foreach: {
+        name: 'For Each: [element] in [list]',
+        loopType: 'foreach',
+        loopSelector: '',
+        loopVariable: 'item',
+        loopSteps: [],
+        expectedResult: 'Loop completed for all items'
       },
     };
 
@@ -7033,6 +7256,909 @@ function StepEditor({
         </div>
       )}
 
+      {/* ========== ADVANCED UI STEP EDITORS ========== */}
+
+      {/* Smart Select - Dynamic element selection */}
+      {step.type === 'smart_select' && (
+        <div className="space-y-4 border-l-4 border-emerald-500 pl-4">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
+            <Target className="h-4 w-4" />
+            Smart Element Selection
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Find and interact with elements dynamically by text, attribute, or other criteria. Perfect for when element positions change.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Find Element By</Label>
+            <Select value={step.findBy || 'text'} onValueChange={(v) => onUpdate({ findBy: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">Text Content (exact match)</SelectItem>
+                <SelectItem value="contains">Text Contains (partial match)</SelectItem>
+                <SelectItem value="attribute">Attribute Value</SelectItem>
+                <SelectItem value="index">Index/Position</SelectItem>
+                <SelectItem value="css">CSS Selector</SelectItem>
+                <SelectItem value="xpath">XPath</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {step.findBy === 'attribute' && (
+            <div className="space-y-2">
+              <Label>Attribute Name</Label>
+              <Input
+                value={step.findAttribute || ''}
+                onChange={(e) => onUpdate({ findAttribute: e.target.value })}
+                placeholder="data-product-id, data-price, title, etc."
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>{step.findBy === 'index' ? 'Element Index (0-based)' : step.findBy === 'attribute' ? 'Attribute Value' : 'Search Criteria'}</Label>
+            {step.findBy === 'index' ? (
+              <Input
+                type="number"
+                value={step.findIndex ?? 0}
+                onChange={(e) => onUpdate({ findIndex: parseInt(e.target.value) })}
+                placeholder="0"
+              />
+            ) : (
+              <Input
+                value={step.findCriteria || ''}
+                onChange={(e) => onUpdate({ findCriteria: e.target.value })}
+                placeholder={
+                  step.findBy === 'text' ? 'MacBook Pro 14"' :
+                  step.findBy === 'contains' ? 'MacBook' :
+                  step.findBy === 'attribute' ? '12345' :
+                  step.findBy === 'css' ? '.product-card:first-child' :
+                  '//div[@class="product"]'
+                }
+              />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Search Within (optional container)</Label>
+            <Input
+              value={step.findWithin || ''}
+              onChange={(e) => onUpdate({ findWithin: e.target.value })}
+              placeholder=".product-grid, #search-results, table tbody"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Narrow down search to a specific container element
+            </p>
+          </div>
+
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-2">
+              💡 Example Use Cases:
+            </p>
+            <ul className="text-[10px] text-emerald-600 dark:text-emerald-500 space-y-1">
+              <li>• Select product by name: Text = "MacBook Pro 14""</li>
+              <li>• Find by price: Attribute = "data-price", Value = "1999"</li>
+              <li>• Click nth item: Index = 0 (first item)</li>
+              <li>• Complex selection: CSS = ".product[data-stock='true']:first-child"</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Extract Variable - Extract value from element */}
+      {step.type === 'extract_variable' && (
+        <div className="space-y-4 border-l-4 border-emerald-500 pl-4">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
+            <Download className="h-4 w-4" />
+            Extract & Store Value
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Extract a value from the page and store it as a variable for later use in assertions or other steps.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Element to Extract From</Label>
+            <Input
+              value={step.selector || ''}
+              onChange={(e) => onUpdate({ selector: e.target.value })}
+              placeholder=".price, #total-amount, [data-testid='cart-total']"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Extract Type</Label>
+            <Select value={step.extractType || 'text'} onValueChange={(v) => onUpdate({ extractType: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">Text Content</SelectItem>
+                <SelectItem value="number">Number (strips $, commas)</SelectItem>
+                <SelectItem value="attribute">Attribute Value</SelectItem>
+                <SelectItem value="count">Element Count</SelectItem>
+                <SelectItem value="html">Inner HTML</SelectItem>
+                <SelectItem value="list">List of Values</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {step.extractType === 'attribute' && (
+            <div className="space-y-2">
+              <Label>Attribute Name</Label>
+              <Input
+                value={step.extractAttribute || ''}
+                onChange={(e) => onUpdate({ extractAttribute: e.target.value })}
+                placeholder="href, data-id, value"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Regex Pattern (optional)</Label>
+            <Input
+              value={step.extractRegex || ''}
+              onChange={(e) => onUpdate({ extractRegex: e.target.value })}
+              placeholder="\$?([\d,]+\.?\d*)"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Extract a specific part using regex. Group 1 will be captured.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Store As Variable</Label>
+            <Input
+              value={step.variableName || ''}
+              onChange={(e) => onUpdate({ variableName: e.target.value })}
+              placeholder="product_price, cart_total, item_count"
+              className="font-mono"
+            />
+          </div>
+
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-1">
+              Use in later steps:
+            </p>
+            <code className="text-[10px] bg-white dark:bg-slate-800 px-2 py-1 rounded border block">
+              {'${'}{step.variableName || 'variable_name'}{'}'}
+            </code>
+          </div>
+        </div>
+      )}
+
+      {/* Computed Assert - Math and string assertions */}
+      {step.type === 'computed_assert' && (
+        <div className="space-y-4 border-l-4 border-emerald-600 pl-4">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-medium">
+            <Calculator className="h-4 w-4" />
+            Computed Assertion
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Verify calculations using extracted variables. Perfect for pricing, taxes, discounts, and totals.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Left Expression</Label>
+            <Input
+              value={step.expression || ''}
+              onChange={(e) => onUpdate({ expression: e.target.value })}
+              placeholder="${subtotal} + ${tax}"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Supports: +, -, *, /, %, round(), floor(), ceil()
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Comparison</Label>
+            <Select value={step.compareOperator || '=='} onValueChange={(v) => onUpdate({ compareOperator: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="==">Equals (==)</SelectItem>
+                <SelectItem value="!=">Not Equals (!=)</SelectItem>
+                <SelectItem value=">">Greater Than (&gt;)</SelectItem>
+                <SelectItem value="<">Less Than (&lt;)</SelectItem>
+                <SelectItem value=">=">Greater or Equal (&gt;=)</SelectItem>
+                <SelectItem value="<=">Less or Equal (&lt;=)</SelectItem>
+                <SelectItem value="contains">Contains (string)</SelectItem>
+                <SelectItem value="matches">Matches (regex)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Right Expression / Expected Value</Label>
+            <Input
+              value={step.compareValue || ''}
+              onChange={(e) => onUpdate({ compareValue: e.target.value })}
+              placeholder="${total} or 199.99"
+              className="font-mono"
+            />
+          </div>
+
+          {['==', '!='].includes(step.compareOperator || '==') && (
+            <div className="space-y-2">
+              <Label>Tolerance (for floating point)</Label>
+              <Input
+                type="number"
+                step="0.001"
+                value={step.tolerance ?? 0.01}
+                onChange={(e) => onUpdate({ tolerance: parseFloat(e.target.value) })}
+                placeholder="0.01"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Allow small differences for floating point comparison
+              </p>
+            </div>
+          )}
+
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              💡 Example Assertions:
+            </p>
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-500 space-y-1 font-mono">
+              <div>{'${price} * ${quantity}'} == {'${line_total}'}</div>
+              <div>{'${subtotal} + ${tax}'} == {'${grand_total}'}</div>
+              <div>{'${original} * 0.9'} == {'${discounted}'} (10% off)</div>
+              <div>round({'${subtotal} * 0.0825'}, 2) == {'${tax}'}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table Find - Find row in table by column value */}
+      {step.type === 'table_find' && (
+        <div className="space-y-4 border-l-4 border-teal-500 pl-4">
+          <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-medium">
+            <Table className="h-4 w-4" />
+            Find Row in Table
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Find a specific row by matching a column value, then click an action button in that row.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Table Selector</Label>
+            <Input
+              value={step.tableSelector || 'table'}
+              onChange={(e) => onUpdate({ tableSelector: e.target.value })}
+              placeholder="table, .data-grid, #orders-table"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Find in Column</Label>
+              <Input
+                value={step.columnName || ''}
+                onChange={(e) => onUpdate({ columnName: e.target.value })}
+                placeholder="Order ID, Name, Status"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Where Value Equals</Label>
+              <Input
+                value={step.rowCriteria || ''}
+                onChange={(e) => onUpdate({ rowCriteria: e.target.value })}
+                placeholder="ORD-12345, John Doe"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Then Click Button (optional)</Label>
+            <Input
+              value={step.actionButton || ''}
+              onChange={(e) => onUpdate({ actionButton: e.target.value })}
+              placeholder="Edit, Delete, View, Download"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Button text to click in the found row
+            </p>
+          </div>
+
+          <div className="p-3 bg-teal-50 dark:bg-teal-900/20 rounded-lg">
+            <p className="text-xs font-medium text-teal-700 dark:text-teal-400 mb-1">
+              Example: Find order and click Edit
+            </p>
+            <code className="text-[10px] text-teal-600 dark:text-teal-500 block">
+              Table: #orders-table | Column: "Order ID" | Value: "ORD-12345" | Click: "Edit"
+            </code>
+          </div>
+        </div>
+      )}
+
+      {/* Table Extract - Extract data from table row */}
+      {step.type === 'table_extract' && (
+        <div className="space-y-4 border-l-4 border-teal-500 pl-4">
+          <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-medium">
+            <Download className="h-4 w-4" />
+            Extract Row Data from Table
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Find a row and extract values from specific columns into variables.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Table Selector</Label>
+            <Input
+              value={step.tableSelector || 'table'}
+              onChange={(e) => onUpdate({ tableSelector: e.target.value })}
+              placeholder="table, .data-grid, #products-table"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Find in Column</Label>
+              <Input
+                value={step.columnName || ''}
+                onChange={(e) => onUpdate({ columnName: e.target.value })}
+                placeholder="Product Name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Where Value Equals</Label>
+              <Input
+                value={step.rowCriteria || ''}
+                onChange={(e) => onUpdate({ rowCriteria: e.target.value })}
+                placeholder="MacBook Pro"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Columns to Extract (comma-separated)</Label>
+            <Input
+              value={(step.extractColumns || []).join(', ')}
+              onChange={(e) => onUpdate({ extractColumns: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              placeholder="Price, Quantity, Total"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Store As Variable Prefix</Label>
+            <Input
+              value={step.variableName || 'row'}
+              onChange={(e) => onUpdate({ variableName: e.target.value })}
+              placeholder="product"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Variables will be: {'${'}{step.variableName || 'row'}_Price{'}'}, {'${'}{step.variableName || 'row'}_Quantity{'}'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Table Assert - Verify table data */}
+      {step.type === 'table_assert' && (
+        <div className="space-y-4 border-l-4 border-teal-600 pl-4">
+          <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-medium">
+            <CheckCircle className="h-4 w-4" />
+            Assert Table Data
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Verify that a table contains specific data or that a row exists.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Table Selector</Label>
+            <Input
+              value={step.tableSelector || 'table'}
+              onChange={(e) => onUpdate({ tableSelector: e.target.value })}
+              placeholder="table, .data-grid"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Column to Check</Label>
+              <Input
+                value={step.columnName || ''}
+                onChange={(e) => onUpdate({ columnName: e.target.value })}
+                placeholder="Status"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Expected Value</Label>
+              <Input
+                value={step.rowCriteria || ''}
+                onChange={(e) => onUpdate({ rowCriteria: e.target.value })}
+                placeholder="Completed, Active"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drag and Drop */}
+      {step.type === 'drag_drop' && (
+        <div className="space-y-4 border-l-4 border-amber-500 pl-4">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
+            <Move className="h-4 w-4" />
+            Drag & Drop
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Drag an element from source to target location.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Source Element (what to drag)</Label>
+            <Input
+              value={step.selector || ''}
+              onChange={(e) => onUpdate({ selector: e.target.value })}
+              placeholder=".draggable-item, [draggable='true']"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Target Element (where to drop)</Label>
+            <Input
+              value={step.targetSelector || ''}
+              onChange={(e) => onUpdate({ targetSelector: e.target.value })}
+              placeholder=".drop-zone, #cart-area"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Slider */}
+      {step.type === 'slider' && (
+        <div className="space-y-4 border-l-4 border-amber-500 pl-4">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
+            <Sliders className="h-4 w-4" />
+            Set Slider Value
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Set a slider or range input to a specific value.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Slider Element</Label>
+            <Input
+              value={step.selector || ''}
+              onChange={(e) => onUpdate({ selector: e.target.value })}
+              placeholder="[type='range'], .slider, #price-slider"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label>Min Value</Label>
+              <Input
+                type="number"
+                value={step.sliderMin ?? 0}
+                onChange={(e) => onUpdate({ sliderMin: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Max Value</Label>
+              <Input
+                type="number"
+                value={step.sliderMax ?? 100}
+                onChange={(e) => onUpdate({ sliderMax: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Set To</Label>
+              <Input
+                type="number"
+                value={step.sliderValue ?? 50}
+                onChange={(e) => onUpdate({ sliderValue: parseFloat(e.target.value) })}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Picker */}
+      {step.type === 'date_picker' && (
+        <div className="space-y-4 border-l-4 border-amber-600 pl-4">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
+            <Calendar className="h-4 w-4" />
+            Select Date
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Select a date from a date picker control.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Date Input Element</Label>
+            <Input
+              value={step.selector || ''}
+              onChange={(e) => onUpdate({ selector: e.target.value })}
+              placeholder="[type='date'], .datepicker, #departure-date"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Date Value</Label>
+            <Input
+              type="date"
+              value={step.dateValue || ''}
+              onChange={(e) => onUpdate({ dateValue: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Date Format (for custom pickers)</Label>
+            <Select value={step.dateFormat || 'YYYY-MM-DD'} onValueChange={(v) => onUpdate({ dateFormat: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-01-15)</SelectItem>
+                <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (01/15/2024)</SelectItem>
+                <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (15/01/2024)</SelectItem>
+                <SelectItem value="MMM DD, YYYY">MMM DD, YYYY (Jan 15, 2024)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard */}
+      {step.type === 'keyboard' && (
+        <div className="space-y-4 border-l-4 border-amber-600 pl-4">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
+            <Keyboard className="h-4 w-4" />
+            Press Keyboard Keys
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Press keyboard keys, optionally with modifiers (Ctrl, Shift, Alt).
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Key to Press</Label>
+            <Select value={step.keyToPress || 'Enter'} onValueChange={(v) => onUpdate({ keyToPress: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Enter">Enter</SelectItem>
+                <SelectItem value="Tab">Tab</SelectItem>
+                <SelectItem value="Escape">Escape</SelectItem>
+                <SelectItem value="Backspace">Backspace</SelectItem>
+                <SelectItem value="Delete">Delete</SelectItem>
+                <SelectItem value="ArrowUp">Arrow Up</SelectItem>
+                <SelectItem value="ArrowDown">Arrow Down</SelectItem>
+                <SelectItem value="ArrowLeft">Arrow Left</SelectItem>
+                <SelectItem value="ArrowRight">Arrow Right</SelectItem>
+                <SelectItem value="Home">Home</SelectItem>
+                <SelectItem value="End">End</SelectItem>
+                <SelectItem value="PageUp">Page Up</SelectItem>
+                <SelectItem value="PageDown">Page Down</SelectItem>
+                <SelectItem value="a">A (for Ctrl+A)</SelectItem>
+                <SelectItem value="c">C (for Ctrl+C)</SelectItem>
+                <SelectItem value="v">V (for Ctrl+V)</SelectItem>
+                <SelectItem value="z">Z (for Ctrl+Z)</SelectItem>
+                <SelectItem value="s">S (for Ctrl+S)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modifier Keys (optional)</Label>
+            <div className="flex flex-wrap gap-2">
+              {(['ctrl', 'shift', 'alt', 'meta'] as const).map((mod) => (
+                <label key={mod} className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={(step.keyModifiers || []).includes(mod)}
+                    onChange={(e) => {
+                      const current = step.keyModifiers || [];
+                      if (e.target.checked) {
+                        onUpdate({ keyModifiers: [...current, mod] });
+                      } else {
+                        onUpdate({ keyModifiers: current.filter(m => m !== mod) });
+                      }
+                    }}
+                    className="rounded"
+                  />
+                  {mod === 'meta' ? 'Cmd/Win' : mod.charAt(0).toUpperCase() + mod.slice(1)}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Select */}
+      {step.type === 'multi_select' && (
+        <div className="space-y-4 border-l-4 border-amber-700 pl-4">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-medium">
+            <CheckSquare className="h-4 w-4" />
+            Multi-Select Options
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Select multiple options from a multi-select dropdown or checkbox group.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Select Element</Label>
+            <Input
+              value={step.selector || ''}
+              onChange={(e) => onUpdate({ selector: e.target.value })}
+              placeholder="select[multiple], .checkbox-group"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Values to Select (comma-separated)</Label>
+            <Input
+              value={(step.selectValues || []).join(', ')}
+              onChange={(e) => onUpdate({ selectValues: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              placeholder="Option 1, Option 2, Option 3"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Frame Switch */}
+      {step.type === 'frame_switch' && (
+        <div className="space-y-4 border-l-4 border-fuchsia-500 pl-4">
+          <div className="flex items-center gap-2 text-fuchsia-700 dark:text-fuchsia-400 font-medium">
+            <Layout className="h-4 w-4" />
+            Switch to iFrame
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Switch context to an iframe to interact with elements inside it.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Frame Selector or Index</Label>
+            <Input
+              value={step.frameSelector || ''}
+              onChange={(e) => onUpdate({ frameSelector: e.target.value })}
+              placeholder="iframe#payment, [name='checkout'], 0 (for first frame)"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Use selector like "iframe#id" or index like "0" for first iframe
+            </p>
+          </div>
+
+          <div className="p-3 bg-fuchsia-50 dark:bg-fuchsia-900/20 rounded-lg">
+            <p className="text-xs text-fuchsia-700 dark:text-fuchsia-400">
+              💡 Use "main" or leave empty to switch back to main page content
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Control */}
+      {step.type === 'new_tab' && (
+        <div className="space-y-4 border-l-4 border-fuchsia-500 pl-4">
+          <div className="flex items-center gap-2 text-fuchsia-700 dark:text-fuchsia-400 font-medium">
+            <Maximize2 className="h-4 w-4" />
+            Browser Tab Control
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Control browser tabs - create new, switch between, or close tabs.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Action</Label>
+            <Select value={step.tabAction || 'new'} onValueChange={(v) => onUpdate({ tabAction: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">Open New Tab</SelectItem>
+                <SelectItem value="switch">Switch to Tab</SelectItem>
+                <SelectItem value="close">Close Tab</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {(step.tabAction === 'switch' || step.tabAction === 'close') && (
+            <div className="space-y-2">
+              <Label>Tab Index (0-based)</Label>
+              <Input
+                type="number"
+                value={step.tabIndex ?? 0}
+                onChange={(e) => onUpdate({ tabIndex: parseInt(e.target.value) })}
+                placeholder="0"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                0 = first tab, 1 = second tab, etc. Use -1 for last tab.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Alert Handle */}
+      {step.type === 'alert_handle' && (
+        <div className="space-y-4 border-l-4 border-fuchsia-600 pl-4">
+          <div className="flex items-center gap-2 text-fuchsia-700 dark:text-fuchsia-400 font-medium">
+            <AlertCircle className="h-4 w-4" />
+            Handle JavaScript Alert/Confirm/Prompt
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Handle browser dialogs (alert, confirm, prompt).
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Action</Label>
+            <Select value={step.alertAction || 'accept'} onValueChange={(v) => onUpdate({ alertAction: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="accept">Accept (OK)</SelectItem>
+                <SelectItem value="dismiss">Dismiss (Cancel)</SelectItem>
+                <SelectItem value="getText">Get Text (extract message)</SelectItem>
+                <SelectItem value="type">Type into Prompt</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {step.alertAction === 'type' && (
+            <div className="space-y-2">
+              <Label>Text to Enter</Label>
+              <Input
+                value={step.alertText || ''}
+                onChange={(e) => onUpdate({ alertText: e.target.value })}
+                placeholder="Enter value for prompt"
+              />
+            </div>
+          )}
+
+          {step.alertAction === 'getText' && (
+            <div className="space-y-2">
+              <Label>Store Message As Variable</Label>
+              <Input
+                value={step.variableName || 'alert_message'}
+                onChange={(e) => onUpdate({ variableName: e.target.value })}
+                placeholder="alert_message"
+                className="font-mono"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Condition - If/Then/Else */}
+      {step.type === 'condition' && (
+        <div className="space-y-4 border-l-4 border-purple-500 pl-4">
+          <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 font-medium">
+            <Share2 className="h-4 w-4" />
+            Conditional Logic (If / Then / Else)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Execute different steps based on a condition.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Condition Expression</Label>
+            <Input
+              value={step.conditionExpression || ''}
+              onChange={(e) => onUpdate({ conditionExpression: e.target.value })}
+              placeholder="${stock} > 0, element_exists('.in-stock'), ${price} < 100"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Use variables, comparisons, or element_exists() checks
+            </p>
+          </div>
+
+          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-purple-700 dark:text-purple-400">
+              💡 Example Conditions:
+            </p>
+            <div className="text-[10px] text-purple-600 dark:text-purple-500 space-y-1 font-mono">
+              <div>element_exists('.in-stock-badge')</div>
+              <div>{'${cart_total}'} &gt; 100</div>
+              <div>{'${user_type}'} == 'premium'</div>
+            </div>
+          </div>
+
+          <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
+            <p className="text-xs text-green-700 dark:text-green-400">
+              ✅ <strong>Then:</strong> Add steps below this condition for the "true" branch
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Loop - Repeat steps */}
+      {step.type === 'loop' && (
+        <div className="space-y-4 border-l-4 border-purple-500 pl-4">
+          <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 font-medium">
+            <RefreshCw className="h-4 w-4" />
+            Loop (Repeat Steps)
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Repeat a set of steps a specific number of times.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Loop Type</Label>
+            <Select value={step.loopType || 'count'} onValueChange={(v) => onUpdate({ loopType: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="count">Count (fixed iterations)</SelectItem>
+                <SelectItem value="while">While (condition true)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {step.loopType === 'count' && (
+            <div className="space-y-2">
+              <Label>Number of Iterations</Label>
+              <Input
+                type="number"
+                value={step.loopCount || 1}
+                onChange={(e) => onUpdate({ loopCount: parseInt(e.target.value) })}
+                placeholder="5"
+              />
+            </div>
+          )}
+
+          {step.loopType === 'while' && (
+            <div className="space-y-2">
+              <Label>While Condition</Label>
+              <Input
+                value={step.conditionExpression || ''}
+                onChange={(e) => onUpdate({ conditionExpression: e.target.value })}
+                placeholder="element_exists('.next-page'), ${counter} < 10"
+                className="font-mono"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Loop Variable Name</Label>
+            <Input
+              value={step.loopVariable || 'i'}
+              onChange={(e) => onUpdate({ loopVariable: e.target.value })}
+              placeholder="i"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Use {'${'}{step.loopVariable || 'i'}{'}'} to access current iteration (0, 1, 2, ...)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ForEach - Loop through elements */}
+      {step.type === 'foreach' && (
+        <div className="space-y-4 border-l-4 border-purple-600 pl-4">
+          <div className="flex items-center gap-2 text-purple-700 dark:text-purple-400 font-medium">
+            <RefreshCw className="h-4 w-4" />
+            For Each Element
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Loop through all matching elements and perform actions on each.
+          </p>
+          
+          <div className="space-y-2">
+            <Label>Elements Selector</Label>
+            <Input
+              value={step.loopSelector || ''}
+              onChange={(e) => onUpdate({ loopSelector: e.target.value })}
+              placeholder=".product-card, table tbody tr, .search-result"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              All matching elements will be iterated over
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Current Item Variable</Label>
+            <Input
+              value={step.loopVariable || 'item'}
+              onChange={(e) => onUpdate({ loopVariable: e.target.value })}
+              placeholder="item"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Use {'${'}{step.loopVariable || 'item'}{'}'} to reference current element in loop body
+            </p>
+          </div>
+
+          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+            <p className="text-xs text-purple-700 dark:text-purple-400">
+              💡 Add steps after this to run on each matched element
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ========== COMPLEX VERIFICATION STEP EDITORS ========== */}
       
       {/* Email Verify - Full email verification configuration */}
@@ -9021,6 +10147,416 @@ def test_${safeName}():
         break;
       }
       
+      // ========== ADVANCED UI STEP CODE GENERATION ==========
+      
+      case 'smart_select': {
+        const findBy = step.findBy || 'text';
+        const criteria = step.findCriteria || '';
+        const within = step.findWithin || '';
+        const findAttr = step.findAttribute || 'data-id';
+        const findIdx = step.findIndex ?? 0;
+        
+        code += `${indent}# Smart Select: Find element by ${findBy}\n`;
+        
+        if (within) {
+          code += `${indent}_container = page.locator("${within}")\n`;
+        } else {
+          code += `${indent}_container = page\n`;
+        }
+        
+        switch (findBy) {
+          case 'text':
+            code += `${indent}_element = _container.get_by_text("${criteria}", exact=True).first\n`;
+            break;
+          case 'contains':
+            code += `${indent}_element = _container.locator(':has-text("${criteria}")').first\n`;
+            break;
+          case 'attribute':
+            code += `${indent}_element = _container.locator('[${findAttr}="${criteria}"]').first\n`;
+            break;
+          case 'index':
+            code += `${indent}_element = _container.locator("*").nth(${findIdx})\n`;
+            break;
+          case 'css':
+            code += `${indent}_element = _container.locator("${criteria}").first\n`;
+            break;
+          case 'xpath':
+            code += `${indent}_element = _container.locator("xpath=${criteria}").first\n`;
+            break;
+        }
+        code += `${indent}_element.click()\n`;
+        code += `${indent}print(f"[+] Smart selected element by ${findBy}: ${criteria}")\n`;
+        break;
+      }
+      
+      case 'extract_variable': {
+        const extractType = step.extractType || 'text';
+        const varName = step.variableName || 'extracted_value';
+        const extractAttr = step.extractAttribute || 'value';
+        const extractRegex = step.extractRegex || '';
+        const selector = step.selector || 'body';
+        
+        code += `${indent}# Extract value from element -> \${${varName}}\n`;
+        code += `${indent}_el = page.locator("${selector}").first\n`;
+        
+        switch (extractType) {
+          case 'text':
+            code += `${indent}_raw_value = _el.inner_text()\n`;
+            break;
+          case 'number':
+            code += `${indent}_raw_text = _el.inner_text()\n`;
+            code += `${indent}import re\n`;
+            code += `${indent}_numbers = re.findall(r'[\\d,]+\\.?\\d*', _raw_text.replace(',', ''))\n`;
+            code += `${indent}_raw_value = float(_numbers[0]) if _numbers else 0\n`;
+            break;
+          case 'attribute':
+            code += `${indent}_raw_value = _el.get_attribute("${extractAttr}")\n`;
+            break;
+          case 'count':
+            code += `${indent}_raw_value = page.locator("${selector}").count()\n`;
+            break;
+          case 'html':
+            code += `${indent}_raw_value = _el.inner_html()\n`;
+            break;
+          case 'list':
+            code += `${indent}_raw_value = [el.inner_text() for el in page.locator("${selector}").all()]\n`;
+            break;
+        }
+        
+        if (extractRegex) {
+          code += `${indent}import re\n`;
+          code += `${indent}_match = re.search(r'${extractRegex}', str(_raw_value))\n`;
+          code += `${indent}_value = _match.group(1) if _match else _raw_value\n`;
+        } else {
+          code += `${indent}_value = _raw_value\n`;
+        }
+        
+        code += `${indent}_variables["${varName}"] = _value\n`;
+        code += `${indent}print(f"[+] Extracted ${varName}: {_value}")\n`;
+        break;
+      }
+      
+      case 'computed_assert': {
+        const expr = step.expression || '';
+        const compareOp = step.compareOperator || '==';
+        const compareVal = step.compareValue || '';
+        const tolerance = step.tolerance ?? 0.01;
+        
+        code += `${indent}# Computed Assertion: ${expr} ${compareOp} ${compareVal}\n`;
+        code += `${indent}import re\n`;
+        code += `${indent}def _eval_expr(expr_str):\n`;
+        code += `${indent}    """Evaluate expression with variable substitution"""\n`;
+        code += `${indent}    result = expr_str\n`;
+        code += `${indent}    for var_name, var_val in _variables.items():\n`;
+        code += `${indent}        result = result.replace(f"$" + "{" + var_name + "}", str(var_val))\n`;
+        code += `${indent}    try:\n`;
+        code += `${indent}        return eval(result)\n`;
+        code += `${indent}    except:\n`;
+        code += `${indent}        return result\n`;
+        code += `${indent}_left = _eval_expr("${expr}")\n`;
+        code += `${indent}_right = _eval_expr("${compareVal}")\n`;
+        
+        switch (compareOp) {
+          case '==':
+            code += `${indent}if isinstance(_left, (int, float)) and isinstance(_right, (int, float)):\n`;
+            code += `${indent}    assert abs(float(_left) - float(_right)) <= ${tolerance}, f"Expected {_left} == {_right} (tolerance ${tolerance})"\n`;
+            code += `${indent}else:\n`;
+            code += `${indent}    assert str(_left) == str(_right), f"Expected {_left} == {_right}"\n`;
+            break;
+          case '!=':
+            code += `${indent}assert _left != _right, f"Expected {_left} != {_right}"\n`;
+            break;
+          case '>':
+            code += `${indent}assert float(_left) > float(_right), f"Expected {_left} > {_right}"\n`;
+            break;
+          case '<':
+            code += `${indent}assert float(_left) < float(_right), f"Expected {_left} < {_right}"\n`;
+            break;
+          case '>=':
+            code += `${indent}assert float(_left) >= float(_right), f"Expected {_left} >= {_right}"\n`;
+            break;
+          case '<=':
+            code += `${indent}assert float(_left) <= float(_right), f"Expected {_left} <= {_right}"\n`;
+            break;
+          case 'contains':
+            code += `${indent}assert str(_right) in str(_left), f"Expected '{_left}' to contain '{_right}'"\n`;
+            break;
+          case 'matches':
+            code += `${indent}assert re.search(str(_right), str(_left)), f"Expected '{_left}' to match regex '{_right}'"\n`;
+            break;
+        }
+        code += `${indent}print(f"[+] Computed assertion passed: {_left} ${compareOp} {_right}")\n`;
+        break;
+      }
+      
+      case 'table_find': {
+        const tableSel = step.tableSelector || 'table';
+        const colName = step.columnName || '';
+        const rowVal = step.rowCriteria || '';
+        const actionBtn = step.actionButton || '';
+        
+        code += `${indent}# Table Find: Find row where "${colName}" = "${rowVal}"\n`;
+        code += `${indent}_table = page.locator("${tableSel}")\n`;
+        code += `${indent}_headers = [h.inner_text().strip() for h in _table.locator("thead th, thead td").all()]\n`;
+        code += `${indent}_col_idx = _headers.index("${colName}") if "${colName}" in _headers else 0\n`;
+        code += `${indent}_rows = _table.locator("tbody tr").all()\n`;
+        code += `${indent}_found_row = None\n`;
+        code += `${indent}for _row in _rows:\n`;
+        code += `${indent}    _cells = _row.locator("td").all()\n`;
+        code += `${indent}    if len(_cells) > _col_idx and "${rowVal}" in _cells[_col_idx].inner_text():\n`;
+        code += `${indent}        _found_row = _row\n`;
+        code += `${indent}        break\n`;
+        code += `${indent}assert _found_row is not None, f"Row not found where {_col_idx}: ${colName} = ${rowVal}"\n`;
+        code += `${indent}print(f"[+] Found row where ${colName} = ${rowVal}")\n`;
+        
+        if (actionBtn) {
+          code += `${indent}_found_row.get_by_role("button", name="${actionBtn}").first.click()\n`;
+          code += `${indent}print(f"[+] Clicked ${actionBtn} button in found row")\n`;
+        }
+        break;
+      }
+      
+      case 'table_extract': {
+        const tableSel2 = step.tableSelector || 'table';
+        const colName2 = step.columnName || '';
+        const rowVal2 = step.rowCriteria || '';
+        const extractCols = step.extractColumns || [];
+        const varPrefix = step.variableName || 'row';
+        
+        code += `${indent}# Table Extract: Get data from row where "${colName2}" = "${rowVal2}"\n`;
+        code += `${indent}_table = page.locator("${tableSel2}")\n`;
+        code += `${indent}_headers = [h.inner_text().strip() for h in _table.locator("thead th, thead td").all()]\n`;
+        code += `${indent}_col_idx = _headers.index("${colName2}") if "${colName2}" in _headers else 0\n`;
+        code += `${indent}_rows = _table.locator("tbody tr").all()\n`;
+        code += `${indent}for _row in _rows:\n`;
+        code += `${indent}    _cells = _row.locator("td").all()\n`;
+        code += `${indent}    if len(_cells) > _col_idx and "${rowVal2}" in _cells[_col_idx].inner_text():\n`;
+        
+        if (extractCols.length > 0) {
+          extractCols.forEach(col => {
+            const safeCol = col.replace(/[^a-zA-Z0-9]/g, '_');
+            code += `${indent}        _col_val_idx = _headers.index("${col}") if "${col}" in _headers else -1\n`;
+            code += `${indent}        if _col_val_idx >= 0 and len(_cells) > _col_val_idx:\n`;
+            code += `${indent}            _variables["${varPrefix}_${safeCol}"] = _cells[_col_val_idx].inner_text().strip()\n`;
+          });
+        } else {
+          code += `${indent}        for i, _cell in enumerate(_cells):\n`;
+          code += `${indent}            _col_name = _headers[i] if i < len(_headers) else f"col_{i}"\n`;
+          code += `${indent}            _variables[f"${varPrefix}_{_col_name}"] = _cell.inner_text().strip()\n`;
+        }
+        code += `${indent}        print(f"[+] Extracted row data with prefix: ${varPrefix}_")\n`;
+        code += `${indent}        break\n`;
+        break;
+      }
+      
+      case 'table_assert': {
+        const tableSel3 = step.tableSelector || 'table';
+        const colName3 = step.columnName || '';
+        const expectedVal = step.rowCriteria || '';
+        
+        code += `${indent}# Table Assert: Verify table contains ${colName3} = ${expectedVal}\n`;
+        code += `${indent}_table = page.locator("${tableSel3}")\n`;
+        code += `${indent}_found = _table.locator(f'td:has-text("${expectedVal}")').count() > 0\n`;
+        code += `${indent}assert _found, f"Table should contain '${expectedVal}'"\n`;
+        code += `${indent}print(f"[+] Table contains expected value: ${expectedVal}")\n`;
+        break;
+      }
+      
+      case 'drag_drop': {
+        const dragSrc = step.selector || '';
+        const dragTarget = step.targetSelector || '';
+        
+        code += `${indent}# Drag and Drop\n`;
+        code += `${indent}_source = page.locator("${dragSrc}").first\n`;
+        code += `${indent}_target = page.locator("${dragTarget}").first\n`;
+        code += `${indent}_source.drag_to(_target)\n`;
+        code += `${indent}print(f"[+] Dragged element to target")\n`;
+        break;
+      }
+      
+      case 'slider': {
+        const sliderSel = step.selector || '';
+        const sliderVal = step.sliderValue ?? 50;
+        const sliderMin = step.sliderMin ?? 0;
+        const sliderMax = step.sliderMax ?? 100;
+        
+        code += `${indent}# Set slider value to ${sliderVal}\n`;
+        code += `${indent}_slider = page.locator("${sliderSel}").first\n`;
+        code += `${indent}_slider_box = _slider.bounding_box()\n`;
+        code += `${indent}_percentage = (${sliderVal} - ${sliderMin}) / (${sliderMax} - ${sliderMin})\n`;
+        code += `${indent}_target_x = _slider_box["x"] + (_slider_box["width"] * _percentage)\n`;
+        code += `${indent}_target_y = _slider_box["y"] + _slider_box["height"] / 2\n`;
+        code += `${indent}page.mouse.click(_target_x, _target_y)\n`;
+        code += `${indent}print(f"[+] Set slider to ${sliderVal}")\n`;
+        break;
+      }
+      
+      case 'date_picker': {
+        const dateSel = step.selector || '';
+        const dateVal = step.dateValue || '';
+        
+        code += `${indent}# Select date: ${dateVal}\n`;
+        code += `${indent}_date_input = page.locator("${dateSel}").first\n`;
+        code += `${indent}_date_input.fill("${dateVal}")\n`;
+        code += `${indent}print(f"[+] Selected date: ${dateVal}")\n`;
+        break;
+      }
+      
+      case 'keyboard': {
+        const keyPress = step.keyToPress || 'Enter';
+        const modifiers = step.keyModifiers || [];
+        
+        code += `${indent}# Press keyboard: ${modifiers.length > 0 ? modifiers.join('+') + '+' : ''}${keyPress}\n`;
+        
+        if (modifiers.length > 0) {
+          const modStr = modifiers.map(m => m === 'ctrl' ? 'Control' : m.charAt(0).toUpperCase() + m.slice(1)).join('+');
+          code += `${indent}page.keyboard.press("${modStr}+${keyPress}")\n`;
+        } else {
+          code += `${indent}page.keyboard.press("${keyPress}")\n`;
+        }
+        code += `${indent}print(f"[+] Pressed ${keyPress}")\n`;
+        break;
+      }
+      
+      case 'multi_select': {
+        const selectSel = step.selector || '';
+        const selectVals = step.selectValues || [];
+        
+        code += `${indent}# Multi-select: ${selectVals.join(', ')}\n`;
+        code += `${indent}_select = page.locator("${selectSel}").first\n`;
+        selectVals.forEach(val => {
+          code += `${indent}_select.select_option("${val}")\n`;
+        });
+        code += `${indent}print(f"[+] Selected multiple options")\n`;
+        break;
+      }
+      
+      case 'frame_switch': {
+        const frameSel = step.frameSelector || '';
+        
+        code += `${indent}# Switch to iframe\n`;
+        if (frameSel === 'main' || frameSel === '') {
+          code += `${indent}_current_frame = page.main_frame\n`;
+          code += `${indent}print(f"[+] Switched to main frame")\n`;
+        } else if (/^\d+$/.test(frameSel)) {
+          code += `${indent}_current_frame = page.frames[${frameSel}]\n`;
+          code += `${indent}print(f"[+] Switched to frame ${frameSel}")\n`;
+        } else {
+          code += `${indent}_current_frame = page.frame_locator("${frameSel}").first\n`;
+          code += `${indent}print(f"[+] Switched to frame: ${frameSel}")\n`;
+        }
+        break;
+      }
+      
+      case 'new_tab': {
+        const tabAction = step.tabAction || 'new';
+        const tabIdx = step.tabIndex ?? 0;
+        
+        code += `${indent}# Browser tab: ${tabAction}\n`;
+        switch (tabAction) {
+          case 'new':
+            code += `${indent}_new_page = context.new_page()\n`;
+            code += `${indent}print(f"[+] Opened new tab")\n`;
+            break;
+          case 'switch':
+            code += `${indent}page = context.pages[${tabIdx}]\n`;
+            code += `${indent}page.bring_to_front()\n`;
+            code += `${indent}print(f"[+] Switched to tab ${tabIdx}")\n`;
+            break;
+          case 'close':
+            code += `${indent}context.pages[${tabIdx}].close()\n`;
+            code += `${indent}print(f"[+] Closed tab ${tabIdx}")\n`;
+            break;
+        }
+        break;
+      }
+      
+      case 'alert_handle': {
+        const alertAction = step.alertAction || 'accept';
+        const alertText = step.alertText || '';
+        const alertVarName = step.variableName || 'alert_message';
+        
+        code += `${indent}# Handle alert: ${alertAction}\n`;
+        code += `${indent}def _handle_dialog(dialog):\n`;
+        switch (alertAction) {
+          case 'accept':
+            code += `${indent}    dialog.accept()\n`;
+            break;
+          case 'dismiss':
+            code += `${indent}    dialog.dismiss()\n`;
+            break;
+          case 'getText':
+            code += `${indent}    _variables["${alertVarName}"] = dialog.message\n`;
+            code += `${indent}    dialog.accept()\n`;
+            break;
+          case 'type':
+            code += `${indent}    dialog.accept("${alertText}")\n`;
+            break;
+        }
+        code += `${indent}page.on("dialog", _handle_dialog)\n`;
+        code += `${indent}print(f"[+] Alert handler set: ${alertAction}")\n`;
+        break;
+      }
+      
+      case 'condition': {
+        const condExpr = step.conditionExpression || 'True';
+        
+        code += `${indent}# Conditional: if ${condExpr}\n`;
+        code += `${indent}def _eval_condition(cond):\n`;
+        code += `${indent}    """Evaluate condition with variable substitution"""\n`;
+        code += `${indent}    result = cond\n`;
+        code += `${indent}    for var_name, var_val in _variables.items():\n`;
+        code += `${indent}        result = result.replace(f"$" + "{" + var_name + "}", str(var_val))\n`;
+        code += `${indent}    # Handle element_exists()\n`;
+        code += `${indent}    if "element_exists" in result:\n`;
+        code += `${indent}        import re\n`;
+        code += `${indent}        match = re.search(r"element_exists\\(['\"](.+?)['\"]\\)", result)\n`;
+        code += `${indent}        if match:\n`;
+        code += `${indent}            selector = match.group(1)\n`;
+        code += `${indent}            exists = page.locator(selector).count() > 0\n`;
+        code += `${indent}            result = result.replace(match.group(0), str(exists))\n`;
+        code += `${indent}    return eval(result)\n`;
+        code += `${indent}_condition_result = _eval_condition("${condExpr.replace(/"/g, '\\"')}")\n`;
+        code += `${indent}print(f"[+] Condition evaluated: {_condition_result}")\n`;
+        code += `${indent}if _condition_result:\n`;
+        code += `${indent}    pass  # Then branch - subsequent steps execute normally\n`;
+        break;
+      }
+      
+      case 'loop': {
+        const loopType = step.loopType || 'count';
+        const loopCount = step.loopCount || 1;
+        const loopVar = step.loopVariable || 'i';
+        const loopCond = step.conditionExpression || 'True';
+        
+        code += `${indent}# Loop: ${loopType}\n`;
+        if (loopType === 'count') {
+          code += `${indent}for ${loopVar} in range(${loopCount}):\n`;
+          code += `${indent}    _variables["${loopVar}"] = ${loopVar}\n`;
+          code += `${indent}    print(f"[+] Loop iteration {${loopVar} + 1}/${loopCount}")\n`;
+        } else if (loopType === 'while') {
+          code += `${indent}${loopVar} = 0\n`;
+          code += `${indent}while _eval_condition("${loopCond.replace(/"/g, '\\"')}"):\n`;
+          code += `${indent}    _variables["${loopVar}"] = ${loopVar}\n`;
+          code += `${indent}    ${loopVar} += 1\n`;
+          code += `${indent}    if ${loopVar} > 100: break  # Safety limit\n`;
+        }
+        break;
+      }
+      
+      case 'foreach': {
+        const loopSelector = step.loopSelector || '';
+        const itemVar = step.loopVariable || 'item';
+        
+        code += `${indent}# For Each: iterate over elements\n`;
+        code += `${indent}_elements = page.locator("${loopSelector}").all()\n`;
+        code += `${indent}print(f"[+] Found {len(_elements)} elements to iterate")\n`;
+        code += `${indent}for ${itemVar}_idx, ${itemVar} in enumerate(_elements):\n`;
+        code += `${indent}    _variables["${itemVar}_index"] = ${itemVar}_idx\n`;
+        code += `${indent}    print(f"[+] Processing element {${itemVar}_idx + 1}/{len(_elements)}")\n`;
+        break;
+      }
+
       default:
         code += `${indent}pass  # Unknown step type: ${step.type}\n`;
     }
