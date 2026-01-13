@@ -121,19 +121,24 @@ function HeroSection() {
             </div>
 
             {/* Stats Row */}
-            <div className="flex flex-wrap justify-center lg:justify-start gap-x-8 gap-y-4">
+            <div className="flex flex-wrap justify-center lg:justify-start gap-x-6 gap-y-4">
               {[
-                { value: '5', suffix: '', label: 'Testing Types' },
-                { value: '10k+', suffix: '', label: 'Virtual Users' },
-                { value: '0', suffix: '', label: 'Lines of Code' },
+                { value: '5', label: 'Testing Types' },
+                { value: '10k+', label: 'Virtual Users' },
+                { value: '0', label: 'Lines of Code' },
               ].map((stat, idx) => (
                 <div key={idx} className="text-center lg:text-left">
-                  <div className="text-2xl font-bold text-slate-800">
-                    {stat.value}<span className="text-slate-400 text-lg">{stat.suffix}</span>
-                  </div>
+                  <div className="text-2xl font-bold text-slate-800">{stat.value}</div>
                   <div className="text-xs text-slate-500">{stat.label}</div>
                 </div>
               ))}
+              <div className="text-center lg:text-left flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200">
+                <Database className="w-5 h-5 text-sky-600" />
+                <div>
+                  <div className="text-sm font-bold text-sky-700">Salesforce Native</div>
+                  <div className="text-[10px] text-sky-600">20+ specialized tools</div>
+                </div>
+              </div>
             </div>
 
             {/* CTAs - Three aligned buttons */}
