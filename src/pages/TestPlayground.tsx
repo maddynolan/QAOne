@@ -107,10 +107,10 @@ export default function TestPlayground() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid grid-cols-5 lg:grid-cols-10 gap-1 h-auto p-1 bg-white dark:bg-slate-800 shadow-sm">
             <TabsTrigger value="products" data-testid="tab-products" className="text-xs px-2 py-1.5">Products</TabsTrigger>
-            <TabsTrigger value="cart" data-testid="tab-cart" className="text-xs px-2 py-1.5 relative">
-              Cart
+            <TabsTrigger value="cart" data-testid="tab-cart" className="text-xs px-2 py-1.5 relative" aria-label="Cart">
+              <span>Cart</span>
               {cartItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center" data-testid="cart-count">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center" aria-hidden="true" data-testid="cart-count">
                   {cartItems.length}
                 </span>
               )}
