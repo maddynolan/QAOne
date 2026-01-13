@@ -89,35 +89,17 @@ function HeroSection() {
           </div>
         </div>
 
-        {/* Testing Capabilities Strip */}
+        {/* FLOWSTRAL Breakdown Teaser */}
         <div className="flex justify-center mb-10">
-          <div className="flex flex-wrap justify-center gap-2">
-            {[
-              { label: 'E2E Testing', color: 'amber' },
-              { label: 'API Testing', color: 'pink' },
-              { label: 'Performance', color: 'emerald' },
-              { label: 'Visual Testing', color: 'indigo' },
-              { label: 'Accessibility', color: 'teal' },
-              { label: 'Test Management', color: 'violet' },
-            ].map((type, idx) => (
-              <span 
-                key={idx}
-                className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-medium",
-                  type.color === 'amber' ? "bg-amber-100 text-amber-700" :
-                  type.color === 'pink' ? "bg-pink-100 text-pink-700" :
-                  type.color === 'emerald' ? "bg-emerald-100 text-emerald-700" :
-                  type.color === 'indigo' ? "bg-indigo-100 text-indigo-700" :
-                  type.color === 'teal' ? "bg-teal-100 text-teal-700" :
-                  "bg-violet-100 text-violet-700"
-                )}
-              >
-                {type.label}
-              </span>
-            ))}
-            <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 flex items-center gap-1">
-              <Database className="w-3 h-3" /> Salesforce Native
-            </span>
+          <div className="inline-flex items-center gap-1 p-2 rounded-2xl bg-white/60 backdrop-blur-sm border border-slate-200/50 shadow-sm">
+            <span className="px-3 py-1.5 rounded-xl text-sm font-bold bg-gradient-to-r from-blue-500 to-cyan-500 text-white">FLOW</span>
+            <span className="text-slate-300">+</span>
+            <span className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-100 text-violet-700" title="System Testing">ST</span>
+            <span className="px-2 py-1.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-700" title="Regression">R</span>
+            <span className="px-2 py-1.5 rounded-lg text-xs font-semibold bg-pink-100 text-pink-700" title="API & Accessibility">A</span>
+            <span className="px-2 py-1.5 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700" title="Load Testing">L</span>
+            <span className="px-3 py-1.5 text-slate-400 text-sm">=</span>
+            <span className="px-3 py-1.5 text-sm font-bold bg-gradient-to-r from-blue-600 via-violet-600 to-emerald-600 bg-clip-text text-transparent">FLOWSTRAL</span>
           </div>
         </div>
 
@@ -127,23 +109,23 @@ function HeroSection() {
             {/* Main Headline */}
             <div className="space-y-4">
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 leading-[1.1] tracking-tight">
-                Maximize Your
+                One Platform.
+                <span className="block mt-2">Every Test Type.</span>
                 <span className="block mt-2 bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent pb-2" style={{ lineHeight: '1.2' }}>
-                  Test Coverage
+                  Zero Code.
                 </span>
               </h1>
               <p className="text-lg sm:text-xl text-slate-600 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                Build automated tests visually. Turn manual test cases into automation. 
-                Achieve <span className="font-semibold text-emerald-600">maximum coverage</span> without writing code.
+                System, Regression, API, Accessibility, and Load testing — <span className="font-semibold text-violet-600">finally unified</span>.
               </p>
             </div>
 
             {/* Stats Row */}
             <div className="flex flex-wrap justify-center lg:justify-start gap-x-8 gap-y-4">
               {[
-                { value: '0', suffix: ' code', label: 'Lines Required' },
-                { value: '10k+', label: 'Virtual Users' },
-                { value: '50+', label: 'Data Generators' },
+                { value: '5', suffix: '', label: 'Testing Types' },
+                { value: '10k+', suffix: '', label: 'Virtual Users' },
+                { value: '0', suffix: '', label: 'Lines of Code' },
               ].map((stat, idx) => (
                 <div key={idx} className="text-center lg:text-left">
                   <div className="text-2xl font-bold text-slate-800">
@@ -472,6 +454,312 @@ function HeroSection() {
         </div>
       </div>
 
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOWSTRAL METHODOLOGY SHOWCASE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function FlowstralSection() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const navigate = useNavigate();
+  
+  const flowstralParts = [
+    {
+      letters: 'FLOW',
+      title: 'Flow',
+      subtitle: 'Intelligent Workflow Engine',
+      description: 'The foundation that powers everything. Visual test workflows, smart recording, and seamless orchestration.',
+      icon: Workflow,
+      color: 'from-blue-500 to-cyan-500',
+      bgColor: 'from-blue-100 to-cyan-100',
+      borderColor: 'border-blue-300',
+      textColor: 'text-blue-600',
+      href: '/products/visual-builder'
+    },
+    {
+      letters: 'ST',
+      title: 'System Testing',
+      subtitle: 'End-to-End Validation',
+      description: 'Complete system testing with intelligent element detection, self-healing locators, and cross-browser support.',
+      icon: MonitorCheck,
+      color: 'from-violet-500 to-purple-500',
+      bgColor: 'from-violet-100 to-purple-100',
+      borderColor: 'border-violet-300',
+      textColor: 'text-violet-600',
+      href: '/products/test-management'
+    },
+    {
+      letters: 'R',
+      title: 'Regression',
+      subtitle: 'Automated Change Validation',
+      description: 'Robust regression testing with smart test selection, impact analysis, and self-healing locators. Includes visual regression with 6 comparison modes.',
+      icon: RefreshCw,
+      color: 'from-amber-500 to-orange-500',
+      bgColor: 'from-amber-100 to-orange-100',
+      borderColor: 'border-amber-300',
+      textColor: 'text-amber-600',
+      href: '/products/smart-recorder'
+    },
+    {
+      letters: 'A',
+      title: 'API & Accessibility',
+      subtitle: 'Multi-Protocol & WCAG 2.1',
+      description: 'REST, GraphQL, SOAP testing with security scanning. Plus WCAG 2.1 accessibility validation.',
+      icon: Cable,
+      color: 'from-pink-500 to-rose-500',
+      bgColor: 'from-pink-100 to-rose-100',
+      borderColor: 'border-pink-300',
+      textColor: 'text-pink-600',
+      href: '/products/api-testing'
+    },
+    {
+      letters: 'L',
+      title: 'Load Testing',
+      subtitle: '10,000+ Virtual Users',
+      description: 'Enterprise-grade performance testing with auto-correlation, multiple load patterns, and real-time metrics.',
+      icon: Activity,
+      color: 'from-emerald-500 to-teal-500',
+      bgColor: 'from-emerald-100 to-teal-100',
+      borderColor: 'border-emerald-300',
+      textColor: 'text-emerald-600',
+      href: '/products/performance'
+    },
+  ];
+
+  // Auto-cycle through parts
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveIndex(prev => (prev + 1) % flowstralParts.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="py-24 relative overflow-hidden bg-gradient-to-b from-white via-slate-50 to-blue-50/50">
+      {/* Animated Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Gradient orbs */}
+        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-blue-400/20 rounded-full blur-[150px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-violet-400/20 rounded-full blur-[150px]" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-emerald-400/10 rounded-full blur-[120px]" />
+        
+        {/* Grid pattern */}
+        <div className="absolute inset-0 opacity-[0.02]" style={{
+          backgroundImage: `linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)`,
+          backgroundSize: '80px 80px'
+        }} />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-6">
+        {/* Section Header */}
+        <div className="text-center mb-16">
+          <Badge className="mb-4 bg-gradient-to-r from-blue-100 to-violet-100 text-violet-700 border-violet-200 px-4 py-1.5">
+            <Sparkles className="w-3 h-3 mr-1.5" /> The FLOWSTRAL Methodology
+          </Badge>
+          <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6">
+            One Platform.{' '}
+            <span className="bg-gradient-to-r from-blue-600 via-violet-600 to-emerald-600 bg-clip-text text-transparent">
+              Complete Coverage.
+            </span>
+          </h2>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Every letter in FLOWSTRAL represents a critical testing dimension. Together, they form the complete QA lifecycle.
+          </p>
+        </div>
+
+        {/* FLOWSTRAL Word Display */}
+        <div className="flex justify-center mb-12">
+          <div className="inline-flex items-center gap-1 sm:gap-2 p-3 rounded-2xl bg-white/80 backdrop-blur-sm border border-slate-200 shadow-lg">
+            {flowstralParts.map((part, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveIndex(idx)}
+                className={cn(
+                  "relative px-3 sm:px-5 py-3 rounded-xl font-bold text-xl sm:text-3xl tracking-wider transition-all duration-500",
+                  activeIndex === idx 
+                    ? `bg-gradient-to-r ${part.color} text-white shadow-lg scale-110`
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                {part.letters}
+                {activeIndex === idx && (
+                  <div className={cn(
+                    "absolute -bottom-1 left-1/2 -translate-x-1/2 w-1/2 h-1 rounded-full bg-gradient-to-r",
+                    part.color
+                  )} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Flow Visualization - Horizontal Journey */}
+        <div className="relative mb-16">
+          {/* Connection Line */}
+          <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-slate-300 to-transparent -translate-y-1/2 hidden lg:block" />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6">
+            {flowstralParts.map((part, idx) => {
+              const Icon = part.icon;
+              const isActive = activeIndex === idx;
+              
+              return (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    setActiveIndex(idx);
+                    navigate(part.href);
+                  }}
+                  className={cn(
+                    "relative group cursor-pointer transition-all duration-500",
+                    isActive ? "scale-105 z-10" : "hover:scale-102"
+                  )}
+                >
+                  {/* Card */}
+                  <div className={cn(
+                    "relative p-6 rounded-2xl border backdrop-blur-sm transition-all duration-500 h-full",
+                    isActive 
+                      ? `bg-gradient-to-b ${part.bgColor} ${part.borderColor} shadow-xl`
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md"
+                  )}>
+                    {/* Glow effect */}
+                    {isActive && (
+                      <div className={cn(
+                        "absolute -inset-px rounded-2xl bg-gradient-to-r opacity-30 blur-sm -z-10",
+                        part.color
+                      )} />
+                    )}
+                    
+                    {/* Icon */}
+                    <div className={cn(
+                      "w-14 h-14 rounded-xl mb-4 flex items-center justify-center transition-all duration-500",
+                      isActive 
+                        ? `bg-gradient-to-r ${part.color} shadow-lg`
+                        : "bg-slate-100"
+                    )}>
+                      <Icon className={cn(
+                        "w-7 h-7 transition-colors",
+                        isActive ? "text-white" : "text-slate-500"
+                      )} />
+                    </div>
+
+                    {/* Letter badge */}
+                    <div className={cn(
+                      "inline-flex items-center gap-1 px-3 py-1 rounded-lg mb-3 text-sm font-bold",
+                      isActive 
+                        ? `bg-gradient-to-r ${part.color} text-white`
+                        : "bg-slate-100 text-slate-500"
+                    )}>
+                      {part.letters}
+                    </div>
+
+                    {/* Title */}
+                    <h3 className={cn(
+                      "text-lg font-bold mb-1 transition-colors",
+                      isActive ? "text-slate-900" : "text-slate-700"
+                    )}>
+                      {part.title}
+                    </h3>
+
+                    {/* Subtitle */}
+                    <p className={cn(
+                      "text-xs mb-3 transition-colors font-medium",
+                      isActive ? part.textColor : "text-slate-400"
+                    )}>
+                      {part.subtitle}
+                    </p>
+
+                    {/* Description */}
+                    <p className={cn(
+                      "text-sm leading-relaxed transition-all duration-300",
+                      isActive ? "text-slate-700 opacity-100" : "text-slate-500 opacity-80"
+                    )}>
+                      {part.description}
+                    </p>
+
+                    {/* Arrow connector (hidden on mobile) */}
+                    {idx < flowstralParts.length - 1 && (
+                      <div className="hidden lg:flex absolute -right-3 top-1/2 -translate-y-1/2 z-20">
+                        <div className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-500 bg-white border",
+                          isActive || activeIndex === idx + 1
+                            ? "border-slate-300 text-slate-600"
+                            : "border-slate-200 text-slate-400"
+                        )}>
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Feature Callout for Active Section */}
+        <div className="max-w-3xl mx-auto">
+          <div className={cn(
+            "p-8 rounded-3xl border backdrop-blur-sm transition-all duration-500 bg-gradient-to-r shadow-lg",
+            flowstralParts[activeIndex].bgColor,
+            flowstralParts[activeIndex].borderColor
+          )}>
+            <div className="flex flex-col sm:flex-row items-start gap-6">
+              <div className={cn(
+                "w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r shadow-xl flex-shrink-0",
+                flowstralParts[activeIndex].color
+              )}>
+                {React.createElement(flowstralParts[activeIndex].icon, { className: "w-8 h-8 text-white" })}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className={cn(
+                    "text-3xl font-black bg-gradient-to-r bg-clip-text text-transparent",
+                    flowstralParts[activeIndex].color
+                  )}>
+                    {flowstralParts[activeIndex].letters}
+                  </span>
+                  <span className="text-2xl font-bold text-slate-900">
+                    {flowstralParts[activeIndex].title}
+                  </span>
+                </div>
+                <p className="text-slate-600 mb-4">
+                  {flowstralParts[activeIndex].description}
+                </p>
+                <Button 
+                  onClick={() => navigate(flowstralParts[activeIndex].href)}
+                  className={cn(
+                    "bg-gradient-to-r text-white border-0 hover:opacity-90 shadow-md",
+                    flowstralParts[activeIndex].color
+                  )}
+                >
+                  Learn More
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Progress Indicators */}
+        <div className="flex justify-center gap-2 mt-8">
+          {flowstralParts.map((part, idx) => (
+            <button
+              key={idx}
+              onClick={() => setActiveIndex(idx)}
+              className={cn(
+                "h-2 rounded-full transition-all duration-500",
+                activeIndex === idx 
+                  ? `w-8 bg-gradient-to-r ${part.color}`
+                  : "w-2 bg-slate-300 hover:bg-slate-400"
+              )}
+            />
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1064,6 +1352,7 @@ export default function LandingPage() {
       <Header />
       <main>
         <HeroSection />
+        <FlowstralSection />
         <FeaturesSection />
         <PerformanceAPISection />
         <VisualA11ySection />

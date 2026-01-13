@@ -169,6 +169,7 @@ const App = () => {
                 <Route path="/auth" element={<PublicRoute><AuthPage /></PublicRoute>} />
                 
                 {/* Marketing Pages */}
+                <Route path="/landing" element={<LandingPage />} />
                 <Route path="/products/smart-recorder" element={<SmartRecorderPage />} />
                 <Route path="/products/:feature" element={<FeaturePage />} />
                 <Route path="/pricing" element={<PricingPage />} />
