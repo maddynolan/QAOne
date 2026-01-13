@@ -76,6 +76,7 @@ import Results from "./pages/Results";
 import ProjectManagement from "./pages/ProjectManagement";
 import VisualTestingPage from "./pages/VisualTestingPage";
 import SecretsVault from "./pages/SecretsVault";
+import TestPlayground from "./pages/TestPlayground";
 import APICoverageMap from "./pages/APICoverageMap";
 import DataDependencyGraph from "./pages/DataDependencyGraph";
 import APMConfig from "./pages/APMConfig";
@@ -170,6 +171,7 @@ const App = () => {
                 
                 {/* Marketing Pages */}
                 <Route path="/landing" element={<LandingPage />} />
+                <Route path="/test-playground" element={<TestPlayground />} />
                 <Route path="/products/smart-recorder" element={<SmartRecorderPage />} />
                 <Route path="/products/:feature" element={<FeaturePage />} />
                 <Route path="/pricing" element={<PricingPage />} />
