@@ -226,12 +226,15 @@ function ProductsSection({ addToCart, cartItemCount }: ProductsSectionProps) {
         {/* Filters */}
         <div className="grid md:grid-cols-4 gap-4 mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
           <div>
-            <Label>Search Products</Label>
+            <Label htmlFor="product-search-input">Search Products</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
+                id="product-search-input"
+                name="product-search"
                 data-testid="product-search"
-                placeholder="Search by name..."
+                placeholder="Search products by name..."
+                aria-label="Search products"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -478,13 +481,19 @@ function CartSection({ cartItems, setCartItems }: CartSectionProps) {
             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg space-y-3">
               {/* Promo Code */}
               <div className="flex gap-2">
+                <Label htmlFor="promo-code" className="sr-only">Promo Code</Label>
                 <Input 
-                  placeholder="Promo code (SAVE10, SAVE20, FLAT50)"
+                  id="promo-code"
+                  name="promo-code"
+                  placeholder="Enter promo code (SAVE10, SAVE20, FLAT50)"
+                  aria-label="Promo code"
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
                   data-testid="promo-code-input"
                 />
-                <Button onClick={applyPromo} data-testid="apply-promo">Apply</Button>
+                <Button onClick={applyPromo} data-testid="apply-promo" name="apply-promo">
+                  Apply
+                </Button>
               </div>
 
               {/* Shipping */}
