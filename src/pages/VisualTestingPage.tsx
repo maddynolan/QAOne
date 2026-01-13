@@ -16,7 +16,7 @@ import {
   Image as ImageIcon, Settings, Layers, GitCompare, 
   AlertCircle, CheckCircle, Clock, Maximize2, ZoomIn,
   Plus, Search, Filter, MoreVertical, ChevronDown, 
-  FileImage, Target, Box, Palette, Activity
+  FileImage, Target, Box, Palette, Activity, Lightbulb
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -54,6 +54,61 @@ import { toast } from 'sonner';
 import axios from 'axios';
 
 const API_BASE = 'http://localhost:8000/api/visual-testing';
+
+// Sample baseline images for demo purposes
+const SAMPLE_BASELINES: Baseline[] = [
+  {
+    test_name: 'login_page_hero',
+    path: '/baselines/login_page_hero.png',
+    file_size: 145000,
+    modified_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    dimensions: [1920, 1080],
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+  },
+  {
+    test_name: 'dashboard_overview',
+    path: '/baselines/dashboard_overview.png',
+    file_size: 234000,
+    modified_at: new Date(Date.now() - 86400000).toISOString(),
+    dimensions: [1920, 1080],
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+  },
+  {
+    test_name: 'checkout_form',
+    path: '/baselines/checkout_form.png',
+    file_size: 189000,
+    modified_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    dimensions: [1920, 1080],
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    test_name: 'product_catalog_grid',
+    path: '/baselines/product_catalog_grid.png',
+    file_size: 312000,
+    modified_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+    dimensions: [1920, 1080],
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    test_name: 'user_profile_settings',
+    path: '/baselines/user_profile_settings.png',
+    file_size: 167000,
+    modified_at: new Date().toISOString(),
+    dimensions: [1920, 1080],
+    created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+  },
+  {
+    test_name: 'mobile_navigation_menu',
+    path: '/baselines/mobile_navigation_menu.png',
+    file_size: 98000,
+    modified_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    dimensions: [375, 812],
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+  },
+];
+
+// Sample placeholder image (SVG as base64)
+const SAMPLE_IMAGE_PLACEHOLDER = `PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgdmlld0JveD0iMCAwIDgwMCA0NTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiBmaWxsPSIjMWUyOTNiIi8+CjxyZWN0IHg9IjUwIiB5PSI1MCIgd2lkdGg9IjcwMCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSI3NSIgd2lkdGg9IjEyMCIgaGVpZ2h0PSI1MCIgcng9IjQiIGZpbGw9IiM2MzY2ZjEiLz4KPHJlY3QgeD0iMjEwIiB5PSI4NSIgd2lkdGg9IjgwIiBoZWlnaHQ9IjMwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSIzMTAiIHk9Ijg1IiB3aWR0aD0iODAiIGhlaWdodD0iMzAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjQxMCIgeT0iODUiIHdpZHRoPSI4MCIgaGVpZ2h0PSIzMCIgcng9IjQiIGZpbGw9IiM0NzU1NjkiLz4KPHJlY3QgeD0iNjMwIiB5PSI3NSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSI1MCIgcng9IjI1IiBmaWxsPSIjMTBiOTgxIi8+CjxyZWN0IHg9IjUwIiB5PSIxODAiIHdpZHRoPSIzNDAiIGhlaWdodD0iMjIwIiByeD0iOCIgZmlsbD0iIzMzNDE1NSIvPgo8cmVjdCB4PSI0MTAiIHk9IjE4MCIgd2lkdGg9IjM0MCIgaGVpZ2h0PSIyMjAiIHJ4PSI4IiBmaWxsPSIjMzM0MTU1Ii8+CjxyZWN0IHg9IjcwIiB5PSIyMDAiIHdpZHRoPSIzMDAiIGhlaWdodD0iMTIwIiByeD0iNCIgZmlsbD0iIzQ3NTU2OSIvPgo8cmVjdCB4PSI0MzAiIHk9IjIwMCIgd2lkdGg9IjMwMCIgaGVpZ2h0PSIxMjAiIHJ4PSI0IiBmaWxsPSIjNDc1NTY5Ii8+CjxyZWN0IHg9IjcwIiB5PSIzNDAiIHdpZHRoPSIxNDAiIGhlaWdodD0iNDAiIHJ4PSI0IiBmaWxsPSIjNjM2NmYxIi8+CjxyZWN0IHg9IjQzMCIgeT0iMzQwIiB3aWR0aD0iMTQwIiBoZWlnaHQ9IjQwIiByeD0iNCIgZmlsbD0iIzYzNjZmMSIvPgo8dGV4dCB4PSI0MDAiIHk9IjQzNSIgZmlsbD0iIzY0NzQ4YiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2FtcGxlIEJhc2VsaW5lIEltYWdlPC90ZXh0Pgo8L3N2Zz4=`;
 
 // Types
 interface Baseline {
@@ -189,10 +244,14 @@ export default function VisualTestingPage() {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/baselines`);
-      setBaselines(response.data.baselines || []);
+      const apiBaselines = response.data.baselines || [];
+      // If API returns empty, use sample baselines for demo
+      setBaselines(apiBaselines.length > 0 ? apiBaselines : SAMPLE_BASELINES);
     } catch (error) {
       console.error('Error loading baselines:', error);
-      toast.error('Failed to load baselines');
+      // Use sample baselines when API is unavailable
+      setBaselines(SAMPLE_BASELINES);
+      toast.info('Showing sample baselines (backend not connected)');
     } finally {
       setLoading(false);
     }
@@ -289,13 +348,24 @@ export default function VisualTestingPage() {
   };
 
   const handleViewBaseline = async (baseline: Baseline) => {
+    // Check if this is a sample baseline
+    const isSample = SAMPLE_BASELINES.some(s => s.test_name === baseline.test_name);
+    
+    if (isSample) {
+      setSelectedBaseline(baseline);
+      setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER);
+      return;
+    }
+    
     try {
       const response = await axios.get(`${API_BASE}/baselines/${baseline.test_name}`);
       setSelectedBaseline(baseline);
       setSelectedBaselineImage(response.data.image_base64);
     } catch (error) {
       console.error('Error loading baseline:', error);
-      toast.error('Failed to load baseline image');
+      // Show placeholder on error
+      setSelectedBaseline(baseline);
+      setSelectedBaselineImage(SAMPLE_IMAGE_PLACEHOLDER);
     }
   };
 
@@ -416,6 +486,36 @@ export default function VisualTestingPage() {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
+            {/* How It Works Guide */}
+            <Card className="border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 dark:border-violet-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-amber-500" />
+                  How Visual Testing Works
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-4 gap-4">
+                  {[
+                    { step: 1, title: 'Create Baseline', desc: 'Upload or capture a screenshot of your expected UI', icon: Upload },
+                    { step: 2, title: 'Run Test', desc: 'During test execution, capture the current screen', icon: Target },
+                    { step: 3, title: 'Compare', desc: 'Choose a comparison mode and threshold', icon: GitCompare },
+                    { step: 4, title: 'Review Diff', desc: 'See highlighted differences and approve changes', icon: Eye },
+                  ].map((item) => (
+                    <div key={item.step} className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-900/60 rounded-lg">
+                      <div className="w-8 h-8 rounded-full bg-violet-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
+                        {item.step}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{item.title}</p>
+                        <p className="text-xs text-muted-foreground">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Stats Cards */}
             <div className="grid grid-cols-4 gap-4">
               <Card>

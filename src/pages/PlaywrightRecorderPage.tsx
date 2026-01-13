@@ -242,6 +242,12 @@ export default function PlaywrightRecorderPage() {
   const [captureForApiTest, setCaptureForApiTest] = useState(false);
   const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
   
+  // Visual checkpoint state
+  const [isCapturingVisual, setIsCapturingVisual] = useState(false);
+  const [visualCheckpoints, setVisualCheckpoints] = useState(0);
+  const [showVisualDialog, setShowVisualDialog] = useState(false);
+  const [visualBaselineName, setVisualBaselineName] = useState('');
+  
   // Accessibility scanning state
   const [isA11yScanning, setIsA11yScanning] = useState(false);
   const [a11yIssues, setA11yIssues] = useState<Array<{
@@ -2038,6 +2044,105 @@ export default function PlaywrightRecorderPage() {
     toast.info("Cleared");
   };
 
+  // Visual checkpoint capture handler
+  const handleCaptureVisualCheckpoint = async () => {
+    if (!currentUrl) {
+      toast.error("No page loaded to capture");
+      return;
+    }
+    
+    // Generate baseline name from URL
+    const urlPath = new URL(currentUrl).pathname.replace(/\//g, '_').replace(/^_/, '') || 'homepage';
+    const suggestedName = `${urlPath}_checkpoint_${visualCheckpoints + 1}`;
+    setVisualBaselineName(suggestedName);
+    setShowVisualDialog(true);
+  };
+
+  const handleConfirmVisualCapture = async () => {
+    if (!visualBaselineName.trim()) {
+      toast.error("Please enter a baseline name");
+      return;
+    }
+    
+    setIsCapturingVisual(true);
+    setShowVisualDialog(false);
+    
+    try {
+      // Try to capture via backend API
+      const response = await fetch("http://localhost:8000/api/visual-testing/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          url: currentUrl,
+          test_name: visualBaselineName.trim(),
+          full_page: 'true',
+          viewport_width: '1920',
+          viewport_height: '1080',
+          save_as_baseline: 'true'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Capture failed: ${response.statusText}`);
+      }
+      
+      // Add visual_check step to recorded actions
+      const newAction: RecordedAction = {
+        id: `visual_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        type: 'visual_check',
+        description: `Visual checkpoint: ${visualBaselineName}`,
+        selector: '',
+        value: visualBaselineName,
+        locators: [],
+        metadata: {
+          baselineName: visualBaselineName,
+          visualMode: 'anti_aliased',
+          visualThreshold: 0.1,
+          capturedAt: new Date().toISOString(),
+          url: currentUrl
+        }
+      };
+      
+      setActions(prev => [...prev, newAction]);
+      setVisualCheckpoints(prev => prev + 1);
+      
+      toast.success(`Visual checkpoint "${visualBaselineName}" captured!`, {
+        description: "Baseline saved and step added to recording"
+      });
+    } catch (error) {
+      console.error("[Visual Capture] Error:", error);
+      // Still add the step even if backend fails - user can capture baseline later
+      const newAction: RecordedAction = {
+        id: `visual_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        type: 'visual_check',
+        description: `Visual checkpoint: ${visualBaselineName}`,
+        selector: '',
+        value: visualBaselineName,
+        locators: [],
+        metadata: {
+          baselineName: visualBaselineName,
+          visualMode: 'anti_aliased',
+          visualThreshold: 0.1,
+          capturedAt: new Date().toISOString(),
+          url: currentUrl,
+          pendingCapture: true
+        }
+      };
+      
+      setActions(prev => [...prev, newAction]);
+      setVisualCheckpoints(prev => prev + 1);
+      
+      toast.warning(`Visual checkpoint step added (baseline capture pending)`, {
+        description: "Upload baseline image in Visual Testing tab later"
+      });
+    } finally {
+      setIsCapturingVisual(false);
+      setVisualBaselineName('');
+    }
+  };
+
   // Accessibility scan handler - scans current page during recording
   const handleA11yScan = async () => {
     if (!currentUrl) {
@@ -3498,6 +3603,28 @@ Recorded Test
                         )}
                       >
                         {a11yIssues.reduce((acc, p) => acc + p.summary.total, 0)}
+                      </Badge>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleCaptureVisualCheckpoint}
+                    disabled={isCapturingVisual || !currentUrl}
+                    variant="outline"
+                    className="h-10 px-3 border-violet-500/50 hover:bg-violet-500/10 text-violet-400"
+                    title="Capture visual checkpoint for regression testing"
+                  >
+                    {isCapturingVisual ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                    <span className="ml-1.5 text-xs">Visual</span>
+                    {visualCheckpoints > 0 && (
+                      <Badge 
+                        variant="secondary" 
+                        className="ml-1 h-5 min-w-5 px-1 text-xs bg-violet-500/20 text-violet-400"
+                      >
+                        {visualCheckpoints}
                       </Badge>
                     )}
                   </Button>
@@ -5832,6 +5959,79 @@ Recorded Test
           )}
         </div>
       )}
+
+      {/* Visual Checkpoint Dialog */}
+      <Dialog open={showVisualDialog} onOpenChange={setShowVisualDialog}>
+        <DialogContent className="max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Eye className="h-5 w-5 text-violet-400" />
+              Capture Visual Checkpoint
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-violet-500/10 rounded-lg border border-violet-500/30">
+              <p className="text-xs text-violet-300 mb-1">Current Page</p>
+              <p className="text-sm text-foreground truncate">{currentUrl}</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="baseline-name" className="text-foreground">Baseline Name</Label>
+              <Input
+                id="baseline-name"
+                value={visualBaselineName}
+                onChange={(e) => setVisualBaselineName(e.target.value)}
+                placeholder="e.g., login_page_hero"
+                className="bg-secondary border-border text-foreground"
+              />
+              <p className="text-xs text-muted-foreground">
+                This name will be used to reference this baseline in visual regression tests
+              </p>
+            </div>
+            
+            <div className="p-3 bg-muted rounded-lg space-y-2">
+              <p className="text-xs font-medium text-foreground">What happens next:</p>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3 text-emerald-400" />
+                  Screenshot captured and saved as baseline
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3 text-emerald-400" />
+                  Visual check step added to your recording
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-3 w-3 text-emerald-400" />
+                  Future test runs will compare against this baseline
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowVisualDialog(false)}
+              className="border-border text-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmVisualCapture}
+              disabled={!visualBaselineName.trim() || isCapturingVisual}
+              className="bg-violet-600 hover:bg-violet-700"
+            >
+              {isCapturingVisual ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4 mr-2" />
+              )}
+              Capture Baseline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Test Picker Dialog - Enterprise Scale */}
       <Dialog open={showTestPicker} onOpenChange={setShowTestPicker}>
