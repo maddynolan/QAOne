@@ -1,0 +1,106 @@
+# QAAI Project Rules
+
+## Required Reading
+Before working on this project, read these documents:
+
+1. **Master Reference**: `docs/QAAI-MASTER-REFERENCE.md` - Complete platform overview
+2. **Recording/Playback**: `docs/QAAI-CAPABILITIES-REFERENCE.md` - Deep dive on record/playback
+
+## Project Overview
+
+QAAI is a full-suite enterprise QA automation platform with:
+
+- **Recording**: Playwright-based with Recipe system for robust element capture
+- **Playback**: 4-layer fallback (SmartFinder → Legacy → AI Vision → Error)
+- **API Testing**: Postman-like with request chaining
+- **Performance Testing**: Real browser + protocol-level
+- **Accessibility Testing**: WCAG 2.1 with Axe-core
+- **Visual Testing**: Screenshot comparison
+- **Salesforce Testing**: Shadow DOM + Lightning support
+- **AI Features**: Self-healing, exploration, test generation
+
+## Key Architecture
+
+```
+Backend (Python/FastAPI) - Port 8000
+├── 60+ API routers in backend/app/routers/
+└── Services in backend/app/services/
+
+Desktop App (Electron/Playwright)
+├── flowstral-desktop/src/main/index.js (entry)
+├── flowstral-desktop/src/main/playwright-recorder.js (record/playback)
+├── flowstral-desktop/src/main/test-executor.js (test runner)
+└── flowstral-desktop/src/main/lib/ (SmartFinder, Recipe, AI agents)
+
+Browser Extension
+└── flowstral-extension/src/lib/recorder-engine.js
+```
+
+## Critical Files for Recording/Playback
+
+| File | Purpose |
+|------|---------|
+| `playwright-recorder.js` | Main recorder, executeAction(), runTest() |
+| `lib/smart-finder.js` | 8-phase element finding |
+| `lib/element-recipe.js` | Recipe model (what/where/which) |
+| `lib/recipe-recorder-integration.js` | Legacy ↔ Recipe conversion |
+| `test-executor.js` | Alternative executor with AI fallback |
+
+## Playback Fallback Order
+
+1. **SmartFinder** (8-phase, with retry) → 95% success
+2. **Legacy _findElement** (50+ strategies) → 4% additional
+3. **AI Vision Fallback** (GPT-4o screenshot) → 1% additional
+4. **Report failure** with details
+
+## Key Patterns
+
+### Element Finding with Retry
+```javascript
+await this.retryWithBackoff(async () => {
+  // Try SmartFinder, then legacy
+}, { maxRetries: 3, baseDelay: 500 });
+```
+
+### Recipe Format
+```javascript
+{
+  what: { role: 'button', text: 'Submit' },
+  where: { landmark: 'main' },
+  which: { position: 2, testId: 'submit-btn' }  // 1-based position!
+}
+```
+
+### AI Fallback
+```javascript
+const coords = await this.findElementWithAI(description, 'click');
+await this.page.mouse.click(coords.x, coords.y);
+```
+
+## Configuration Flags
+
+```javascript
+// In PlaywrightRecorder:
+useRecipeRecorder: true          // Recipe-based recording
+useSmartFinderForPlayback: true  // SmartFinder for playback
+enableAIFallback: true           // AI vision as last resort
+maxAICallsPerRun: 5              // Budget per test
+```
+
+## Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Wrong element clicked | Check elementIndex/position |
+| Element not found | Increase timeout, check SmartFinder logs |
+| Custom dropdown fails | Uses click-then-select for Radix |
+| AI not working | Check OPENAI_API_KEY env var |
+
+## Documentation Structure
+
+- `docs/QAAI-MASTER-REFERENCE.md` - Full platform reference
+- `docs/QAAI-CAPABILITIES-REFERENCE.md` - Recording/playback deep dive
+- `docs/API_TESTING_USAGE.md` - API testing guide
+- `docs/PERFORMANCE_TESTING_USAGE.md` - Perf testing guide
+- `docs/SALESFORCE_TESTING_GUIDE.md` - Salesforce guide
+- `docs/FEATURES_USAGE_GUIDE.md` - Complex verifications

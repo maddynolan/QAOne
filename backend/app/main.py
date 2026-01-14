@@ -7106,6 +7106,14 @@ try:
 except ImportError as e:
     logger.warning(f"Vision Self-Healing API not available: {e}")
 
+# AI-Enhanced Automation API (Zero-Failure Playback)
+try:
+    from app.routers.ai_automation_api import router as ai_automation_router
+    app.include_router(ai_automation_router)
+    logger.info("AI Automation API registered (zero-failure playback)")
+except ImportError as e:
+    logger.warning(f"AI Automation API not available: {e}")
+
 # Exploration Complete Workflow API
 from app.routers.exploration_workflow_api import router as exploration_workflow_router
 app.include_router(exploration_workflow_router)

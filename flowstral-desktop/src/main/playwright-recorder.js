@@ -47,10 +47,16 @@ class PlaywrightRecorder extends EventEmitter {
     this._stepByStep = false;
     
     // V2 Recipe-based recorder (more robust element identification)
-    // Enable this for better element finding on modern frameworks (Radix, Salesforce, etc.)
-    this.useRecipeRecorder = false; // TEMPORARILY DISABLED - was: options.useRecipeRecorder !== false;
+    // ENABLED: Better element finding on modern frameworks (Radix, Salesforce, etc.)
+    this.useRecipeRecorder = options.useRecipeRecorder !== false; // ENABLED by default
     this.recipeActions = []; // Actions captured by v2 recorder
     this.smartFinder = null; // SmartFinder instance for playback
+    this.useSmartFinderForPlayback = options.useSmartFinderForPlayback !== false; // Use SmartFinder during playback
+    
+    // AI Vision Fallback - LAST RESORT when all deterministic strategies fail
+    this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
+    this.aiCallsThisRun = 0;
+    this.maxAICallsPerRun = options.maxAICallsPerRun || 5; // Budget per test run
     
     // Load recorder engine code once
     this.recorderEngineCode = '';
@@ -1220,6 +1226,63 @@ class PlaywrightRecorder extends EventEmitter {
               }
             }
             
+            // Filter 2.5: CRITICAL - Skip React DevTools, Webpack, and framework internal code
+            // This catches garbage like "import { injectIntoGlobalHook } from '/@react-refr"
+            var frameworkInternalPatterns = [
+              '/@react',
+              '__webpack',
+              'injectIntoGlobalHook',
+              'webpackJsonp',
+              'undefined is not',
+              'Cannot read propert',
+              '__REACT_DEVTOOLS',
+              '__PREACT_DEVTOOLS',
+              'import {',
+              'import \\(',
+              'require\\(',
+              'from \\'',
+              'from "',
+              'module.exports',
+              'export default',
+              'export {',
+              '__esModule',
+              '__vite',
+              'hot module',
+              'hmr',
+              'localhost:',
+              '127.0.0.1:',
+              '.js:',
+              '.tsx:',
+              '.ts:'
+            ];
+            
+            var fullText = (text || '').toLowerCase();
+            var fullDesc = (desc || '').toLowerCase();
+            for (var pi = 0; pi < frameworkInternalPatterns.length; pi++) {
+              var pattern = frameworkInternalPatterns[pi].toLowerCase();
+              if (fullText.indexOf(pattern) !== -1 || fullDesc.indexOf(pattern) !== -1) {
+                console.log('[Flowstral] Skipping framework internal element:', desc.substring(0, 50));
+                isPhantomClick = true;
+                break;
+              }
+            }
+            
+            // Filter 2.6: Skip script tags or elements inside script tags
+            if (tag === 'script' || (bestElement.closest && bestElement.closest('script'))) {
+              console.log('[Flowstral] Skipping script element');
+              isPhantomClick = true;
+            }
+            
+            // Filter 2.7: Skip elements with code-like text patterns
+            if (!isPhantomClick && text) {
+              // Code patterns: arrow functions, const/let/var declarations, imports
+              var codePatterns = /^(const |let |var |function |import |export |return |if \\(|for \\(|\\(\\) =>|=> \\{)/i;
+              if (codePatterns.test(text.trim())) {
+                console.log('[Flowstral] Skipping code-like text:', text.substring(0, 30));
+                isPhantomClick = true;
+              }
+            }
+            
             // Filter 3: Skip truly internal Lightning components (primitives, formatters)
             // but NEVER skip search results, menu items, or elements with meaningful data
             var isInternalComponent = ['lightning-primitive-cell', 'lightning-primitive-icon', 
@@ -1332,7 +1395,56 @@ class PlaywrightRecorder extends EventEmitter {
             // Create unique key for this input
             const key = (input.id || '') + '|' + (input.name || '') + '|' + (input.placeholder || '') + '|' + (input.getAttribute('aria-label') || '');
             
-            // Store/update pending input
+            // Get additional context for better differentiation
+            // Find associated label text
+            var associatedLabel = '';
+            var formId = '';
+            var formAction = '';
+            var sectionContext = '';
+            
+            try {
+              // Find label via for attribute
+              if (input.id) {
+                var labelEl = document.querySelector('label[for="' + input.id + '"]');
+                if (labelEl) associatedLabel = (labelEl.textContent || '').trim();
+              }
+              
+              // Find label via parent
+              if (!associatedLabel) {
+                var parentLabel = input.closest('label');
+                if (parentLabel) {
+                  // Get text excluding the input value
+                  associatedLabel = (parentLabel.textContent || '').replace(input.value || '', '').trim();
+                }
+              }
+              
+              // Find nearby label (sibling or parent's label)
+              if (!associatedLabel) {
+                var parent = input.parentElement;
+                if (parent) {
+                  var nearbyLabel = parent.querySelector('label, .label, [class*="label"]');
+                  if (nearbyLabel) associatedLabel = (nearbyLabel.textContent || '').trim();
+                }
+              }
+              
+              // Get form context
+              var form = input.closest('form');
+              if (form) {
+                formId = form.id || '';
+                formAction = form.getAttribute('action') || '';
+              }
+              
+              // Get section/container context for disambiguation
+              var section = input.closest('section, [role="region"], [role="form"], .card, .panel, .modal, .dialog, header, footer, aside, nav, main, .cart, .checkout, .search');
+              if (section) {
+                sectionContext = section.getAttribute('aria-label') || 
+                                 section.getAttribute('data-testid') ||
+                                 section.id ||
+                                 section.className.split(' ').filter(c => c && c.length < 30 && !c.includes('--'))[0] || '';
+              }
+            } catch(e) {}
+            
+            // Store/update pending input with enhanced context
             window.__flowstralCDPInputs[key] = {
               timestamp: Date.now(),
               tag: 'input',
@@ -1349,7 +1461,12 @@ class PlaywrightRecorder extends EventEmitter {
               dataTest: input.getAttribute('data-test') || '',
               dataCy: input.getAttribute('data-cy') || '',
               fromShadow: path.some(p => p.nodeType === 11),
-              key: key
+              key: key,
+              // NEW: Additional context for disambiguation
+              label: associatedLabel,
+              formId: formId,
+              formAction: formAction,
+              sectionContext: sectionContext
             };
           } catch(err) {}
         }, true);
@@ -1817,6 +1934,9 @@ class PlaywrightRecorder extends EventEmitter {
     const { url, steps, headless = false, timeout = 30000 } = options;
     
     console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps');
+    
+    // Reset AI call counter for this test run
+    this.aiCallsThisRun = 0;
     
     // CRITICAL: Set flag to prevent recording navigations during test run
     this._isRunningTest = true;
@@ -2857,10 +2977,11 @@ class PlaywrightRecorder extends EventEmitter {
       this.page = null;
     }
 
-    // Final deduplication pass - only remove TRUE duplicates (same action within 200ms)
+    // Final deduplication pass - only remove TRUE duplicates (same action within 500ms)
     // IMPORTANT: DO NOT dedupe based on description alone - "Next" can be clicked multiple times!
     const uniqueActions = [];
     const seenFills = new Map(); // Track fills by field key
+    const seenNavigations = new Map(); // Track navigation URLs to dedupe consecutive same-URL navigations
     
     for (let i = 0; i < this.actions.length; i++) {
       const action = this.actions[i];
@@ -2872,15 +2993,36 @@ class PlaywrightRecorder extends EventEmitter {
         continue; // Don't add yet - we'll add the last one later
       }
       
-      // For click actions, check if it's a TRUE duplicate (same action within 200ms)
+      // For navigate actions, skip consecutive duplicates to same URL
+      if (action.type === 'navigate' || action.qword === 'GoTo') {
+        const navUrl = action.url || action.args?.[0] || '';
+        const lastNavUrl = seenNavigations.get('lastUrl');
+        const lastNavTimestamp = seenNavigations.get('lastTimestamp') || 0;
+        const navTimeDiff = Math.abs((action.timestamp || 0) - lastNavTimestamp);
+        
+        // Skip if same URL within 1 second
+        if (lastNavUrl === navUrl && navTimeDiff < 1000) {
+          console.log('[PlaywrightRecorder] Final dedupe: skipping duplicate navigation to:', navUrl);
+          continue;
+        }
+        
+        seenNavigations.set('lastUrl', navUrl);
+        seenNavigations.set('lastTimestamp', action.timestamp || 0);
+      }
+      
+      // For click/hover actions, check if it's a TRUE duplicate (same action within 500ms OR same timestamp)
       // Allow repeated clicks like "Next" buttons on multi-step forms!
       const prevAction = uniqueActions[uniqueActions.length - 1];
+      const timeDiff = Math.abs((prevAction?.timestamp || 0) - (action.timestamp || 0));
+      const isSameTimestamp = prevAction?.timestamp === action.timestamp;
+      
       if (prevAction && 
           prevAction.description === action.description &&
           prevAction.qword === action.qword &&
-          Math.abs((prevAction.timestamp || 0) - (action.timestamp || 0)) < 200) {
-        // Skip true double-click
-        console.log('[PlaywrightRecorder] Final dedupe: skipping double-click:', action.description);
+          (timeDiff < 500 || isSameTimestamp)) {
+        // Skip true double-click or same-timestamp duplicate
+        console.log('[PlaywrightRecorder] Final dedupe: skipping duplicate:', action.description, 
+                    isSameTimestamp ? '(same timestamp)' : `(${timeDiff}ms apart)`);
         continue;
       }
       
@@ -4252,6 +4394,16 @@ class PlaywrightRecorder extends EventEmitter {
     const cleanLabel = (label || '').replace(/"/g, '').trim();
     const isFillAction = action.type === 'fill' || action.type === 'type' || action.inputType;
     
+    // CRITICAL: Extract element index for duplicate elements (e.g., multiple "Add to Cart" buttons)
+    // action.args[1] contains the 0-based index of which matching element to click
+    const elementIndex = typeof action.args?.[1] === 'number' ? action.args[1] : 0;
+    if (elementIndex > 0) {
+      console.log(`[PlaywrightRecorder] Element index specified: ${elementIndex} (will click ${elementIndex + 1}${this._ordinal(elementIndex + 1).slice(-2)} matching element)`);
+    }
+    
+    // Helper to get element at specific index from a locator
+    const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
+    
     // Normalize selector - could be a string or object with selector property
     const selectorStr = typeof action.selector === 'string' 
       ? action.selector 
@@ -4513,54 +4665,68 @@ class PlaywrightRecorder extends EventEmitter {
     for (const strategy of strategies) {
       try {
         let locator;
+        let baseLocator; // Base locator before applying index
         
         // Handle special Playwright locator methods (THESE AUTOMATICALLY PIERCE SHADOW DOM)
+        // CRITICAL FIX: Use getAtIndex() instead of .first() to respect elementIndex
         if (strategy.value.startsWith('getByTestId:')) {
           // HIGHEST PRIORITY: data-testid - most reliable selector
           const testIdValue = strategy.value.replace('getByTestId:', '');
-          locator = this.page.getByTestId(testIdValue).first();
+          baseLocator = this.page.getByTestId(testIdValue);
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByText:')) {
           const text = strategy.value.replace('getByText:', '');
-          locator = this.page.getByText(text, { exact: true }).first();
+          baseLocator = this.page.getByText(text, { exact: true });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByLabel:')) {
           const labelText = strategy.value.replace('getByLabel:', '');
-          locator = this.page.getByLabel(labelText).first();
+          baseLocator = this.page.getByLabel(labelText);
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:textbox:')) {
           const name = strategy.value.replace('getByRole:textbox:', '');
-          locator = this.page.getByRole('textbox', { name }).first();
+          baseLocator = this.page.getByRole('textbox', { name });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:button:')) {
           const name = strategy.value.replace('getByRole:button:', '');
-          locator = this.page.getByRole('button', { name }).first();
+          baseLocator = this.page.getByRole('button', { name });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:link:')) {
           const name = strategy.value.replace('getByRole:link:', '');
-          locator = this.page.getByRole('link', { name }).first();
+          baseLocator = this.page.getByRole('link', { name });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:tab:')) {
           const name = strategy.value.replace('getByRole:tab:', '');
-          locator = this.page.getByRole('tab', { name }).first();
+          baseLocator = this.page.getByRole('tab', { name });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:menuitem:')) {
           const name = strategy.value.replace('getByRole:menuitem:', '');
-          locator = this.page.getByRole('menuitem', { name }).first();
+          baseLocator = this.page.getByRole('menuitem', { name });
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:')) {
           // Generic getByRole handler for role-name strategies
           const parts = strategy.value.replace('getByRole:', '').split(':');
           if (parts.length === 2) {
-            locator = this.page.getByRole(parts[0], { name: parts[1] }).first();
+            baseLocator = this.page.getByRole(parts[0], { name: parts[1] });
           } else {
-            locator = this.page.getByRole(parts[0]).first();
+            baseLocator = this.page.getByRole(parts[0]);
           }
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByPlaceholder:')) {
           const placeholder = strategy.value.replace('getByPlaceholder:', '');
-          locator = this.page.getByPlaceholder(placeholder).first();
+          baseLocator = this.page.getByPlaceholder(placeholder);
+          locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByTitle:')) {
           const title = strategy.value.replace('getByTitle:', '');
-          locator = this.page.getByTitle(title).first();
+          baseLocator = this.page.getByTitle(title);
+          locator = getAtIndex(baseLocator);
         } else {
-          locator = this.page.locator(strategy.value).first();
+          baseLocator = this.page.locator(strategy.value);
+          locator = getAtIndex(baseLocator);
         }
         
         const count = await locator.count().catch(() => 0);
         if (count > 0) {
-          const isVisible = await locator.isVisible({ timeout: 1000 }).catch(() => false);
+          const isVisible = await locator.isVisible({ timeout: 5000 }).catch(() => false);
           if (isVisible) {
             // For fill actions, validate that the element is actually fillable
             if (isFillAction) {
@@ -4714,17 +4880,18 @@ class PlaywrightRecorder extends EventEmitter {
         console.log(`[PlaywrightRecorder] Deep search found ${shadowResult.length} candidates:`, found);
         
         // Build locator from the found element info
+        // Use getAtIndex to respect elementIndex for duplicate elements
         let locator;
         if (found.id && !/^(lwc|aura)-/i.test(found.id)) {
-          locator = this.page.locator(`#${CSS.escape(found.id)}`).first();
+          locator = getAtIndex(this.page.locator(`#${CSS.escape(found.id)}`));
         } else if (found.ariaLabel) {
-          locator = this.page.getByLabel(found.ariaLabel).first();
+          locator = getAtIndex(this.page.getByLabel(found.ariaLabel));
         } else if (found.placeholder) {
-          locator = this.page.getByPlaceholder(found.placeholder).first();
+          locator = getAtIndex(this.page.getByPlaceholder(found.placeholder));
         } else if (found.title) {
-          locator = this.page.getByTitle(found.title).first();
+          locator = getAtIndex(this.page.getByTitle(found.title));
         } else if (found.name) {
-          locator = this.page.locator(`[name="${found.name}"]`).first();
+          locator = getAtIndex(this.page.locator(`[name="${found.name}"]`));
         }
         
         if (locator) {
@@ -4741,6 +4908,222 @@ class PlaywrightRecorder extends EventEmitter {
     
     console.log(`[PlaywrightRecorder] ✗ Could not find element: "${cleanLabel}"`);
     return null;
+  }
+
+  /**
+   * AI Vision Fallback - Find element by description using AI
+   * This is the LAST RESORT when all deterministic strategies fail
+   * @param {string} description - Human-readable element description
+   * @param {string} actionType - 'click', 'fill', etc.
+   * @returns {Promise<{x: number, y: number} | null>} - Coordinates or null if AI fails
+   */
+  async findElementWithAI(description, actionType = 'click') {
+    if (!this.enableAIFallback) {
+      console.log('[AI Fallback] AI fallback is disabled');
+      return null;
+    }
+    
+    if (this.aiCallsThisRun >= this.maxAICallsPerRun) {
+      console.log(`[AI Fallback] Budget exhausted (${this.aiCallsThisRun}/${this.maxAICallsPerRun} calls used)`);
+      return null;
+    }
+    
+    try {
+      console.log(`[AI Fallback] 🤖 Attempting AI vision for: "${description}"`);
+      this.aiCallsThisRun++;
+      
+      // Take screenshot
+      const screenshot = await this.page.screenshot({ type: 'png' });
+      const screenshotBase64 = screenshot.toString('base64');
+      
+      // Get viewport dimensions
+      const viewport = await this.page.viewportSize();
+      
+      // Try to call AI service via backend API
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+      
+      try {
+        const response = await fetch(`${backendUrl}/api/ai/vision/find-element`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            screenshot_base64: screenshotBase64,
+            description: description,
+            action_type: actionType,
+            viewport: viewport,
+            context: {
+              url: this.page.url(),
+              title: await this.page.title()
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.found && result.confidence > 0.7 && result.x && result.y) {
+            console.log(`[AI Fallback] ✅ AI found element at (${result.x}, ${result.y}) with ${Math.round(result.confidence * 100)}% confidence`);
+            return { x: result.x, y: result.y, confidence: result.confidence };
+          }
+        }
+      } catch (e) {
+        console.log('[AI Fallback] Backend AI service not available:', e.message);
+      }
+      
+      // Fallback: OpenAI API directly if configured
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (openaiKey) {
+        try {
+          const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openaiKey}`
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are a UI element locator. Given a screenshot and element description, return the PIXEL COORDINATES (x, y) of the CENTER of that element. 
+                  
+IMPORTANT: Return ONLY a JSON object in this exact format:
+{"found": true, "x": 123, "y": 456, "confidence": 0.9}
+
+If you cannot find the element, return:
+{"found": false, "x": null, "y": null, "confidence": 0}
+
+The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be within this range.`
+                },
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Find the element for "${actionType}" action: "${description}"`
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: { url: `data:image/png;base64,${screenshotBase64}` }
+                    }
+                  ]
+                }
+              ],
+              max_tokens: 100
+            })
+          });
+          
+          if (openaiResponse.ok) {
+            const openaiResult = await openaiResponse.json();
+            const content = openaiResult.choices?.[0]?.message?.content || '';
+            
+            // Parse JSON response
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.found && parsed.x && parsed.y) {
+                console.log(`[AI Fallback] ✅ OpenAI found element at (${parsed.x}, ${parsed.y})`);
+                return { x: parsed.x, y: parsed.y, confidence: parsed.confidence || 0.8 };
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[AI Fallback] OpenAI API error:', e.message);
+        }
+      }
+      
+      console.log('[AI Fallback] AI could not find the element');
+      return null;
+      
+    } catch (error) {
+      console.error('[AI Fallback] Error:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Click at specific coordinates (used by AI fallback)
+   */
+  async clickAtCoordinates(x, y) {
+    console.log(`[AI Fallback] Clicking at coordinates (${x}, ${y})`);
+    await this.page.mouse.click(x, y);
+    await this.page.waitForTimeout(200); // Let UI settle
+  }
+
+  /**
+   * Retry with exponential backoff - handles transient failures
+   * @param {Function} fn - Async function to retry
+   * @param {Object} options - { maxRetries: 3, baseDelay: 500, maxDelay: 5000, description: 'action' }
+   * @returns {Promise<any>} - Result of fn or throws after all retries
+   */
+  async retryWithBackoff(fn, options = {}) {
+    const { 
+      maxRetries = 3, 
+      baseDelay = 500, 
+      maxDelay = 5000,
+      description = 'action'
+    } = options;
+    
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff: 500ms, 1000ms, 2000ms, etc.
+          const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+          console.log(`[Retry] ${description} failed (attempt ${attempt}/${maxRetries}), waiting ${delay}ms...`);
+          console.log(`[Retry] Error: ${error.message}`);
+          await this.page.waitForTimeout(delay);
+          
+          // Wait for page stability before retry
+          await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+        }
+      }
+    }
+    
+    console.log(`[Retry] ${description} failed after ${maxRetries} attempts`);
+    throw lastError;
+  }
+
+  /**
+   * Find element with retry - wraps the element finding logic with retries
+   * @param {Object} action - The action containing element info
+   * @returns {Promise<{locator, strategy}|null>}
+   */
+  async findElementWithRetry(action) {
+    const label = action.label || action.text || action.description;
+    
+    try {
+      return await this.retryWithBackoff(async () => {
+        // Try SmartFinder first
+        if (this.useSmartFinderForPlayback) {
+          if (!this.smartFinder) {
+            this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+          }
+          
+          await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+          await this.page.waitForTimeout(300);
+          
+          const recipe = legacyActionToRecipe(action);
+          const locator = await this.smartFinder.find(recipe);
+          if (locator) {
+            return { locator, strategy: { type: 'SmartFinder' } };
+          }
+        }
+        
+        // Fallback to legacy finder
+        const result = await this._findElement(action);
+        if (result) return result;
+        
+        throw new Error(`Element not found: "${label}"`);
+      }, { maxRetries: 3, description: `Find "${label}"` });
+    } catch (e) {
+      return null; // All retries failed
+    }
   }
 
   /**
@@ -4823,8 +5206,31 @@ class PlaywrightRecorder extends EventEmitter {
         case 'ClickText':
         case 'clickelement':
         case 'ClickElement':
-          // Find element using multiple strategies
-          const clickResult = await this._findElement(action);
+          // ============================================================
+          // ROBUST ELEMENT FINDING WITH RETRY + 3-LAYER FALLBACK
+          // Layer 1: SmartFinder (recipe-based) with retry
+          // Layer 2: Legacy _findElement (50+ strategies) with retry
+          // Layer 3: AI Vision Fallback (screenshot + GPT-4o)
+          // ============================================================
+          
+          // Try finding element with automatic retry (handles slow pages)
+          let clickResult = await this.findElementWithRetry(action);
+          
+          // Layer 3: AI FALLBACK - Last resort when all deterministic strategies fail
+          if (!clickResult && this.enableAIFallback) {
+            console.log(`[PlaywrightRecorder] All strategies failed after retries, trying AI fallback...`);
+            const aiResult = await this.findElementWithAI(label || selector || action.description, 'click');
+            if (aiResult) {
+              try {
+                await this.clickAtCoordinates(aiResult.x, aiResult.y);
+                console.log(`[PlaywrightRecorder] ✓ AI Fallback click succeeded at (${aiResult.x}, ${aiResult.y})`);
+                return { success: true, strategy: 'AI Vision Fallback' };
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] AI Fallback click failed:`, e.message);
+              }
+            }
+          }
+          
           if (!clickResult) {
             return { success: false, error: `Could not find element to click: "${label || selector}"` };
           }
@@ -5001,7 +5407,26 @@ class PlaywrightRecorder extends EventEmitter {
         case 'type':
         case 'input':
           // Find input element using multiple strategies
-          const fillResult = await this._findElement(action);
+          let fillResult = await this._findElement(action);
+          
+          // AI FALLBACK for fill - Last resort
+          if (!fillResult && this.enableAIFallback) {
+            console.log(`[PlaywrightRecorder] Fill: All strategies failed, trying AI fallback...`);
+            const aiFillResult = await this.findElementWithAI(label || selector || action.description, 'fill');
+            if (aiFillResult) {
+              try {
+                // Click to focus, then type
+                await this.page.mouse.click(aiFillResult.x, aiFillResult.y);
+                await this.page.waitForTimeout(100);
+                await this.page.keyboard.type(value || '');
+                console.log(`[PlaywrightRecorder] ✓ AI Fallback fill succeeded at (${aiFillResult.x}, ${aiFillResult.y})`);
+                return { success: true, strategy: 'AI Vision Fallback' };
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] AI Fallback fill failed:`, e.message);
+              }
+            }
+          }
+          
           if (!fillResult) {
             return { success: false, error: `Could not find input field: "${label || selector}"` };
           }
@@ -5047,7 +5472,30 @@ class PlaywrightRecorder extends EventEmitter {
 
         case 'select':
           // Find select element using multiple strategies
-          const selectResult = await this._findElement(action);
+          let selectResult = await this._findElement(action);
+          
+          // AI FALLBACK for select - Last resort
+          if (!selectResult && this.enableAIFallback) {
+            console.log(`[PlaywrightRecorder] Select: All strategies failed, trying AI fallback...`);
+            const aiSelectResult = await this.findElementWithAI(label || selector || action.description, 'select');
+            if (aiSelectResult) {
+              try {
+                // Click to open dropdown, then find and click option
+                await this.page.mouse.click(aiSelectResult.x, aiSelectResult.y);
+                await this.page.waitForTimeout(300);
+                // Try to find and click the option by text
+                const optionLocator = this.page.getByText(value, { exact: false });
+                if (await optionLocator.count() > 0) {
+                  await optionLocator.first().click();
+                  console.log(`[PlaywrightRecorder] ✓ AI Fallback select succeeded`);
+                  return { success: true, strategy: 'AI Vision Fallback' };
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] AI Fallback select failed:`, e.message);
+              }
+            }
+          }
+          
           if (!selectResult) {
             return { success: false, error: `Could not find select field: "${label || selector}"` };
           }
@@ -5058,7 +5506,31 @@ class PlaywrightRecorder extends EventEmitter {
             el.style.outline = '3px solid #4ade80';
           }).catch(() => {});
           
-          await selectResult.locator.selectOption(value, { timeout });
+          // Check if this is a native select or custom dropdown (Radix, Headless UI, etc.)
+          const tagName = await selectResult.locator.evaluate(el => el.tagName.toLowerCase()).catch(() => 'div');
+          
+          if (tagName === 'select') {
+            // Native select - use selectOption
+            await selectResult.locator.selectOption(value, { timeout });
+          } else {
+            // Custom dropdown (Radix, Headless UI, etc.) - click to open, then click option
+            console.log(`[PlaywrightRecorder] Non-native select detected (${tagName}), using click-then-select`);
+            await selectResult.locator.click();
+            await this.page.waitForTimeout(200);
+            
+            // Try to find and click the option
+            const optionLocator = this.page.getByText(value, { exact: false });
+            const optionCount = await optionLocator.count();
+            if (optionCount > 0) {
+              await optionLocator.first().click();
+            } else {
+              // Fallback: try role option
+              await this.page.getByRole('option', { name: value }).first().click().catch(async () => {
+                // Last resort: look for listitem with matching text
+                await this.page.getByRole('listitem').filter({ hasText: value }).first().click();
+              });
+            }
+          }
           
           await selectResult.locator.evaluate(el => {
             el.style.outline = '';

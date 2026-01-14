@@ -423,7 +423,8 @@ function legacyActionToRecipe(legacyAction) {
       name: element.name || selectorObj.name || null,
       ariaLabel: element.ariaLabel || selectorObj.ariaLabel || null,
       placeholder: element.placeholder || selectorObj.placeholder || null,
-      position: legacyAction.elementIndex ? legacyAction.elementIndex + 1 : null,
+      // FIX: Use typeof check because elementIndex 0 is falsy but valid
+      position: typeof legacyAction.elementIndex === 'number' ? legacyAction.elementIndex + 1 : null,
     },
     confirm: {
       cssSelector: typeof selectorObj === 'string' ? selectorObj : selectorObj.selector,

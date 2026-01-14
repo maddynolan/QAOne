@@ -1,169 +1,102 @@
-# ArisTrace - Quick Reference
+# QAAI Documentation Index
 
-> For full documentation, see [DOCUMENTATION.md](../DOCUMENTATION.md)
+## 🚀 START HERE
 
-## Quick Start
-
-```bash
-# Frontend
-npm install && npm run dev
-
-# Backend
-cd backend && pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-
-# Extension
-# Load flowstral-extension folder in Chrome (chrome://extensions)
-```
-
-## Ports
-
-| Service | Port |
-|---------|------|
-| Frontend | 5173 (dev) / 8080 (prod) |
-| Backend | 8000 |
-| Test Website | 3000 |
-| E-commerce Demo | 8002 |
-
-## Key URLs
-
-| Page | Path | Description |
-|------|------|-------------|
-| Dashboard | `/` | Overview & KPIs |
-| Trace (Record) | `/flowstral` | Record browser sessions |
-| Workflow Editor | `/flowstral/workflow-editor` | Visual test builder |
-| Test Cases | `/cases` | Test case library |
-| Test Execution | `/execution` | Releases, Plans, Runs |
-| Traceability | `/traceability` | Coverage matrix |
-| Requirements | `/requirements` | Requirement management |
-| Defects | `/defects` | Bug tracking |
-| Performance & Load | `/load-testing` | Load testing |
-| API Testing | `/enhanced-api-testing` | API testing |
-| Settings | `/settings` | Configuration & data management |
-
-## Core Workflow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    TEST MANAGEMENT LIFECYCLE                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  REQUIREMENTS ──► TEST CASES ──► TEST PLANS ──► TEST RUNS ──► DEFECTS  │
-│       ↓              ↓              ↓              ↓            ↓      │
-│    Define        Create         Organize        Execute        Track   │
-│    (REQ-xxx)     (TC-xxx)       (TP-xxx)        (TR-xxx)       (DEF-xx)│
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## Recording Workflow
-
-```
-Extension → Trace Page → Workflow Editor → Test Case → Test Plan → Execute
-    ↓           ↓              ↓              ↓            ↓          ↓
-  Record     Review        Edit Flow       Approve      Organize   Run Tests
-             + Assert      + Add Steps     + Save       + Group    + Evidence
-```
-
-## Test Execution Hierarchy
-
-```
-Release (Test Cycle)
- └── Test Plans (Smoke, Regression, Functional, etc.)
-      └── Test Cases (Linked from library)
-           └── Test Runs (Execution records)
-                └── Defects (From failed steps)
-```
-
-## Quick Actions
-
-| Action | Path | Description |
-|--------|------|-------------|
-| Create Test Case | `/cases/new` | New manual/automated test |
-| Create Requirement | `/requirements/new` | New requirement |
-| Create Defect | `/defects/new` | Report a bug |
-| Run Test | `/execution` → Select Plan → Execute | Step-by-step execution |
-
-## API Endpoints
-
-```
-# Sessions/Recordings
-GET  /api/flowstral/sessions             # List recordings
-POST /api/flowstral/save-session         # Save recording
-GET  /api/flowstral/session/{id}/artifacts  # Get session details
-
-# Test Cases
-GET  /test-cases                         # List test cases
-POST /test-cases                         # Create test case
-
-# Requirements
-GET  /requirements                       # List requirements
-POST /requirements                       # Create requirement
-
-# Defects
-GET  /defects                            # List defects
-POST /defects                            # Create defect
-
-# Traceability
-GET  /api/traceability                   # Get traceability matrix
-
-# Sample Data
-POST /api/sample-data/load               # Load sample data
-```
-
-## Data Storage
-
-- **Primary**: Backend API (in-memory/SQLite)
-- **Fallback**: localStorage (for offline/dev)
-- **Clear Data**: Settings → Data Management → Clear All Data
-
-## File Structure
-
-```
-QAAI/
-├── src/
-│   ├── pages/               # React pages
-│   │   ├── Flowstral.tsx    # Trace (Record)
-│   │   ├── TestExecution.tsx # Releases/Plans/Runs
-│   │   ├── TestCaseExecutor.tsx # Step-by-step execution
-│   │   ├── Traceability.tsx # Coverage matrix
-│   │   └── ...
-│   ├── components/          # Reusable components
-│   └── lib/                 # Services & utilities
-├── backend/app/
-│   ├── routers/             # API endpoints
-│   └── services/            # Business logic
-├── flowstral-extension/     # Chrome extension
-├── DOCUMENTATION.md         # Full docs (living document)
-└── docs/README.md           # This file (quick reference)
-```
-
-## Common Commands
-
-```bash
-# Start frontend
-npm run dev
-
-# Start backend
-cd backend && uvicorn app.main:app --reload --port 8000
-
-# Check for linting errors
-npm run lint
-
-# Build for production
-npm run build
-```
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+S` | Save (in editors) |
-| `Esc` | Close dialogs |
-| `Enter` | Confirm/Submit |
+| Document | Purpose |
+|----------|---------|
+| **[QAAI-MASTER-REFERENCE.md](QAAI-MASTER-REFERENCE.md)** | 📌 **MASTER REFERENCE** - Complete platform overview |
+| [QAAI-CAPABILITIES-REFERENCE.md](QAAI-CAPABILITIES-REFERENCE.md) | Recording/Playback deep dive |
+| [QUICK_START.md](QUICK_START.md) | Getting started guide |
+| [USER_MANUAL.md](USER_MANUAL.md) | End user guide |
 
 ---
 
-*Last Updated: December 12, 2024*
+## 📚 Documentation by Category
 
-*See [DOCUMENTATION.md](../DOCUMENTATION.md) for complete documentation*
+### Core Platform
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
+| [ENTERPRISE_ARCHITECTURE.md](ENTERPRISE_ARCHITECTURE.md) | Enterprise features |
+| [PLATFORM_ARCHITECTURE.md](PLATFORM_ARCHITECTURE.md) | Platform design |
+| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Database structure |
+
+### Recording & Playback
+| Document | Description |
+|----------|-------------|
+| [QAAI-CAPABILITIES-REFERENCE.md](QAAI-CAPABILITIES-REFERENCE.md) | Full recording/playback system |
+| [RECORDING-PLAYBACK-DEEP-DIVE.md](RECORDING-PLAYBACK-DEEP-DIVE.md) | Technical deep dive |
+| [ROBUST-PLAYBACK-ACTION-PLAN.md](ROBUST-PLAYBACK-ACTION-PLAN.md) | Improvements made |
+| [INTELLIGENT_LOCATOR_BUILDER.md](INTELLIGENT_LOCATOR_BUILDER.md) | Element finding |
+
+### API Testing
+| Document | Description |
+|----------|-------------|
+| [API_TESTING_USAGE.md](API_TESTING_USAGE.md) | How to use API testing |
+| [API_TESTING_ARCHITECTURE.md](API_TESTING_ARCHITECTURE.md) | API testing design |
+| [API_AND_PERFORMANCE_TESTING_GUIDE.md](API_AND_PERFORMANCE_TESTING_GUIDE.md) | Combined guide |
+
+### Performance Testing
+| Document | Description |
+|----------|-------------|
+| [PERFORMANCE_TESTING_USAGE.md](PERFORMANCE_TESTING_USAGE.md) | How to use perf testing |
+| [PERFORMANCE_TESTING_ARCHITECTURE.md](PERFORMANCE_TESTING_ARCHITECTURE.md) | Perf testing design |
+| [PROTOCOL_RECORDING_PERFORMANCE_TESTING.md](PROTOCOL_RECORDING_PERFORMANCE_TESTING.md) | Protocol-level |
+
+### Salesforce Testing
+| Document | Description |
+|----------|-------------|
+| [SALESFORCE_TESTING_GUIDE.md](SALESFORCE_TESTING_GUIDE.md) | Complete SF guide |
+| [SALESFORCE_AUTH_SETUP.md](SALESFORCE_AUTH_SETUP.md) | Authentication setup |
+| [SALESFORCE_AUTH_EXPLAINED.md](SALESFORCE_AUTH_EXPLAINED.md) | Auth explained |
+| [SF_TOOLS_USAGE_GUIDE.md](SF_TOOLS_USAGE_GUIDE.md) | SF tools usage |
+
+### AI Features
+| Document | Description |
+|----------|-------------|
+| [AI-FEATURES.md](AI-FEATURES.md) | AI capabilities |
+| [AI-INTEGRATION-IMPLEMENTATION.md](AI-INTEGRATION-IMPLEMENTATION.md) | AI integration |
+| [FLOWSTRAL-AI-MODEL-STRATEGY.md](FLOWSTRAL-AI-MODEL-STRATEGY.md) | AI model strategy |
+
+### Complex Verifications
+| Document | Description |
+|----------|-------------|
+| [FEATURES_USAGE_GUIDE.md](FEATURES_USAGE_GUIDE.md) | Email, PDF, File verification |
+| [COMPLEX_VERIFICATIONS.md](COMPLEX_VERIFICATIONS.md) | Complex verification types |
+
+### Deployment
+| Document | Description |
+|----------|-------------|
+| [CUSTOMER-DEPLOYMENT-OPTIONS.md](CUSTOMER-DEPLOYMENT-OPTIONS.md) | Deployment options |
+| [CUSTOMER-AI-DEPLOYMENT-OPTIONS.md](CUSTOMER-AI-DEPLOYMENT-OPTIONS.md) | AI deployment |
+| [AIR_GAPPED_DEPLOYMENT.md](AIR_GAPPED_DEPLOYMENT.md) | Offline deployment |
+
+### Reference
+| Document | Description |
+|----------|-------------|
+| [BACKEND_REFERENCE.md](BACKEND_REFERENCE.md) | Backend API reference |
+| [FRONTEND_REFERENCE.md](FRONTEND_REFERENCE.md) | Frontend reference |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Quick reference card |
+
+---
+
+## 🗄️ Archive
+
+Old/historical documents are in `archive/`:
+- `archive/fixes/` - Bug fix notes
+- `archive/status/` - Status reports
+- `archive/debug/` - Debug sessions
+- `archive/sessions/` - Session summaries
+- `archive/old/` - Miscellaneous old docs
+
+---
+
+## For AI Assistants
+
+To quickly understand QAAI, read these in order:
+
+1. `QAAI-MASTER-REFERENCE.md` - Full platform overview
+2. `QAAI-CAPABILITIES-REFERENCE.md` - If working on recording/playback
+3. Feature-specific doc - If working on specific feature
+
+Or just say: "Read QAAI-MASTER-REFERENCE.md" at the start of conversation.

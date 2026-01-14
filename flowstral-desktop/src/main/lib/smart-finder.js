@@ -324,8 +324,8 @@ class SmartFinder {
       return { success: true, locator: locator.first(), count: 1 };
     }
     
-    // Multiple matches - use position if available
-    if (which?.position && which.position <= count) {
+    // Multiple matches - use position if available (most reliable for disambiguation)
+    if (typeof which?.position === 'number' && which.position > 0 && which.position <= count) {
       this.log(`Multiple matches (${count}), using position ${which.position}`);
       return { success: true, locator: locator.nth(which.position - 1), count };
     }
@@ -339,9 +339,59 @@ class SmartFinder {
       }
     }
     
-    // Default to first
-    this.log(`Multiple matches (${count}), using first`);
+    // Multiple matches - try to use ID as filter
+    if (which?.id && !this._isDynamicId(which.id)) {
+      try {
+        const idLocator = this.page.locator(`#${which.id}`);
+        const idCount = await idLocator.count();
+        if (idCount === 1) {
+          this.log(`Multiple matches (${count}), filtered to unique ID: ${which.id}`);
+          return { success: true, locator: idLocator.first(), count: 1 };
+        }
+      } catch (e) {
+        // ID selector failed, continue
+      }
+    }
+    
+    // Multiple matches - try to find one that's visible and in viewport
+    try {
+      for (let i = 0; i < Math.min(count, 10); i++) { // Check first 10 matches
+        const candidate = locator.nth(i);
+        const isVisible = await candidate.isVisible({ timeout: 500 }).catch(() => false);
+        if (isVisible) {
+          const box = await candidate.boundingBox().catch(() => null);
+          if (box && box.y >= 0 && box.y < 1000) { // Visible in viewport
+            this.log(`Multiple matches (${count}), using first visible in viewport (index ${i})`);
+            return { success: true, locator: candidate, count };
+          }
+        }
+      }
+    } catch (e) {
+      // Visibility check failed, continue to default
+    }
+    
+    // Default to first with warning
+    this.log(`WARNING: Multiple matches (${count}) with no disambiguation, using first. Consider recording with element index.`);
     return { success: true, locator: locator.first(), count };
+  }
+  
+  /**
+   * Check if an ID looks dynamic/auto-generated
+   */
+  _isDynamicId(id) {
+    if (!id) return true;
+    const dynamicPatterns = [
+      /^[a-f0-9]{8}-[a-f0-9]{4}/i,  // UUID
+      /^\d{10,}$/,                   // Timestamp
+      /^:r\d+:$/,                    // Radix
+      /^ember\d+$/,                  // Ember
+      /^react-/,                     // React
+      /^vue_/,                       // Vue
+      /^aura\d+/,                    // Salesforce Aura
+      /^lwc-\d+/,                    // Salesforce LWC
+      /_\d{5,}$/,                    // Ending with long numbers
+    ];
+    return dynamicPatterns.some(p => p.test(id));
   }
   
   // ==========================================================================

@@ -30,6 +30,152 @@ class TestExecutor {
     // V2: SmartFinder for recipe-based element finding (more robust)
     this.useSmartFinder = options.useSmartFinder !== false; // Default: enabled
     this.smartFinder = null;
+    
+    // AI Fallback: Enable AI vision for element finding as last resort
+    this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
+    this.aiCallsThisRun = 0;
+    this.maxAICallsPerRun = options.maxAICallsPerRun || 3; // Budget per test run
+  }
+  
+  /**
+   * AI Vision Fallback - Find element by description using AI
+   * This is the LAST RESORT when all deterministic strategies fail
+   * @param {string} description - Human-readable element description
+   * @param {string} actionType - 'click', 'fill', etc.
+   * @returns {Promise<{x: number, y: number} | null>} - Coordinates or null if AI fails
+   */
+  async findElementWithAI(description, actionType = 'click') {
+    if (!this.enableAIFallback) {
+      console.log('[AI Fallback] AI fallback is disabled');
+      return null;
+    }
+    
+    if (this.aiCallsThisRun >= this.maxAICallsPerRun) {
+      console.log(`[AI Fallback] AI budget exhausted (${this.aiCallsThisRun}/${this.maxAICallsPerRun} calls used)`);
+      return null;
+    }
+    
+    try {
+      console.log(`[AI Fallback] 🤖 Attempting AI vision for: "${description}"`);
+      this.aiCallsThisRun++;
+      
+      // Take screenshot
+      const screenshot = await this.page.screenshot({ type: 'png' });
+      const screenshotBase64 = screenshot.toString('base64');
+      
+      // Get viewport dimensions
+      const viewport = await this.page.viewportSize();
+      
+      // Try to call AI service via backend or local model
+      // First try: Backend API
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+      
+      try {
+        const response = await fetch(`${backendUrl}/api/ai/vision/find-element`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            screenshot_base64: screenshotBase64,
+            description: description,
+            action_type: actionType,
+            viewport: viewport,
+            context: {
+              url: this.page.url(),
+              title: await this.page.title()
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.found && result.confidence > 0.7 && result.x && result.y) {
+            console.log(`[AI Fallback] ✅ AI found element at (${result.x}, ${result.y}) with ${Math.round(result.confidence * 100)}% confidence`);
+            return { x: result.x, y: result.y, confidence: result.confidence };
+          }
+        }
+      } catch (e) {
+        console.log('[AI Fallback] Backend AI service not available:', e.message);
+      }
+      
+      // Second try: OpenAI API directly if configured
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (openaiKey) {
+        try {
+          const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openaiKey}`
+            },
+            body: JSON.stringify({
+              model: 'gpt-4o-mini',
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are a UI element locator. Given a screenshot and element description, return the PIXEL COORDINATES (x, y) of the CENTER of that element. 
+                  
+IMPORTANT: Return ONLY a JSON object in this exact format:
+{"found": true, "x": 123, "y": 456, "confidence": 0.9}
+
+If you cannot find the element, return:
+{"found": false, "x": null, "y": null, "confidence": 0}
+
+The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be within this range.`
+                },
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Find the element for "${actionType}" action: "${description}"`
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: { url: `data:image/png;base64,${screenshotBase64}` }
+                    }
+                  ]
+                }
+              ],
+              max_tokens: 100
+            })
+          });
+          
+          if (openaiResponse.ok) {
+            const openaiResult = await openaiResponse.json();
+            const content = openaiResult.choices?.[0]?.message?.content || '';
+            
+            // Parse JSON response
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              if (parsed.found && parsed.x && parsed.y) {
+                console.log(`[AI Fallback] ✅ OpenAI found element at (${parsed.x}, ${parsed.y})`);
+                return { x: parsed.x, y: parsed.y, confidence: parsed.confidence || 0.8 };
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[AI Fallback] OpenAI API error:', e.message);
+        }
+      }
+      
+      console.log('[AI Fallback] AI could not find the element');
+      return null;
+      
+    } catch (error) {
+      console.error('[AI Fallback] Error:', error.message);
+      return null;
+    }
+  }
+  
+  /**
+   * Click at specific coordinates (used by AI fallback)
+   */
+  async clickAtCoordinates(x, y) {
+    console.log(`[AI Fallback] Clicking at coordinates (${x}, ${y})`);
+    await this.page.mouse.click(x, y);
+    await this.page.waitForTimeout(200); // Let UI settle
   }
   
   // Normalize selector - handles both string and object formats
@@ -566,6 +712,21 @@ class TestExecutor {
           const elementIndex = typeof resolvedStep.args?.[1] === 'number' ? resolvedStep.args[1] : 0;
           console.log(`[Executor] ClickText: "${clickText}"${elementIndex > 0 ? ` (index: ${elementIndex})` : ''}`);
           
+          // Extract ID from fallbacks if not directly available
+          // Test cases store ID in fallbacks array: selectorObj.fallbacks[{type: 'id', selector: '#button-cart'}]
+          let extractedId = selectorObj.id;
+          if (!extractedId && selectorObj.fallbacks && Array.isArray(selectorObj.fallbacks)) {
+            const idFallback = selectorObj.fallbacks.find(fb => fb?.type === 'id');
+            if (idFallback?.selector) {
+              extractedId = idFallback.selector.replace(/^#/, ''); // Remove leading # if present
+              console.log(`[Executor] Extracted ID from fallbacks: ${extractedId}`);
+            }
+          }
+          // Also check primary selector for ID
+          if (!extractedId && selectorObj.primary?.type === 'id' && selectorObj.primary?.selector) {
+            extractedId = selectorObj.primary.selector.replace(/^#/, '');
+          }
+          
           // Helper to get locator at specific index
           const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
           
@@ -671,21 +832,70 @@ class TestExecutor {
             }
           }
           
-          // STRATEGY 3: Last resort - CSS selector from recording
-          if (!clickSuccess && selectorObj.id) {
-            console.log(`[Executor] Trying recorded ID selector: #${selectorObj.id}`);
+          // STRATEGY 3: Last resort - CSS selector from recording (ID or explicit selector)
+          if (!clickSuccess && extractedId) {
+            console.log(`[Executor] Trying recorded ID selector: #${extractedId}`);
             try {
-              clickLocator = this.page.locator(`#${selectorObj.id}`);
+              clickLocator = this.page.locator(`#${extractedId}`);
               await clickLocator.click({ timeout: 5000, force: true });
               clickSuccess = true;
               console.log(`[Executor] ✓ Click succeeded with ID selector`);
             } catch (e) {
-              // Continue to throw
+              console.log(`[Executor] ID selector #${extractedId} failed:`, e.message);
+            }
+          }
+          
+          // STRATEGY 3b: Try fallback selectors from selectorObj.fallbacks
+          if (!clickSuccess && selectorObj.fallbacks && Array.isArray(selectorObj.fallbacks)) {
+            for (const fallback of selectorObj.fallbacks) {
+              if (clickSuccess) break;
+              const fbSelector = fallback?.selector || fallback?.playwright;
+              if (!fbSelector) continue;
+              
+              console.log(`[Executor] Trying fallback selector: ${fbSelector}`);
+              try {
+                // Handle playwright-style selectors
+                if (fbSelector.startsWith('locator(')) {
+                  const innerSelector = fbSelector.match(/locator\(['"](.+)['"]\)/)?.[1];
+                  if (innerSelector) {
+                    clickLocator = getAtIndex(this.page.locator(innerSelector));
+                  }
+                } else if (fbSelector.startsWith('getByRole')) {
+                  // Already tried in text strategies
+                  continue;
+                } else {
+                  clickLocator = getAtIndex(this.page.locator(fbSelector));
+                }
+                
+                if (clickLocator) {
+                  await clickLocator.click({ timeout: 5000, force: true });
+                  clickSuccess = true;
+                  console.log(`[Executor] ✓ Click succeeded with fallback selector: ${fbSelector}`);
+                }
+              } catch (e) {
+                console.log(`[Executor] Fallback ${fbSelector} failed:`, e.message);
+              }
+            }
+          }
+          
+          // AI FALLBACK: Try AI vision as absolute last resort
+          if (!clickSuccess && this.enableAIFallback) {
+            console.log(`[Executor] All strategies failed for click, trying AI fallback...`);
+            const aiResult = await this.findElementWithAI(clickText, 'click');
+            
+            if (aiResult) {
+              try {
+                await this.clickAtCoordinates(aiResult.x, aiResult.y);
+                clickSuccess = true;
+                console.log(`[Executor] ✓ AI Fallback click succeeded at (${aiResult.x}, ${aiResult.y})`);
+              } catch (e) {
+                console.log(`[Executor] AI Fallback click failed:`, e.message);
+              }
             }
           }
           
           if (!clickSuccess) {
-            throw new Error(`Could not click "${clickText}" after trying all strategies`);
+            throw new Error(`Could not click "${clickText}" after trying all strategies including AI fallback`);
           }
           
           // Wait for UI to settle - longer for form elements
@@ -837,18 +1047,40 @@ class TestExecutor {
             }
           }
           
+          // AI FALLBACK: Try AI vision as absolute last resort
+          if (!clickSuccess && this.enableAIFallback) {
+            console.log(`[Executor] All selectors failed for ClickElement, trying AI fallback...`);
+            const elementDesc = normalizedClickText || clickSelectorObj.ariaLabel || clickSelectorObj.title || 'element';
+            const aiResult = await this.findElementWithAI(elementDesc, 'click');
+            
+            if (aiResult) {
+              try {
+                await this.clickAtCoordinates(aiResult.x, aiResult.y);
+                clickSuccess = true;
+                console.log(`[Executor] ✓ AI Fallback ClickElement succeeded at (${aiResult.x}, ${aiResult.y})`);
+              } catch (e) {
+                console.log(`[Executor] AI Fallback ClickElement failed:`, e.message);
+              }
+            }
+          }
+          
           if (!clickSuccess) {
-            throw new Error(`Click failed: Could not find element "${normalizedClickText}". Tried ${uniqueClickSelectors.length} selectors. Last error: ${lastClickError}`);
+            throw new Error(`Click failed: Could not find element "${normalizedClickText}". Tried ${uniqueClickSelectors.length} selectors + AI fallback. Last error: ${lastClickError}`);
           }
           break;
         }
           
-        // Input actions - ROBUST with data-testid priority
+        // Input actions - ROBUST with data-testid priority and section context
         case 'Fill':
         case 'input': {
           const fieldName = resolvedStep.args?.[0] || '';
           const inputValue = resolvedStep.args?.[1] || resolvedStep.value || '';
           const fillSelectorObj = resolvedStep.selectorObj || {};
+          
+          // Get additional context for disambiguation
+          const formId = fillSelectorObj.formId || '';
+          const sectionContext = fillSelectorObj.sectionContext || '';
+          const associatedLabel = fillSelectorObj.label || '';
           
           // Build list of selectors to try (in PRIORITY order)
           const selectorsToTry = [];
@@ -865,25 +1097,42 @@ class TestExecutor {
             selectorsToTry.push(`#${fillSelectorObj.id}`);
           }
           
-          // 3. Name attribute (unique per form)
-          if (fillSelectorObj.name) selectorsToTry.push(`[name="${fillSelectorObj.name}"]`);
+          // 3. Name attribute SCOPED to form if available (prevents cross-form matching)
+          if (fillSelectorObj.name) {
+            if (formId) {
+              selectorsToTry.push(`#${formId} [name="${fillSelectorObj.name}"]`);
+            }
+            selectorsToTry.push(`[name="${fillSelectorObj.name}"]`);
+          }
           
           // 4. Aria-label (accessibility, unique)
           if (fillSelectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${fillSelectorObj.ariaLabel}"]`);
           
-          // 5. Explicit selector from recording
-          if (resolvedStep.selector) selectorsToTry.push(this.normalizeSelector(resolvedStep.selector));
-          if (fillSelectorObj.selector) selectorsToTry.push(fillSelectorObj.selector);
-          
-          // 6. EXACT Placeholder match (no partial - too risky!)
+          // 5. Placeholder SCOPED to section context (prevents promo code -> search issues)
           if (fillSelectorObj.placeholder) {
+            if (sectionContext) {
+              // Try to scope by section class or ID
+              selectorsToTry.push(`.${sectionContext} [placeholder="${fillSelectorObj.placeholder}"]`);
+              selectorsToTry.push(`#${sectionContext} [placeholder="${fillSelectorObj.placeholder}"]`);
+              selectorsToTry.push(`[class*="${sectionContext}"] [placeholder="${fillSelectorObj.placeholder}"]`);
+            }
             selectorsToTry.push(`[placeholder="${fillSelectorObj.placeholder}"]`);
           }
           
-          // 7. Label association (Playwright's label= selector)
+          // 6. Associated label (from recording) - very specific
+          if (associatedLabel) {
+            selectorsToTry.push(`label:has-text("${associatedLabel}") input`);
+            selectorsToTry.push(`label:has-text("${associatedLabel}") textarea`);
+          }
+          
+          // 7. Explicit selector from recording
+          if (resolvedStep.selector) selectorsToTry.push(this.normalizeSelector(resolvedStep.selector));
+          if (fillSelectorObj.selector) selectorsToTry.push(fillSelectorObj.selector);
+          
+          // 8. Label association (Playwright's label= selector)
           if (fieldName) selectorsToTry.push(`label=${fieldName}`);
           
-          // 8. Fallbacks from recording
+          // 9. Fallbacks from recording
           if (fillSelectorObj.fallbacks && Array.isArray(fillSelectorObj.fallbacks)) {
             fillSelectorObj.fallbacks.forEach(fb => {
               if (fb?.selector) selectorsToTry.push(fb.selector);
@@ -892,6 +1141,8 @@ class TestExecutor {
           
           // NOTE: Removed risky partial placeholder match [placeholder*=...] 
           // It was matching wrong inputs!
+          
+          console.log(`[Executor] Fill context: formId=${formId}, section=${sectionContext}, label=${associatedLabel}`);
           
           // Remove duplicates and empty values
           const uniqueSelectors = [...new Set(selectorsToTry.filter(s => s && s.length > 0))];
@@ -927,8 +1178,30 @@ class TestExecutor {
             }
           }
           
+          // AI FALLBACK: Try AI vision as absolute last resort for Fill
+          if (!fillSuccess && this.enableAIFallback) {
+            console.log(`[Executor] All selectors failed for Fill, trying AI fallback...`);
+            const inputDesc = fieldName || fillSelectorObj.ariaLabel || fillSelectorObj.placeholder || 'input field';
+            const aiResult = await this.findElementWithAI(inputDesc, 'fill');
+            
+            if (aiResult) {
+              try {
+                // Click on the input first
+                await this.page.mouse.click(aiResult.x, aiResult.y);
+                await this.page.waitForTimeout(100);
+                
+                // Now type the value
+                await this.page.keyboard.type(inputValue);
+                fillSuccess = true;
+                console.log(`[Executor] ✓ AI Fallback Fill succeeded at (${aiResult.x}, ${aiResult.y})`);
+              } catch (e) {
+                console.log(`[Executor] AI Fallback Fill failed:`, e.message);
+              }
+            }
+          }
+          
           if (!fillSuccess) {
-            throw new Error(`Fill failed: Could not find input for "${fieldName}". Tried ${uniqueSelectors.length} selectors.`);
+            throw new Error(`Fill failed: Could not find input for "${fieldName}". Tried ${uniqueSelectors.length} selectors + AI fallback.`);
           }
           break;
         }
