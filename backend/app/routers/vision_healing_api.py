@@ -419,3 +419,23 @@ def get_openai_api_key() -> str:
     """Utility function for other services to get the configured API key"""
     return _ai_config.get("api_key", "")
 
+
+class InternalKeyResponse(BaseModel):
+    """Response with actual API key for internal Electron app use"""
+    key: str
+    model: str
+
+
+@router.get("/config/internal-key", response_model=InternalKeyResponse)
+async def get_internal_api_key():
+    """
+    Get actual API key for internal Electron app use.
+    This endpoint is intended for localhost Electron app communication only.
+    """
+    api_key = _ai_config.get("api_key", "")
+    model = _ai_config.get("model", "gpt-4o-mini")
+    
+    return InternalKeyResponse(
+        key=api_key,
+        model=model
+    )

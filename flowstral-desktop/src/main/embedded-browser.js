@@ -512,11 +512,28 @@ class EmbeddedBrowser {
     }
     
     // Build the selectorObj in web extension format
+    // PRIORITY ORDER for selectors:
+    // 1. data-testid (most stable - explicitly added for testing)
+    // 2. name attribute (stable - used by forms)
+    // 3. id attribute (stable if not dynamic)
+    // 4. aria-label (stable - accessibility)
+    // 5. CSS selectors
+    
+    // Build best selector prioritizing stable attributes
+    let bestSelector = primary.selector;
+    if (element.testId || element.dataTestId) {
+      bestSelector = `[data-testid="${element.testId || element.dataTestId}"]`;
+    } else if (element.name && !bestSelector) {
+      bestSelector = `[name="${element.name}"]`;
+    } else if (element.id && !bestSelector) {
+      bestSelector = `#${element.id}`;
+    }
+    
     const selectorObj = {
       // Primary selector (best match)
       primary: primary,
-      // CSS selector string
-      selector: primary.selector || (element.name ? `[name="${element.name}"]` : element.id ? `#${element.id}` : null),
+      // CSS selector string - PRIORITIZE data-testid and name
+      selector: bestSelector || (element.name ? `[name="${element.name}"]` : element.id ? `#${element.id}` : null),
       // Playwright locator string (e.g., "locator('[name=\"username\"]')")
       playwright: playwrightLocator,
       // Confidence score
@@ -525,11 +542,16 @@ class EmbeddedBrowser {
       type: primary.type || 'unknown',
       // Text content (for display/debugging)
       text: textSelector?.value || element.text || '',
-      // Element attributes for fallback resolution
-      name: element.name || '',
+      // Element attributes for fallback resolution - CRITICAL FOR ROBUST PLAYBACK
+      testId: element.testId || element.dataTestId || '',       // HIGHEST PRIORITY
+      dataTestId: element.dataTestId || element.testId || '',   // Alias
+      name: element.name || '',                                  // HIGH PRIORITY
       id: element.id || '',
       placeholder: element.placeholder || '',
       ariaLabel: element.ariaLabel || '',
+      title: element.title || '',
+      role: element.role || '',
+      href: element.href || '',
       // Fallback selectors (all except primary)
       fallbacks: sorted.slice(1)
         .filter(s => s.playwright)

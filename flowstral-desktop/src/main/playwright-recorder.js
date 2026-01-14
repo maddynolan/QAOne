@@ -16,6 +16,10 @@ const { EventEmitter } = require('events');
 // Path to shared recorder engine (SINGLE SOURCE OF TRUTH)
 const RECORDER_ENGINE_PATH = path.join(__dirname, '../../../flowstral-extension/src/lib/recorder-engine.js');
 
+// V2 Recipe-based recorder (more robust element identification)
+const { getRecipeClickCaptureScript, recipeActionToLegacy, legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
+const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
+
 class PlaywrightRecorder extends EventEmitter {
   constructor(options = {}) {
     super();
@@ -41,6 +45,12 @@ class PlaywrightRecorder extends EventEmitter {
     this._stopRequested = false;
     this._currentTestSteps = [];
     this._stepByStep = false;
+    
+    // V2 Recipe-based recorder (more robust element identification)
+    // Enable this for better element finding on modern frameworks (Radix, Salesforce, etc.)
+    this.useRecipeRecorder = false; // TEMPORARILY DISABLED - was: options.useRecipeRecorder !== false;
+    this.recipeActions = []; // Actions captured by v2 recorder
+    this.smartFinder = null; // SmartFinder instance for playback
     
     // Load recorder engine code once
     this.recorderEngineCode = '';
@@ -1445,8 +1455,23 @@ class PlaywrightRecorder extends EventEmitter {
       // Install click capture via addInitScript (runs before page loads)
       await this.page.addInitScript(this._getClickCaptureScript());
       
+      // V2: Also inject recipe-based recorder for better element identification
+      if (this.useRecipeRecorder) {
+        await this.page.addInitScript(getRecipeClickCaptureScript());
+        console.log('[PlaywrightRecorder] V2 Recipe recorder enabled');
+      }
+      
       // Also inject immediately into current page
       await this._injectClickCaptureScript();
+      
+      // V2: Also inject recipe recorder immediately
+      if (this.useRecipeRecorder) {
+        try {
+          await this.page.evaluate(getRecipeClickCaptureScript());
+        } catch (e) {
+          // Page might be navigating
+        }
+      }
       
       // Poll for CDP clicks and inputs, add them to actions
       this._cdpClickInterval = setInterval(async () => {
@@ -1475,6 +1500,10 @@ class PlaywrightRecorder extends EventEmitter {
             let clicks = window.__flowstralCDPClicks || [];
             window.__flowstralCDPClicks = [];
             
+            // V2: Get recipe actions (new format)
+            let recipeActions = window.__flowstralRecipeActions || [];
+            window.__flowstralRecipeActions = [];
+            
             // Process inputs - flush those that should be flushed, are stale, or have been around for 300ms
             const inputs = [];
             const now = Date.now();
@@ -1495,13 +1524,22 @@ class PlaywrightRecorder extends EventEmitter {
               }
             }
             
-            return { clicks, inputs };
+            return { clicks, inputs, recipeActions };
           });
           
-          // Process page data (inputs first, then clicks)
-          await this._processInputs(data.inputs);
-          for (const click of data.clicks) {
-            await this._processClick(click);
+          // V2: Process recipe actions (these have better element info)
+          if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 0) {
+            for (const recipeAction of data.recipeActions) {
+              await this._processRecipeAction(recipeAction);
+            }
+          }
+          
+          // Process page data (inputs first, then clicks) - fallback if recipe not used
+          if (!this.useRecipeRecorder || !data.recipeActions || data.recipeActions.length === 0) {
+            await this._processInputs(data.inputs);
+            for (const click of data.clicks) {
+              await this._processClick(click);
+            }
           }
         } catch (e) {
           // Page might be navigating - that's OK, main process clicks already processed
@@ -1598,6 +1636,50 @@ class PlaywrightRecorder extends EventEmitter {
       this.actions.push(action);
       this.emit('action', action);
     }
+  }
+
+  /**
+   * V2: Process a recipe-based action (new format with ElementRecipe)
+   * This provides better element identification for modern frameworks
+   */
+  async _processRecipeAction(recipeAction) {
+    const { type, target, value, description, timestamp } = recipeAction;
+    
+    // Generate unique ID
+    const actionId = `recipe_${timestamp}_${type}_${target?.what?.text || 'element'}`;
+    if (this.seenActionIds.has(actionId)) return;
+    this.seenActionIds.add(actionId);
+    
+    // Store the raw recipe action
+    this.recipeActions.push(recipeAction);
+    
+    // Convert to legacy format for backward compatibility with existing UI
+    const legacyAction = recipeActionToLegacy(recipeAction);
+    legacyAction.id = actionId;
+    legacyAction.fromRecipe = true; // Mark as v2 recipe-based
+    
+    console.log('[PlaywrightRecorder] Recipe action:', type, description || target?.what?.text);
+    
+    // Check for duplicates in existing actions
+    const isDuplicate = this.actions.some(a => {
+      // Same type and similar description within 500ms
+      if (a.qword === legacyAction.qword && 
+          Math.abs((a.timestamp || 0) - timestamp) < 500) {
+        // Check if it's the same element
+        const aText = a.args?.[0] || a.text || '';
+        const newText = legacyAction.args?.[0] || legacyAction.text || '';
+        return aText === newText;
+      }
+      return false;
+    });
+    
+    if (isDuplicate) {
+      console.log('[PlaywrightRecorder] Skipping duplicate recipe action');
+      return;
+    }
+    
+    this.actions.push(legacyAction);
+    this.emit('action', legacyAction);
   }
 
   /**
@@ -4129,11 +4211,38 @@ class PlaywrightRecorder extends EventEmitter {
    * 3. Role-based selectors are the most reliable across Shadow DOM boundaries
    * 
    * Priority order:
-   * 1. Playwright's semantic locators (getByRole, getByLabel) - pierce shadow DOM automatically
-   * 2. Salesforce-specific selectors with shadow piercing
-   * 3. CSS selectors with >> chaining for shadow DOM
-   * 4. Fallback to generic text matching
+   * 1. data-testid (most reliable)
+   * 2. name attribute (stable)
+   * 3. id attribute (if not dynamic)
+   * 4. aria-label (accessibility)
+   * 5. Playwright's semantic locators (getByRole, getByLabel) - pierce shadow DOM automatically
+   * 6. Salesforce-specific selectors with shadow piercing
+   * 7. CSS selectors with >> chaining for shadow DOM
+   * 8. Fallback to generic text matching
    */
+  
+  // Helper to detect dynamic IDs that shouldn't be used for element finding
+  _isDynamicId(id) {
+    if (!id) return true;
+    const dynamicPatterns = [
+      /^[a-f0-9]{8,}$/i,           // Hex strings
+      /^\d{6,}$/,                   // Long numbers
+      /^:r[0-9a-z]+:$/,            // React IDs
+      /_[a-z0-9]{6,}$/i,           // Suffix patterns
+      /^ember\d+$/,                 // Ember IDs
+      /^ng-/,                       // Angular IDs
+      /^vue-/,                      // Vue IDs
+      /-\d{10,}$/,                  // Timestamp suffixes
+      /^(lwc|aura)-/i,             // Salesforce Lightning IDs
+      /^radix-/i,                   // Radix UI IDs
+      /^headlessui-/i,             // HeadlessUI IDs
+      /^react-aria/i,              // React ARIA IDs
+      /^mantine-/i,                // Mantine IDs
+      /^chakra-/i,                 // Chakra UI IDs
+    ];
+    return dynamicPatterns.some(pattern => pattern.test(id));
+  }
+  
   async _findElement(action) {
     const timeout = 5000;
     const strategies = [];
@@ -4148,13 +4257,87 @@ class PlaywrightRecorder extends EventEmitter {
       ? action.selector 
       : (action.selector?.selector || action.selectorObj?.selector || '');
     
+    // ========== EXTRACT ALL RECORDED ELEMENT ATTRIBUTES ==========
+    // These are the stable identifiers captured during recording
+    const selectorObj = action.selectorObj || action.selector || {};
+    const rawElement = action.raw?.element || action.element || {};
+    
+    // Extract all available attributes from multiple sources
+    const testId = selectorObj.testId || rawElement.testId || action.testId || 
+                   selectorObj['data-testid'] || rawElement['data-testid'];
+    const name = selectorObj.name || rawElement.name || action.name;
+    const id = selectorObj.id || rawElement.id || action.id;
+    const ariaLabel = selectorObj.ariaLabel || rawElement.ariaLabel || action.ariaLabel;
+    const placeholder = selectorObj.placeholder || rawElement.placeholder || action.placeholder;
+    const title = selectorObj.title || rawElement.title || action.title;
+    const role = selectorObj.role || rawElement.role || action.role;
+    const href = selectorObj.href || rawElement.href || action.href;
+    const className = selectorObj.className || rawElement.className || action.className;
+    
     console.log(`[PlaywrightRecorder] Finding element: "${cleanLabel}" (selector: ${selectorStr}, fill: ${isFillAction})`);
+    console.log(`[PlaywrightRecorder] Recorded attributes: testId=${testId}, name=${name}, id=${id}, ariaLabel=${ariaLabel}`);
     
-    // ========== PLAYWRIGHT'S NATIVE SHADOW DOM PIERCING ==========
-    // These methods automatically work through Shadow DOM without any special handling
-    // This is the same approach used by commercial tools like Autify and Katalon
+    // ════════════════════════════════════════════════════════════════════════════
+    // ENTERPRISE-GRADE ELEMENT FINDING - PRIORITY ORDER:
+    // 1. data-testid (most stable - explicitly added for testing)
+    // 2. name attribute (stable - used by forms)
+    // 3. id attribute (stable if not dynamic)
+    // 4. aria-label (stable - accessibility)
+    // 5. role + name combination (semantic)
+    // 6. CSS selector from recording
+    // 7. Text-based fallbacks (least reliable)
+    // ════════════════════════════════════════════════════════════════════════════
     
-    // 1. Try exact CSS selector first
+    // ========== HIGHEST PRIORITY: TEST IDs ==========
+    // data-testid is the GOLD STANDARD for test automation - always try first
+    if (testId) {
+      strategies.push({ type: 'testid-exact', value: `[data-testid="${testId}"]` });
+      strategies.push({ type: 'testid-getby', value: `getByTestId:${testId}` });
+      // Also try common variations
+      strategies.push({ type: 'testid-alt', value: `[data-test-id="${testId}"]` });
+      strategies.push({ type: 'testid-cy', value: `[data-cy="${testId}"]` });
+      strategies.push({ type: 'testid-qa', value: `[data-qa="${testId}"]` });
+    }
+    
+    // ========== HIGH PRIORITY: NAME ATTRIBUTE ==========
+    // name attribute is stable and commonly used for form elements
+    if (name) {
+      strategies.push({ type: 'name-exact', value: `[name="${name}"]` });
+      strategies.push({ type: 'name-button', value: `button[name="${name}"]` });
+      strategies.push({ type: 'name-input', value: `input[name="${name}"]` });
+    }
+    
+    // ========== HIGH PRIORITY: ID ATTRIBUTE ==========
+    // Only use if it doesn't look dynamic
+    if (id && !this._isDynamicId(id)) {
+      strategies.push({ type: 'id-exact', value: `#${CSS.escape(id)}` });
+    }
+    
+    // ========== HIGH PRIORITY: ARIA-LABEL ==========
+    // Accessibility attributes are typically stable
+    if (ariaLabel) {
+      strategies.push({ type: 'aria-exact', value: `[aria-label="${ariaLabel}"]` });
+      strategies.push({ type: 'aria-getby', value: `getByLabel:${ariaLabel}` });
+    }
+    
+    // ========== MEDIUM PRIORITY: TITLE ATTRIBUTE ==========
+    if (title) {
+      strategies.push({ type: 'title-exact', value: `[title="${title}"]` });
+      strategies.push({ type: 'title-getby', value: `getByTitle:${title}` });
+    }
+    
+    // ========== MEDIUM PRIORITY: ROLE + NAME ==========
+    if (role && cleanLabel) {
+      strategies.push({ type: 'role-name', value: `getByRole:${role}:${cleanLabel}` });
+    }
+    
+    // ========== MEDIUM PRIORITY: HREF FOR LINKS ==========
+    if (href && !isFillAction) {
+      strategies.push({ type: 'href-exact', value: `a[href="${href}"]` });
+      strategies.push({ type: 'href-contains', value: `a[href*="${href.split('/').pop()}"]` });
+    }
+    
+    // ========== MEDIUM PRIORITY: RECORDED CSS SELECTOR ==========
     if (selectorStr && !selectorStr.includes('text=')) {
       strategies.push({ type: 'css-selector', value: selectorStr });
     }
@@ -4332,7 +4515,11 @@ class PlaywrightRecorder extends EventEmitter {
         let locator;
         
         // Handle special Playwright locator methods (THESE AUTOMATICALLY PIERCE SHADOW DOM)
-        if (strategy.value.startsWith('getByText:')) {
+        if (strategy.value.startsWith('getByTestId:')) {
+          // HIGHEST PRIORITY: data-testid - most reliable selector
+          const testIdValue = strategy.value.replace('getByTestId:', '');
+          locator = this.page.getByTestId(testIdValue).first();
+        } else if (strategy.value.startsWith('getByText:')) {
           const text = strategy.value.replace('getByText:', '');
           locator = this.page.getByText(text, { exact: true }).first();
         } else if (strategy.value.startsWith('getByLabel:')) {
@@ -4353,6 +4540,14 @@ class PlaywrightRecorder extends EventEmitter {
         } else if (strategy.value.startsWith('getByRole:menuitem:')) {
           const name = strategy.value.replace('getByRole:menuitem:', '');
           locator = this.page.getByRole('menuitem', { name }).first();
+        } else if (strategy.value.startsWith('getByRole:')) {
+          // Generic getByRole handler for role-name strategies
+          const parts = strategy.value.replace('getByRole:', '').split(':');
+          if (parts.length === 2) {
+            locator = this.page.getByRole(parts[0], { name: parts[1] }).first();
+          } else {
+            locator = this.page.getByRole(parts[0]).first();
+          }
         } else if (strategy.value.startsWith('getByPlaceholder:')) {
           const placeholder = strategy.value.replace('getByPlaceholder:', '');
           locator = this.page.getByPlaceholder(placeholder).first();
@@ -7654,14 +7849,72 @@ class PlaywrightRecorder extends EventEmitter {
 
   /**
    * Convert action to QWord format (EXACT SAME as browser extension)
+   * ENTERPRISE-GRADE: Properly preserves ALL element attributes for robust playback
    */
   _toQWord(action) {
     const element = action.element || action;
-    const selector = action.selector || element.selectorObj || {};
+    const existingSelector = action.selector || element.selectorObj || {};
     
     // Get text for description
     const text = element.textContent || element.innerText || element.text || '';
     const cleanText = text.trim().substring(0, 50);
+    
+    // ════════════════════════════════════════════════════════════════════════════
+    // BUILD SELECTOR OBJECT WITH ALL ELEMENT ATTRIBUTES
+    // This is CRITICAL for reliable test playback!
+    // Priority order: testId > name > id > ariaLabel > placeholder
+    // ════════════════════════════════════════════════════════════════════════════
+    
+    // Extract all element attributes from the action
+    const testId = action.testId || action.dataTestId || element.testId || element.dataTestId || '';
+    const name = action.name || element.name || '';
+    const id = action.id || element.id || '';
+    const ariaLabel = action.ariaLabel || element.ariaLabel || '';
+    const placeholder = action.placeholder || element.placeholder || '';
+    const title = action.title || element.title || '';
+    const role = action.role || element.role || '';
+    const href = action.href || element.href || '';
+    const tagName = action.tag || action.tagName || element.tagName || '';
+    
+    // Build the best CSS selector based on priority
+    let bestSelector = existingSelector.selector || '';
+    if (testId) {
+      bestSelector = `[data-testid="${testId}"]`;
+    } else if (name) {
+      bestSelector = `[name="${name}"]`;
+    } else if (id && !this._isDynamicId(id)) {
+      bestSelector = `#${id}`;
+    } else if (ariaLabel) {
+      bestSelector = `[aria-label="${ariaLabel}"]`;
+    }
+    
+    // Build comprehensive selectorObj for robust playback
+    const selectorObj = {
+      // Best CSS selector (PRIORITIZED)
+      selector: bestSelector || existingSelector.selector || '',
+      // Element attributes for multi-strategy playback
+      testId: testId,                    // HIGHEST PRIORITY
+      dataTestId: testId,                // Alias
+      name: name,                         // HIGH PRIORITY
+      id: id,
+      ariaLabel: ariaLabel,
+      placeholder: placeholder,
+      title: title,
+      role: role,
+      href: href,
+      tagName: tagName,
+      // Text for display/fallback matching
+      text: cleanText,
+      innerText: cleanText,
+      textContent: cleanText,
+      // Preserve any existing strategies
+      strategies: existingSelector.strategies || [],
+      fallbacks: existingSelector.fallbacks || [],
+      // Metadata
+      elementIndex: action.elementIndex || 0,
+      totalMatching: action.totalMatching || 1,
+      app: existingSelector.app || 'generic',
+    };
     
     let qword, args, description;
     
@@ -7674,12 +7927,12 @@ class PlaywrightRecorder extends EventEmitter {
         
       case 'click':
         qword = cleanText ? 'ClickText' : 'ClickElement';
-        args = [cleanText || element.tagName || 'element'];
-        description = action.description || `Click "${cleanText || element.tagName}"`;
+        args = [cleanText || tagName || 'element'];
+        description = action.description || `Click "${cleanText || tagName}"`;
         break;
         
       case 'fill':
-        const label = element.placeholder || element.name || element.id || element.ariaLabel || 'input';
+        const label = placeholder || name || id || ariaLabel || 'input';
         const displayVal = action.displayValue || action.value || '';
         qword = 'Fill';
         args = [label, action.value || ''];
@@ -7687,7 +7940,7 @@ class PlaywrightRecorder extends EventEmitter {
         break;
         
       case 'select':
-        const selectLabel = element.name || element.id || 'dropdown';
+        const selectLabel = name || id || 'dropdown';
         qword = 'Select';
         args = [selectLabel, action.value || action.label || ''];
         description = action.description || `Select "${action.label}" from ${selectLabel}`;
@@ -7695,7 +7948,7 @@ class PlaywrightRecorder extends EventEmitter {
         
       case 'check':
       case 'uncheck':
-        const checkLabel = element.name || element.id || cleanText || 'checkbox';
+        const checkLabel = name || id || cleanText || 'checkbox';
         qword = action.type === 'check' ? 'Check' : 'Uncheck';
         args = [checkLabel];
         description = action.description || `${qword} "${checkLabel}"`;
@@ -7718,7 +7971,7 @@ class PlaywrightRecorder extends EventEmitter {
       qword,
       args,
       description,
-      selectorObj: selector,
+      selectorObj: selectorObj,
       raw: action,
       timestamp: action.timestamp || Date.now()
     };

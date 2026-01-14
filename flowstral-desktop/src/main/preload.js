@@ -101,18 +101,37 @@ contextBridge.exposeInMainWorld('flowstral', {
       'playwright-recorder-paused',
       'playwright-recorder-resumed',
       'playwright-recorder-suggestions',
-      'playwright-recorder-navigation'
+      'playwright-recorder-navigation',
+      // AI Explorer Agent channels
+      'ai-explorer-progress',
+      'ai-explorer-action',
+      'ai-explorer-test-discovered',
+      'ai-explorer-error',
+      'ai-explorer-state-change'
     ];
+    
+    // Store listeners for explicit removal
+    const listeners = new Map();
     
     if (validChannels.includes(channel)) {
       const subscription = (event, ...args) => callback(...args);
       ipcRenderer.on(channel, subscription);
       
+      // Store for explicit removal
+      const key = `${channel}-${callback.toString().substring(0, 50)}`;
+      listeners.set(key, { channel, subscription });
+      
       // Return unsubscribe function
       return () => {
         ipcRenderer.removeListener(channel, subscription);
+        listeners.delete(key);
       };
     }
+  },
+  
+  // Explicit listener removal
+  off: (channel, callback) => {
+    ipcRenderer.removeAllListeners(channel);
   },
   
   // One-time event listener

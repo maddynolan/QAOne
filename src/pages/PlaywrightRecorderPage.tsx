@@ -23,7 +23,7 @@ import {
   PenLine, LayoutGrid, ArrowRight, Upload, Activity,
   Navigation, Building2, Users, User, Contact, Briefcase,
   FileBox, MapPin, Compass, Route, TestTube, FlaskConical,
-  Accessibility, Scan, Link2, Bug
+  Accessibility, Scan, Link2, Bug, Bot, Network
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,6 +58,12 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { SalesforceContextPanel } from "@/components/SalesforceContextPanel";
 import { SoqlEditor } from "@/components/SoqlEditor";
 import { salesforceApi } from "@/lib/salesforce-api";
+// AI Test Generator
+import { AITestGenerator } from "@/components/AITestGenerator";
+// AI Explorer Agent - Autonomous test discovery
+import { AIExplorerAgent } from "@/components/AIExplorerAgent";
+// AI Flow Explorer - Full flow discovery with navigation graph
+import { AIFlowExplorer } from "@/components/AIFlowExplorer";
 // New SF Components
 import { SFContextDashboard } from "@/components/salesforce/SFContextDashboard";
 import { SmartSOQLBuilder } from "@/components/salesforce/SmartSOQLBuilder";
@@ -579,6 +585,13 @@ export default function PlaywrightRecorderPage() {
   
   // Export dropdown
   const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // AI Test Generator
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
+  // AI Explorer Agent - Autonomous exploration
+  const [showAIExplorer, setShowAIExplorer] = useState(false);
+  // AI Flow Explorer - Full navigation graph discovery
+  const [showAIFlowExplorer, setShowAIFlowExplorer] = useState(false);
   
   // SF Tools customization dialog
   const [showSFToolDialog, setShowSFToolDialog] = useState(false);
@@ -3612,6 +3625,43 @@ Recorded Test
             <Layers className="h-3.5 w-3.5 mr-1.5" />
             Builder
                     </Button>
+          {/* AI Test Generator - Generate tests automatically */}
+          <Button
+            onClick={() => setShowAIGenerator(true)}
+            size="sm"
+            className="h-8 px-3 text-xs bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+            disabled={!isRecording}
+            title="AI-powered test generation"
+          >
+            <Bot className="h-3.5 w-3.5 mr-1" />
+            AI
+          </Button>
+          {/* AI Explorer Agent - Autonomous test discovery - ALWAYS ENABLED FOR TESTING */}
+          <Button
+            onClick={() => {
+              console.log('[Explorer] Button clicked, isRecording:', isRecording);
+              setShowAIExplorer(true);
+            }}
+            size="sm"
+            className="h-8 px-3 text-xs bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            title="AI Agent: Autonomous exploration and test discovery"
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1" />
+            Explorer
+          </Button>
+          {/* AI Flow Explorer - Full navigation graph discovery */}
+          <Button
+            onClick={() => {
+              console.log('[FlowExplorer] Button clicked');
+              setShowAIFlowExplorer(true);
+            }}
+            size="sm"
+            className="h-8 px-3 text-xs bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
+            title="AI Flow Explorer: Discover ALL flows, pages, and hidden elements"
+          >
+            <Network className="h-3.5 w-3.5 mr-1" />
+            Flow Map
+          </Button>
           {/* Quick API Test - show when API toggle is ON and has actions */}
           {captureForApiTest && !isRecording && actions.length > 0 && (
             <Button
@@ -7428,6 +7478,79 @@ Recorded Test
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AI Test Generator Modal */}
+      <AITestGenerator
+        open={showAIGenerator}
+        onOpenChange={setShowAIGenerator}
+        onTestsGenerated={(tests) => {
+          // Add generated tests as actions
+          tests.forEach(test => {
+            test.steps.forEach(step => {
+              const newAction: RecordedAction = {
+                id: step.id,
+                qword: step.qword,
+                args: step.args,
+                description: step.description,
+                timestamp: Date.now(),
+                selectorObj: step.recipe ? { recipe: step.recipe } : {},
+              };
+              setActions(prev => [...prev, newAction]);
+            });
+          });
+          toast.success(`Added ${tests.reduce((acc, t) => acc + t.steps.length, 0)} steps from ${tests.length} AI-generated tests`);
+        }}
+      />
+      
+      {/* AI Explorer Agent - Autonomous exploration and test discovery */}
+      <AIExplorerAgent
+        isOpen={showAIExplorer}
+        onClose={() => setShowAIExplorer(false)}
+        currentUrl={currentUrl || url}
+        onSaveTests={(tests) => {
+          // Convert AI Explorer tests to RecordedActions
+          tests.forEach(test => {
+            test.steps?.forEach((step: any) => {
+              const newAction: RecordedAction = {
+                id: `ai-explorer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                qword: step.action || 'click',
+                args: [step.target, step.value].filter(Boolean),
+                description: `${step.action}: ${step.target}${step.value ? ` = "${step.value}"` : ''}`,
+                timestamp: Date.now(),
+                selectorObj: {},
+              };
+              setActions(prev => [...prev, newAction]);
+            });
+          });
+          toast.success(`Saved ${tests.length} AI-discovered tests with ${tests.reduce((acc, t) => acc + (t.steps?.length || 0), 0)} steps`);
+          setShowAIExplorer(false);
+        }}
+      />
+      
+      {/* AI Flow Explorer - Full navigation graph discovery */}
+      <AIFlowExplorer
+        isOpen={showAIFlowExplorer}
+        onClose={() => setShowAIFlowExplorer(false)}
+        currentUrl={currentUrl || url}
+        onSaveTests={(tests) => {
+          // Convert Flow Explorer tests to RecordedActions
+          tests.forEach(test => {
+            test.steps?.forEach((step: any) => {
+              const newAction: RecordedAction = {
+                id: `flow-explorer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                qword: step.qword || 'ClickText',
+                args: step.args || [step.target, step.value].filter(Boolean),
+                description: step.description || `${step.qword}: ${step.args?.join(' ')}`,
+                timestamp: Date.now(),
+                selectorObj: {},
+              };
+              setActions(prev => [...prev, newAction]);
+            });
+          });
+          toast.success(`Saved ${tests.length} flow tests with ${tests.reduce((acc, t) => acc + (t.steps?.length || 0), 0)} steps`);
+          setShowAIFlowExplorer(false);
+        }}
+      />
     </div>
   );
 }

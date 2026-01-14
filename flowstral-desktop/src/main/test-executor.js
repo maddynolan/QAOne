@@ -7,6 +7,10 @@
 
 const { chromium, firefox, webkit } = require('playwright');
 
+// V2: Import SmartFinder for recipe-based element finding
+const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
+const { legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
+
 class TestExecutor {
   constructor(options = {}) {
     this.browserType = options.browserType || 'chromium';
@@ -22,6 +26,10 @@ class TestExecutor {
     this.browser = null;
     this.context = null;
     this.page = null;
+    
+    // V2: SmartFinder for recipe-based element finding (more robust)
+    this.useSmartFinder = options.useSmartFinder !== false; // Default: enabled
+    this.smartFinder = null;
   }
   
   // Normalize selector - handles both string and object formats
@@ -31,6 +39,101 @@ class TestExecutor {
     if (typeof sel === 'string') return sel;
     // Handle object formats: { selector: "..." }, { value: "..." }, etc.
     return sel.selector || sel.value || sel.css || sel.xpath || '';
+  }
+
+  /**
+   * V2: Find element using SmartFinder with recipe-based identification
+   * Falls back to legacy selector if SmartFinder fails
+   * @param {Object} step - The step containing selectorObj and/or recipe
+   * @returns {Promise<Locator|null>} - Playwright locator or null if not found
+   */
+  async findElementV2(step) {
+    if (!this.smartFinder || !this.useSmartFinder) {
+      return null; // Let caller use legacy method
+    }
+    
+    try {
+      // Get recipe from step (either directly or convert from legacy)
+      let recipe = step.recipe || step.selectorObj?.recipe;
+      
+      if (!recipe && step.selectorObj) {
+        // Convert legacy selectorObj to recipe format
+        recipe = legacyActionToRecipe({
+          selectorObj: step.selectorObj,
+          element: step.element || {},
+          text: step.args?.[0] || step.selectorObj?.text || '',
+          label: step.selectorObj?.ariaLabel || step.selectorObj?.placeholder || '',
+          elementIndex: step.args?.[1]
+        });
+      }
+      
+      if (!recipe) {
+        console.log('[Executor V2] No recipe available, falling back to legacy');
+        return null;
+      }
+      
+      console.log('[Executor V2] Finding element with recipe:', 
+        recipe.what?.role || recipe.what?.tag, 
+        recipe.what?.text || recipe.which?.testId);
+      
+      const locator = await this.smartFinder.find(recipe);
+      console.log('[Executor V2] Element found with SmartFinder');
+      return locator;
+      
+    } catch (error) {
+      console.log('[Executor V2] SmartFinder failed:', error.message, '- falling back to legacy');
+      return null;
+    }
+  }
+
+  /**
+   * V2: Execute a select action using SmartFinder's combobox handling
+   * This properly handles Radix/Headless UI dropdowns
+   * @param {Object} step - The step containing target and value
+   * @returns {Promise<boolean>} - True if successful
+   */
+  async executeSelectV2(step) {
+    if (!this.smartFinder || !this.useSmartFinder) {
+      return false; // Let caller use legacy method
+    }
+    
+    try {
+      let recipe = step.recipe || step.selectorObj?.recipe;
+      
+      if (!recipe && step.selectorObj) {
+        recipe = legacyActionToRecipe({
+          selectorObj: step.selectorObj,
+          element: step.element || {},
+          text: step.args?.[0] || step.selectorObj?.text || '',
+        });
+      }
+      
+      if (!recipe) {
+        return false;
+      }
+      
+      const valueText = step.args?.[1] || step.value?.text || step.value || '';
+      
+      console.log('[Executor V2] Executing select with SmartFinder:', valueText);
+      
+      // Use SmartFinder's combobox handling
+      const combobox = await this.smartFinder.findCombobox(recipe);
+      await combobox.trigger.click({ timeout: this.timeout });
+      
+      // Wait for dropdown
+      await this.page.waitForTimeout(100);
+      
+      // Click option
+      const option = await combobox.findOption(valueText);
+      await option.click({ timeout: this.timeout });
+      
+      console.log('[Executor V2] Select completed successfully');
+      return true;
+      
+    } catch (error) {
+      console.log('[Executor V2] Select failed:', error.message, '- falling back to legacy');
+      return false;
+    }
   }
 
   // Get browser instance
@@ -73,6 +176,15 @@ class TestExecutor {
     const pages = this.context.pages();
     this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
     this.page.setDefaultTimeout(this.timeout);
+    
+    // V2: Initialize SmartFinder for recipe-based element finding
+    if (this.useSmartFinder) {
+      this.smartFinder = new SmartFinder(this.page, {
+        timeout: this.timeout,
+        debug: false
+      });
+      console.log('[Executor] SmartFinder initialized for v2 element finding');
+    }
     
     console.log('[Executor] Browser initialized with persistent context');
   }
@@ -457,15 +569,32 @@ class TestExecutor {
           // Helper to get locator at specific index
           const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
           
+          let clickSuccess = false;
+          let clickLocator = null;
+          const maxRetries = 3;
+          
+          // V2: TRY SMARTFINDER FIRST (recipe-based element finding)
+          // This uses semantic identification (role, text, context) instead of brittle selectors
+          if (this.useSmartFinder && !clickSuccess) {
+            try {
+              const v2Locator = await this.findElementV2(resolvedStep);
+              if (v2Locator) {
+                await v2Locator.waitFor({ state: 'visible', timeout: 5000 });
+                await v2Locator.click({ timeout: 5000 });
+                clickSuccess = true;
+                clickLocator = v2Locator;
+                console.log(`[Executor] ✓ V2 SmartFinder click successful`);
+              }
+            } catch (e) {
+              console.log(`[Executor] V2 SmartFinder failed:`, e.message);
+            }
+          }
+          
           // Detect if this is likely a checkbox/radio by selectorObj data
           const isCheckboxRadio = selectorObj.tag === 'input' && 
             (selectorObj.name?.includes('__c') || // Salesforce custom field
              selectorObj.id?.startsWith('checkbox') || 
              selectorObj.id?.startsWith('radio'));
-          
-          let clickSuccess = false;
-          let clickLocator = null;
-          const maxRetries = 3;
           
           // STRATEGY 1: If checkbox/radio, use name attribute selector with .check()
           if (isCheckboxRadio && selectorObj.name) {
@@ -606,17 +735,23 @@ class TestExecutor {
           if (clickSelectorObj.dataTestId) clickSelectorsToTry.push(`[data-testid="${clickSelectorObj.dataTestId}"]`);
           if (clickSelectorObj.dataTest) clickSelectorsToTry.push(`[data-test="${clickSelectorObj.dataTest}"]`);
           
-          // 2. aria-label (accessibility, very stable)
+          // 2. name attribute (CRITICAL for buttons - very stable!)
+          if (clickSelectorObj.name) {
+            clickSelectorsToTry.push(`[name="${clickSelectorObj.name}"]`);
+            clickSelectorsToTry.push(`button[name="${clickSelectorObj.name}"]`);
+          }
+          
+          // 3. aria-label (accessibility, very stable)
           if (clickSelectorObj.ariaLabel) {
             clickSelectorsToTry.push(`[aria-label="${clickSelectorObj.ariaLabel}"]`);
           }
           
-          // 3. ID (if not dynamic)
+          // 4. ID (if not dynamic)
           if (clickSelectorObj.id && !/^[a-f0-9]{8,}|^\d{6,}|^:r/.test(clickSelectorObj.id)) {
             clickSelectorsToTry.push(`#${clickSelectorObj.id}`);
           }
           
-          // 4. Role + name (semantic)
+          // 5. Role + name (semantic)
           if (clickSelectorObj.role && normalizedClickText) {
             clickSelectorsToTry.push(`[role="${clickSelectorObj.role}"][aria-label="${normalizedClickText}"]`);
           }
@@ -798,13 +933,78 @@ class TestExecutor {
           break;
         }
           
-        // Select dropdown
+        // Select dropdown - handles both native <select> and custom dropdowns (Radix, Headless UI, etc.)
         case 'Select':
-        case 'select':
-          const selectSelector = resolvedStep.args?.[0] || this.normalizeSelector(resolvedStep.selector);
-          const selectValue = resolvedStep.args?.[1] || resolvedStep.value;
-          await this.page.selectOption(selectSelector, selectValue);
+        case 'select': {
+          const selectLabel = resolvedStep.args?.[0] || this.normalizeSelector(resolvedStep.selector);
+          const selectValue = resolvedStep.args?.[1] || resolvedStep.value?.text || resolvedStep.value;
+          
+          console.log(`[Executor] Select: "${selectValue}" from "${selectLabel}"`);
+          
+          let selectSuccess = false;
+          
+          // V2: TRY SMARTFINDER FIRST (handles Radix/Headless UI dropdowns)
+          if (this.useSmartFinder && !selectSuccess) {
+            selectSuccess = await this.executeSelectV2(resolvedStep);
+          }
+          
+          // LEGACY FALLBACK: Try native select first
+          if (!selectSuccess) {
+            try {
+              // Try native select
+              const selectSelector = this.normalizeSelector(resolvedStep.selector) || 
+                                     `select[name*="${selectLabel}" i], select[aria-label*="${selectLabel}" i]`;
+              await this.page.selectOption(selectSelector, selectValue, { timeout: 3000 });
+              selectSuccess = true;
+              console.log(`[Executor] ✓ Native select successful`);
+            } catch (e) {
+              console.log(`[Executor] Native select failed, trying custom dropdown...`);
+            }
+          }
+          
+          // FALLBACK 2: Handle custom dropdown (click trigger, then click option)
+          if (!selectSuccess) {
+            try {
+              // Find and click the trigger
+              const triggers = [
+                this.page.getByLabel(selectLabel),
+                this.page.locator(`[aria-label*="${selectLabel}" i]`).first(),
+                this.page.locator(`[data-testid*="${selectLabel.toLowerCase().replace(/\s+/g, '-')}"]`).first(),
+                this.page.getByRole('combobox', { name: selectLabel }),
+                this.page.locator(`.select-trigger:has-text("${selectLabel}")`).first(),
+              ];
+              
+              for (const triggerLocator of triggers) {
+                try {
+                  await triggerLocator.waitFor({ state: 'visible', timeout: 2000 });
+                  await triggerLocator.click({ timeout: 3000 });
+                  
+                  // Wait for dropdown to open
+                  await this.page.waitForTimeout(200);
+                  
+                  // Click the option
+                  const option = this.page.getByRole('option', { name: selectValue })
+                    .or(this.page.getByRole('menuitem', { name: selectValue }))
+                    .or(this.page.getByText(selectValue, { exact: true }));
+                  
+                  await option.first().click({ timeout: 3000 });
+                  selectSuccess = true;
+                  console.log(`[Executor] ✓ Custom dropdown select successful`);
+                  break;
+                } catch (triggerError) {
+                  // Try next trigger
+                }
+              }
+            } catch (e) {
+              console.log(`[Executor] Custom dropdown select failed:`, e.message);
+            }
+          }
+          
+          if (!selectSuccess) {
+            throw new Error(`Could not select "${selectValue}" from "${selectLabel}"`);
+          }
           break;
+        }
           
         // Hover
         case 'Hover':

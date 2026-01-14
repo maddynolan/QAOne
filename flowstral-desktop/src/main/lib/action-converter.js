@@ -122,17 +122,39 @@ function buildSelectorObject(action) {
   const primary = cssSelectors[0] || sorted[0] || { selector: null, playwright: null };
   const textSelector = sorted.find(s => s.type === 'text');
   
+  // PRIORITY ORDER for selectors (enterprise-grade approach):
+  // 1. data-testid (most stable - explicitly added for testing)
+  // 2. name attribute (stable - used by forms)
+  // 3. id attribute (stable if not dynamic)
+  // 4. aria-label (stable - accessibility)
+  
+  let bestSelector = primary.selector || null;
+  if (element.testId || element.dataTestId) {
+    bestSelector = `[data-testid="${element.testId || element.dataTestId}"]`;
+  } else if (element.name && !bestSelector) {
+    bestSelector = `[name="${element.name}"]`;
+  } else if (element.id && !bestSelector) {
+    bestSelector = `#${element.id}`;
+  }
+  
   return {
     primary: primary,
-    selector: primary.selector || null,
+    // CSS selector - PRIORITIZE stable attributes
+    selector: bestSelector,
     playwright: primary.playwright || null,
     confidence: primary.confidence || 0,
     type: primary.type || 'unknown',
     text: textSelector?.value || element.text || '',
-    name: element.name || '',
+    // CRITICAL: Include ALL element attributes for robust playback
+    testId: element.testId || element.dataTestId || '',       // HIGHEST PRIORITY
+    dataTestId: element.dataTestId || element.testId || '',   // Alias
+    name: element.name || '',                                  // HIGH PRIORITY
     id: element.id || '',
     placeholder: element.placeholder || '',
     ariaLabel: element.ariaLabel || '',
+    title: element.title || '',
+    role: element.role || '',
+    href: element.href || '',
     fallbacks: sorted.slice(1)
       .filter(s => s.playwright)
       .map(s => ({ 

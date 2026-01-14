@@ -25,70 +25,68 @@ accessibility_agent = AccessibilityAgent()
 
 async def run_axe_core_scan(url: str, component_selector: Optional[str] = None) -> Dict[str, Any]:
     """
-    Run axe-core accessibility scan using Playwright.
-    Returns violations from axe-core analysis.
+    Run axe-core accessibility scan using Playwright via subprocess.
+    Uses subprocess to completely isolate Playwright from uvicorn's event loop
+    to avoid Windows asyncio subprocess issues.
     """
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
-        logger.warning("Playwright not installed, using basic HTML checks")
-        return {"violations": [], "html": ""}
+    import subprocess
+    import sys
+    import json
+    import os
     
     violations = []
     html_content = ""
     
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            page = await context.new_page()
+        # Path to the scanner script
+        script_path = os.path.join(
+            os.path.dirname(__file__), 
+            "..", "services", "accessibility", "axe_scanner.py"
+        )
+        script_path = os.path.abspath(script_path)
+        
+        logger.info(f"[A11Y] Scanner script path: {script_path}")
+        logger.info(f"[A11Y] Script exists: {os.path.exists(script_path)}")
+        
+        # Build command
+        cmd = [sys.executable, script_path, url]
+        if component_selector:
+            cmd.append(component_selector)
+        
+        logger.info(f"[A11Y] Running axe-core scan via subprocess: {url}")
+        logger.info(f"[A11Y] Command: {' '.join(cmd)}")
+        
+        # Run in subprocess with timeout
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=os.path.dirname(script_path)
+        )
+        
+        logger.info(f"[A11Y] Subprocess returncode: {result.returncode}")
+        logger.info(f"[A11Y] Stdout length: {len(result.stdout) if result.stdout else 0}")
+        logger.info(f"[A11Y] Stderr: {result.stderr[:500] if result.stderr else 'None'}")
+        
+        if result.returncode == 0 and result.stdout:
+            data = json.loads(result.stdout)
+            violations = data.get("violations", [])
+            html_content = data.get("html", "")
             
-            # Navigate to URL with timeout
-            await page.goto(url, timeout=30000, wait_until="networkidle")
+            logger.info(f"[A11Y] Parsed violations: {len(violations)}")
             
-            # Get HTML content
-            html_content = await page.content()
+            if data.get("error"):
+                logger.warning(f"[A11Y] Axe scanner warning: {data['error']}")
+        else:
+            logger.error(f"[A11Y] Axe scanner failed: {result.stderr}")
             
-            # Inject and run axe-core
-            # Using CDN version of axe-core
-            await page.add_script_tag(url="https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js")
-            
-            # Wait for axe to load
-            await page.wait_for_function("typeof axe !== 'undefined'", timeout=10000)
-            
-            # Configure axe options
-            axe_options = {
-                "runOnly": {
-                    "type": "tag",
-                    "values": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]
-                }
-            }
-            
-            # Run axe-core scan
-            if component_selector:
-                # Scan specific component
-                axe_result = await page.evaluate(f"""
-                    async () => {{
-                        const element = document.querySelector('{component_selector}');
-                        if (!element) return {{ violations: [], error: 'Component not found' }};
-                        return await axe.run(element, {axe_options});
-                    }}
-                """)
-            else:
-                # Scan full page
-                axe_result = await page.evaluate(f"""
-                    async () => {{
-                        return await axe.run(document, {axe_options});
-                    }}
-                """)
-            
-            violations = axe_result.get("violations", [])
-            
-            await browser.close()
-            
+    except subprocess.TimeoutExpired:
+        logger.error("Axe-core scan timed out after 60 seconds")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse axe scanner output: {e}")
     except Exception as e:
         logger.error(f"Error running axe-core scan: {e}", exc_info=True)
-        # Return empty violations on error - will fall back to basic checks
     
     return {"violations": violations, "html": html_content}
 

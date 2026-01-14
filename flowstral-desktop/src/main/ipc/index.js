@@ -9,6 +9,9 @@ const { registerBrowserHandlers } = require('./browser-handlers');
 const { registerStorageHandlers } = require('./storage-handlers');
 const { registerTestHandlers } = require('./test-handlers');
 const { registerUtilityHandlers } = require('./utility-handlers');
+const { registerAIGeneratorHandlers } = require('./ai-generator-handlers');
+const { registerAIExplorerHandlers } = require('./ai-explorer-handlers');
+const { registerFlowExplorerHandlers } = require('./flow-explorer-handlers');
 
 /**
  * Register all IPC handlers
@@ -21,6 +24,9 @@ function registerAllHandlers(context) {
   registerStorageHandlers(context);
   registerTestHandlers(context);
   registerUtilityHandlers(context);
+  registerAIGeneratorHandlers(context);
+  registerAIExplorerHandlers(context);
+  registerFlowExplorerHandlers(context);
   
   console.log('[IPC] All handlers registered');
 }
@@ -30,6 +36,9 @@ module.exports = {
   registerBrowserHandlers,
   registerStorageHandlers,
   registerTestHandlers,
-  registerUtilityHandlers
+  registerUtilityHandlers,
+  registerAIGeneratorHandlers,
+  registerAIExplorerHandlers,
+  registerFlowExplorerHandlers
 };
 

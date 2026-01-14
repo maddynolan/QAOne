@@ -405,7 +405,7 @@ export function StreamlinedLayout({ children }: { children?: React.ReactNode }) 
         : "bg-gray-950 text-white"
     )}>
       <Header />
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-auto">
         {children || <Outlet />}
       </main>
       <Toaster position="bottom-right" richColors />

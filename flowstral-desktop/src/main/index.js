@@ -1017,6 +1017,511 @@ ipcMain.handle('network-capture-link-action', async (event, { timestamp, type, d
 // END NETWORK CAPTURE
 // ============================================================================
 
+// ============================================================================
+// AI TEST GENERATOR
+// ============================================================================
+
+const { AITestGenerator } = require('./lib/ai-test-generator');
+
+// Generate tests for current page using AI
+ipcMain.handle('ai-generate-current-page', async (event, options = {}) => {
+  try {
+    const { apiKey, model } = options;
+    
+    if (!apiKey) {
+      return { success: false, error: 'OpenAI API key is required' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session. Start a recording first.' };
+    }
+    
+    const url = playwrightRecorder.page.url();
+    
+    const generator = new AITestGenerator(playwrightRecorder.page, {
+      apiKey,
+      model: model || 'gpt-4o-mini',
+      debug: true,
+      
+      onProgress: (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-generator-progress', progress);
+          webappView?.webContents.send('ai-generator-progress', progress);
+        }
+      },
+      
+      onTestGenerated: (test) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-generator-test', test);
+          webappView?.webContents.send('ai-generator-test', test);
+        }
+      }
+    });
+    
+    const result = await generator.generateForCurrentPage();
+    
+    return {
+      success: true,
+      url,
+      analysis: result.analysis,
+      tests: result.tests || []
+    };
+    
+  } catch (error) {
+    console.error('[AIGenerator] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Analyze page without generating tests
+ipcMain.handle('ai-analyze-page', async (event, options = {}) => {
+  try {
+    const { apiKey, model } = options;
+    
+    if (!apiKey) {
+      return { success: false, error: 'OpenAI API key is required' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session. Start a recording first.' };
+    }
+    
+    const generator = new AITestGenerator(playwrightRecorder.page, {
+      apiKey,
+      model: model || 'gpt-4o-mini',
+      debug: true
+    });
+    
+    const snapshot = await generator.getAccessibilitySnapshot();
+    const url = playwrightRecorder.page.url();
+    const analysis = await generator.analyzePage(snapshot, url);
+    
+    return {
+      success: true,
+      url,
+      snapshot,
+      analysis
+    };
+    
+  } catch (error) {
+    console.error('[AIGenerator] Analysis error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Generate tests for a specific URL with optional crawling
+ipcMain.handle('ai-generate-tests', async (event, options = {}) => {
+  try {
+    const { url, apiKey, model, maxPages, crawl } = options;
+    
+    if (!url) {
+      return { success: false, error: 'URL is required' };
+    }
+    
+    if (!apiKey) {
+      return { success: false, error: 'OpenAI API key is required' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session. Start a recording first.' };
+    }
+    
+    const generator = new AITestGenerator(playwrightRecorder.page, {
+      apiKey,
+      model: model || 'gpt-4o-mini',
+      maxPages: maxPages || 10,
+      debug: true,
+      
+      onProgress: (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-generator-progress', progress);
+          webappView?.webContents.send('ai-generator-progress', progress);
+        }
+      },
+      
+      onTestGenerated: (test) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-generator-test', test);
+          webappView?.webContents.send('ai-generator-test', test);
+        }
+      }
+    });
+    
+    let result;
+    if (crawl) {
+      result = await generator.crawlAndGenerate(url);
+    } else {
+      await playwrightRecorder.page.goto(url, { waitUntil: 'domcontentloaded' });
+      result = await generator.generateForCurrentPage();
+    }
+    
+    return { 
+      success: true, 
+      tests: result.tests || [],
+      pagesVisited: result.pagesVisited || [url],
+      errors: result.errors || []
+    };
+    
+  } catch (error) {
+    console.error('[AIGenerator] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// END AI TEST GENERATOR
+// ============================================================================
+
+// ============================================================================
+// AI EXPLORER AGENT - Autonomous Test Discovery
+// ============================================================================
+
+const { AIExplorerAgent } = require('./lib/ai-explorer-agent');
+
+let currentExplorerAgent = null;
+
+// Start autonomous exploration
+ipcMain.handle('ai-explorer-start', async (event, options = {}) => {
+  try {
+    const { startUrl, maxActions, maxPages, apiKey, model, testData } = options;
+    
+    // Get the actual API key - if '***env***' marker, fetch from backend
+    let actualApiKey = apiKey ? apiKey.trim() : '';
+    
+    if (actualApiKey === '***env***' || actualApiKey.includes('***env') || !actualApiKey) {
+      // Key is stored on backend server - fetch it
+      console.log('[AIExplorer IPC] Fetching API key from backend...');
+      try {
+        const axios = require('axios');
+        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        if (response.data && response.data.key) {
+          actualApiKey = response.data.key;
+          console.log('[AIExplorer IPC] Got API key from backend');
+        } else if (process.env.OPENAI_API_KEY) {
+          actualApiKey = process.env.OPENAI_API_KEY;
+          console.log('[AIExplorer IPC] Using API key from environment variable');
+        }
+      } catch (err) {
+        console.log('[AIExplorer IPC] Could not fetch from backend, trying env:', err.message);
+        actualApiKey = process.env.OPENAI_API_KEY || '';
+      }
+    }
+    
+    // Show first 8 chars of API key for debugging (safe to show prefix)
+    const keyPreview = actualApiKey ? `${actualApiKey.substring(0, 8)}...${actualApiKey.slice(-4)}` : 'none';
+    console.log('[AIExplorer IPC] Starting with:', { startUrl, maxActions, apiKeyPreview: keyPreview, hasRecorder: !!playwrightRecorder, hasPage: !!playwrightRecorder?.page });
+    
+    if (!actualApiKey) {
+      console.log('[AIExplorer IPC] No API key');
+      return { success: false, error: 'OpenAI API key not found. Make sure the backend is running at localhost:8000 with OPENAI_API_KEY configured.' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      console.log('[AIExplorer IPC] No recorder or page');
+      return { success: false, error: 'No active recording session. Start a recording first.' };
+    }
+    
+    // Create agent
+    currentExplorerAgent = new AIExplorerAgent(playwrightRecorder.page, {
+      apiKey: actualApiKey,
+      model: model || 'gpt-4o-mini',
+      maxActions: maxActions || 50,
+      maxPages: maxPages || 5,
+      testData: testData || undefined,
+      debug: true,
+      
+      // Progress callbacks - send to renderer
+      onProgress: (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-explorer-progress', progress);
+        }
+      },
+      
+      onAction: (action) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-explorer-action', action);
+        }
+      },
+      
+      onTestDiscovered: (test) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-explorer-test-discovered', test);
+        }
+      },
+      
+      onError: (error) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-explorer-error', error);
+        }
+      },
+      
+      onStateChange: (state) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ai-explorer-state-change', state);
+        }
+      }
+    });
+    
+    // Start exploration
+    const result = await currentExplorerAgent.explore(startUrl);
+    
+    currentExplorerAgent = null;
+    return result;
+    
+  } catch (error) {
+    console.error('[AIExplorer] Start error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop current exploration
+ipcMain.handle('ai-explorer-stop', async (event) => {
+  try {
+    if (currentExplorerAgent) {
+      currentExplorerAgent.stop();
+      currentExplorerAgent = null;
+      return { success: true };
+    }
+    return { success: false, error: 'No exploration running' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get exploration status
+ipcMain.handle('ai-explorer-status', async (event) => {
+  return {
+    running: !!currentExplorerAgent,
+    actionCount: currentExplorerAgent?.actionCount || 0,
+    testsDiscovered: currentExplorerAgent?.discoveredTests?.length || 0
+  };
+});
+
+// ============================================================================
+// END AI EXPLORER AGENT
+// ============================================================================
+
+// ============================================================================
+// AI FLOW EXPLORER - Full Flow Discovery
+// ============================================================================
+
+const { AIFlowExplorer } = require('./lib/ai-flow-explorer');
+
+let currentFlowExplorer = null;
+
+// Start flow exploration
+ipcMain.handle('flow-explorer-start', async (event, options = {}) => {
+  try {
+    const { startUrl, maxPages, apiKey, model, testData } = options;
+    
+    // Get the actual API key
+    let actualApiKey = apiKey ? apiKey.trim() : '';
+    
+    if (actualApiKey === '***env***' || actualApiKey.includes('***env') || !actualApiKey) {
+      console.log('[FlowExplorer IPC] Fetching API key from backend...');
+      try {
+        const axios = require('axios');
+        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        if (response.data && response.data.key) {
+          actualApiKey = response.data.key;
+          console.log('[FlowExplorer IPC] Got API key from backend');
+        } else if (process.env.OPENAI_API_KEY) {
+          actualApiKey = process.env.OPENAI_API_KEY;
+        }
+      } catch (err) {
+        actualApiKey = process.env.OPENAI_API_KEY || '';
+      }
+    }
+    
+    if (!actualApiKey) {
+      return { success: false, error: 'No API key found' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session' };
+    }
+    
+    currentFlowExplorer = new AIFlowExplorer(playwrightRecorder.page, {
+      apiKey: actualApiKey,
+      model: model || 'gpt-4o-mini',
+      maxPages: maxPages || 50,
+      testData: testData || {},
+      debug: true,
+      
+      onProgress: (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('flow-explorer-progress', progress);
+        }
+      },
+      
+      onPageDiscovered: (page) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('flow-explorer-page-discovered', page);
+        }
+      },
+      
+      onTestGenerated: (test) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('flow-explorer-test-generated', test);
+        }
+      },
+      
+      onError: (error) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('flow-explorer-error', error);
+        }
+      }
+    });
+    
+    const result = await currentFlowExplorer.explore(startUrl);
+    currentFlowExplorer = null;
+    return result;
+    
+  } catch (error) {
+    console.error('[FlowExplorer] Start error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('flow-explorer-stop', async (event) => {
+  if (currentFlowExplorer) {
+    currentFlowExplorer.stop();
+    currentFlowExplorer = null;
+  }
+  return { success: true };
+});
+
+ipcMain.handle('flow-explorer-automate-manual', async (event, options = {}) => {
+  try {
+    const { description, apiKey, testData } = options;
+    
+    let actualApiKey = apiKey ? apiKey.trim() : '';
+    if (actualApiKey === '***env***' || !actualApiKey) {
+      try {
+        const axios = require('axios');
+        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        if (response.data && response.data.key) actualApiKey = response.data.key;
+        else if (process.env.OPENAI_API_KEY) actualApiKey = process.env.OPENAI_API_KEY;
+      } catch { actualApiKey = process.env.OPENAI_API_KEY || ''; }
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session' };
+    }
+    
+    const explorer = new AIFlowExplorer(playwrightRecorder.page, {
+      apiKey: actualApiKey,
+      testData: testData || {},
+      debug: true
+    });
+    
+    const result = await explorer.automateManualTestCase(description);
+    return result;
+    
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// END AI FLOW EXPLORER
+// ============================================================================
+
+// ============================================================================
+// AI GOAL AGENT - Execute goals in natural language
+// ============================================================================
+
+const { AIGoalAgent } = require('./lib/ai-goal-agent');
+
+let currentGoalAgent = null;
+
+ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
+  try {
+    const { goal, startUrl, apiKey, testData, maxSteps } = options;
+    
+    if (!goal) {
+      return { success: false, error: 'No goal provided' };
+    }
+    
+    // Get API key
+    let actualApiKey = apiKey ? apiKey.trim() : '';
+    if (actualApiKey === '***env***' || !actualApiKey) {
+      try {
+        const axios = require('axios');
+        const response = await axios.get('http://127.0.0.1:8000/api/ai/vision/config/internal-key');
+        if (response.data && response.data.key) actualApiKey = response.data.key;
+        else if (process.env.OPENAI_API_KEY) actualApiKey = process.env.OPENAI_API_KEY;
+      } catch { actualApiKey = process.env.OPENAI_API_KEY || ''; }
+    }
+    
+    if (!actualApiKey) {
+      return { success: false, error: 'No API key available' };
+    }
+    
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No active recording session. Start recording first.' };
+    }
+    
+    console.log('[GoalAgent] Starting goal execution:', goal);
+    console.log('[GoalAgent] Test data:', testData);
+    
+    currentGoalAgent = new AIGoalAgent(playwrightRecorder.page, {
+      apiKey: actualApiKey,
+      testData: testData || {},
+      maxSteps: maxSteps || 50,
+      debug: true,
+      
+      onStep: (stepInfo) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('goal-agent-step', stepInfo);
+        }
+      },
+      
+      onProgress: (progress) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('goal-agent-progress', progress);
+        }
+      },
+      
+      onGoalAchieved: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('goal-agent-complete', { success: true });
+        }
+      },
+      
+      onError: (error) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('goal-agent-error', error);
+        }
+      }
+    });
+    
+    const result = await currentGoalAgent.executeGoal(goal, startUrl);
+    currentGoalAgent = null;
+    
+    console.log('[GoalAgent] Execution complete:', result.success ? 'SUCCESS' : 'INCOMPLETE');
+    console.log('[GoalAgent] Steps taken:', result.steps?.length || 0);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('[GoalAgent] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('goal-agent-stop', async (event) => {
+  if (currentGoalAgent) {
+    currentGoalAgent.stop();
+    currentGoalAgent = null;
+  }
+  return { success: true };
+});
+
+// ============================================================================
+// END AI GOAL AGENT
+// ============================================================================
+
 // Execute a suggestion action in the browser (click, fill, etc.)
 ipcMain.handle('embedded-browser-execute-action', async (event, action) => {
   if (!embeddedBrowser?.view) return { success: false, error: 'No browser' };

@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -48,12 +47,14 @@ export default function Accessibility() {
   };
 
   const scanPage = async () => {
+    console.log("[A11y Debug] scanPage called, url:", url);
     if (!url) {
       toast.error("Please enter a URL");
       return;
     }
 
     setIsScanning(true);
+    console.log("[A11y Debug] Starting scan for:", url);
     try {
       const apiKey = getApiKey();
       
@@ -84,6 +85,8 @@ export default function Accessibility() {
       }
 
       const result = await response.json();
+      console.log("[A11y Debug] Scan result:", result);
+      console.log("[A11y Debug] Issues:", result.issues?.length || 0);
       setScanResult(result);
       setRecentScans(prev => [result, ...prev].slice(0, 10));
       toast.success(`Scan completed: ${result.summary.total} issues found`);
@@ -250,55 +253,64 @@ export default function Accessibility() {
               </div>
             </div>
 
-            <Tabs defaultValue="all">
-              <TabsList>
-                <TabsTrigger value="all">All Issues ({scanResult.summary.total})</TabsTrigger>
-                <TabsTrigger value="critical">Critical ({scanResult.summary.critical})</TabsTrigger>
-                <TabsTrigger value="serious">Serious ({scanResult.summary.serious})</TabsTrigger>
-                <TabsTrigger value="moderate">Moderate ({scanResult.summary.moderate})</TabsTrigger>
-                <TabsTrigger value="minor">Minor ({scanResult.summary.minor})</TabsTrigger>
-              </TabsList>
-
-              {["all", "critical", "serious", "moderate", "minor"].map((filter) => (
-                <TabsContent key={filter} value={filter}>
-                  <div className="space-y-4">
-                    {scanResult.issues
-                      .filter(issue => filter === "all" || issue.impact === filter)
-                      .map((issue) => (
-                        <Card key={issue.id}>
-                          <CardContent className="pt-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Badge className={getImpactColor(issue.impact)}>
-                                    {issue.impact}
-                                  </Badge>
-                                  <span className="font-semibold">{issue.rule}</span>
-                                  {issue.wcag_criterion && (
-                                    <Badge variant="outline">{issue.wcag_criterion}</Badge>
-                                  )}
-                                </div>
-                                <p className="text-sm text-muted-foreground mb-2">
-                                  {issue.description}
-                                </p>
-                                <p className="text-xs text-muted-foreground mb-3">
-                                  Element: <code className="bg-muted px-1 rounded">{issue.element}</code>
-                                </p>
-                                {issue.suggested_fix && (
-                                  <div className="bg-muted p-3 rounded-md">
-                                    <p className="text-sm font-semibold mb-1">Suggested Fix:</p>
-                                    <p className="text-sm">{issue.suggested_fix}</p>
-                                  </div>
-                                )}
-                              </div>
+            {/* Issues List - Show all issues directly without tabs for better visibility */}
+            <div className="mt-6 space-y-4">
+              <h3 className="text-lg font-semibold">Issues Found ({scanResult.issues?.length || 0})</h3>
+              
+              {(!scanResult.issues || scanResult.issues.length === 0) ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No accessibility issues found! 🎉</p>
+                </div>
+              ) : (
+                scanResult.issues.map((issue, idx) => (
+                  <Card key={issue.id || idx} className="border-l-4" style={{ borderLeftColor: issue.impact === 'critical' ? '#ef4444' : issue.impact === 'serious' ? '#f97316' : issue.impact === 'moderate' ? '#eab308' : '#3b82f6' }}>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <Badge className={getImpactColor(issue.impact)}>
+                              {issue.impact?.toUpperCase()}
+                            </Badge>
+                            <span className="font-semibold text-lg">{issue.rule || issue.id}</span>
+                            {issue.wcag_criterion && (
+                              <Badge variant="outline">{issue.wcag_criterion}</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            {issue.description}
+                          </p>
+                          {issue.element && (
+                            <div className="mb-3">
+                              <p className="text-xs font-medium mb-1">Affected Element:</p>
+                              <code className="block bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded text-xs overflow-x-auto max-w-full whitespace-pre-wrap break-all">
+                                {issue.element}
+                              </code>
                             </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+                          )}
+                          {issue.suggested_fix && (
+                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-md mt-3">
+                              <p className="text-sm font-semibold mb-1 text-green-800 dark:text-green-200">✅ Recommended Fix:</p>
+                              <p className="text-sm text-green-700 dark:text-green-300">{issue.suggested_fix}</p>
+                            </div>
+                          )}
+                          {issue.help_url && (
+                            <a 
+                              href={issue.help_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline mt-3 inline-block"
+                            >
+                              Learn more about this issue →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+
           </CardContent>
         </Card>
       )}

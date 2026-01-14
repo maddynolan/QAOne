@@ -145,6 +145,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'test-step-start',
       'test-step-complete',
       'test-complete',
+      // AI Generator events
+      'ai-generator-progress',
+      'ai-generator-test',
+      'ai-generator-error',
+      // AI Explorer Agent events
+      'ai-explorer-progress',
+      'ai-explorer-action',
+      'ai-explorer-test-discovered',
+      'ai-explorer-error',
+      'ai-explorer-state-change',
+      // Flow Explorer events
+      'flow-explorer-progress',
+      'flow-explorer-page-discovered',
+      'flow-explorer-element-discovered',
+      'flow-explorer-flow-complete',
+      'flow-explorer-test-generated',
+      'flow-explorer-error',
     ];
     
     if (validChannels.includes(channel)) {
@@ -152,6 +169,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on(channel, subscription);
       return () => ipcRenderer.removeListener(channel, subscription);
     }
+  },
+  
+  // Explicit listener removal
+  off: (channel, callback) => {
+    ipcRenderer.removeAllListeners(channel);
   },
   
   once: (channel, callback) => {
