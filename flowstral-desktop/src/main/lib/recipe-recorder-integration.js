@@ -408,10 +408,23 @@ function legacyActionToRecipe(legacyAction) {
   const selectorObj = legacyAction.selectorObj || legacyAction.selector || {};
   const element = legacyAction.element || {};
   
+  // CRITICAL FIX: elementIndex can be in multiple places:
+  // 1. action.elementIndex (direct property)
+  // 2. action.args[1] (for ClickText actions)
+  // 3. action.selectorObj?.elementIndex
+  let elementIndex = null;
+  if (typeof legacyAction.elementIndex === 'number') {
+    elementIndex = legacyAction.elementIndex;
+  } else if (typeof legacyAction.args?.[1] === 'number') {
+    elementIndex = legacyAction.args[1];
+  } else if (typeof selectorObj.elementIndex === 'number') {
+    elementIndex = selectorObj.elementIndex;
+  }
+  
   return {
     what: {
       role: element.role || selectorObj.role || null,
-      text: legacyAction.text || element.text || selectorObj.text || '',
+      text: legacyAction.text || legacyAction.label || element.text || selectorObj.text || '',
       tag: element.tagName || selectorObj.tag || null,
     },
     where: {
@@ -423,8 +436,8 @@ function legacyActionToRecipe(legacyAction) {
       name: element.name || selectorObj.name || null,
       ariaLabel: element.ariaLabel || selectorObj.ariaLabel || null,
       placeholder: element.placeholder || selectorObj.placeholder || null,
-      // FIX: Use typeof check because elementIndex 0 is falsy but valid
-      position: typeof legacyAction.elementIndex === 'number' ? legacyAction.elementIndex + 1 : null,
+      // Position is 1-based (elementIndex 0 → position 1)
+      position: elementIndex !== null ? elementIndex + 1 : null,
     },
     confirm: {
       cssSelector: typeof selectorObj === 'string' ? selectorObj : selectorObj.selector,
