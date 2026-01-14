@@ -44,6 +44,7 @@ class AIGoalAgent {
     this.currentStep = 0;
     this.goalAchieved = false;
     this.shouldStop = false;
+    this.actionHistory = []; // Track recent actions to detect repetition
     
     // Callbacks
     this.onStep = options.onStep || (() => {});
@@ -71,6 +72,23 @@ class AIGoalAgent {
       await newPage.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
       this.page = newPage;
     });
+  }
+  
+  /**
+   * Get actions that have been repeated without making progress
+   */
+  getRepeatedActions() {
+    const actionCounts = {};
+    for (const step of this.stepsTaken.slice(-10)) {
+      const key = `${step.action}:${step.target}`;
+      actionCounts[key] = (actionCounts[key] || 0) + 1;
+    }
+    
+    const repeated = Object.entries(actionCounts)
+      .filter(([_, count]) => count >= 2)
+      .map(([action, count]) => `• "${action}" tried ${count} times`);
+    
+    return repeated.length > 0 ? repeated.join('\n') : 'None';
   }
   
   // ==========================================================================
@@ -189,14 +207,38 @@ class AIGoalAgent {
     const url = this.page.url();
     const title = await this.page.title();
     
-    // Get visible interactive elements
+    // Wait for any modals/dialogs to stabilize
+    await this.page.waitForTimeout(500);
+    
+    // Check for modals/dialogs that might have opened
+    const hasModal = await this.page.evaluate(() => {
+      return !!(
+        document.querySelector('[role="dialog"]') ||
+        document.querySelector('.slds-modal') ||
+        document.querySelector('.modal') ||
+        document.querySelector('[aria-modal="true"]')
+      );
+    });
+    
+    if (hasModal) {
+      this.log('Modal/Dialog detected on page');
+      await this.page.waitForTimeout(500); // Extra wait for modal animation
+    }
+    
+    // Get visible interactive elements - enhanced for Salesforce Lightning
     const elements = await this.page.evaluate(() => {
       const results = [];
       const selectors = [
         'a[href]', 'button', 'input', 'select', 'textarea',
         '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]',
         '[role="checkbox"]', '[role="radio"]', '[role="combobox"]',
-        '[onclick]', '[data-testid]'
+        '[role="textbox"]', '[role="dialog"] input', '[role="dialog"] button',
+        '[onclick]', '[data-testid]',
+        // Salesforce Lightning specific
+        'lightning-input input', 'lightning-input', 
+        'lightning-combobox', 'lightning-textarea',
+        '.slds-input', '.slds-button', '.slds-combobox',
+        '[data-aura-rendered-by]', '[data-refid]'
       ];
       
       document.querySelectorAll(selectors.join(', ')).forEach((el, idx) => {
@@ -319,7 +361,10 @@ CURRENT PAGE:
 - Form Labels: ${pageState.labels.join(', ') || 'None'}
 
 PREVIOUS STEPS TAKEN (${this.stepsTaken.length}):
-${this.stepsTaken.slice(-5).map((s, i) => `${i + 1}. ${s.description}`).join('\n') || 'None yet'}
+${this.stepsTaken.slice(-8).map((s, i) => `${i + 1}. [${s.success ? '✓' : '✗'}] ${s.description}`).join('\n') || 'None yet'}
+
+ACTIONS TO AVOID (already tried without progress):
+${this.getRepeatedActions()}
 
 INTERACTIVE ELEMENTS ON PAGE:
 ${pageState.elements.slice(0, 60).map((el, i) => 
@@ -329,9 +374,17 @@ ${pageState.elements.slice(0, 60).map((el, i) =>
 INSTRUCTIONS:
 1. Analyze the current page and elements
 2. Determine the SINGLE BEST action to get closer to the goal
-3. If you see a form field that matches your test data, fill it
-4. If the goal appears to be achieved (e.g., success message, confirmation), set goalAchieved to true
-5. If stuck or no relevant elements, explain why
+3. If you see a form field, fill it with appropriate test data:
+   - "First Name" or "firstName" → use firstName test data
+   - "Last Name" or "lastName" → use lastName test data  
+   - "Email" → use email test data
+   - "Phone" → use phone test data
+   - "Company" or "Account" → use company test data
+4. If the goal appears to be achieved (e.g., success message, confirmation, record created), set goalAchieved to true
+5. If you've clicked something that should open a form/modal, wait for it (action: "wait")
+6. For Salesforce Lightning: Look for fields in the modal that just opened
+7. IMPORTANT: Don't repeat the same action more than twice - try a different approach
+8. If stuck, explain what you tried and what's blocking you
 
 Respond with JSON:
 {
@@ -458,15 +511,71 @@ Respond with JSON:
   }
   
   async doFill(element, target, value) {
-    const locators = this.buildLocators(element, target);
+    this.log(`Attempting to fill "${target}" with "${value}"`);
     
-    for (const locator of locators) {
+    // Enhanced locator strategies for complex UIs like Salesforce
+    const locatorStrategies = [
+      // Direct selector
+      () => element?.selector ? this.page.locator(element.selector) : null,
+      
+      // By label text (most reliable for forms)
+      () => this.page.getByLabel(target, { exact: false }),
+      () => this.page.getByLabel(new RegExp(target, 'i')),
+      
+      // By placeholder
+      () => this.page.getByPlaceholder(target, { exact: false }),
+      () => this.page.getByPlaceholder(new RegExp(target, 'i')),
+      
+      // By role textbox with name
+      () => this.page.getByRole('textbox', { name: target }),
+      () => this.page.getByRole('textbox', { name: new RegExp(target, 'i') }),
+      
+      // Lightning-specific: input inside lightning-input with matching label
+      () => this.page.locator(`lightning-input:has-text("${target}") input`),
+      () => this.page.locator(`lightning-textarea:has-text("${target}") textarea`),
+      
+      // Salesforce SLDS
+      () => this.page.locator(`.slds-form-element:has-text("${target}") input`),
+      () => this.page.locator(`.slds-form-element:has-text("${target}") textarea`),
+      
+      // Modal/dialog context
+      () => this.page.locator(`[role="dialog"] input[placeholder*="${target}" i]`),
+      () => this.page.locator(`[role="dialog"] label:has-text("${target}") + input`),
+      () => this.page.locator(`[role="dialog"] label:has-text("${target}") ~ input`),
+      
+      // Generic label association
+      () => this.page.locator(`label:has-text("${target}") + input`),
+      () => this.page.locator(`label:has-text("${target}") ~ input`),
+      
+      // Aria-label
+      () => this.page.locator(`input[aria-label*="${target}" i]`),
+      () => this.page.locator(`textarea[aria-label*="${target}" i]`),
+      
+      // Name attribute
+      () => this.page.locator(`input[name*="${target}" i]`),
+      () => this.page.locator(`textarea[name*="${target}" i]`),
+      
+      // Data attributes
+      () => this.page.locator(`[data-field-name*="${target}" i] input`),
+      () => this.page.locator(`[data-name*="${target}" i] input`)
+    ];
+    
+    for (const getLocator of locatorStrategies) {
       try {
+        const locator = getLocator();
+        if (!locator) continue;
+        
         const count = await locator.count();
         if (count > 0) {
-          await locator.first().scrollIntoViewIfNeeded({ timeout: 3000 });
-          await locator.first().clear();
-          await locator.first().fill(value);
+          const first = locator.first();
+          await first.scrollIntoViewIfNeeded({ timeout: 3000 });
+          
+          // Clear and fill
+          await first.click(); // Focus first
+          await this.page.keyboard.press('Control+A');
+          await first.fill(value);
+          
+          this.log(`Successfully filled "${target}" using locator strategy`);
           return { success: true };
         }
       } catch (e) {
@@ -474,7 +583,8 @@ Respond with JSON:
       }
     }
     
-    return { success: false, error: 'Element not found' };
+    this.log(`Could not find field "${target}" with any strategy`);
+    return { success: false, error: `Field "${target}" not found` };
   }
   
   async doSelect(element, target, value) {
