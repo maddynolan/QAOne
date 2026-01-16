@@ -443,11 +443,26 @@ Return JSON:
       const alreadyAddedCount = this.memory.addedToCart.length;
       
       if (btnCount > alreadyAddedCount) {
-        await addButtons.nth(alreadyAddedCount).scrollIntoViewIfNeeded().catch(() => {});
-        await addButtons.nth(alreadyAddedCount).click({ timeout: 5000 });
+        const btnElement = addButtons.nth(alreadyAddedCount);
+        await btnElement.scrollIntoViewIfNeeded().catch(() => {});
+        
+        // Try to get testId or other unique identifier
+        const testId = await btnElement.getAttribute('data-testid').catch(() => null);
+        const ariaLabel = await btnElement.getAttribute('aria-label').catch(() => null);
+        
+        await btnElement.click({ timeout: 5000 });
         this.memory.addedToCart.push(productName);
         this.log(`✓ Added ${productName} via nth(${alreadyAddedCount})`);
-        return { success: true, method: 'nth-add' };
+        
+        // Return the index and any unique identifier for playback
+        return { 
+          success: true, 
+          method: 'nth-add',
+          elementIndex: alreadyAddedCount,  // 0-based index
+          testId: testId,
+          ariaLabel: ariaLabel,
+          actualText: 'Add to Cart'
+        };
       }
       
       this.log(`✗ Could not find Add button for ${productName}`);
@@ -799,6 +814,11 @@ Return JSON:
           args: [cleanTarget],
           // Store method used for debugging
           method: result.method,
+          // CRITICAL: Store element index for playback of duplicate elements
+          elementIndex: result.elementIndex ?? null,
+          // Store testId if available (best for playback)
+          testId: result.testId || null,
+          ariaLabel: result.ariaLabel || null,
           // Store actual element info if available
           actualElement: result.actualElement || null
         });
@@ -908,6 +928,15 @@ Return JSON:
       const role = this.inferRole(s.action, s.originalTarget || s.target);
       const tag = this.inferTag(s.action);
       
+      // Use actual testId from execution if available, otherwise infer
+      const testId = s.testId || this.inferTestId(targetText);
+      
+      // CRITICAL: Use actual element index from execution (1-based for SmartFinder)
+      // elementIndex from execution is 0-based, SmartFinder position is 1-based
+      const position = s.elementIndex !== null && s.elementIndex !== undefined 
+        ? s.elementIndex + 1  // Convert 0-based to 1-based
+        : 1;
+      
       // Build proper step structure for PlaywrightRecorder playback
       const step = {
         qword: s.qword || this.actionToQWord(s.action),
@@ -915,12 +944,14 @@ Return JSON:
         description: s.description,
         type: s.action || 'click',
         label: s.description,
+        // CRITICAL: Include elementIndex for duplicate elements
+        elementIndex: s.elementIndex,
         // Include selector data for SmartFinder
         selectorObj: {
           text: targetText,
           role: role,
-          testId: this.inferTestId(targetText),
-          ariaLabel: targetText,
+          testId: testId,
+          ariaLabel: s.ariaLabel || targetText,
           recipe: {
             what: {
               role: role,
@@ -931,7 +962,8 @@ Return JSON:
               landmark: 'main'
             },
             which: {
-              position: 1,
+              position: position,
+              testId: testId,
               uniqueText: false
             }
           }
@@ -942,7 +974,7 @@ Return JSON:
           text: targetText,
           tagName: tag
         },
-        // Include recipe for SmartFinder
+        // Include recipe for SmartFinder - CRITICAL: position must match actual clicked element
         recipe: {
           what: {
             role: role,
@@ -953,7 +985,8 @@ Return JSON:
             landmark: 'main'
           },
           which: {
-            position: index + 1,
+            position: position,  // Use actual position from execution
+            testId: testId,
             uniqueText: false
           }
         }
