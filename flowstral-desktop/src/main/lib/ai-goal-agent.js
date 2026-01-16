@@ -784,15 +784,23 @@ Return JSON:
         
         const result = await this.executeSmartAction(action);
         
-        // Record the step
+        // Record the step with actual element data from execution
+        const actualTarget = result.actualText || result.actualTarget || action.target;
+        const cleanTarget = this.cleanTargetForPlayback(action.target, action.action);
+        
         this.stepsTaken.push({
           step: this.currentStep,
           action: action.action,
-          target: action.target,
-          description: `${action.action} "${action.target}"`,
+          target: cleanTarget,
+          originalTarget: action.target,
+          description: `${action.action} "${cleanTarget}"`,
           success: result.success,
           qword: this.actionToQWord(action.action),
-          args: [action.target]
+          args: [cleanTarget],
+          // Store method used for debugging
+          method: result.method,
+          // Store actual element info if available
+          actualElement: result.actualElement || null
         });
         
         this.onStep({
@@ -895,24 +903,29 @@ Return JSON:
    */
   generateTestCase() {
     const steps = this.stepsTaken.filter(s => s.success).map((s, index) => {
+      // Use cleaned target for playback
+      const targetText = s.target;
+      const role = this.inferRole(s.action, s.originalTarget || s.target);
+      const tag = this.inferTag(s.action);
+      
       // Build proper step structure for PlaywrightRecorder playback
       const step = {
         qword: s.qword || this.actionToQWord(s.action),
-        args: s.args || [s.target],
+        args: [targetText],
         description: s.description,
         type: s.action || 'click',
         label: s.description,
         // Include selector data for SmartFinder
         selectorObj: {
-          text: s.target,
-          role: this.inferRole(s.action, s.target),
-          testId: this.inferTestId(s.target),
-          ariaLabel: s.target,
+          text: targetText,
+          role: role,
+          testId: this.inferTestId(targetText),
+          ariaLabel: targetText,
           recipe: {
             what: {
-              role: this.inferRole(s.action, s.target),
-              text: s.target,
-              tag: this.inferTag(s.action)
+              role: role,
+              text: targetText,
+              tag: tag
             },
             where: {
               landmark: 'main'
@@ -925,16 +938,16 @@ Return JSON:
         },
         // Include element data
         element: {
-          role: this.inferRole(s.action, s.target),
-          text: s.target,
-          tagName: this.inferTag(s.action)
+          role: role,
+          text: targetText,
+          tagName: tag
         },
         // Include recipe for SmartFinder
         recipe: {
           what: {
-            role: this.inferRole(s.action, s.target),
-            text: s.target,
-            tag: this.inferTag(s.action)
+            role: role,
+            text: targetText,
+            tag: tag
           },
           where: {
             landmark: 'main'
@@ -966,6 +979,43 @@ Return JSON:
       source: 'ai-goal-agent-v3',
       goalAchieved: this.goalAchieved
     };
+  }
+  
+  /**
+   * Clean the target text for playback
+   * Converts AI descriptions like "Products tab" to actual element text "Products"
+   */
+  cleanTargetForPlayback(target, action) {
+    if (!target) return target;
+    
+    let clean = target;
+    
+    // Remove common suffixes that AI adds but aren't in actual element text
+    const suffixesToRemove = [
+      ' tab', ' button', ' link', ' dropdown', ' option', ' field', ' input',
+      ' checkbox', ' menu', ' item', ' card'
+    ];
+    
+    for (const suffix of suffixesToRemove) {
+      if (clean.toLowerCase().endsWith(suffix)) {
+        clean = clean.slice(0, -suffix.length).trim();
+        break;
+      }
+    }
+    
+    // Handle "Add to Cart for X" -> keep as is for product-specific actions
+    // but for playback, just use "Add to Cart" if it's a generic add
+    if (clean.toLowerCase().includes('add to cart for')) {
+      // Keep the product name for context but simplify for finding
+      // The actual button just says "Add to Cart"
+      return 'Add to Cart';
+    }
+    
+    if (clean.toLowerCase().includes('remove for')) {
+      return 'Remove';
+    }
+    
+    return clean;
   }
   
   /**
