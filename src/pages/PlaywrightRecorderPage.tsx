@@ -126,13 +126,36 @@ interface TestCase {
   automationStatus?: 'none' | 'partial' | 'full';
 }
 
+// Cross-origin user action - for manual selector input
+interface CrossOriginUserAction {
+  id: string;
+  type: 'click' | 'fill' | 'select' | 'wait';
+  findBy: 'text' | 'css' | 'xpath' | 'testId' | 'coords';
+  selector: string;
+  coords?: { x: number; y: number };
+  value?: string;
+  description?: string;
+}
+
+// Helper to detect cross-origin placeholder actions
+const isCrossOriginAction = (action: RecordedAction): boolean => {
+  const type = (action.type || action.qword || '').toLowerCase();
+  const desc = (action.description || '').toLowerCase();
+  return type === 'crossoriginplaceholder' || 
+         type === 'crossorigin' || 
+         desc.includes('external tab') ||
+         desc.includes('cross-origin');
+};
+
 // Check if running in Electron
 const isElectron = () => !!(window as any).flowstral?.playwrightRecorder || !!(window as any).electronAPI;
 
 // Helper to detect password-related fields
 const isPasswordField = (action: RecordedAction): boolean => {
   const qword = (action.qword || '').toLowerCase();
-  const arg0 = (action.args?.[0] || '').toLowerCase();
+  // CRITICAL: args[0] could be a number (e.g., tabIndex), not a string
+  const arg0Raw = action.args?.[0];
+  const arg0 = (typeof arg0Raw === 'string' ? arg0Raw : '').toLowerCase();
   const desc = (action.description || '').toLowerCase();
   const selector = JSON.stringify(action.selectorObj || {}).toLowerCase();
   
@@ -574,6 +597,11 @@ export default function PlaywrightRecorderPage() {
   // Pause/Resume/Debug execution state
   const [isTestPaused, setIsTestPaused] = useState(false);
   const [pausedAtStep, setPausedAtStep] = useState<number | null>(null);
+  
+  // Cross-origin step editor state
+  const [showCrossOriginEditor, setShowCrossOriginEditor] = useState(false);
+  const [editingCrossOriginIndex, setEditingCrossOriginIndex] = useState<number | null>(null);
+  const [crossOriginUserActions, setCrossOriginUserActions] = useState<CrossOriginUserAction[]>([]);
   const [stepByStepMode, setStepByStepMode] = useState(false);
   const [editingPausedStep, setEditingPausedStep] = useState<RecordedAction | null>(null);
   const [pauseRequested, setPauseRequested] = useState(false);
@@ -3001,7 +3029,7 @@ Recorded Test
     navigate('/test-cases');
   };
 
-  const handleRunTest = async (debugMode: boolean = false) => {
+  const handleRunTest = async (debugMode: boolean = false, freshBrowser: boolean = false) => {
     if (actions.length === 0) {
       toast.error("No steps to run");
       return;
@@ -3015,6 +3043,11 @@ Recorded Test
     if (debugMode) {
       setStepByStepMode(true);
       toast.info('🐛 Debug mode: Step-by-step execution enabled', { duration: 2000 });
+    }
+    
+    // If fresh browser mode, show toast
+    if (freshBrowser) {
+      toast.info('🧹 Fresh browser mode: Clean state, no cookies/storage', { duration: 2000 });
     }
     
     // ROBUST PLAYBACK: Normalize all steps before execution
@@ -3053,9 +3086,11 @@ Recorded Test
       
       if (flowstral?.playwrightRecorder?.runTest) {
         // Use normalized actions for robust playback
+        // freshBrowser: true = completely clean browser with no stored state
         result = await flowstral.playwrightRecorder.runTest({
           steps: normalizedActions,
-          url: url
+          url: url,
+          freshBrowser: freshBrowser // NEW: Clean browser mode
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
@@ -3593,19 +3628,29 @@ Recorded Test
                 <ChevronDown className="h-3 w-3 ml-1.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-48 p-1">
+            <PopoverContent align="end" className="w-52 p-1">
               <button
-                onClick={() => handleRunTest(false)}
+                onClick={() => handleRunTest(false, false)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-emerald-500/20 text-left transition-colors"
               >
                 <Play className="h-4 w-4 text-emerald-400" />
                 <div>
                   <div className="font-medium">Run</div>
-                  <div className="text-[10px] text-muted-foreground">Execute all steps</div>
+                  <div className="text-[10px] text-muted-foreground">Execute with saved state</div>
                 </div>
               </button>
               <button
-                onClick={() => handleRunTest(true)}
+                onClick={() => handleRunTest(false, true)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-cyan-500/20 text-left transition-colors"
+              >
+                <RotateCcw className="h-4 w-4 text-cyan-400" />
+                <div>
+                  <div className="font-medium">Fresh Run</div>
+                  <div className="text-[10px] text-muted-foreground">Clean browser, no cache</div>
+                </div>
+              </button>
+              <button
+                onClick={() => handleRunTest(true, false)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-500/20 text-left transition-colors"
               >
                 <Bug className="h-4 w-4 text-amber-400" />
@@ -4221,13 +4266,39 @@ Recorded Test
                       <p className="text-sm text-foreground truncate">
                         {displayAction.description || `${action.qword || action.type} ${displayAction.args?.[0] || ''}`}
                         {isPw && <span className="ml-1 text-primary">🔒</span>}
+                        {isCrossOriginAction(action) && (
+                          <span className="ml-1 text-yellow-500">⚠️</span>
+                        )}
                       </p>
-                      {displayAction.args?.[0] && (
+                      {isCrossOriginAction(action) ? (
+                        <p className="text-xs text-yellow-500/80 truncate">
+                          {(action as any).userActions?.length > 0 
+                            ? `${(action as any).userActions.length} action(s) defined`
+                            : 'Click to add selectors'}
+                        </p>
+                      ) : displayAction.args?.[0] && (
                         <p className="text-xs text-muted-foreground truncate">
                           {isPw ? `${displayAction.args[0]} → ••••••••` : displayAction.args.join(' → ')}
                         </p>
                       )}
                     </div>
+                    {/* Edit button for cross-origin actions */}
+                    {isCrossOriginAction(action) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingCrossOriginIndex(index);
+                          setCrossOriginUserActions((action as any).userActions || []);
+                          setShowCrossOriginEditor(true);
+                        }}
+                      >
+                        <PenLine className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                    )}
                     {/* Quick link button - shown when hovering in existing mode */}
                     {mode === 'existing' && selectedTestCase && !isMultiSelectMode && (
                       <Button
@@ -6323,6 +6394,275 @@ Recorded Test
                 <Eye className="h-4 w-4 mr-2" />
               )}
               Capture Baseline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cross-Origin Step Editor Dialog */}
+      <Dialog open={showCrossOriginEditor} onOpenChange={setShowCrossOriginEditor}>
+        <DialogContent className="max-w-2xl bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-500" />
+              Edit Cross-Origin Actions
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+              <p className="text-xs text-yellow-300">
+                This step was recorded in an external tab where we couldn't capture actions automatically.
+                Add selectors below to define what actions to perform during playback.
+              </p>
+            </div>
+            
+            {/* User-defined actions list */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-foreground">Actions</h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setCrossOriginUserActions(prev => [...prev, {
+                      id: `action_${Date.now()}`,
+                      type: 'click',
+                      findBy: 'text',
+                      selector: '',
+                      description: ''
+                    }]);
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Action
+                </Button>
+              </div>
+              
+              {crossOriginUserActions.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg">
+                  <p className="text-sm">No actions defined</p>
+                  <p className="text-xs mt-1">Click "Add Action" to define how to interact with elements</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                  {crossOriginUserActions.map((userAction, idx) => (
+                    <div key={userAction.id} className="p-3 bg-secondary rounded-lg border border-border space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-mono text-muted-foreground">Action {idx + 1}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            setCrossOriginUserActions(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      
+                      {/* Action Type */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Action Type</label>
+                          <Select 
+                            value={userAction.type} 
+                            onValueChange={(v: any) => {
+                              setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                i === idx ? { ...a, type: v } : a
+                              ));
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="click">Click</SelectItem>
+                              <SelectItem value="fill">Fill / Type</SelectItem>
+                              <SelectItem value="select">Select Option</SelectItem>
+                              <SelectItem value="wait">Wait</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Find By</label>
+                          <Select 
+                            value={userAction.findBy} 
+                            onValueChange={(v: any) => {
+                              setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                i === idx ? { ...a, findBy: v } : a
+                              ));
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text Content</SelectItem>
+                              <SelectItem value="css">CSS Selector</SelectItem>
+                              <SelectItem value="xpath">XPath</SelectItem>
+                              <SelectItem value="testId">Test ID</SelectItem>
+                              <SelectItem value="coords">Coordinates (x, y)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      
+                      {/* Selector/Value Input */}
+                      {userAction.findBy === 'coords' ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">X Position</label>
+                            <Input
+                              type="number"
+                              value={userAction.coords?.x || ''}
+                              onChange={(e) => {
+                                setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                  i === idx ? { ...a, coords: { x: parseInt(e.target.value) || 0, y: a.coords?.y || 0 } } : a
+                                ));
+                              }}
+                              className="h-8 text-xs"
+                              placeholder="450"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Y Position</label>
+                            <Input
+                              type="number"
+                              value={userAction.coords?.y || ''}
+                              onChange={(e) => {
+                                setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                  i === idx ? { ...a, coords: { x: a.coords?.x || 0, y: parseInt(e.target.value) || 0 } } : a
+                                ));
+                              }}
+                              className="h-8 text-xs"
+                              placeholder="320"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">
+                            {userAction.findBy === 'text' ? 'Text to find' :
+                             userAction.findBy === 'css' ? 'CSS Selector' :
+                             userAction.findBy === 'xpath' ? 'XPath Expression' :
+                             'Test ID'}
+                          </label>
+                          <Input
+                            value={userAction.selector}
+                            onChange={(e) => {
+                              setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                i === idx ? { ...a, selector: e.target.value } : a
+                              ));
+                            }}
+                            className="h-8 text-xs font-mono"
+                            placeholder={
+                              userAction.findBy === 'text' ? 'Click here for more info' :
+                              userAction.findBy === 'css' ? 'button.submit-btn, #login' :
+                              userAction.findBy === 'xpath' ? '//button[@id="submit"]' :
+                              'submit-button'
+                            }
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Value input for fill actions */}
+                      {userAction.type === 'fill' && (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Value to Type</label>
+                          <Input
+                            value={userAction.value || ''}
+                            onChange={(e) => {
+                              setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                i === idx ? { ...a, value: e.target.value } : a
+                              ));
+                            }}
+                            className="h-8 text-xs"
+                            placeholder="Enter value to type..."
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Wait duration for wait actions */}
+                      {userAction.type === 'wait' && (
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Wait Duration (ms)</label>
+                          <Input
+                            type="number"
+                            value={userAction.value || '2000'}
+                            onChange={(e) => {
+                              setCrossOriginUserActions(prev => prev.map((a, i) => 
+                                i === idx ? { ...a, value: e.target.value } : a
+                              ));
+                            }}
+                            className="h-8 text-xs"
+                            placeholder="2000"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Description */}
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Description (optional)</label>
+                        <Input
+                          value={userAction.description || ''}
+                          onChange={(e) => {
+                            setCrossOriginUserActions(prev => prev.map((a, i) => 
+                              i === idx ? { ...a, description: e.target.value } : a
+                            ));
+                          }}
+                          className="h-8 text-xs"
+                          placeholder="Click the login button"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCrossOriginEditor(false);
+                setEditingCrossOriginIndex(null);
+                setCrossOriginUserActions([]);
+              }}
+              className="border-border text-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                // Save user actions to the action
+                if (editingCrossOriginIndex !== null) {
+                  setActions(prev => prev.map((action, idx) => {
+                    if (idx === editingCrossOriginIndex) {
+                      return {
+                        ...action,
+                        userActions: crossOriginUserActions,
+                        description: crossOriginUserActions.length > 0 
+                          ? `⚠️ Cross-origin: ${crossOriginUserActions.length} action(s) defined`
+                          : action.description
+                      };
+                    }
+                    return action;
+                  }));
+                  toast.success(`Saved ${crossOriginUserActions.length} action(s) for cross-origin step`);
+                }
+                setShowCrossOriginEditor(false);
+                setEditingCrossOriginIndex(null);
+                setCrossOriginUserActions([]);
+              }}
+              className="bg-yellow-600 hover:bg-yellow-700"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Actions
             </Button>
           </DialogFooter>
         </DialogContent>

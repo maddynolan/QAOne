@@ -14,10 +14,11 @@
 4. [Element Finding (SmartFinder)](#element-finding-smartfinder)
 5. [Element Recipe Model](#element-recipe-model)
 6. [AI Fallback System](#ai-fallback-system)
-7. [Framework Support](#framework-support)
-8. [Key Files Reference](#key-files-reference)
-9. [Configuration Options](#configuration-options)
-10. [Troubleshooting Guide](#troubleshooting-guide)
+7. [Multi-Tab and Cross-Origin Handling](#multi-tab-and-cross-origin-handling)
+8. [Framework Support](#framework-support)
+9. [Key Files Reference](#key-files-reference)
+10. [Configuration Options](#configuration-options)
+11. [Troubleshooting Guide](#troubleshooting-guide)
 
 ---
 
@@ -320,6 +321,103 @@ if (!elementFound) {
 
 ---
 
+## Multi-Tab and Cross-Origin Handling
+
+### Supported Tab Operations
+| Action Type | Recording | Playback | Notes |
+|-------------|-----------|----------|-------|
+| `newTab` | ✅ Auto-detected | ✅ Waits for tab | Via `context.on('page')` |
+| `switchTab` | ✅ Focus detection | ✅ By index/URL | 1.5s debounce |
+| `closeTab` | ✅ Auto-detected | ✅ Returns to parent | Via `page.on('close')` |
+| `crossOriginPlaceholder` | ✅ Auto-detected | ✅ Manual selectors | For external domains |
+
+### Modal/Popup Window Support
+| Action Type | Recording | Playback | Notes |
+|-------------|-----------|----------|-------|
+| `closeModal` | ✅ Close button click | ✅ Multi-strategy | Radix Dialog, Material, etc. |
+| `closeModal` | ✅ Backdrop click | ✅ Backdrop click | Click outside to dismiss |
+| `press Escape` | ✅ Escape in modal | ✅ Key press | For modal dismissal |
+
+**Close Modal Playback Strategies** (in order):
+1. Find close button by aria-label (close/dismiss)
+2. Find Radix `[data-radix-dialog-close]` button
+3. Find `.close` or `[data-dismiss]` buttons
+4. Find button with text "Close", "Cancel", "×", "X"
+5. Press Escape key
+6. Click backdrop/overlay
+
+### Cross-Origin Limitations
+**Browser security prevents direct access to cross-origin tabs.** When a test opens a tab to a different domain (e.g., OAuth login, payment gateway), QAAI cannot inject recorder scripts.
+
+**Solution: Cross-Origin Placeholder Steps**
+1. QAAI detects cross-origin navigation automatically
+2. Records a `crossOriginPlaceholder` step
+3. User can edit the step to define manual actions
+4. During playback, QAAI executes user-defined selectors
+
+### Manual Selector Types for Cross-Origin
+```javascript
+{
+  action: 'click' | 'fill' | 'select',
+  description: 'Human-readable description',
+  selectorType: 'text' | 'css' | 'xpath' | 'testid' | 'coords',
+  selector: 'button.submit' | '//button[@id="pay"]',
+  text: 'Submit Payment',
+  coords: { x: 450, y: 320 },
+  value: 'Value for fill actions'
+}
+```
+
+### Cross-Origin Playback Flow
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Step: crossOriginPlaceholder                                    │
+│ URL: https://external-site.com/oauth                            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+    ┌────────────────────────▼────────────────────────────────────┐
+    │ 1. Find and switch to cross-origin tab                      │
+    │    - By URL match or hostname                               │
+    │    - Falls back to latest tab                               │
+    └────────────────────────┬────────────────────────────────────┘
+                             │
+    ┌────────────────────────▼────────────────────────────────────┐
+    │ 2. Execute user-defined actions                             │
+    │    - CSS selector → page.locator(selector)                  │
+    │    - XPath → page.locator('xpath=' + selector)              │
+    │    - Text → page.getByText(text)                            │
+    │    - Coords → page.mouse.click(x, y)                        │
+    │    - AI Fallback if enabled                                 │
+    └────────────────────────┬────────────────────────────────────┘
+                             │
+    ┌────────────────────────▼────────────────────────────────────┐
+    │ 3. Close cross-origin tab and return to parent              │
+    │    - Explicitly closes external tab                         │
+    │    - Switches back to tab 0 (parent)                        │
+    │    - Re-initializes SmartFinder for parent page             │
+    └─────────────────────────────────────────────────────────────┘
+```
+
+### iFrame Handling
+| Operation | Method | Notes |
+|-----------|--------|-------|
+| Click in iframe | `frameLocator` search | Tries testId, button text, text content |
+| Fill in iframe | `frameLocator` search | Tries testId, id, placeholder, name |
+| Switch to frame | `switchToFrame` action | By selector, name, or index |
+| Return to main | `switchToMainFrame` | Clears frame context |
+
+### Fresh Browser Mode
+For state-sensitive tests, use "Fresh Run" to start with a clean browser:
+```javascript
+// In PlaywrightRecorder.runTest()
+if (options.freshBrowser) {
+  // Launches new browser without persistent storage
+  // No cookies, localStorage, or session data
+}
+```
+
+---
+
 ## Framework Support
 
 ### Built-In Mappings
@@ -350,7 +448,7 @@ page.locator('my-component >> button');
 ### Recording Files
 | File | Lines | Purpose |
 |------|-------|---------|
-| `playwright-recorder.js` | ~8500 | Main recorder, playback, overlays |
+| `playwright-recorder.js` | ~10000 | Main recorder, playback, overlays |
 | `recorder-engine.js` | ~2000 | Shared engine (injected in page) |
 | `element-recipe.js` | ~400 | Recipe model, element analyzer |
 | `recipe-recorder-integration.js` | ~500 | Legacy ↔ Recipe conversion |
@@ -367,6 +465,13 @@ page.locator('my-component >> button');
 |------|-------|---------|
 | `ai-explorer-agent.js` | ~1000 | Autonomous page exploration |
 | `ai-goal-agent.js` | ~700 | Goal-directed automation |
+
+### Refactored Handler Modules (Jan 2026)
+| File | Lines | Purpose |
+|------|-------|---------|
+| `action-handlers.js` | ~600 | Click, fill, select, drag, download handlers |
+| `tab-manager.js` | ~450 | Multi-tab/window/cross-origin handling |
+| `salesforce-handlers.js` | ~400 | Salesforce-specific actions (sf_*, REST API) |
 
 ---
 
@@ -400,9 +505,35 @@ new SmartFinder(page, {
 
 ## Troubleshooting Guide
 
-### Problem: Always clicking first element (duplicate buttons)
-**Cause**: `elementIndex` not being used during playback
-**Solution**: We added `getAtIndex()` helper - rebuilt app should fix this
+### Problem: Tab clicking fails (e.g., "Tables" not found)
+**Cause**: Radix UI tabs have accessibility name "Table" but visual text "Tables"
+**Solution**: SmartFinder now tries singular text for tabs (strips trailing 's')
+**Files**: `smart-finder.js` - `role+text-singular` strategy
+
+### Problem: Radix dropdown not recording
+**Cause**: Radix uses `pointerdown` event, not `click`
+**Solution**: Added pointerdown handler in recipe-recorder-integration.js
+**Files**: `recipe-recorder-integration.js` - pointerdown handler sets pendingTrigger
+
+### Problem: Wrong "Add to Cart" button clicked (duplicates)
+**Cause**: `getPositionAmongSiblings()` only checked immediate siblings
+**Solution**: Added `getGlobalPosition()` for same-text elements across page
+**Files**: `element-recipe.js` - getGlobalPosition()
+
+### Problem: SmartFinder can't find element by role
+**Cause**: Action object missing element/selectorObj during playback
+**Solution**: Pass full step data to action object in runTest()
+**Files**: `playwright-recorder.js` - action construction (2 locations)
+
+### Problem: "Target page, context or browser has been closed"
+**Cause**: Test started before page fully loaded
+**Solution**: Added `waitForLoadState('networkidle')` + page validity checks
+**Files**: `playwright-recorder.js` - page stability wait
+
+### Problem: SmartFinder searches for "Click 'Tables'" instead of "Tables"
+**Cause**: legacyActionToRecipe used full label as search text
+**Solution**: Added extractTextFromLabel() to parse element text from descriptions
+**Files**: `recipe-recorder-integration.js` - extractTextFromLabel()
 
 ### Problem: Custom dropdown not selecting option
 **Cause**: Using `selectOption()` on non-native select
@@ -419,6 +550,35 @@ new SmartFinder(page, {
 ### Problem: AI fallback not working
 **Cause**: Backend not running or no API key
 **Solution**: Set `OPENAI_API_KEY` env var, or start backend on port 8000
+
+### Problem: Cross-origin tab actions not recorded
+**Cause**: Browser security prevents script injection into different-origin tabs
+**Solution**: QAAI creates `crossOriginPlaceholder` steps that can be edited with manual selectors
+**Files**: `tab-manager.js` - handleCrossOrigin(), `PlaywrightRecorderPage.tsx` - CrossOriginEditor
+
+### Problem: Fill/Click fails in iframe
+**Cause**: Element search not scoped to iframes by default
+**Solution**: Added iframe fallback search using testId, id, placeholder, name strategies
+**Files**: `action-handlers.js` - searchIframesForFill(), searchIframesForClick()
+
+### Problem: Download step timing out
+**Cause**: Download was already triggered by previous click action
+**Solution**: Download handler now waits only 3s if no trigger selector, passes by default
+**Files**: `action-handlers.js` - handleDownload()
+
+### Problem: Tab switch spam during recording
+**Cause**: Focus detection too aggressive (no debounce)
+**Solution**: Added 1.5s debounce and focus confirmation before recording switchTab
+**Files**: `tab-manager.js` - setupTabFocusDetection()
+
+### Problem: State pollution between test runs
+**Cause**: Persistent browser context saves cookies/localStorage
+**Solution**: Use "Fresh Run" to launch clean browser without persistent storage
+**Files**: `playwright-recorder.js` - freshBrowser option in runTest()
+
+### See Also
+For detailed post-mortem on January 2026 fixes, see:
+`docs/RECORDING-PLAYBACK-BUGFIXES-2026-01-15.md`
 
 ---
 
@@ -453,6 +613,20 @@ When working on QAAI recording/playback issues:
 
 | Date | Changes |
 |------|---------|
+| Jan 16, 2026 | **AI Goal Agent v3.0** - Plan-first agentic architecture |
+| Jan 16, 2026 | Fixed Goal Agent IPC channels in preload (events weren't whitelisted) |
+| Jan 16, 2026 | Fixed Goal Agent event handler signature in frontend |
+| Jan 16, 2026 | Added auto-launch browser for Goal Agent when no session active |
+| Jan 16, 2026 | Added extensive debugging logs for Goal Agent execution |
+| Jan 16, 2026 | Fixed AIFlowExplorer light/dark mode contrast issues |
+| Jan 15, 2026 | **Major Refactoring** - Extracted handlers into modules |
+| Jan 15, 2026 | Added cross-origin tab handling with manual selectors |
+| Jan 15, 2026 | Added multi-tab/window recording and playback |
+| Jan 15, 2026 | Added Fresh Browser mode for clean test runs |
+| Jan 15, 2026 | Added iframe search fallback for click/fill actions |
+| Jan 15, 2026 | Fixed download step handling (trigger vs already-triggered) |
+| Jan 15, 2026 | Fixed tab focus detection with debouncing |
+| Jan 15, 2026 | Added cross-origin placeholder UI in recorder |
 | Jan 2026 | Added AI fallback to PlaywrightRecorder |
 | Jan 2026 | Added retry with exponential backoff |
 | Jan 2026 | Fixed elementIndex for duplicate elements |

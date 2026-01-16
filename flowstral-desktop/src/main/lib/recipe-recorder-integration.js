@@ -105,7 +105,8 @@ function getRecipeClickCaptureScript() {
       // Priority 3: Elements with explicit roles
       var role = el.getAttribute('role');
       var interactiveRoles = ['button', 'link', 'tab', 'menuitem', 'option', 
-                              'checkbox', 'radio', 'switch', 'slider', 'treeitem'];
+                              'checkbox', 'radio', 'switch', 'slider', 'treeitem',
+                              'combobox', 'listbox'];  // Added for Radix Select support
       if (role && interactiveRoles.indexOf(role) !== -1) {
         return el;
       }
@@ -150,56 +151,237 @@ function getRecipeClickCaptureScript() {
   // Record an action
   function recordAction(action) {
     action.timestamp = Date.now();
+    
+    // Add iframe context if we're inside an iframe
+    var frameInfo = getFrameContext();
+    if (frameInfo) {
+      action.frameContext = frameInfo;
+    }
+    
     window.__flowstralRecipeActions.push(action);
-    console.log('[Flowstral Recipe]', action.type, action.description || '');
+    console.log('[Flowstral Recipe]', action.type, action.description || '', frameInfo ? '(in iframe: ' + frameInfo.name + ')' : '');
   }
+  
+  // Detect if we're inside an iframe and get frame identification info
+  function getFrameContext() {
+    try {
+      if (window === window.top) return null; // Main frame
+      
+      // We're in an iframe - get identifier
+      var frameInfo = {
+        isIframe: true,
+        name: window.name || null,
+        src: window.location.href
+      };
+      
+      // Try to identify by frame name or src
+      if (window.frameElement) {
+        var frame = window.frameElement;
+        frameInfo.id = frame.id || null;
+        frameInfo.name = frame.name || frameInfo.name;
+        frameInfo.testId = frame.getAttribute('data-testid') || null;
+        frameInfo.selector = buildFrameSelector(frame);
+      }
+      
+      return frameInfo;
+    } catch (e) {
+      // Cross-origin iframe - still detect but with limited info
+      return { isIframe: true, crossOrigin: true, src: null };
+    }
+  }
+  
+  // Build a selector for the iframe element
+  function buildFrameSelector(frame) {
+    if (frame.id) return '#' + frame.id;
+    if (frame.name) return 'iframe[name="' + frame.name + '"]';
+    var testId = frame.getAttribute('data-testid');
+    if (testId) return '[data-testid="' + testId + '"]';
+    
+    // Count position among iframes
+    var iframes = document.querySelectorAll('iframe');
+    for (var i = 0; i < iframes.length; i++) {
+      if (iframes[i] === frame) {
+        return 'iframe:nth-of-type(' + (i + 1) + ')';
+      }
+    }
+    return 'iframe';
+  }
+  
+  // Track element handled by pointerdown to prevent duplicate recording
+  var lastHandledElement = null;
+  var lastHandledTime = 0;
   
   // ========== CLICK HANDLER ==========
   
+  // Helper: Check if element is a modal close button
+  function isModalCloseButton(element) {
+    if (!element) return false;
+    
+    // Check if element is inside a modal/dialog
+    var inModal = element.closest(
+      '[role="dialog"], [role="alertdialog"], [aria-modal="true"], ' +
+      '[data-radix-dialog-content], .modal, .modal-content'
+    );
+    if (!inModal) return false;
+    
+    // Check if element is a close button
+    var ariaLabel = (element.getAttribute('aria-label') || '').toLowerCase();
+    var testId = (element.getAttribute('data-testid') || '').toLowerCase();
+    var className = (element.className || '').toLowerCase();
+    var innerText = ((element.textContent || element.innerText) || '').trim();
+    
+    // Check for close indicators
+    var isCloseIndicator = 
+      ariaLabel.includes('close') || ariaLabel.includes('dismiss') ||
+      testId.includes('close') || testId.includes('dismiss') ||
+      className.includes('close') || className.includes('dismiss') ||
+      element.hasAttribute('data-radix-dialog-close') ||
+      element.hasAttribute('data-dismiss') ||
+      innerText === '×' || innerText === 'X' || innerText === 'x' ||
+      innerText.toLowerCase() === 'close' || innerText.toLowerCase() === 'cancel';
+    
+    return isCloseIndicator;
+  }
+  
+  // Helper: Check if click is on modal backdrop/overlay
+  function isModalBackdrop(element) {
+    if (!element) return false;
+    
+    var className = (element.className || '').toLowerCase();
+    var role = element.getAttribute('role');
+    
+    return (
+      element.hasAttribute('data-radix-dialog-overlay') ||
+      className.includes('backdrop') ||
+      className.includes('overlay') ||
+      className.includes('modal-bg') ||
+      (role === 'presentation' && className.includes('modal'))
+    );
+  }
+  
   document.addEventListener('click', function(e) {
     try {
-      // Get composed path for Shadow DOM support
       var path = e.composedPath ? e.composedPath() : [e.target];
-      
-      // Find best element
       var element = findBestElement(path);
       if (!element) return;
-      
-      // Skip overlay
       if (isOverlayElement(element)) return;
-      
-      // Skip framework internals
       if (isFrameworkInternal(element)) return;
       
-      // Debug: Log what we're capturing
-      var role = element.getAttribute && element.getAttribute('role');
-      var text = (element.innerText || element.textContent || '').trim().substring(0, 50);
-      console.log('[Flowstral Recipe] Click on:', element.tagName, 
-        role ? 'role=' + role : '', 
-        text ? '"' + text + '"' : '');
-      
-      // Check if this is a dropdown option (for debugging)
-      var isOption = coalescer.isDropdownOption(element);
-      var isTrigger = coalescer.isDropdownTrigger(element);
-      console.log('[Flowstral Recipe] isOption:', isOption, 'isTrigger:', isTrigger, 
-        'hasPending:', !!coalescer.pendingTrigger);
-      
-      // Analyze the element
-      var recipe = analyzer.analyze(element);
-      if (!recipe) {
-        console.log('[Flowstral Recipe] No recipe generated for element');
+      // Skip if pointerdown already handled this element (within 500ms)
+      if (element === lastHandledElement && (Date.now() - lastHandledTime) < 500) {
+        console.log('[Flowstral Recipe] Skip click - handled by pointerdown');
         return;
       }
       
-      // Process through coalescer (handles dropdowns)
+      var recipe = analyzer.analyze(element);
+      if (!recipe) return;
+      
+      // Check if this is a modal close button
+      if (isModalCloseButton(element)) {
+        var modal = element.closest('[role="dialog"], [role="alertdialog"], [aria-modal="true"], [data-radix-dialog-content], .modal');
+        var modalTitle = modal ? (modal.querySelector('[role="heading"], h1, h2, h3, .modal-title')?.textContent?.trim() || 'dialog') : 'dialog';
+        
+        console.log('[Flowstral Recipe] ★ Modal close button clicked');
+        recordAction({
+          type: 'closeModal',
+          target: recipe,
+          modalTitle: modalTitle,
+          description: 'Close modal: ' + modalTitle
+        });
+        return;
+      }
+      
+      // Check if this is a backdrop/overlay click (dismiss modal)
+      if (isModalBackdrop(element)) {
+        var nearbyModal = document.querySelector('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden]), [aria-modal="true"]');
+        var modalTitle = nearbyModal ? (nearbyModal.querySelector('[role="heading"], h1, h2, h3, .modal-title')?.textContent?.trim() || 'dialog') : 'dialog';
+        
+        console.log('[Flowstral Recipe] ★ Modal backdrop clicked');
+        recordAction({
+          type: 'closeModal',
+          target: recipe,
+          modalTitle: modalTitle,
+          description: 'Close modal by clicking backdrop: ' + modalTitle
+        });
+        return;
+      }
+      
+      // Debug: Check if this is a dropdown trigger
+      var isTrigger = coalescer.isDropdownTrigger(element);
+      var role = element.getAttribute && element.getAttribute('role');
+      console.log('[Flowstral Recipe] CLICK:', element.tagName, 'role=' + role, 
+        'isTrigger=' + isTrigger, 'pendingTrigger=' + !!coalescer.pendingTrigger);
+      
+      // Process through coalescer (handles dropdown trigger + option → select)
       coalescer.processClick(element, recipe, function(action) {
+        console.log('[Flowstral Recipe] → Recording:', action.type, action.description);
         recordAction(action);
       });
       
     } catch (err) {
       console.error('[Flowstral Recipe] Click capture error:', err);
     }
-  }, true); // Use capture phase
+  }, true);
+  
+  // ========== POINTERDOWN HANDLER (for custom dropdowns like Radix) ==========
+  // Radix uses pointerdown for BOTH triggers and options, not click!
+  
+  document.addEventListener('pointerdown', function(e) {
+    try {
+      var path = e.composedPath ? e.composedPath() : [e.target];
+      var element = findBestElement(path);
+      if (!element) return;
+      if (isOverlayElement(element)) return;
+      if (isFrameworkInternal(element)) return;
+      
+      var role = element.getAttribute && element.getAttribute('role');
+      var isTrigger = coalescer.isDropdownTrigger(element);
+      var isOption = coalescer.isDropdownOption(element);
+      var isInDropdownContent = (
+        element.closest('[data-radix-select-content]') ||
+        element.closest('[data-radix-popper-content-wrapper]') ||
+        element.closest('[role="listbox"]') ||
+        element.closest('[role="menu"]')
+      );
+      
+      console.log('[Flowstral Recipe] POINTERDOWN:', element.tagName, 'role=' + role,
+        'isTrigger=' + isTrigger, 'isOption=' + isOption, 'inContent=' + !!isInDropdownContent, 
+        'pendingTrigger=' + !!coalescer.pendingTrigger);
+      
+      // If this is a dropdown TRIGGER, set pendingTrigger (Radix uses pointerdown, not click)
+      if (isTrigger && !coalescer.pendingTrigger) {
+        console.log('[Flowstral Recipe] ★ Setting pendingTrigger from pointerdown');
+        var recipe = analyzer.analyze(element);
+        if (recipe) {
+          coalescer.processClick(element, recipe, function(action) {
+            // This will set pendingTrigger and wait for option
+            console.log('[Flowstral Recipe] Trigger processed, waiting for option...');
+          });
+        }
+        // Mark as handled to prevent click from re-processing
+        lastHandledElement = element;
+        lastHandledTime = Date.now();
+        return;
+      }
+      
+      // If this is an option and we have a pending trigger, record select
+      if (coalescer.pendingTrigger && (isOption || isInDropdownContent)) {
+        console.log('[Flowstral Recipe] ★ Processing option via pointerdown!');
+        lastHandledElement = element;
+        lastHandledTime = Date.now();
+        
+        var recipe = analyzer.analyze(element);
+        if (recipe) {
+          coalescer.processClick(element, recipe, function(action) {
+            console.log('[Flowstral Recipe] → Recording SELECT:', action.type, action.description);
+            recordAction(action);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Flowstral Recipe] Pointerdown error:', err);
+    }
+  }, true);
   
   // ========== INPUT HANDLER ==========
   
@@ -296,7 +478,7 @@ function getRecipeClickCaptureScript() {
     }
   }, true);
   
-  // ========== KEYBOARD HANDLER (for Enter key submissions) ==========
+  // ========== KEYBOARD HANDLER (for Enter key submissions and Escape to close modals) ==========
   
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
@@ -317,6 +499,104 @@ function getRecipeClickCaptureScript() {
         }
       }
     }
+    
+    // Escape key - used to close modals, dialogs, dropdowns
+    if (e.key === 'Escape') {
+      // Check if there's an open modal/dialog
+      var openModal = document.querySelector(
+        '[role="dialog"]:not([hidden]), ' +
+        '[role="alertdialog"]:not([hidden]), ' +
+        '[data-radix-dialog-content], ' +
+        '[data-state="open"][role="dialog"], ' +
+        '.modal.show, .modal[open], ' +
+        '[aria-modal="true"]'
+      );
+      
+      if (openModal) {
+        var modalTitle = openModal.querySelector('[role="heading"], h1, h2, h3, .modal-title')?.textContent?.trim() || 'dialog';
+        recordAction({
+          type: 'press',
+          target: { what: { role: 'dialog', text: modalTitle } },
+          value: 'Escape',
+          description: 'Press Escape to close ' + modalTitle
+        });
+      }
+    }
+  }, true);
+  
+  // ========== FILE UPLOAD HANDLER ==========
+  
+  document.addEventListener('change', function(e) {
+    var el = e.target;
+    if (!el || el.tagName !== 'INPUT' || el.type !== 'file') return;
+    
+    if (el.files && el.files.length > 0) {
+      var recipe = analyzer.analyze(el);
+      var fileNames = [];
+      for (var i = 0; i < el.files.length; i++) {
+        fileNames.push(el.files[i].name);
+      }
+      
+      recordAction({
+        type: 'upload',
+        target: recipe,
+        value: {
+          files: fileNames,
+          multiple: el.multiple
+        },
+        description: 'Upload file' + (fileNames.length > 1 ? 's' : '') + ': ' + fileNames.join(', ')
+      });
+    }
+  }, true);
+  
+  // ========== DRAG AND DROP HANDLER ==========
+  
+  var dragState = null;
+  
+  document.addEventListener('dragstart', function(e) {
+    var el = e.target;
+    if (!el) return;
+    
+    dragState = {
+      element: el,
+      recipe: analyzer.analyze(el),
+      startX: e.clientX,
+      startY: e.clientY,
+      startTime: Date.now()
+    };
+    
+    console.log('[Flowstral Recipe] Drag started:', dragState.recipe?.what?.text || el.tagName);
+  }, true);
+  
+  document.addEventListener('drop', function(e) {
+    if (!dragState) return;
+    
+    var dropTarget = e.target;
+    var dropRecipe = analyzer.analyze(dropTarget);
+    
+    recordAction({
+      type: 'dragDrop',
+      target: dragState.recipe,
+      dropTarget: dropRecipe,
+      value: {
+        startX: dragState.startX,
+        startY: dragState.startY,
+        endX: e.clientX,
+        endY: e.clientY
+      },
+      description: 'Drag "' + (dragState.recipe?.what?.text || 'item') + '" to "' + 
+                   (dropRecipe?.what?.text || dropRecipe?.where?.nearText || 'drop zone') + '"'
+    });
+    
+    dragState = null;
+  }, true);
+  
+  document.addEventListener('dragend', function(e) {
+    // Clear drag state if no drop happened
+    if (dragState && (Date.now() - dragState.startTime) > 100) {
+      console.log('[Flowstral Recipe] Drag cancelled (no valid drop)');
+    }
+    dragState = null;
   }, true);
   
   // Expose flush function
@@ -336,7 +616,7 @@ function getRecipeClickCaptureScript() {
  * This allows the new recorder to work with existing test builder
  */
 function recipeActionToLegacy(recipeAction) {
-  const { type, target, value, description, timestamp } = recipeAction;
+  const { type, target, value, description, timestamp, frameContext, dropTarget } = recipeAction;
   
   // Convert recipe to legacy selectorObj
   const selectorObj = recipeToLegacySelector(target);
@@ -353,9 +633,9 @@ function recipeActionToLegacy(recipeAction) {
     selectorObj: selectorObj,
     // New recipe field
     recipe: target,
-    // Value for fill/select
-    value: typeof value === 'object' ? value.text : value,
-    displayValue: typeof value === 'object' ? value.text : value,
+    // Value for fill/select (handle complex values for new types)
+    value: typeof value === 'object' ? (value.text || value.files || value) : value,
+    displayValue: typeof value === 'object' ? (value.text || value.files?.join(', ') || JSON.stringify(value)) : value,
     // Element info
     element: {
       tagName: target?.what?.tag || '',
@@ -366,7 +646,11 @@ function recipeActionToLegacy(recipeAction) {
       testId: target?.which?.testId || '',
       ariaLabel: target?.which?.ariaLabel || '',
       placeholder: target?.which?.placeholder || '',
-    }
+    },
+    // Frame context for iframe support
+    frameContext: frameContext || null,
+    // Drag-drop target
+    dropTarget: dropTarget || null
   };
 }
 
@@ -385,6 +669,22 @@ function getQWord(type, target) {
       return 'Check';
     case 'uncheck':
       return 'Uncheck';
+    case 'upload':
+      return 'Upload';
+    case 'dragDrop':
+      return 'DragDrop';
+    case 'dialog':
+      return 'HandleDialog';
+    case 'switchToFrame':
+    case 'frame':
+      return 'SwitchFrame';
+    case 'switchToMainFrame':
+    case 'mainFrame':
+      return 'MainFrame';
+    case 'newTab':
+      return 'NewTab';
+    case 'download':
+      return 'Download';
     case 'press':
       return 'Press';
     case 'navigate':
@@ -392,6 +692,35 @@ function getQWord(type, target) {
     default:
       return type.charAt(0).toUpperCase() + type.slice(1);
   }
+}
+
+/**
+ * Extract element text from description like 'Click "Tables"' → 'Tables'
+ */
+function extractTextFromLabel(label) {
+  if (!label) return null;
+  
+  // Match patterns like: Click "Tables", Select "Option" from "Dropdown"
+  const quoteMatch = label.match(/["']([^"']+)["']/);
+  if (quoteMatch) {
+    return quoteMatch[1];
+  }
+  
+  // If no quotes, try to extract after common prefixes
+  const prefixPatterns = [
+    /^Click\s+(.+)$/i,
+    /^Fill\s+(.+)$/i,
+    /^Select\s+(.+)$/i,
+  ];
+  
+  for (const pattern of prefixPatterns) {
+    const match = label.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -421,14 +750,22 @@ function legacyActionToRecipe(legacyAction) {
     elementIndex = selectorObj.elementIndex;
   }
   
+  // Extract actual element text - try multiple sources
+  // Priority: explicit text > element.text > extracted from label > label itself
+  let elementText = legacyAction.text || element.text || selectorObj.text;
+  if (!elementText && legacyAction.label) {
+    // Try to extract text from descriptions like 'Click "Tables"'
+    elementText = extractTextFromLabel(legacyAction.label) || legacyAction.label;
+  }
+  
   return {
     what: {
       role: element.role || selectorObj.role || null,
-      text: legacyAction.text || legacyAction.label || element.text || selectorObj.text || '',
+      text: elementText || '',
       tag: element.tagName || selectorObj.tag || null,
     },
     where: {
-      nearText: legacyAction.label || selectorObj.ariaLabel || null,
+      nearText: elementText || selectorObj.ariaLabel || null,
     },
     which: {
       testId: element.testId || selectorObj.testId || selectorObj.dataTestId || null,

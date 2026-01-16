@@ -140,11 +140,12 @@ class ActionCoalescer {
     
     const { what, which } = recipe;
     
-    // Check role
+    // Check role - combobox or listbox indicates a dropdown trigger
     if (what?.role && PATTERNS.dropdown.triggerRoles.includes(what.role)) {
-      // Additional check: does it have aria-haspopup or aria-expanded?
-      // This info should be in the recipe or we infer from role
-      if (what.role === 'combobox') return true;
+      return true;
+    }
+    if (what?.role === 'combobox' || what?.role === 'listbox') {
+      return true;
     }
     
     // Check for explicit indicators in element
@@ -325,20 +326,26 @@ function getActionCoalescerScript() {
       // Explicit indicators
       if (hasPopup === 'listbox' || hasPopup === 'menu' || hasPopup === 'true') return true;
       if (expanded !== null) return true;
-      if (role === 'combobox') return true;
+      if (role === 'combobox' || role === 'listbox') return true;
       if (tag === 'select') return true;
       
       // Check for Radix/Headless UI patterns
       if (dataState === 'open' || dataState === 'closed') return true;
       
-      // Check for Radix Select trigger attribute
+      // Check for Radix Select trigger attribute on element or children
       if (element.hasAttribute('data-radix-select-trigger')) return true;
+      if (element.querySelector && element.querySelector('[data-radix-select-trigger]')) return true;
+      
+      // Check for Radix Select value (indicates this is a trigger showing selected value)
+      if (element.hasAttribute('data-radix-select-value')) return true;
       
       // Check classes
       var classList = element.className || '';
-      if (classList.includes('select') && classList.includes('trigger')) return true;
-      if (classList.includes('combobox')) return true;
-      if (classList.includes('SelectTrigger')) return true;
+      if (typeof classList === 'string') {
+        if (classList.includes('select') && classList.includes('trigger')) return true;
+        if (classList.includes('combobox')) return true;
+        if (classList.includes('SelectTrigger')) return true;
+      }
       
       // Check if parent has trigger indicators (for wrapped triggers)
       var parent = element.parentElement;
@@ -347,6 +354,8 @@ function getActionCoalescerScript() {
         var parentRole = parent.getAttribute('role');
         if (parentDataState === 'open' || parentDataState === 'closed') return true;
         if (parentRole === 'combobox') return true;
+        // Check if parent is a Radix trigger
+        if (parent.hasAttribute('data-radix-select-trigger')) return true;
       }
       
       return false;

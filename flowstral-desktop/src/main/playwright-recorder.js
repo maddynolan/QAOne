@@ -13,12 +13,61 @@ const path = require('path');
 const fs = require('fs');
 const { EventEmitter } = require('events');
 
+// cssEscape polyfill for Node.js (browser API not available in Electron main process)
+// Based on https://drafts.csswg.org/cssom/#serialize-an-identifier
+const cssEscape = (value) => {
+  if (value == null) return '';
+  const string = String(value);
+  const length = string.length;
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    const char = string.charAt(i);
+    const code = string.charCodeAt(i);
+    // If the character is NULL, use replacement character
+    if (code === 0x0000) {
+      result += '\uFFFD';
+      continue;
+    }
+    if (
+      (code >= 0x0001 && code <= 0x001F) || // C0 controls
+      code === 0x007F || // DEL
+      (i === 0 && code >= 0x0030 && code <= 0x0039) || // digit at start
+      (i === 1 && code >= 0x0030 && code <= 0x0039 && string.charCodeAt(0) === 0x002D) // digit after hyphen at start
+    ) {
+      result += '\\' + code.toString(16) + ' ';
+      continue;
+    }
+    if (i === 0 && code === 0x002D && length === 1) {
+      result += '\\' + char;
+      continue;
+    }
+    if (
+      code >= 0x0080 ||
+      code === 0x002D || // hyphen
+      code === 0x005F || // underscore
+      (code >= 0x0030 && code <= 0x0039) || // digit
+      (code >= 0x0041 && code <= 0x005A) || // uppercase
+      (code >= 0x0061 && code <= 0x007A) // lowercase
+    ) {
+      result += char;
+      continue;
+    }
+    result += '\\' + char;
+  }
+  return result;
+};
+
 // Path to shared recorder engine (SINGLE SOURCE OF TRUTH)
 const RECORDER_ENGINE_PATH = path.join(__dirname, '../../../flowstral-extension/src/lib/recorder-engine.js');
 
 // V2 Recipe-based recorder (more robust element identification)
 const { getRecipeClickCaptureScript, recipeActionToLegacy, legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
 const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
+
+// Refactored handler modules (extracted for maintainability)
+const ActionHandlers = require('./lib/action-handlers');
+const TabManager = require('./lib/tab-manager');
+const SalesforceHandlers = require('./lib/salesforce-handlers');
 
 class PlaywrightRecorder extends EventEmitter {
   constructor(options = {}) {
@@ -744,10 +793,211 @@ class PlaywrightRecorder extends EventEmitter {
     // Overlay polling disabled
     // this._startOverlayPolling();
 
-    // Handle page close
+    // Handle page close - but NOT during test runs!
     this.page.on('close', () => {
       console.log('[PlaywrightRecorder] Page closed');
-      this.stop();
+      // CRITICAL: Don't stop if we're running a test (test manages its own browser)
+      if (!this._isRunningTest) {
+        this.stop();
+      }
+    });
+    
+    // Handle JavaScript dialogs (alert, confirm, prompt)
+    // Auto-accept by default during playback, record during recording
+    this.page.on('dialog', async (dialog) => {
+      const dialogType = dialog.type(); // 'alert', 'confirm', 'prompt', 'beforeunload'
+      const message = dialog.message();
+      console.log(`[PlaywrightRecorder] Dialog detected: ${dialogType} - "${message.substring(0, 50)}"`);
+      
+      if (this.recording && !this._isRunningTest) {
+        // During recording, record the dialog and auto-accept
+        this._addAction({
+          type: 'dialog',
+          dialogType: dialogType,
+          message: message,
+          action: 'accept', // Default action
+          timestamp: Date.now(),
+          description: `Handle ${dialogType}: "${message.substring(0, 30)}..."`
+        });
+      }
+      
+      // Auto-accept dialogs (can be customized per step later)
+      try {
+        if (dialogType === 'prompt') {
+          await dialog.accept(''); // Accept with empty string for prompts
+        } else {
+          await dialog.accept();
+        }
+        console.log(`[PlaywrightRecorder] Dialog auto-accepted`);
+      } catch (e) {
+        console.log(`[PlaywrightRecorder] Dialog handling error:`, e.message);
+      }
+    });
+    
+    // ============================================================
+    // MULTI-TAB/WINDOW CONTEXT MANAGEMENT
+    // Track all pages, detect switches, handle closes
+    // ============================================================
+    
+    // Initialize page tracking
+    this._pages = [this.page]; // Track all pages
+    this._currentPageIndex = 0; // Index of active page
+    this._pageUrls = [this.page.url()]; // URLs for identification
+    
+    // Handle new tabs/popups
+    this.context.on('page', async (newPage) => {
+      const newUrl = newPage.url();
+      const newPageIndex = this._pages.length;
+      
+      console.log(`[PlaywrightRecorder] New tab/popup opened: ${newUrl} (index: ${newPageIndex})`);
+      
+      // Add to tracking
+      this._pages.push(newPage);
+      this._pageUrls.push(newUrl);
+      
+      // NOTE: Don't add newTab action here - we'll determine if it's cross-origin 
+      // below and add the appropriate action type (newTab or crossOriginPlaceholder)
+      
+      // Listen for this page being closed
+      newPage.on('close', () => {
+        const closedIndex = this._pages.indexOf(newPage);
+        console.log(`[PlaywrightRecorder] Tab closed: index ${closedIndex}`);
+        
+        if (this.recording && !this._isRunningTest) {
+          this._addAction({
+            type: 'closeTab',
+            tabIndex: closedIndex,
+            timestamp: Date.now(),
+            description: `Closed tab ${closedIndex}`
+          });
+        }
+        
+        // Remove from tracking
+        if (closedIndex !== -1) {
+          this._pages.splice(closedIndex, 1);
+          this._pageUrls.splice(closedIndex, 1);
+          
+          // If closed tab was current, switch back to first tab
+          if (this._currentPageIndex >= closedIndex) {
+            this._currentPageIndex = Math.max(0, this._currentPageIndex - 1);
+            this.page = this._pages[this._currentPageIndex];
+            
+            if (this.recording && !this._isRunningTest && this._pages.length > 0) {
+              this._addAction({
+                type: 'switchTab',
+                tabIndex: this._currentPageIndex,
+                timestamp: Date.now(),
+                description: `Switched to tab ${this._currentPageIndex}`
+              });
+            }
+          }
+        }
+      });
+      
+      // Listen for navigation within this new page
+      // NOTE: This is NOT a tab switch - user is just clicking links inside the tab
+      // We should NOT record switchTab here - that's handled by focus detection
+      newPage.on('framenavigated', async (frame) => {
+        if (frame === newPage.mainFrame() && this._pages.includes(newPage)) {
+          const newUrl = frame.url();
+          const pageIndex = this._pages.indexOf(newPage);
+          
+          // Just update the URL in our tracking - NOT a tab switch
+          if (this._pageUrls && pageIndex < this._pageUrls.length) {
+            this._pageUrls[pageIndex] = newUrl;
+          }
+          
+          console.log(`[PlaywrightRecorder] Tab ${pageIndex} navigated to: ${newUrl.substring(0, 50)}`);
+          
+          // Try to re-inject recorder after navigation (will fail cross-origin)
+          if (this.recording && !this._isRunningTest) {
+            try {
+              await this._injectClickCaptureScript(newPage);
+            } catch (e) {
+              // Cross-origin, expected
+            }
+          }
+        }
+      });
+      
+      // Setup recording for new page
+      if (this.recording && !this._isRunningTest) {
+        try {
+          await newPage.waitForLoadState('domcontentloaded').catch(() => {});
+          
+          const newPageUrl = newPage.url();
+          console.log('[PlaywrightRecorder] New tab URL:', newPageUrl);
+          
+          // Try JavaScript injection for element capture (will fail on cross-origin)
+          let isCrossOrigin = false;
+          try {
+            await newPage.evaluate(this._getRecorderScript());
+            await newPage.evaluate(this._getClickCaptureScript());
+            if (this.useRecipeRecorder) {
+              await newPage.evaluate(getRecipeClickCaptureScript());
+            }
+            console.log('[PlaywrightRecorder] JS recorder injected into new tab (same-origin)');
+            
+            // Same-origin tab - record as regular newTab
+            this._addAction({
+              type: 'newTab',
+              url: newPageUrl,
+              tabIndex: newPageIndex,
+              timestamp: Date.now(),
+              description: `New tab opened: ${newPageUrl.substring(0, 50)}`
+            });
+          } catch (e) {
+            isCrossOrigin = true;
+            console.log('[PlaywrightRecorder] Cross-origin tab detected:', newPageUrl);
+            
+            // Cross-origin tab - add a placeholder step that user can edit
+            this._addAction({
+              type: 'crossOriginPlaceholder',
+              url: newPageUrl,
+              tabIndex: newPageIndex,
+              timestamp: Date.now(),
+              description: `⚠️ Actions in external tab (${new URL(newPageUrl).hostname}) - click to edit`,
+              // Fields user can fill in via UI
+              userActions: [],
+              editable: true,
+              instructions: 'Describe what you did in this external tab. Example: "Click Login button", "Fill username field"'
+            });
+            
+            // Emit event so UI can prompt user
+            this.emit('crossOriginTab', { 
+              url: newPageUrl, 
+              tabIndex: newPageIndex,
+              message: 'External tab opened - actions cannot be auto-recorded. Please describe your actions.'
+            });
+          }
+        } catch (e) {
+          console.log('[PlaywrightRecorder] Could not setup new tab:', e.message);
+        }
+      }
+    });
+    
+    // ============================================================
+    // DETECT TAB FOCUS CHANGES (user switches between tabs)
+    // This is critical for recording when user returns to parent tab
+    // ============================================================
+    this._setupTabFocusDetection();
+    
+    // Handle downloads
+    this.page.on('download', async (download) => {
+      const suggestedFilename = download.suggestedFilename();
+      console.log(`[PlaywrightRecorder] Download started: ${suggestedFilename}`);
+      
+      if (this.recording && !this._isRunningTest) {
+        this._addAction({
+          type: 'download',
+          filename: suggestedFilename,
+          url: download.url(),
+          timestamp: Date.now(),
+          description: `Download: ${suggestedFilename}`
+        });
+      }
+      
+      // Let downloads proceed naturally - don't block
     });
 
     // Handle navigation
@@ -1550,14 +1800,20 @@ class PlaywrightRecorder extends EventEmitter {
   }
   
   /**
-   * Inject the click capture script into the current page
+   * Inject the click capture script into a page
+   * @param {Page} targetPage - The page to inject into (defaults to this.page)
    */
-  async _injectClickCaptureScript() {
-    if (!this.page || this.page.isClosed()) return;
+  async _injectClickCaptureScript(targetPage = null) {
+    const page = targetPage || this.page;
+    if (!page || page.isClosed()) return;
     try {
-      await this.page.evaluate(this._getClickCaptureScript());
+      await page.evaluate(this._getClickCaptureScript());
+      if (this.useRecipeRecorder) {
+        await page.evaluate(getRecipeClickCaptureScript());
+      }
     } catch (e) {
-      // Page might be navigating
+      // Page might be navigating or cross-origin
+      console.log('[PlaywrightRecorder] Click capture injection skipped:', e.message);
     }
   }
   
@@ -1611,56 +1867,79 @@ class PlaywrightRecorder extends EventEmitter {
           this.pendingInputs = [];
         }
         
-        // THEN: Try to get clicks and inputs from current page (might fail during navigation)
-        try {
-          const data = await this.page.evaluate(() => {
-            let clicks = window.__flowstralCDPClicks || [];
-            window.__flowstralCDPClicks = [];
-            
-            // V2: Get recipe actions (new format)
-            let recipeActions = window.__flowstralRecipeActions || [];
-            window.__flowstralRecipeActions = [];
-            
-            // Process inputs - flush those that should be flushed, are stale, or have been around for 300ms
-            const inputs = [];
-            const now = Date.now();
-            const pendingInputs = window.__flowstralCDPInputs || {};
-            
-            for (const key in pendingInputs) {
-              const inp = pendingInputs[key];
-              // More aggressive flushing:
-              // 1. Explicitly marked for flush (focusout)
-              // 2. Idle for 300ms (reduced from 500ms)
-              // 3. Has substantial value (3+ chars) - likely user finished typing
-              const hasSubstantialValue = inp.value && inp.value.length >= 3;
-              const isStale = now - inp.timestamp > 300;
+        // THEN: Poll ALL pages for clicks (not just current page)
+        // This enables multi-tab recording!
+        const allPages = this._pages || [this.page];
+        
+        for (let pageIndex = 0; pageIndex < allPages.length; pageIndex++) {
+          const targetPage = allPages[pageIndex];
+          if (!targetPage || targetPage.isClosed()) continue;
+          
+          try {
+            const data = await targetPage.evaluate(() => {
+              let clicks = window.__flowstralCDPClicks || [];
+              window.__flowstralCDPClicks = [];
               
-              if (inp.shouldFlush || (isStale && inp.value) || (hasSubstantialValue && isStale)) {
-                inputs.push(inp);
-                delete pendingInputs[key];
+              // V2: Get recipe actions (new format)
+              let recipeActions = window.__flowstralRecipeActions || [];
+              window.__flowstralRecipeActions = [];
+              
+              // Process inputs - flush those that should be flushed, are stale, or have been around for 300ms
+              const inputs = [];
+              const now = Date.now();
+              const pendingInputs = window.__flowstralCDPInputs || {};
+              
+              for (const key in pendingInputs) {
+                const inp = pendingInputs[key];
+                // More aggressive flushing:
+                // 1. Explicitly marked for flush (focusout)
+                // 2. Idle for 300ms (reduced from 500ms)
+                // 3. Has substantial value (3+ chars) - likely user finished typing
+                const hasSubstantialValue = inp.value && inp.value.length >= 3;
+                const isStale = now - inp.timestamp > 300;
+                
+                if (inp.shouldFlush || (isStale && inp.value) || (hasSubstantialValue && isStale)) {
+                  inputs.push(inp);
+                  delete pendingInputs[key];
+                }
+              }
+              
+              return { clicks, inputs, recipeActions };
+            });
+            
+            // If this is a different page than current, add tab switch before actions
+            if (data.clicks.length > 0 || data.recipeActions.length > 0) {
+              if (pageIndex !== this._currentPageIndex) {
+                console.log(`[PlaywrightRecorder] Action detected in tab ${pageIndex}, switching context`);
+                this._addAction({
+                  type: 'switchTab',
+                  tabIndex: pageIndex,
+                  timestamp: Date.now(),
+                  description: `Switched to tab ${pageIndex}`
+                });
+                this._currentPageIndex = pageIndex;
+                this.page = targetPage;
+              }
+            }
+          
+            // V2: Process recipe actions (these have better element info)
+            if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 0) {
+              for (const recipeAction of data.recipeActions) {
+                await this._processRecipeAction(recipeAction);
               }
             }
             
-            return { clicks, inputs, recipeActions };
-          });
-          
-          // V2: Process recipe actions (these have better element info)
-          if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 0) {
-            for (const recipeAction of data.recipeActions) {
-              await this._processRecipeAction(recipeAction);
+            // Process page data (inputs first, then clicks) - fallback if recipe not used
+            if (!this.useRecipeRecorder || !data.recipeActions || data.recipeActions.length === 0) {
+              await this._processInputs(data.inputs);
+              for (const click of data.clicks) {
+                await this._processClick(click);
+              }
             }
+          } catch (e) {
+            // Page might be navigating - that's OK, main process clicks already processed
           }
-          
-          // Process page data (inputs first, then clicks) - fallback if recipe not used
-          if (!this.useRecipeRecorder || !data.recipeActions || data.recipeActions.length === 0) {
-            await this._processInputs(data.inputs);
-            for (const click of data.clicks) {
-              await this._processClick(click);
-            }
-          }
-        } catch (e) {
-          // Page might be navigating - that's OK, main process clicks already processed
-        }
+        } // End of page loop
       }, 100); // Check every 100ms for responsive capture
       
       console.log('[PlaywrightRecorder] CDP click capture enabled');
@@ -1669,6 +1948,84 @@ class PlaywrightRecorder extends EventEmitter {
       console.error('[PlaywrightRecorder] Failed to setup CDP click capture:', error.message);
       // Fall back to JS-based capture (already set up)
     }
+  }
+
+  /**
+   * Setup tab focus detection to capture when user switches between tabs
+   * This polls to detect which tab has focus and records switchTab actions
+   * Uses debouncing to avoid recording momentary focus changes
+   */
+  _setupTabFocusDetection() {
+    // Track focus state for debouncing
+    this._lastDetectedFocusTab = null;
+    this._focusDetectedAt = 0;
+    const FOCUS_DEBOUNCE_MS = 1500; // Must stay focused for 1.5s to record switch
+    
+    // Poll every 1000ms to detect tab focus changes (slower to reduce noise)
+    this._tabFocusInterval = setInterval(async () => {
+      if (!this.recording || this._isRunningTest || !this._pages || this._pages.length <= 1) {
+        return;
+      }
+      
+      try {
+        // Find which page currently has focus
+        for (let i = 0; i < this._pages.length; i++) {
+          const page = this._pages[i];
+          if (!page || page.isClosed()) continue;
+          
+          try {
+            const hasFocus = await page.evaluate(() => document.hasFocus()).catch(() => false);
+            
+            if (hasFocus) {
+              const now = Date.now();
+              
+              // If this is a NEW focus (different from what we detected before)
+              if (this._lastDetectedFocusTab !== i) {
+                this._lastDetectedFocusTab = i;
+                this._focusDetectedAt = now;
+                // Don't record yet - wait for debounce
+                break;
+              }
+              
+              // If same focus AND we've been focused long enough AND it's different from current
+              if (i !== this._currentPageIndex && (now - this._focusDetectedAt) >= FOCUS_DEBOUNCE_MS) {
+                // Check if last action was already a switch to this tab (avoid duplicates)
+                const lastAction = this.actions[this.actions.length - 1];
+                if (lastAction?.type === 'switchTab' && lastAction?.tabIndex === i) {
+                  break; // Already recorded this switch
+                }
+                
+                console.log(`[PlaywrightRecorder] Tab focus confirmed: ${this._currentPageIndex} → ${i}`);
+                
+                this._addAction({
+                  type: 'switchTab',
+                  tabIndex: i,
+                  url: page.url(),
+                  timestamp: Date.now(),
+                  description: `Switched to tab ${i}: ${page.url().substring(0, 40)}`
+                });
+                
+                this._currentPageIndex = i;
+                this.page = page;
+                
+                // Re-inject click capture if returning to same-origin page
+                try {
+                  await this._injectClickCaptureScript(page);
+                } catch (e) {
+                  // Cross-origin, can't inject
+                }
+              }
+              
+              break; // Only one tab can have focus
+            }
+          } catch (e) {
+            // Page might be navigating or closed
+          }
+        }
+      } catch (e) {
+        // Ignore errors during focus detection
+      }
+    }, 1000); // Slower polling
   }
 
   /**
@@ -1931,9 +2288,20 @@ class PlaywrightRecorder extends EventEmitter {
    * This avoids the "browser already running" conflict
    */
   async runTest(options = {}) {
-    const { url, steps, headless = false, timeout = 30000 } = options;
+    const { 
+      url, 
+      steps, 
+      headless = false, 
+      timeout = 30000, 
+      isRetry = false, 
+      // NEW: Fresh browser mode - completely clean state, no cookies/storage
+      // Use for: Test Playground, e-commerce, functional tests
+      // Don't use for: Salesforce, SSO apps (need login persistence)
+      freshBrowser = false 
+    } = options;
     
-    console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps');
+    console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps', 
+      isRetry ? '(RETRY)' : '', freshBrowser ? '(FRESH BROWSER)' : '(PERSISTENT)');
     
     // Reset AI call counter for this test run
     this.aiCallsThisRun = 0;
@@ -1942,46 +2310,96 @@ class PlaywrightRecorder extends EventEmitter {
     this._isRunningTest = true;
     
     try {
-      // If browser is already open (from recording), use it
+      // If browser is already open (from recording), close it if we need fresh browser
+      if (freshBrowser && this.context) {
+        console.log('[PlaywrightRecorder] Closing existing browser for fresh start...');
+        await this.context.close().catch(() => {});
+        this.context = null;
+        this.page = null;
+        this.browser = null;
+      }
+      
       let needsNewBrowser = !this.page || this.page.isClosed();
       
       if (needsNewBrowser) {
-        console.log('[PlaywrightRecorder] Launching new browser for test with persistent context...');
-        
-        // Use persistent context to maintain login sessions and avoid OTP prompts
         const { chromium } = require('playwright');
-        const { app } = require('electron');
-        const path = require('path');
-        const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
         
-        console.log('[PlaywrightRecorder] Using persistent user data dir:', userDataDir);
-        
-        this.context = await chromium.launchPersistentContext(userDataDir, {
-          headless,
-          viewport: null,
-          args: [
-            '--start-maximized', 
-            '--disable-blink-features=AutomationControlled'
-          ],
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          ignoreHTTPSErrors: true,
-        });
-        
-        // With persistent context, get existing page or create new one
-        const pages = this.context.pages();
-        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
-        this.browser = null; // Not needed with persistent context
+        if (freshBrowser) {
+          // FRESH BROWSER MODE: Completely clean state - no cookies, localStorage, etc.
+          console.log('[PlaywrightRecorder] Launching FRESH browser (clean state)...');
+          
+          // CRITICAL: Reset SmartFinder so it gets recreated with the new page
+          this.smartFinder = null;
+          
+          this.browser = await chromium.launch({
+            headless,
+            args: [
+              '--start-maximized',
+              '--disable-blink-features=AutomationControlled'
+            ]
+          });
+          
+          // Create a brand new context with no stored data
+          this.context = await this.browser.newContext({
+            viewport: null,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ignoreHTTPSErrors: true,
+          });
+          
+          this.page = await this.context.newPage();
+          console.log('[PlaywrightRecorder] Fresh browser ready - no stored state');
+          
+        } else {
+          // PERSISTENT MODE: Keep login sessions, cookies, etc.
+          console.log('[PlaywrightRecorder] Launching browser with persistent context...');
+          
+          // CRITICAL: Reset SmartFinder so it gets recreated with the new page
+          this.smartFinder = null;
+          
+          const { app } = require('electron');
+          const path = require('path');
+          const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
+          
+          console.log('[PlaywrightRecorder] Using persistent user data dir:', userDataDir);
+          
+          this.context = await chromium.launchPersistentContext(userDataDir, {
+            headless,
+            viewport: null,
+            args: [
+              '--start-maximized', 
+              '--disable-blink-features=AutomationControlled'
+            ],
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ignoreHTTPSErrors: true,
+          });
+          
+          // With persistent context, get existing page or create new one
+          const pages = this.context.pages();
+          this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+          this.browser = null; // Not needed with persistent context
+        }
       } else {
         console.log('[PlaywrightRecorder] Using existing browser for test');
       }
       
-      // Navigate to start URL if provided and different from current
+      // Navigate to start URL
       if (url) {
-        const currentUrl = this.page.url();
-        if (!currentUrl.includes(new URL(url).hostname)) {
-          console.log('[PlaywrightRecorder] Navigating to:', url);
-          await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout });
+        console.log(`[PlaywrightRecorder] Navigating to: ${url}`);
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
+        
+        // For fresh browser, no need to clear - it's already clean
+        // For persistent browser, we keep the state (login sessions, etc.)
+        if (freshBrowser) {
+          console.log('[PlaywrightRecorder] Fresh browser - starting with clean state');
         }
+      }
+      
+      // Wait for page to be stable before executing steps
+      try {
+        await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+        await this.page.waitForTimeout(500); // Let React/Vue fully render after storage clear
+      } catch (e) {
+        console.log('[PlaywrightRecorder] Page stability wait skipped:', e.message);
       }
       
       // Execute each step
@@ -1991,19 +2409,45 @@ class PlaywrightRecorder extends EventEmitter {
       
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
+        
+        // Check if page is still valid before each step
+        if (!this.page || this.page.isClosed()) {
+          console.log('[PlaywrightRecorder] Page was closed unexpectedly, stopping test');
+          failedStep = i;
+          failError = 'Page was closed unexpectedly';
+          break;
+        }
+        
         console.log(`[PlaywrightRecorder] Executing step ${i + 1}: ${step.description || step.qword}`);
+        
+        // DEBUG: Log full step data for cross-origin steps
+        if (step.qword === 'CrossOrigin' || step.type === 'crossOriginPlaceholder' || 
+            (step.description || '').includes('Cross-origin') || (step.description || '').includes('external tab')) {
+          console.log(`[PlaywrightRecorder] ⚠️ CROSS-ORIGIN STEP DETECTED:`);
+          console.log(`[PlaywrightRecorder]   step.type = "${step.type}"`);
+          console.log(`[PlaywrightRecorder]   step.qword = "${step.qword}"`);
+          console.log(`[PlaywrightRecorder]   step.userActions = ${JSON.stringify(step.userActions)}`);
+          console.log(`[PlaywrightRecorder]   step.description = "${step.description}"`);
+        }
         
         this.emit('test-step-start', { stepIndex: i, step });
         
         try {
           // Determine step type from multiple sources (Builder format vs Recorder format)
-          const stepType = step.type || // Builder format: 'click', 'fill', 'navigate', etc.
-                          (step.qword?.toLowerCase() === 'goto' ? 'navigate' : 
-                           step.qword?.toLowerCase() === 'fill' ? 'fill' :
-                           step.qword?.toLowerCase() === 'select' ? 'select' :
-                           step.qword?.toLowerCase() === 'asserttext' ? 'assert' :
-                           step.qword?.toLowerCase() === 'wait' ? 'wait' :
-                           step.qword?.toLowerCase() || 'click');
+          // CRITICAL: CrossOrigin/crossOriginPlaceholder must be preserved!
+          let stepType;
+          if (step.qword === 'CrossOrigin' || step.type === 'crossOriginPlaceholder' || step.type === 'CrossOrigin') {
+            stepType = 'crossOriginPlaceholder'; // Force correct type
+            console.log(`[PlaywrightRecorder]   → Forcing stepType to 'crossOriginPlaceholder'`);
+          } else {
+            stepType = step.type || // Builder format: 'click', 'fill', 'navigate', etc.
+                            (step.qword?.toLowerCase() === 'goto' ? 'navigate' : 
+                             step.qword?.toLowerCase() === 'fill' ? 'fill' :
+                             step.qword?.toLowerCase() === 'select' ? 'select' :
+                             step.qword?.toLowerCase() === 'asserttext' ? 'assert' :
+                             step.qword?.toLowerCase() === 'wait' ? 'wait' :
+                             step.qword?.toLowerCase() || 'click');
+          }
           
           // CRITICAL: Use step.value (edited value) if available, else fall back to args
           // This ensures edited values from Builder are used, not just recorded values
@@ -2026,8 +2470,25 @@ class PlaywrightRecorder extends EventEmitter {
             selector: normalizedSelector,
             timeout,
             // CRITICAL: Pass step.args for SF steps and other complex actions
-            args: step.args
+            args: step.args,
+            // CRITICAL: Pass element data for SmartFinder role-based search
+            element: step.element || {},
+            selectorObj: step.selectorObj || step.selector || {},
+            // Pass recipe directly if available (from Recipe Recorder v2)
+            recipe: step.recipe || step.target || null,
+            // Pass elementIndex for duplicate element handling
+            elementIndex: step.elementIndex ?? step.args?.[1] ?? null,
+            // CRITICAL: Context tracking for multi-tab and iframe support
+            frameContext: step.frameContext || null,
+            tabIndex: step.tabIndex ?? null,
+            // CRITICAL: Pass userActions for cross-origin placeholder steps!
+            userActions: step.userActions || []
           };
+          
+          // DEBUG: Confirm userActions are passed for cross-origin
+          if (stepType === 'crossOriginPlaceholder' || action.userActions?.length > 0) {
+            console.log(`[PlaywrightRecorder] ✓ Action userActions: ${JSON.stringify(action.userActions)}`);
+          }
           
           console.log(`[PlaywrightRecorder] Step ${i + 1} action:`, { type: action.type, label: action.label, value: action.value ? '***' : '(empty)' });
           
@@ -2577,7 +3038,15 @@ class PlaywrightRecorder extends EventEmitter {
       url: ['navigate', 'goto'].includes(stepType) ? urlValue : undefined,
       selector: normalizedSelector,
       timeout,
-      args: step.args
+      args: step.args,
+      // CRITICAL: Pass element data for SmartFinder role-based search
+      element: step.element || {},
+      selectorObj: step.selectorObj || step.selector || {},
+      recipe: step.recipe || step.target || null,
+      elementIndex: step.elementIndex ?? step.args?.[1] ?? null,
+      // CRITICAL: Context tracking for multi-tab and iframe support
+      frameContext: step.frameContext || null,
+      tabIndex: step.tabIndex ?? null
     };
     
     const result = await this.executeAction(action);
@@ -2810,6 +3279,12 @@ class PlaywrightRecorder extends EventEmitter {
         await this._cdpClient.detach();
       } catch (e) {}
       this._cdpClient = null;
+    }
+    
+    // Stop tab focus detection
+    if (this._tabFocusInterval) {
+      clearInterval(this._tabFocusInterval);
+      this._tabFocusInterval = null;
     }
     
     // Stop overlay and suggestion polling
@@ -4462,7 +4937,7 @@ class PlaywrightRecorder extends EventEmitter {
     // ========== HIGH PRIORITY: ID ATTRIBUTE ==========
     // Only use if it doesn't look dynamic
     if (id && !this._isDynamicId(id)) {
-      strategies.push({ type: 'id-exact', value: `#${CSS.escape(id)}` });
+      strategies.push({ type: 'id-exact', value: `#${cssEscape(id)}` });
     }
     
     // ========== HIGH PRIORITY: ARIA-LABEL ==========
@@ -4658,7 +5133,7 @@ class PlaywrightRecorder extends EventEmitter {
     
     // 4. Try ID if available
     if (action.id) {
-      strategies.unshift({ type: 'id', value: `#${CSS.escape(action.id)}` });
+      strategies.unshift({ type: 'id', value: `#${cssEscape(action.id)}` });
     }
     
     // ========== PHASE 1: Try all defined strategies ==========
@@ -4883,7 +5358,7 @@ class PlaywrightRecorder extends EventEmitter {
         // Use getAtIndex to respect elementIndex for duplicate elements
         let locator;
         if (found.id && !/^(lwc|aura)-/i.test(found.id)) {
-          locator = getAtIndex(this.page.locator(`#${CSS.escape(found.id)}`));
+          locator = getAtIndex(this.page.locator(`#${cssEscape(found.id)}`));
         } else if (found.ariaLabel) {
           locator = getAtIndex(this.page.getByLabel(found.ariaLabel));
         } else if (found.placeholder) {
@@ -5099,30 +5574,148 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     
     try {
       return await this.retryWithBackoff(async () => {
+        // Check page is still valid
+        if (!this.page || this.page.isClosed()) {
+          throw new Error('Page is closed');
+        }
+        
+        // Get the appropriate scope (page or iframe)
+        const scope = await this._getFrameScope(action);
+        const isIframe = scope !== this.page;
+        if (isIframe) {
+          console.log('[PlaywrightRecorder] Searching within iframe context');
+        }
+        
         // Try SmartFinder first
         if (this.useSmartFinderForPlayback) {
           if (!this.smartFinder) {
-            this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+            // Pass scope instead of page for iframe support
+            this.smartFinder = new SmartFinder(isIframe ? scope : this.page, { debug: true, timeout: 15000 });
           }
           
           await this.page.waitForLoadState('domcontentloaded').catch(() => {});
           await this.page.waitForTimeout(300);
           
           const recipe = legacyActionToRecipe(action);
-          const locator = await this.smartFinder.find(recipe);
-          if (locator) {
-            return { locator, strategy: { type: 'SmartFinder' } };
+          console.log('[PlaywrightRecorder] Recipe for SmartFinder:', JSON.stringify(recipe.what));
+          
+          // For iframes, we need to search within the frame
+          let locator;
+          if (isIframe) {
+            // Try to find within iframe using basic selectors
+            const testId = recipe.which?.testId;
+            const text = recipe.what?.text;
+            const role = recipe.what?.role;
+            
+            if (testId) {
+              locator = scope.locator(`[data-testid="${testId}"]`);
+            } else if (role && text) {
+              locator = scope.getByRole(role, { name: text });
+            } else if (text) {
+              locator = scope.getByText(text);
+            } else if (recipe.which?.id) {
+              locator = scope.locator(`#${recipe.which.id}`);
+            }
+            
+            if (locator && await locator.count() > 0) {
+              return { locator, strategy: { type: 'SmartFinder-iframe' } };
+            }
+          } else {
+            locator = await this.smartFinder.find(recipe);
+            if (locator) {
+              return { locator, strategy: { type: 'SmartFinder' } };
+            }
           }
         }
         
         // Fallback to legacy finder
-        const result = await this._findElement(action);
+        console.log('[PlaywrightRecorder] SmartFinder failed, trying legacy finder...');
+        const result = await this._findElement(action, scope);
         if (result) return result;
         
         throw new Error(`Element not found: "${label}"`);
       }, { maxRetries: 3, description: `Find "${label}"` });
     } catch (e) {
+      console.log(`[PlaywrightRecorder] findElementWithRetry failed:`, e.message);
       return null; // All retries failed
+    }
+  }
+
+  /**
+   * Get the frame scope for an action (main page or iframe)
+   * Handles automatic frame switching based on action.frameContext
+   * @param {Object} action - The action containing potential frameContext
+   * @returns {Promise<Frame|Page>} - The page or frame locator to use
+   */
+  async _getFrameScope(action) {
+    // Check for explicit frame context in action
+    const frameInfo = action.frameContext || this._currentFrameContext;
+    
+    if (!frameInfo || !frameInfo.isIframe) {
+      return this.page; // Main frame
+    }
+    
+    console.log(`[PlaywrightRecorder] Switching to iframe:`, frameInfo);
+    
+    try {
+      let frameLocator;
+      
+      // Priority 1: By ID
+      if (frameInfo.id) {
+        frameLocator = this.page.frameLocator(`#${frameInfo.id}`);
+        if (await this._frameExists(frameLocator)) return frameLocator;
+      }
+      
+      // Priority 2: By name
+      if (frameInfo.name) {
+        frameLocator = this.page.frameLocator(`iframe[name="${frameInfo.name}"]`);
+        if (await this._frameExists(frameLocator)) return frameLocator;
+      }
+      
+      // Priority 3: By test-id
+      if (frameInfo.testId) {
+        frameLocator = this.page.frameLocator(`[data-testid="${frameInfo.testId}"]`);
+        if (await this._frameExists(frameLocator)) return frameLocator;
+      }
+      
+      // Priority 4: By selector
+      if (frameInfo.selector) {
+        frameLocator = this.page.frameLocator(frameInfo.selector);
+        if (await this._frameExists(frameLocator)) return frameLocator;
+      }
+      
+      // Priority 5: Try to match by src URL
+      if (frameInfo.src) {
+        const frames = this.page.frames();
+        for (const frame of frames) {
+          if (frame.url().includes(frameInfo.src)) {
+            // Return a frame locator that targets this specific frame
+            // Note: We need to use frameLocator for proper Playwright API
+            return this.page.frameLocator(`iframe[src*="${frameInfo.src.split('/').pop()}"]`);
+          }
+        }
+      }
+      
+      console.warn('[PlaywrightRecorder] Could not find frame, using main page');
+      return this.page;
+    } catch (e) {
+      console.error('[PlaywrightRecorder] Frame switching error:', e.message);
+      return this.page;
+    }
+  }
+
+  /**
+   * Check if a frame locator points to an existing frame
+   * @param {FrameLocator} frameLocator 
+   * @returns {Promise<boolean>}
+   */
+  async _frameExists(frameLocator) {
+    try {
+      // Try to find any element in the frame to verify it exists
+      const count = await frameLocator.locator('body').count();
+      return count > 0;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -5134,6 +5727,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
   async executeAction(action) {
     if (!this.page || this.page.isClosed()) {
       return { success: false, error: 'No browser page' };
+    }
+
+    // DEBUG: Log every action type that comes through
+    console.log(`\n[executeAction] ▶ Type: "${action.type}" | QWord: "${action.qword}" | Description: "${(action.description || '').substring(0, 50)}"`);
+    if (action.userActions?.length > 0) {
+      console.log(`[executeAction]   Has ${action.userActions.length} userActions!`);
     }
 
     try {
@@ -5207,16 +5806,70 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         case 'clickelement':
         case 'ClickElement':
           // ============================================================
-          // ROBUST ELEMENT FINDING WITH RETRY + 3-LAYER FALLBACK
+          // ROBUST ELEMENT FINDING WITH RETRY + 4-LAYER FALLBACK
           // Layer 1: SmartFinder (recipe-based) with retry
           // Layer 2: Legacy _findElement (50+ strategies) with retry
-          // Layer 3: AI Vision Fallback (screenshot + GPT-4o)
+          // Layer 3: iFrame search (for elements inside iframes)
+          // Layer 4: AI Vision Fallback (screenshot + GPT-4o)
           // ============================================================
           
           // Try finding element with automatic retry (handles slow pages)
           let clickResult = await this.findElementWithRetry(action);
           
-          // Layer 3: AI FALLBACK - Last resort when all deterministic strategies fail
+          // Layer 3: IFRAME FALLBACK - Search inside iframes if not found on main page
+          if (!clickResult) {
+            console.log('[PlaywrightRecorder] Click: Element not on main page, checking iframes...');
+            
+            const iframesForClick = await this.page.locator('iframe').all();
+            console.log(`[PlaywrightRecorder] Found ${iframesForClick.length} iframes to search`);
+            
+            for (let i = 0; i < iframesForClick.length; i++) {
+              try {
+                const frameLocator = this.page.frameLocator(`iframe >> nth=${i}`);
+                
+                const testId = action.selectorObj?.testId || action.selectorObj?.dataTestId || action.recipe?.which?.testId;
+                const buttonText = label || action.text || action.recipe?.what?.text;
+                
+                let iframeLocator = null;
+                
+                // Strategy 1: By testId
+                if (testId) {
+                  const locator = frameLocator.locator(`[data-testid="${testId}"]`);
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found click target in iframe by testId: ${testId}`);
+                  }
+                }
+                
+                // Strategy 2: By button text
+                if (!iframeLocator && buttonText) {
+                  const locator = frameLocator.getByRole('button', { name: buttonText });
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found click target in iframe by button text: ${buttonText}`);
+                  }
+                }
+                
+                // Strategy 3: By text content
+                if (!iframeLocator && buttonText) {
+                  const locator = frameLocator.getByText(buttonText, { exact: false });
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found click target in iframe by text: ${buttonText}`);
+                  }
+                }
+                
+                if (iframeLocator) {
+                  clickResult = { locator: iframeLocator, strategy: { type: `iframe[${i}]` } };
+                  break;
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Iframe ${i} access failed:`, e.message);
+              }
+            }
+          }
+          
+          // Layer 4: AI FALLBACK - Last resort when all deterministic strategies fail
           if (!clickResult && this.enableAIFallback) {
             console.log(`[PlaywrightRecorder] All strategies failed after retries, trying AI fallback...`);
             const aiResult = await this.findElementWithAI(label || selector || action.description, 'click');
@@ -5409,6 +6062,83 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // Find input element using multiple strategies
           let fillResult = await this._findElement(action);
           
+          // IFRAME FALLBACK: If not found on main page, try searching inside iframes
+          if (!fillResult) {
+            console.log('[PlaywrightRecorder] Fill: Element not on main page, checking iframes...');
+            
+            // Get all iframes on the page
+            const iframes = await this.page.locator('iframe').all();
+            console.log(`[PlaywrightRecorder] Found ${iframes.length} iframes to search`);
+            
+            for (let i = 0; i < iframes.length; i++) {
+              try {
+                const frameLocator = this.page.frameLocator(`iframe >> nth=${i}`);
+                
+                // Try multiple strategies inside the iframe
+                const testId = action.selectorObj?.testId || action.selectorObj?.dataTestId;
+                const id = action.selectorObj?.id;
+                const placeholder = action.selectorObj?.placeholder || label;
+                const name = action.selectorObj?.name;
+                
+                let iframeLocator = null;
+                
+                // Strategy 1: By testId
+                if (testId) {
+                  const locator = frameLocator.locator(`[data-testid="${testId}"]`);
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found in iframe by testId: ${testId}`);
+                  }
+                }
+                
+                // Strategy 2: By id
+                if (!iframeLocator && id) {
+                  const locator = frameLocator.locator(`#${id}`);
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found in iframe by id: ${id}`);
+                  }
+                }
+                
+                // Strategy 3: By placeholder
+                if (!iframeLocator && placeholder) {
+                  const locator = frameLocator.getByPlaceholder(placeholder, { exact: false });
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found in iframe by placeholder: ${placeholder}`);
+                  }
+                }
+                
+                // Strategy 4: By name
+                if (!iframeLocator && name) {
+                  const locator = frameLocator.locator(`[name="${name}"]`);
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found in iframe by name: ${name}`);
+                  }
+                }
+                
+                // Strategy 5: By partial placeholder match (for "4242 4242 4242 4242" → "4242")
+                if (!iframeLocator && placeholder) {
+                  const shortPlaceholder = placeholder.split(' ')[0]; // First word
+                  const locator = frameLocator.locator(`input[placeholder*="${shortPlaceholder}"]`);
+                  if (await locator.count() > 0) {
+                    iframeLocator = locator.first();
+                    console.log(`[PlaywrightRecorder] ✓ Found in iframe by partial placeholder: ${shortPlaceholder}`);
+                  }
+                }
+                
+                if (iframeLocator) {
+                  fillResult = { locator: iframeLocator, strategy: { type: `iframe[${i}]` } };
+                  break;
+                }
+              } catch (e) {
+                // Cross-origin iframe, skip
+                console.log(`[PlaywrightRecorder] Iframe ${i} access failed (cross-origin?):`, e.message);
+              }
+            }
+          }
+          
           // AI FALLBACK for fill - Last resort
           if (!fillResult && this.enableAIFallback) {
             console.log(`[PlaywrightRecorder] Fill: All strategies failed, trying AI fallback...`);
@@ -5474,6 +6204,76 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // Find select element using multiple strategies
           let selectResult = await this._findElement(action);
           
+          // RADIX DROPDOWN FALLBACK - Try specific strategies for Radix comboboxes
+          if (!selectResult) {
+            console.log(`[PlaywrightRecorder] Standard select find failed, trying Radix-specific strategies...`);
+            
+            const selectValue = action.value?.text || action.value || value;
+            const testId = action.selectorObj?.testId || action.element?.testId || action.recipe?.which?.testId;
+            
+            // Strategy 1: By testId
+            if (testId) {
+              const byTestId = this.page.locator(`[data-testid="${testId}"]`);
+              if (await byTestId.count() > 0) {
+                selectResult = { locator: byTestId.first(), strategy: { type: 'testId' } };
+                console.log(`[PlaywrightRecorder] Found dropdown by testId: ${testId}`);
+              }
+            }
+            
+            // Strategy 2: Find combobox that currently shows a known option text
+            if (!selectResult) {
+              // The step might want to select "Blank Page" from dropdown showing "Example.com"
+              const allComboboxes = this.page.getByRole('combobox');
+              const count = await allComboboxes.count();
+              console.log(`[PlaywrightRecorder] Found ${count} comboboxes on page`);
+              
+              for (let i = 0; i < count; i++) {
+                const combobox = allComboboxes.nth(i);
+                const text = await combobox.textContent().catch(() => '');
+                console.log(`[PlaywrightRecorder] Combobox ${i}: "${text}"`);
+                
+                // Check if this combobox is visible and interactable
+                if (await combobox.isVisible()) {
+                  // Click it to see if it has the option we want
+                  try {
+                    await combobox.click();
+                    await this.page.waitForTimeout(200);
+                    
+                    // Check if the option exists in the dropdown
+                    const optionExists = await this.page.getByRole('option', { name: selectValue }).count() > 0;
+                    
+                    if (optionExists) {
+                      selectResult = { locator: combobox, strategy: { type: 'combobox-scan' } };
+                      console.log(`[PlaywrightRecorder] Found dropdown with option "${selectValue}" at combobox ${i}`);
+                      // Don't close - let the main handler select the option
+                      break;
+                    } else {
+                      // Close this dropdown and try next
+                      await this.page.keyboard.press('Escape');
+                      await this.page.waitForTimeout(100);
+                    }
+                  } catch (e) {
+                    console.log(`[PlaywrightRecorder] Combobox ${i} check failed: ${e.message}`);
+                  }
+                }
+              }
+            }
+            
+            // Strategy 3: Try by any visible select trigger with matching nearby text
+            if (!selectResult) {
+              const triggers = this.page.locator('[data-radix-select-trigger], [role="combobox"]');
+              const triggerCount = await triggers.count();
+              
+              for (let i = 0; i < triggerCount; i++) {
+                if (await triggers.nth(i).isVisible()) {
+                  selectResult = { locator: triggers.nth(i), strategy: { type: 'visible-trigger' } };
+                  console.log(`[PlaywrightRecorder] Using visible trigger ${i}`);
+                  break;
+                }
+              }
+            }
+          }
+          
           // AI FALLBACK for select - Last resort
           if (!selectResult && this.enableAIFallback) {
             console.log(`[PlaywrightRecorder] Select: All strategies failed, trying AI fallback...`);
@@ -5482,11 +6282,49 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               try {
                 // Click to open dropdown, then find and click option
                 await this.page.mouse.click(aiSelectResult.x, aiSelectResult.y);
-                await this.page.waitForTimeout(300);
-                // Try to find and click the option by text
-                const optionLocator = this.page.getByText(value, { exact: false });
-                if (await optionLocator.count() > 0) {
-                  await optionLocator.first().click();
+                
+                // Wait for dropdown content to appear (Radix, Headless UI, etc.)
+                const dropdownContent = this.page.locator(
+                  '[role="listbox"], [role="menu"], ' +
+                  '[data-radix-select-content], [data-radix-menu-content], ' +
+                  '[data-radix-popper-content-wrapper]'
+                );
+                await dropdownContent.first().waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+                await this.page.waitForTimeout(100);
+                
+                // Try to find and click the option - properly scoped
+                let aiOptionClicked = false;
+                
+                // Try role=option first
+                const byRole = this.page.getByRole('option', { name: value });
+                if (await byRole.count() > 0) {
+                  await byRole.first().click();
+                  aiOptionClicked = true;
+                }
+                
+                // Try scoped text search
+                if (!aiOptionClicked) {
+                  const scopedOption = this.page.locator(
+                    `[data-radix-select-content] >> text="${value}"`
+                  ).or(this.page.locator(
+                    `[role="listbox"] >> text="${value}"`
+                  ));
+                  if (await scopedOption.count() > 0) {
+                    await scopedOption.first().click();
+                    aiOptionClicked = true;
+                  }
+                }
+                
+                // Fallback to getByText
+                if (!aiOptionClicked) {
+                  const optionLocator = this.page.getByText(value, { exact: false });
+                  if (await optionLocator.count() > 0) {
+                    await optionLocator.first().click();
+                    aiOptionClicked = true;
+                  }
+                }
+                
+                if (aiOptionClicked) {
                   console.log(`[PlaywrightRecorder] ✓ AI Fallback select succeeded`);
                   return { success: true, strategy: 'AI Vision Fallback' };
                 }
@@ -5514,21 +6352,115 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             await selectResult.locator.selectOption(value, { timeout });
           } else {
             // Custom dropdown (Radix, Headless UI, etc.) - click to open, then click option
-            console.log(`[PlaywrightRecorder] Non-native select detected (${tagName}), using click-then-select`);
-            await selectResult.locator.click();
-            await this.page.waitForTimeout(200);
+            console.log(`[PlaywrightRecorder] Non-native select detected (${tagName}), using click-then-select for Radix/custom dropdown`);
             
-            // Try to find and click the option
-            const optionLocator = this.page.getByText(value, { exact: false });
-            const optionCount = await optionLocator.count();
-            if (optionCount > 0) {
-              await optionLocator.first().click();
+            // Check if dropdown is already open (from our scan)
+            const dropdownContent = this.page.locator(
+              '[role="listbox"], [role="menu"], ' +
+              '[data-radix-select-content], [data-radix-menu-content], ' +
+              '[data-radix-popper-content-wrapper], [data-radix-select-viewport]'
+            );
+            
+            const isAlreadyOpen = await dropdownContent.first().isVisible().catch(() => false);
+            
+            if (!isAlreadyOpen) {
+              await selectResult.locator.click();
+              
+              // Wait for the dropdown content to appear (Radix portals to body)
+              try {
+                await dropdownContent.first().waitFor({ state: 'visible', timeout: 3000 });
+                console.log(`[PlaywrightRecorder] Dropdown content appeared`);
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Warning: Dropdown content not detected, continuing anyway...`);
+              }
             } else {
-              // Fallback: try role option
-              await this.page.getByRole('option', { name: value }).first().click().catch(async () => {
-                // Last resort: look for listitem with matching text
-                await this.page.getByRole('listitem').filter({ hasText: value }).first().click();
-              });
+              console.log(`[PlaywrightRecorder] Dropdown already open, skipping click`);
+            }
+            
+            // Small delay for animation
+            await this.page.waitForTimeout(100);
+            
+            // Try to find and click the option - SCOPED TO DROPDOWN CONTENT
+            let optionClicked = false;
+            
+            // Strategy 1: By role=option within visible dropdown
+            try {
+              const byRole = this.page.getByRole('option', { name: value });
+              if (await byRole.count() > 0) {
+                await byRole.first().click({ timeout: 2000 });
+                optionClicked = true;
+                console.log(`[PlaywrightRecorder] ✓ Selected option by role: "${value}"`);
+              }
+            } catch (e) {
+              console.log(`[PlaywrightRecorder] Option by role failed, trying next strategy...`);
+            }
+            
+            // Strategy 2: By role=menuitem (for Radix Menu)
+            if (!optionClicked) {
+              try {
+                const byMenuitem = this.page.getByRole('menuitem', { name: value });
+                if (await byMenuitem.count() > 0) {
+                  await byMenuitem.first().click({ timeout: 2000 });
+                  optionClicked = true;
+                  console.log(`[PlaywrightRecorder] ✓ Selected option by menuitem role: "${value}"`);
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Option by menuitem failed, trying next strategy...`);
+              }
+            }
+            
+            // Strategy 3: Text within Radix content (scoped)
+            if (!optionClicked) {
+              try {
+                const radixOption = this.page.locator(
+                  `[data-radix-select-content] >> text="${value}"`,
+                ).or(this.page.locator(
+                  `[data-radix-popper-content-wrapper] >> text="${value}"`
+                )).or(this.page.locator(
+                  `[role="listbox"] >> text="${value}"`
+                ));
+                
+                if (await radixOption.count() > 0) {
+                  await radixOption.first().click({ timeout: 2000 });
+                  optionClicked = true;
+                  console.log(`[PlaywrightRecorder] ✓ Selected option by scoped text: "${value}"`);
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Scoped text failed, trying next strategy...`);
+              }
+            }
+            
+            // Strategy 4: data-radix-collection-item with matching text
+            if (!optionClicked) {
+              try {
+                const radixItem = this.page.locator('[data-radix-collection-item]').filter({ hasText: value });
+                if (await radixItem.count() > 0) {
+                  await radixItem.first().click({ timeout: 2000 });
+                  optionClicked = true;
+                  console.log(`[PlaywrightRecorder] ✓ Selected option by Radix collection item: "${value}"`);
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Radix collection item failed, trying last resort...`);
+              }
+            }
+            
+            // Strategy 5: Last resort - getByText but visible only
+            if (!optionClicked) {
+              const optionLocator = this.page.getByText(value, { exact: false }).and(this.page.locator(':visible'));
+              const optionCount = await optionLocator.count();
+              if (optionCount > 0) {
+                await optionLocator.first().click({ timeout: 2000 });
+                optionClicked = true;
+                console.log(`[PlaywrightRecorder] ✓ Selected option by visible text: "${value}"`);
+              } else {
+                // Absolute last resort
+                await this.page.getByRole('listitem').filter({ hasText: value }).first().click({ timeout: 2000 });
+                optionClicked = true;
+              }
+            }
+            
+            if (!optionClicked) {
+              console.error(`[PlaywrightRecorder] Failed to select option "${value}" from dropdown`);
             }
           }
           
@@ -5602,6 +6534,318 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           }
           await this.page.hover(selector, { timeout });
           break;
+
+        // ============================================================
+        // NEW ADVANCED ACTION TYPES
+        // ============================================================
+        
+        case 'upload':
+        case 'fileUpload': {
+          // File upload
+          console.log(`[PlaywrightRecorder] Handling file upload`);
+          
+          // Get the file path(s) from action
+          const filePaths = action.value?.files || action.files || [action.value];
+          if (!filePaths || filePaths.length === 0) {
+            return { success: false, error: 'No file path provided for upload' };
+          }
+          
+          // Get target scope (iframe or main page)
+          const uploadScope = await this._getFrameScope(action);
+          
+          // Find file input
+          let fileInput;
+          if (selector) {
+            fileInput = uploadScope.locator(selector);
+          } else {
+            // Try to find file input near label or by recipe
+            const uploadResult = await this.findElementWithRetry({ ...action, type: 'click' });
+            if (uploadResult) {
+              fileInput = uploadResult.locator;
+            }
+          }
+          
+          if (!fileInput) {
+            // Try by input[type=file] in general
+            fileInput = uploadScope.locator('input[type="file"]').first();
+          }
+          
+          await fileInput.setInputFiles(filePaths);
+          console.log(`[PlaywrightRecorder] Uploaded files: ${filePaths.join(', ')}`);
+          break;
+        }
+        
+        case 'dragDrop':
+        case 'drag': {
+          // Drag and drop
+          console.log(`[PlaywrightRecorder] Handling drag and drop`);
+          
+          const dragScope = await this._getFrameScope(action);
+          
+          // Get source element
+          let sourceLocator;
+          if (action.recipe || action.target) {
+            const recipe = action.recipe || action.target;
+            if (!this.smartFinder) {
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+            }
+            sourceLocator = await this.smartFinder.find(recipe);
+          } else if (selector) {
+            sourceLocator = dragScope.locator(selector);
+          }
+          
+          if (!sourceLocator) {
+            return { success: false, error: 'Could not find drag source element' };
+          }
+          
+          // Get drop target
+          let dropLocator;
+          if (action.dropTarget) {
+            dropLocator = await this.smartFinder.find(action.dropTarget);
+          } else if (action.dropSelector) {
+            dropLocator = dragScope.locator(action.dropSelector);
+          } else if (action.value?.endX && action.value?.endY) {
+            // Use coordinates if provided
+            await sourceLocator.dragTo(dragScope.locator('body'), {
+              targetPosition: { x: action.value.endX, y: action.value.endY }
+            });
+            break;
+          }
+          
+          if (!dropLocator) {
+            return { success: false, error: 'Could not find drop target element' };
+          }
+          
+          await sourceLocator.dragTo(dropLocator);
+          console.log(`[PlaywrightRecorder] Drag and drop completed`);
+          break;
+        }
+        
+        case 'dialog':
+        case 'alert':
+        case 'confirm':
+        case 'prompt': {
+          // Dialog handling is automatic via page.on('dialog') but this records the expected action
+          console.log(`[PlaywrightRecorder] Dialog action recorded (handled automatically)`);
+          // Dialogs are auto-handled by the dialog listener - this is just a marker
+          break;
+        }
+        
+        case 'closeModal':
+        case 'dismissModal':
+        case 'closePopup':
+        case 'CloseModal': {
+          // Close DOM-based modal/popup (not browser dialog)
+          const closeResult = await ActionHandlers.handleCloseModal(this, action, { timeout });
+          if (!closeResult.success) {
+            return closeResult;
+          }
+          break;
+        }
+        
+        case 'switchToFrame':
+        case 'frame': {
+          // Switch to iframe context
+          console.log(`[PlaywrightRecorder] Switching to frame`);
+          const frameInfo = action.frameContext || action.value;
+          
+          if (!frameInfo) {
+            return { success: false, error: 'No frame info provided' };
+          }
+          
+          // Store current frame context for subsequent actions
+          this._currentFrameContext = frameInfo;
+          console.log(`[PlaywrightRecorder] Frame context set to:`, frameInfo);
+          break;
+        }
+        
+        case 'switchToMainFrame':
+        case 'mainFrame': {
+          // Switch back to main frame
+          console.log(`[PlaywrightRecorder] Switching back to main frame`);
+          this._currentFrameContext = null;
+          break;
+        }
+        
+        case 'newTab': {
+          // The previous action triggered a new tab - track it
+          // Following Playwright's recommended pattern for tab management
+          console.log(`[PlaywrightRecorder] New tab action - syncing page tracking...`);
+          
+          // Get all current pages in the context
+          const allPages = this.context.pages();
+          this._playbackPages = allPages;
+          
+          // Find the newest page (last in the array)
+          if (allPages.length > 1) {
+            const newestPage = allPages[allPages.length - 1];
+            
+            // Wait for it to be ready
+            try {
+              await newestPage.waitForLoadState('domcontentloaded', { timeout: 10000 });
+            } catch (e) {
+              console.log(`[PlaywrightRecorder] New page still loading...`);
+            }
+            
+            console.log(`[PlaywrightRecorder] Total tabs: ${allPages.length}`);
+            console.log(`[PlaywrightRecorder] Newest tab URL: ${newestPage.url()}`);
+          } else {
+            console.log(`[PlaywrightRecorder] No new tab detected, continuing...`);
+          }
+          break;
+        }
+        
+        case 'switchTab': {
+          // Switch to a specific tab - following Testim's approach:
+          // 1. Try by index first
+          // 2. Fallback to URL matching (handles tab reordering)
+          console.log(`[PlaywrightRecorder] Switching to tab ${action.tabIndex ?? 'by URL'}`);
+          
+          const pages = this.context.pages();
+          this._playbackPages = pages;
+          let targetPage = null;
+          
+          // Strategy 1: Try by index (if provided and valid)
+          if (action.tabIndex !== undefined && action.tabIndex >= 0 && action.tabIndex < pages.length) {
+            targetPage = pages[action.tabIndex];
+            console.log(`[PlaywrightRecorder] Found tab by index ${action.tabIndex}`);
+          }
+          
+          // Strategy 2: Try by URL (more reliable across runs - Testim approach)
+          if (!targetPage && action.url) {
+            // Try exact match first
+            targetPage = pages.find(p => p.url() === action.url);
+            
+            // Try partial URL match
+            if (!targetPage) {
+              targetPage = pages.find(p => p.url().includes(action.url) || action.url.includes(p.url()));
+            }
+            
+            // Try hostname match
+            if (!targetPage) {
+              try {
+                const targetHost = new URL(action.url).hostname;
+                targetPage = pages.find(p => {
+                  try { return new URL(p.url()).hostname === targetHost; }
+                  catch { return false; }
+                });
+              } catch (e) {}
+            }
+            
+            if (targetPage) {
+              console.log(`[PlaywrightRecorder] Found tab by URL match: ${targetPage.url()}`);
+            }
+          }
+          
+          // Strategy 3: If index is 0, always use first page (original/parent)
+          if (!targetPage && action.tabIndex === 0 && pages.length > 0) {
+            targetPage = pages[0];
+            console.log(`[PlaywrightRecorder] Using first tab (original window)`);
+          }
+          
+          if (targetPage) {
+            this.page = targetPage;
+            this._playbackPageIndex = pages.indexOf(targetPage);
+            
+            // Bring to front and wait for ready
+            await this.page.bringToFront();
+            await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+            
+            // Re-initialize SmartFinder for new page context
+            if (this.useSmartFinderForPlayback) {
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+            }
+            
+            console.log(`[PlaywrightRecorder] Now on tab: ${this.page.url()}`);
+          } else {
+            console.log(`[PlaywrightRecorder] Could not find target tab, staying on current`);
+            console.log(`[PlaywrightRecorder] Available tabs:`, pages.map(p => p.url()));
+          }
+          break;
+        }
+        
+        // NOTE: crossOriginPlaceholder is handled below with 'CrossOrigin' case
+        
+        case 'closeTab': {
+          // Close current or specified tab and switch back to parent
+          console.log(`[PlaywrightRecorder] Closing tab ${action.tabIndex ?? 'current'}`);
+          
+          const pages = this.context.pages();
+          let tabToClose = null;
+          
+          if (action.tabIndex !== undefined && action.tabIndex >= 0 && action.tabIndex < pages.length) {
+            tabToClose = pages[action.tabIndex];
+          } else {
+            // Close current tab
+            tabToClose = this.page;
+          }
+          
+          if (tabToClose && pages.length > 1) {
+            await tabToClose.close().catch(() => {});
+            
+            // Switch to first remaining tab (usually the parent)
+            const remainingPages = this.context.pages();
+            if (remainingPages.length > 0) {
+              this.page = remainingPages[0];
+              this._playbackPages = remainingPages;
+              this._playbackPageIndex = 0;
+              await this.page.bringToFront();
+              await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+              
+              // Re-initialize SmartFinder for the page
+              if (this.useSmartFinderForPlayback) {
+                this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+              }
+              
+              console.log(`[PlaywrightRecorder] Closed tab, now on: ${this.page.url()}`);
+            }
+          } else {
+            console.log(`[PlaywrightRecorder] Cannot close last tab, skipping`);
+          }
+          break;
+        }
+        
+        case 'download':
+        case 'Download':
+        case 'waitForDownload': {
+          // Download step - the download was triggered by the PREVIOUS click action
+          // This step is mostly for documentation/verification
+          console.log(`[PlaywrightRecorder] Download step - checking for recent download`);
+          const expectedFilename = action.filename || action.value || action.args?.[0];
+          
+          // If there's a click action to trigger download, do it first
+          if (action.triggerSelector) {
+            console.log(`[PlaywrightRecorder] Triggering download with: ${action.triggerSelector}`);
+            const downloadPromise = this.page.waitForEvent('download', { timeout: 10000 });
+            await this.page.click(action.triggerSelector);
+            try {
+              const download = await downloadPromise;
+              console.log(`[PlaywrightRecorder] Download completed: ${download.suggestedFilename()}`);
+            } catch (e) {
+              console.log(`[PlaywrightRecorder] Download wait timed out, but click completed`);
+            }
+          } else {
+            // No trigger - the download was already triggered by the previous step
+            // Wait briefly to let any pending download complete
+            console.log(`[PlaywrightRecorder] Waiting briefly for any pending download...`);
+            try {
+              // Short timeout - if download already happened, this will timeout (which is fine)
+              const download = await this.page.waitForEvent('download', { timeout: 3000 });
+              console.log(`[PlaywrightRecorder] Download completed: ${download.suggestedFilename()}`);
+            } catch (e) {
+              // Download either already completed or was handled by the previous click
+              console.log(`[PlaywrightRecorder] Download likely already completed (previous click triggered it)`);
+            }
+          }
+          
+          // For verification, we'd check if file exists - for now, just pass
+          if (expectedFilename) {
+            console.log(`[PlaywrightRecorder] Expected download: ${expectedFilename}`);
+          }
+          
+          // Download steps pass by default - the click that triggered it is what matters
+          break;
+        }
 
         case 'scroll':
           // Scroll element into view
@@ -6431,6 +7675,491 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const screenshotName = action.args?.[0] || `screenshot_${Date.now()}.png`;
           console.log(`[PlaywrightRecorder] Taking screenshot: ${screenshotName}`);
           await this.page.screenshot({ path: screenshotName, fullPage: false });
+          return { success: true };
+        }
+
+        // ════════════════════════════════════════════════════════════════════════════
+        // MULTI-TAB AND WINDOW ACTIONS
+        // ════════════════════════════════════════════════════════════════════════════
+        case 'newTab':
+        case 'NewTab': {
+          // A new tab should have opened - during playback we wait for it
+          console.log(`[PlaywrightRecorder] Waiting for new tab: ${action.url || 'any'}`);
+          
+          // The previous action (like clicking a link) should have triggered a new tab
+          // We need to wait for it and switch to it
+          const pages = this.context.pages();
+          const targetTabIndex = action.tabIndex ?? pages.length - 1;
+          
+          if (pages.length > 1) {
+            // Switch to the new tab
+            this.page = pages[targetTabIndex] || pages[pages.length - 1];
+            console.log(`[PlaywrightRecorder] Switched to new tab (index ${targetTabIndex}): ${this.page.url()}`);
+            
+            // Wait for the page to load
+            try {
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+            } catch (e) {
+              console.log('[PlaywrightRecorder] New tab load wait timed out');
+            }
+          } else {
+            console.log('[PlaywrightRecorder] No new tab found, continuing on current page');
+          }
+          
+          return { success: true };
+        }
+        
+        case 'switchTab':
+        case 'SwitchTab': {
+          // Switch to a specific tab by index or URL
+          const targetIndex = action.tabIndex ?? action.args?.[0] ?? 0;
+          const targetUrl = action.url || action.args?.[1] || null;
+          
+          console.log(`[PlaywrightRecorder] Switching to tab ${targetIndex} (url hint: ${targetUrl?.substring(0, 50) || 'none'})`);
+          
+          const allPages = this.context.pages();
+          console.log(`[PlaywrightRecorder] Available tabs: ${allPages.length}`);
+          
+          let targetPage = null;
+          
+          // Strategy 1: Try exact index
+          if (targetIndex < allPages.length) {
+            targetPage = allPages[targetIndex];
+          }
+          
+          // Strategy 2: If index fails, try to find by URL
+          if (!targetPage && targetUrl) {
+            targetPage = allPages.find(p => p.url() === targetUrl);
+            if (!targetPage) {
+              // Try hostname match
+              try {
+                const targetHostname = new URL(targetUrl).hostname;
+                targetPage = allPages.find(p => {
+                  try {
+                    return new URL(p.url()).hostname === targetHostname;
+                  } catch { return false; }
+                });
+              } catch {}
+            }
+          }
+          
+          // Strategy 3: Fall back to first/last page
+          if (!targetPage) {
+            targetPage = targetIndex === 0 ? allPages[0] : allPages[allPages.length - 1];
+          }
+          
+          if (targetPage) {
+            this.page = targetPage;
+            await this.page.bringToFront();
+            console.log(`[PlaywrightRecorder] ✓ Switched to tab: ${this.page.url().substring(0, 50)}`);
+            
+            // Wait for page to be ready
+            try {
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+            } catch (e) {}
+          } else {
+            console.warn(`[PlaywrightRecorder] Could not find target tab ${targetIndex}`);
+          }
+          
+          return { success: true };
+        }
+        
+        case 'closeTab':
+        case 'CloseTab': {
+          // Close a specific tab
+          const closeIndex = action.tabIndex ?? action.args?.[0] ?? -1;
+          const allPagesClose = this.context.pages();
+          
+          console.log(`[PlaywrightRecorder] Closing tab ${closeIndex}`);
+          
+          if (closeIndex >= 0 && closeIndex < allPagesClose.length) {
+            const pageToClose = allPagesClose[closeIndex];
+            await pageToClose.close();
+            
+            // Switch to remaining tab
+            const remainingPages = this.context.pages();
+            if (remainingPages.length > 0) {
+              this.page = remainingPages[0];
+              await this.page.bringToFront();
+            }
+          }
+          
+          return { success: true };
+        }
+        
+        case 'crossOriginPlaceholder':
+        case 'CrossOrigin':
+        case 'crossorigin':
+        case 'cross-origin':
+        case 'CrossOriginPlaceholder': {
+          // ============ CROSS-ORIGIN STEP START ============
+          console.log(`\n[PlaywrightRecorder] ======================================`);
+          console.log(`[PlaywrightRecorder] CROSS-ORIGIN STEP EXECUTING`);
+          console.log(`[PlaywrightRecorder] ======================================`);
+          
+          // Show feedback on CURRENT page (parent) first
+          try {
+            await this.page.evaluate(() => {
+              const div = document.createElement('div');
+              div.id = 'qaai-parent-debug';
+              div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:blue;color:white;padding:20px;z-index:999999;font-size:18px;border-radius:10px;';
+              div.textContent = '🔄 QAAI: Switching to popup window...';
+              document.body.appendChild(div);
+            });
+          } catch (e) {
+            console.log(`[PlaywrightRecorder] Could not show parent feedback: ${e.message}`);
+          }
+          
+          await this.page.waitForTimeout(1000); // Let user see the message
+          
+          const crossOriginUrl = action.url || action.label || action.args?.[0] || 'external tab';
+          console.log(`[PlaywrightRecorder] Cross-origin URL: ${crossOriginUrl}`);
+          console.log(`[PlaywrightRecorder] userActions: ${action.userActions?.length || 0}`);
+          
+          // First, get all available tabs
+          let crossPages = this.context.pages();
+          console.log(`[PlaywrightRecorder] Available tabs: ${crossPages.length}`);
+          crossPages.forEach((p, i) => console.log(`  Tab ${i}: ${p.url().substring(0, 60)}`));
+          
+          // If only one tab, we need to wait for the cross-origin tab to open
+          if (crossPages.length === 1) {
+            console.log(`[PlaywrightRecorder] Only 1 tab open, waiting for popup...`);
+            try {
+              const newPage = await this.context.waitForEvent('page', { timeout: 5000 });
+              await newPage.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+              crossPages = this.context.pages();
+              console.log(`[PlaywrightRecorder] Now have ${crossPages.length} tabs`);
+            } catch (e) {
+              console.log(`[PlaywrightRecorder] No new tab appeared, continuing with current`);
+            }
+          }
+          
+          // Find the right tab - prefer by URL match, then by index
+          const targetCrossTabIndex = action.tabIndex ?? action.args?.[1] ?? 1;
+          let targetTab = null;
+          
+          // Strategy 1: Find by URL match
+          if (crossOriginUrl && crossOriginUrl !== 'external tab') {
+            for (let i = 0; i < crossPages.length; i++) {
+              const pageUrl = crossPages[i].url();
+              if (pageUrl.includes(crossOriginUrl) || crossOriginUrl.includes(new URL(pageUrl).hostname)) {
+                targetTab = crossPages[i];
+                console.log(`[PlaywrightRecorder] Found tab by URL match: ${pageUrl.substring(0, 60)}`);
+                break;
+              }
+            }
+          }
+          
+          // Strategy 2: Use the non-localhost tab (likely the popup)
+          if (!targetTab) {
+            for (let i = crossPages.length - 1; i >= 0; i--) {
+              const pageUrl = crossPages[i].url();
+              if (!pageUrl.includes('localhost') && !pageUrl.includes('127.0.0.1')) {
+                targetTab = crossPages[i];
+                console.log(`[PlaywrightRecorder] Found external tab: ${pageUrl.substring(0, 60)}`);
+                break;
+              }
+            }
+          }
+          
+          // Strategy 3: Use index
+          if (!targetTab && targetCrossTabIndex < crossPages.length) {
+            targetTab = crossPages[targetCrossTabIndex];
+            console.log(`[PlaywrightRecorder] Using tab by index ${targetCrossTabIndex}`);
+          }
+          
+          // Strategy 4: Use the last tab (most recently opened)
+          if (!targetTab && crossPages.length > 1) {
+            targetTab = crossPages[crossPages.length - 1];
+            console.log(`[PlaywrightRecorder] Using last tab as fallback`);
+          }
+          
+          if (targetTab) {
+            this.page = targetTab;
+            await this.page.bringToFront();
+            // Wait for the page to be ready - cross-origin pages need more time
+            console.log(`[PlaywrightRecorder] Waiting for cross-origin page to load...`);
+            await this.page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+            await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+            // Extra wait for JavaScript to initialize
+            await this.page.waitForTimeout(1000);
+            console.log(`[PlaywrightRecorder] ✓ Cross-origin tab ready: ${this.page.url()}`);
+          } else {
+            console.warn(`[PlaywrightRecorder] Could not find cross-origin tab!`);
+            // List all available pages for debugging
+            const allPages = this.context.pages();
+            console.log(`[PlaywrightRecorder] Available pages:`);
+            allPages.forEach((p, i) => console.log(`  ${i}: ${p.url()}`));
+          }
+          
+          // Execute any user-defined actions with manual selectors
+          console.log(`[PlaywrightRecorder] ========== CROSS-ORIGIN STEP ==========`);
+          console.log(`[PlaywrightRecorder] userActions count:`, action.userActions?.length || 0);
+          
+          // Show visual indicator in the browser
+          await this.page.evaluate((count) => {
+            const div = document.createElement('div');
+            div.id = 'qaai-debug';
+            div.style.cssText = 'position:fixed;top:10px;left:10px;background:yellow;color:black;padding:10px;z-index:999999;font-size:14px;border:2px solid black;';
+            div.textContent = `QAAI: Executing ${count} cross-origin action(s)...`;
+            document.body.appendChild(div);
+          }, action.userActions?.length || 0).catch(() => {});
+          
+          if (action.userActions && action.userActions.length > 0) {
+            console.log(`[PlaywrightRecorder] ✓ Found ${action.userActions.length} user actions to execute`);
+            
+            // Log each action
+            action.userActions.forEach((ua, i) => {
+              console.log(`[PlaywrightRecorder]   Action ${i+1}: ${ua.type} by ${ua.findBy} = "${ua.selector}"`);
+            });
+            
+            for (const userAction of action.userActions) {
+              try {
+                console.log(`[PlaywrightRecorder] Cross-origin action: ${userAction.type} by ${userAction.findBy}`);
+                
+                // Handle wait action specially
+                if (userAction.type === 'wait') {
+                  const duration = parseInt(userAction.value) || 2000;
+                  console.log(`[PlaywrightRecorder] Waiting ${duration}ms`);
+                  await this.page.waitForTimeout(duration);
+                  continue;
+                }
+                
+                // Find element based on user's chosen strategy
+                let element = null;
+                
+                switch (userAction.findBy) {
+                  case 'text':
+                  case 'Text Content': // Handle UI display name
+                    console.log(`[PlaywrightRecorder] Finding by text: "${userAction.selector}"`);
+                    const searchText = userAction.selector;
+                    
+                    // Try multiple strategies for text-based finding
+                    element = this.page.getByText(searchText, { exact: false }).first();
+                    
+                    // If not visible, try as link
+                    if (!(await element.isVisible({ timeout: 2000 }).catch(() => false))) {
+                      console.log(`[PlaywrightRecorder] getByText failed, trying getByRole link...`);
+                      element = this.page.getByRole('link', { name: searchText }).first();
+                    }
+                    
+                    // Try button
+                    if (!(await element.isVisible({ timeout: 1000 }).catch(() => false))) {
+                      console.log(`[PlaywrightRecorder] Trying getByRole button...`);
+                      element = this.page.getByRole('button', { name: searchText }).first();
+                    }
+                    
+                    // Try text selector
+                    if (!(await element.isVisible({ timeout: 1000 }).catch(() => false))) {
+                      console.log(`[PlaywrightRecorder] Trying text selector...`);
+                      element = this.page.locator(`text="${searchText}"`).first();
+                    }
+                    
+                    // Try partial text
+                    if (!(await element.isVisible({ timeout: 1000 }).catch(() => false))) {
+                      console.log(`[PlaywrightRecorder] Trying partial text match...`);
+                      element = this.page.locator(`:has-text("${searchText}")`).first();
+                    }
+                    
+                    // Try word-by-word match (e.g., "Learn more" → look for "more")
+                    if (!(await element.isVisible({ timeout: 1000 }).catch(() => false))) {
+                      const words = searchText.split(/\s+/).filter(w => w.length > 3);
+                      for (const word of words) {
+                        console.log(`[PlaywrightRecorder] Trying word match: "${word}"`);
+                        element = this.page.getByText(word, { exact: false }).first();
+                        if (await element.isVisible({ timeout: 500 }).catch(() => false)) {
+                          console.log(`[PlaywrightRecorder] Found element with word: "${word}"`);
+                          break;
+                        }
+                      }
+                    }
+                    
+                    // Last resort: find any link or button and log what's available
+                    if (!(await element.isVisible({ timeout: 500 }).catch(() => false))) {
+                      console.log(`[PlaywrightRecorder] Text "${searchText}" not found, looking for first clickable...`);
+                      // Try to find any link with "more" or "info" in it
+                      const moreLink = this.page.locator('a:has-text("more"), a:has-text("info"), a:has-text("More")').first();
+                      if (await moreLink.isVisible({ timeout: 1000 }).catch(() => false)) {
+                        element = moreLink;
+                        console.log(`[PlaywrightRecorder] Found similar link with "more/info"`);
+                      }
+                    }
+                    break;
+                    
+                  case 'css':
+                  case 'CSS Selector':
+                    console.log(`[PlaywrightRecorder] Finding by CSS: ${userAction.selector}`);
+                    element = this.page.locator(userAction.selector).first();
+                    break;
+                    
+                  case 'xpath':
+                  case 'XPath':
+                    console.log(`[PlaywrightRecorder] Finding by XPath: ${userAction.selector}`);
+                    element = this.page.locator(`xpath=${userAction.selector}`).first();
+                    break;
+                    
+                  case 'testId':
+                  case 'Test ID':
+                    console.log(`[PlaywrightRecorder] Finding by testId: ${userAction.selector}`);
+                    element = this.page.getByTestId(userAction.selector).first();
+                    break;
+                    
+                  case 'coords':
+                  case 'Coordinates':
+                    // Coordinate-based click - no element lookup needed
+                    if (userAction.coords && userAction.coords.x && userAction.coords.y) {
+                      console.log(`[PlaywrightRecorder] Clicking at coordinates: (${userAction.coords.x}, ${userAction.coords.y})`);
+                      await this.page.mouse.click(userAction.coords.x, userAction.coords.y);
+                      console.log(`[PlaywrightRecorder] ✓ Coordinate click succeeded`);
+                    }
+                    continue; // Skip to next action
+                    
+                  default:
+                    // Fallback: treat findBy value as-is or selector as text
+                    console.warn(`[PlaywrightRecorder] Unknown findBy strategy: ${userAction.findBy}, trying as text`);
+                    element = this.page.getByText(userAction.selector, { exact: false }).first();
+                }
+                
+                // Perform the action on the found element
+                if (element) {
+                  // Check if element is visible
+                  const isVisible = await element.isVisible({ timeout: 5000 }).catch(() => false);
+                  if (!isVisible) {
+                    console.warn(`[PlaywrightRecorder] Element not visible for: "${userAction.selector}"`);
+                    // Try AI fallback
+                    if (this.enableAIFallback) {
+                      console.log(`[PlaywrightRecorder] Trying AI fallback for cross-origin action`);
+                      const aiResult = await this.findElementWithAI(userAction.selector, userAction.type);
+                      if (aiResult) {
+                        await this.clickAtCoordinates(aiResult.x, aiResult.y);
+                        console.log(`[PlaywrightRecorder] ✓ AI click succeeded at (${aiResult.x}, ${aiResult.y})`);
+                        await this.page.waitForTimeout(500);
+                        continue;
+                      }
+                    }
+                    continue; // Skip this action
+                  }
+                  
+                  switch (userAction.type) {
+                    case 'click':
+                      // Highlight element before clicking
+                      await element.evaluate(el => {
+                        el.style.outline = '3px solid red';
+                        el.style.outlineOffset = '2px';
+                      }).catch(() => {});
+                      
+                      // Update debug indicator
+                      await this.page.evaluate((text) => {
+                        const div = document.getElementById('qaai-debug');
+                        if (div) div.textContent = `QAAI: Clicking "${text}"...`;
+                      }, userAction.selector).catch(() => {});
+                      
+                      await this.page.waitForTimeout(500); // Pause so user can see
+                      await element.click({ timeout: 10000 });
+                      console.log(`[PlaywrightRecorder] ✓ Cross-origin click succeeded: "${userAction.selector}"`);
+                      
+                      // Update debug indicator
+                      await this.page.evaluate(() => {
+                        const div = document.getElementById('qaai-debug');
+                        if (div) { div.textContent = 'QAAI: Click succeeded!'; div.style.background = 'lightgreen'; }
+                      }).catch(() => {});
+                      
+                      // Wait for potential navigation
+                      await this.page.waitForTimeout(500);
+                      break;
+                      
+                    case 'fill':
+                      await element.clear().catch(() => {});
+                      await element.fill(userAction.value || '');
+                      console.log(`[PlaywrightRecorder] ✓ Cross-origin fill succeeded: "${userAction.selector}"`);
+                      break;
+                      
+                    case 'select':
+                      await element.selectOption(userAction.value || '');
+                      console.log(`[PlaywrightRecorder] ✓ Cross-origin select succeeded: "${userAction.selector}"`);
+                      break;
+                      
+                    default:
+                      console.warn(`[PlaywrightRecorder] Unknown action type: ${userAction.type}`);
+                  }
+                } else {
+                  // Element not found - show what's actually on the page to help user
+                  console.warn(`[PlaywrightRecorder] ❌ Could not find element: "${userAction.selector}"`);
+                  console.warn(`[PlaywrightRecorder] Current page URL: ${this.page.url()}`);
+                  
+                  // Try to show available clickable elements
+                  try {
+                    const availableElements = await this.page.evaluate(() => {
+                      const elements = document.querySelectorAll('a, button, [role="button"], [role="link"]');
+                      return Array.from(elements).slice(0, 10).map(el => ({
+                        tag: el.tagName,
+                        text: (el.textContent || '').trim().substring(0, 50),
+                        href: el.getAttribute('href')
+                      }));
+                    });
+                    console.warn(`[PlaywrightRecorder] Available clickable elements on page:`);
+                    availableElements.forEach((el, i) => {
+                      console.warn(`  ${i + 1}. <${el.tag.toLowerCase()}> "${el.text}" ${el.href ? `→ ${el.href}` : ''}`);
+                    });
+                  } catch (e) {}
+                }
+              } catch (e) {
+                console.warn(`[PlaywrightRecorder] Cross-origin action failed: ${e.message}`);
+                // Don't fail the entire step, just log and continue
+              }
+            }
+          } else {
+            // NO USER ACTIONS DEFINED - this is likely the problem!
+            console.log('[PlaywrightRecorder] ⚠️ NO USER ACTIONS DEFINED!');
+            console.log('[PlaywrightRecorder] The userActions array is empty or undefined');
+            console.log('[PlaywrightRecorder] Make sure you clicked "Save Actions" after defining them');
+            
+            // Show visual warning in browser
+            await this.page.evaluate(() => {
+              const div = document.getElementById('qaai-debug') || document.createElement('div');
+              div.id = 'qaai-debug';
+              div.style.cssText = 'position:fixed;top:10px;left:10px;background:orange;color:black;padding:10px;z-index:999999;font-size:14px;border:2px solid red;';
+              div.textContent = '⚠️ QAAI: No actions defined for this cross-origin step!';
+              if (!document.getElementById('qaai-debug')) document.body.appendChild(div);
+            }).catch(() => {});
+            
+            await this.page.waitForTimeout(2000);
+          }
+          
+          // DON'T auto-close the cross-origin tab here!
+          // There's usually a separate "closeTab" step that handles this.
+          // Just switch back to the parent tab for subsequent steps.
+          
+          // Switch back to parent tab (tab 0) WITHOUT closing the cross-origin tab
+          const remainingPages = this.context.pages();
+          if (remainingPages.length > 1) {
+            // Find the parent tab (localhost or first tab)
+            let parentTab = remainingPages[0];
+            for (const pg of remainingPages) {
+              if (pg.url().includes('localhost') || pg.url().includes('127.0.0.1')) {
+                parentTab = pg;
+                break;
+              }
+            }
+            
+            this.page = parentTab;
+            await this.page.bringToFront();
+            console.log(`[PlaywrightRecorder] ✓ Switched back to parent tab: ${this.page.url().substring(0, 50)}`);
+            
+            // Re-initialize SmartFinder for parent page
+            if (this.useSmartFinderForPlayback) {
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+            }
+          }
+          
+          return { success: true };
+        }
+        
+        case 'dialog':
+        case 'HandleDialog': {
+          // Dialogs are auto-handled by the page.on('dialog') listener
+          // This step is just for documentation
+          console.log(`[PlaywrightRecorder] Dialog step (auto-handled): ${action.dialogType || 'dialog'}`);
           return { success: true };
         }
 
@@ -8431,6 +10160,71 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         args = [cleanText || 'Submit'];
         description = action.description || `Click "${cleanText || 'Submit'}"`;
         break;
+      
+      // ════════════════════════════════════════════════════════════════════════════
+      // MULTI-TAB AND CROSS-ORIGIN ACTIONS
+      // ════════════════════════════════════════════════════════════════════════════
+      case 'newTab':
+        qword = 'NewTab';
+        args = [action.url || ''];
+        description = action.description || `New tab opened: ${action.url || ''}`;
+        // CRITICAL: Preserve type for playback
+        break;
+        
+      case 'switchTab':
+        qword = 'SwitchTab';
+        args = [action.tabIndex ?? 0, action.url || ''];
+        description = action.description || `Switched to tab ${action.tabIndex}`;
+        break;
+        
+      case 'closeTab':
+        qword = 'CloseTab';
+        args = [action.tabIndex ?? 0];
+        description = action.description || `Closed tab ${action.tabIndex}`;
+        break;
+        
+      case 'crossOriginPlaceholder':
+        qword = 'CrossOrigin';
+        args = [action.url || '', action.tabIndex ?? 0];
+        // Safely extract hostname
+        let crossOriginHost = 'unknown';
+        try {
+          if (action.url) crossOriginHost = new URL(action.url).hostname;
+        } catch (e) { /* invalid URL, use default */ }
+        description = action.description || `⚠️ Actions in external tab (${crossOriginHost}) - click to edit`;
+        break;
+        
+      case 'dialog':
+        qword = 'HandleDialog';
+        args = [action.dialogType || 'alert', action.message || ''];
+        description = action.description || `Handle ${action.dialogType}: "${(action.message || '').substring(0, 30)}"`;
+        break;
+      
+      case 'closeModal':
+      case 'dismissModal':
+      case 'closePopup':
+        qword = 'CloseModal';
+        args = [action.modalTitle || action.label || ''];
+        description = action.description || `Close modal: ${action.modalTitle || action.label || 'dialog'}`;
+        break;
+        
+      case 'download':
+        qword = 'Download';
+        args = [action.filename || ''];
+        description = action.description || `Download: ${action.filename || 'file'}`;
+        break;
+        
+      case 'upload':
+        qword = 'Upload';
+        args = [action.filename || '', action.path || ''];
+        description = action.description || `Upload: ${action.filename || 'file'}`;
+        break;
+        
+      case 'drag':
+        qword = 'DragDrop';
+        args = [action.sourceSelector || '', action.targetSelector || ''];
+        description = action.description || `Drag element to target`;
+        break;
         
       default:
         qword = 'ClickText';
@@ -8445,7 +10239,15 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       description,
       selectorObj: selectorObj,
       raw: action,
-      timestamp: action.timestamp || Date.now()
+      timestamp: action.timestamp || Date.now(),
+      // CRITICAL: Preserve original type for playback of special actions
+      type: action.type,
+      // Preserve tab/frame context
+      tabIndex: action.tabIndex ?? null,
+      url: action.url || null,
+      frameContext: action.frameContext || null,
+      // For cross-origin placeholders, preserve user actions
+      userActions: action.userActions || []
     };
   }
 

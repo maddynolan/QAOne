@@ -162,6 +162,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'flow-explorer-flow-complete',
       'flow-explorer-test-generated',
       'flow-explorer-error',
+      // Goal Agent events
+      'goal-agent-step',
+      'goal-agent-progress',
+      'goal-agent-complete',
+      'goal-agent-error',
     ];
     
     if (validChannels.includes(channel)) {

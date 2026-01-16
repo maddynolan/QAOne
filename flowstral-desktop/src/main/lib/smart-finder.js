@@ -87,6 +87,28 @@ class SmartFinder {
       }, attempts);
       
       if (result.success) return result.locator;
+      
+      // RADIX FIX: Try without trailing 's' (Radix tabs use singular accessible names)
+      // e.g., recorded "Tables" but accessible name is "Table"
+      if (what.role === 'tab' && what.text.endsWith('s')) {
+        const singularText = what.text.slice(0, -1);
+        const singularResult = await this.tryStrategy('role+text-singular', async () => {
+          const locator = scope.getByRole(what.role, { name: singularText });
+          return await this.resolveMultiple(locator, which, 'role+text-singular');
+        }, attempts);
+        
+        if (singularResult.success) return singularResult.locator;
+      }
+      
+      // Try regex matching (handles partial matches)
+      const regexResult = await this.tryStrategy('role+text-regex', async () => {
+        // Create regex that matches the text anywhere in accessible name
+        const escapedText = what.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const locator = scope.getByRole(what.role, { name: new RegExp(escapedText, 'i') });
+        return await this.resolveMultiple(locator, which, 'role+text-regex');
+      }, attempts);
+      
+      if (regexResult.success) return regexResult.locator;
     }
     
     // Try role-only if text didn't work

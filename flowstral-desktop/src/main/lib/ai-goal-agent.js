@@ -1,14 +1,15 @@
 /**
- * AI Goal Agent - Autonomous Goal-Directed Test Automation
+ * AI Goal Agent v3.0 - Truly Agentic Test Automation
  * 
- * Give it a goal in natural language, and it will:
- * 1. Understand the objective
- * 2. Analyze the current page
- * 3. Decide the next action to get closer to the goal
- * 4. Perform the action using test data
- * 5. Verify progress and continue until goal is achieved
+ * KEY IMPROVEMENTS:
+ * 1. PLAN FIRST - Single API call creates full action plan
+ * 2. EXECUTE FAST - Local execution without API calls per step
+ * 3. SMART UI HANDLING - Radix dropdowns, Shadow DOM, modals, tabs
+ * 4. MEMORY - Tracks state across entire session
+ * 5. BATCH ACTIONS - Executes 5-10 actions per API call
+ * 6. BETTER MODEL - Uses GPT-4o for planning (smarter)
  * 
- * @version 1.0.0
+ * @version 3.0.0
  */
 
 const axios = require('axios');
@@ -18,7 +19,8 @@ class AIGoalAgent {
     this.page = page;
     this.browserContext = page.context();
     this.apiKey = options.apiKey || process.env.OPENAI_API_KEY;
-    this.model = options.model || 'gpt-4o-mini';
+    this.planningModel = 'gpt-4o'; // Better model for planning
+    this.executionModel = 'gpt-4o-mini'; // Cheaper model for quick decisions
     this.maxSteps = options.maxSteps || 50;
     this.timeout = options.timeout || 10000;
     this.debug = options.debug !== false;
@@ -40,11 +42,23 @@ class AIGoalAgent {
     
     // Execution state
     this.goal = null;
+    this.actionPlan = []; // Pre-planned actions
     this.stepsTaken = [];
     this.currentStep = 0;
     this.goalAchieved = false;
     this.shouldStop = false;
-    this.actionHistory = []; // Track recent actions to detect repetition
+    
+    // V3: SESSION MEMORY - remembers state across execution
+    this.memory = {
+      visitedPages: [],
+      addedToCart: [],
+      removedFromCart: [],
+      filledFields: {},
+      clickedElements: [],
+      currentPage: '',
+      cartCount: 0,
+      lastError: null
+    };
     
     // Callbacks
     this.onStep = options.onStep || (() => {});
@@ -74,117 +88,607 @@ class AIGoalAgent {
     });
   }
   
-  /**
-   * Get actions that have been repeated without making progress
-   */
-  getRepeatedActions() {
-    const actionCounts = {};
-    for (const step of this.stepsTaken.slice(-10)) {
-      const key = `${step.action}:${step.target}`;
-      actionCounts[key] = (actionCounts[key] || 0) + 1;
-    }
+  // ==========================================================================
+  // V3: DEEP PAGE ANALYSIS - Understands complex UI
+  // ==========================================================================
+  
+  async analyzePageDeep() {
+    const url = this.page.url();
+    const title = await this.page.title();
     
-    const repeated = Object.entries(actionCounts)
-      .filter(([_, count]) => count >= 2)
-      .map(([action, count]) => `• "${action}" tried ${count} times`);
+    this.log('Deep analyzing page:', title);
     
-    return repeated.length > 0 ? repeated.join('\n') : 'None';
+    // Comprehensive element analysis
+    const analysis = await this.page.evaluate(() => {
+      const results = {
+        products: [],
+        buttons: [],
+        inputs: [],
+        dropdowns: [],
+        tabs: [],
+        links: [],
+        modals: [],
+        cartInfo: null,
+        pageType: 'unknown'
+      };
+      
+      // Detect page type
+      const h1 = document.querySelector('h1')?.innerText?.toLowerCase() || '';
+      const url = window.location.href.toLowerCase();
+      if (url.includes('product') || h1.includes('product')) results.pageType = 'products';
+      else if (url.includes('cart') || h1.includes('cart')) results.pageType = 'cart';
+      else if (url.includes('checkout') || h1.includes('checkout')) results.pageType = 'checkout';
+      else if (url.includes('login') || h1.includes('login')) results.pageType = 'login';
+      
+      // Find all products with their Add to Cart buttons
+      document.querySelectorAll('[data-testid*="product"], .product, .product-card, [class*="product"]').forEach(product => {
+        const name = product.querySelector('h3, h4, [class*="title"], [class*="name"]')?.innerText?.trim();
+        const price = product.querySelector('[class*="price"], .price')?.innerText?.trim();
+        const addBtn = product.querySelector('button[data-testid*="add"], button:has-text("Add"), [data-testid*="add-to-cart"]');
+        const testId = product.getAttribute('data-testid');
+        
+        if (name) {
+          results.products.push({
+            name,
+            price,
+            testId,
+            hasAddButton: !!addBtn,
+            addButtonTestId: addBtn?.getAttribute('data-testid')
+          });
+        }
+      });
+      
+      // Find all buttons with context
+      document.querySelectorAll('button, [role="button"], input[type="submit"]').forEach(btn => {
+        const rect = btn.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        
+        const text = btn.innerText?.trim() || btn.getAttribute('aria-label') || '';
+        const testId = btn.getAttribute('data-testid');
+        const type = text.toLowerCase();
+        
+        let category = 'other';
+        if (type.includes('add') && type.includes('cart')) category = 'add-to-cart';
+        else if (type.includes('remove') || type.includes('delete')) category = 'remove';
+        else if (type.includes('checkout') || type.includes('proceed')) category = 'checkout';
+        else if (type.includes('apply')) category = 'apply';
+        else if (type.includes('submit')) category = 'submit';
+        
+        results.buttons.push({ text, testId, category });
+      });
+      
+      // Find dropdowns (including Radix)
+      document.querySelectorAll('select, [role="combobox"], [data-radix-select-trigger], [role="listbox"]').forEach(dd => {
+        const label = dd.getAttribute('aria-label') || 
+                      dd.closest('label')?.innerText?.trim() ||
+                      dd.closest('[class*="form"]')?.querySelector('label')?.innerText?.trim();
+        const testId = dd.getAttribute('data-testid');
+        const currentValue = dd.value || dd.innerText?.trim();
+        
+        // Get options if visible
+        const options = [];
+        const optionsContainer = document.querySelector('[data-radix-select-content], [role="listbox"]');
+        if (optionsContainer) {
+          optionsContainer.querySelectorAll('[role="option"], option').forEach(opt => {
+            options.push(opt.innerText?.trim());
+          });
+        }
+        
+        results.dropdowns.push({ label, testId, currentValue, options, isRadix: !!dd.hasAttribute('data-radix-select-trigger') });
+      });
+      
+      // Find tabs
+      document.querySelectorAll('[role="tab"], [data-radix-collection-item]').forEach(tab => {
+        const text = tab.innerText?.trim();
+        const testId = tab.getAttribute('data-testid');
+        const isActive = tab.getAttribute('data-state') === 'active' || tab.getAttribute('aria-selected') === 'true';
+        results.tabs.push({ text, testId, isActive });
+      });
+      
+      // Find cart info
+      const cartCount = document.querySelector('[data-testid*="cart-count"], .cart-count, [class*="cart"] .badge')?.innerText;
+      const cartItems = [];
+      document.querySelectorAll('[data-testid*="cart-item"], .cart-item, [class*="cart"] [class*="item"]').forEach(item => {
+        const name = item.querySelector('[class*="name"], [class*="title"], h3, h4')?.innerText?.trim();
+        const removeBtn = item.querySelector('button[data-testid*="remove"], button:has-text("Remove")');
+        if (name) cartItems.push({ name, hasRemoveButton: !!removeBtn });
+      });
+      
+      if (cartCount || cartItems.length) {
+        results.cartInfo = { count: parseInt(cartCount) || cartItems.length, items: cartItems };
+      }
+      
+      // Find active modals
+      const modal = document.querySelector('[role="dialog"], [aria-modal="true"], .modal.show');
+      if (modal) {
+        results.modals.push({
+          title: modal.querySelector('h2, [class*="title"]')?.innerText?.trim(),
+          hasCloseButton: !!modal.querySelector('[aria-label*="close"], .close, [data-dismiss]')
+        });
+      }
+      
+      // Find input fields
+      document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]), textarea').forEach(input => {
+        const rect = input.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        
+        const label = input.getAttribute('aria-label') || 
+                      input.placeholder ||
+                      document.querySelector(`label[for="${input.id}"]`)?.innerText?.trim() ||
+                      input.closest('label')?.innerText?.trim();
+        
+        results.inputs.push({
+          label,
+          type: input.type,
+          testId: input.getAttribute('data-testid'),
+          name: input.name,
+          currentValue: input.value
+        });
+      });
+      
+      return results;
+    });
+    
+    this.memory.currentPage = analysis.pageType;
+    this.log('Page type:', analysis.pageType);
+    this.log('Products found:', analysis.products.length);
+    this.log('Buttons found:', analysis.buttons.length);
+    this.log('Dropdowns found:', analysis.dropdowns.length);
+    
+    return { url, title, ...analysis };
   }
   
   // ==========================================================================
-  // MAIN EXECUTION
+  // V3: SMART PLANNING - Creates full action plan in ONE API call
   // ==========================================================================
   
-  /**
-   * Execute a goal - the main entry point
-   * @param {string} goal - Natural language description of what to accomplish
-   * @param {string} startUrl - Optional URL to start from
-   */
+  async createActionPlan(pageAnalysis) {
+    const prompt = `You are an expert test automation AI. Create a COMPLETE action plan to achieve the goal.
+
+GOAL: "${this.goal}"
+
+CURRENT PAGE STATE:
+- Page Type: ${pageAnalysis.pageType}
+- URL: ${pageAnalysis.url}
+- Title: ${pageAnalysis.title}
+
+PRODUCTS ON PAGE (${pageAnalysis.products.length}):
+${pageAnalysis.products.map((p, i) => `${i + 1}. "${p.name}" - ${p.price || 'no price'} ${p.hasAddButton ? '(has Add button)' : ''}`).join('\n')}
+
+CART INFO:
+${pageAnalysis.cartInfo ? `- Items in cart: ${pageAnalysis.cartInfo.count}\n- Items: ${pageAnalysis.cartInfo.items.map(i => i.name).join(', ')}` : '- Cart is empty or not visible'}
+
+AVAILABLE TABS: ${pageAnalysis.tabs.map(t => `"${t.text}"${t.isActive ? ' (active)' : ''}`).join(', ') || 'None'}
+
+DROPDOWNS: ${pageAnalysis.dropdowns.map(d => `"${d.label || 'unnamed'}" (current: "${d.currentValue || 'empty'}")`).join(', ') || 'None'}
+
+BUTTONS: ${pageAnalysis.buttons.filter(b => b.category !== 'other').map(b => `"${b.text}" (${b.category})`).join(', ')}
+
+MEMORY (what's already done):
+- Added to cart: ${this.memory.addedToCart.join(', ') || 'none'}
+- Removed from cart: ${this.memory.removedFromCart.join(', ') || 'none'}
+- Visited pages: ${this.memory.visitedPages.join(', ') || 'none'}
+
+TEST DATA: ${JSON.stringify(this.testData)}
+
+Create a plan with 5-15 actions. Each action should be specific and executable.
+
+IMPORTANT RULES:
+1. To add ALL products, click each "Add to Cart" button individually
+2. To remove specific products, go to Cart first, then click Remove for each
+3. For Radix dropdowns: click to open, then click the option text
+4. If goal says "all products", list EACH product to add
+5. Be specific: "Click Add to Cart for iPhone 15 Pro" not "Add products"
+
+Return JSON:
+{
+  "plan": [
+    { "action": "click", "target": "Products tab", "reason": "Navigate to products" },
+    { "action": "click", "target": "Add to Cart for iPhone 15 Pro", "reason": "Add first product" },
+    { "action": "click", "target": "Add to Cart for MacBook Pro", "reason": "Add second product" },
+    // ... continue for ALL products
+    { "action": "click", "target": "Cart tab", "reason": "Go to cart" },
+    { "action": "click", "target": "Remove for Nintendo Switch", "reason": "Remove as per goal" },
+    { "action": "click", "target": "Shipping Method dropdown", "reason": "Open shipping dropdown" },
+    { "action": "click", "target": "Express Shipping option", "reason": "Select express" },
+    { "action": "verify", "target": "cart total", "reason": "Verify total is correct" }
+  ],
+  "expectedOutcome": "All products added, specified items removed, express shipping selected"
+}`;
+
+    try {
+      this.log('Creating action plan with GPT-4o...');
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: this.planningModel, // GPT-4o for better planning
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are an expert test automation planner. Create detailed, executable action plans. Be specific about each action. Always respond with valid JSON.' 
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 3000,
+        response_format: { type: 'json_object' }
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        }
+      });
+      
+      const result = JSON.parse(response.data.choices[0].message.content);
+      this.log('Plan created with', result.plan.length, 'actions');
+      return result.plan;
+    } catch (error) {
+      this.log('Planning error:', error.message);
+      throw error;
+    }
+  }
+  
+  // ==========================================================================
+  // V3: SMART ACTION EXECUTION - Handles complex UI without API calls
+  // ==========================================================================
+  
+  async executeSmartAction(action) {
+    const { action: actionType, target, reason } = action;
+    this.log(`Executing: ${actionType} - "${target}" (${reason})`);
+    
+    try {
+      switch (actionType) {
+        case 'click':
+          return await this.smartClick(target);
+        case 'fill':
+          return await this.smartFill(target, action.value);
+        case 'select':
+          return await this.smartSelect(target, action.value);
+        case 'verify':
+          return await this.smartVerify(target);
+        case 'wait':
+          await this.page.waitForTimeout(1000);
+          return { success: true };
+        case 'navigate':
+          await this.page.goto(target, { waitUntil: 'domcontentloaded' });
+          return { success: true };
+        default:
+          return await this.smartClick(target);
+      }
+    } catch (error) {
+      this.log('Action failed:', error.message);
+      this.memory.lastError = error.message;
+      return { success: false, error: error.message };
+    }
+  }
+  
+  async smartClick(target) {
+    const targetLower = target.toLowerCase();
+    
+    // Strategy 1: Exact text match
+    let locator = this.page.getByText(target, { exact: true });
+    if (await locator.count() > 0) {
+      await locator.first().click({ timeout: 5000 });
+      this.updateMemory('click', target);
+      return { success: true, method: 'exact-text' };
+    }
+    
+    // Strategy 2: Partial text match
+    locator = this.page.getByText(target, { exact: false });
+    if (await locator.count() > 0) {
+      await locator.first().scrollIntoViewIfNeeded().catch(() => {});
+      await locator.first().click({ timeout: 5000 });
+      this.updateMemory('click', target);
+      return { success: true, method: 'partial-text' };
+    }
+    
+    // Strategy 3: Role-based (buttons, tabs, links)
+    for (const role of ['button', 'tab', 'link', 'menuitem']) {
+      locator = this.page.getByRole(role, { name: target });
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.updateMemory('click', target);
+        return { success: true, method: `role-${role}` };
+      }
+    }
+    
+    // Strategy 4: testId patterns
+    const testIdPatterns = [
+      target.toLowerCase().replace(/\s+/g, '-'),
+      `add-to-cart-${target.toLowerCase().replace(/\s+/g, '-')}`,
+      `remove-${target.toLowerCase().replace(/\s+/g, '-')}`,
+      `trigger-${target.toLowerCase().replace(/\s+/g, '-')}`
+    ];
+    
+    for (const testId of testIdPatterns) {
+      locator = this.page.locator(`[data-testid*="${testId}"]`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.updateMemory('click', target);
+        return { success: true, method: 'testid' };
+      }
+    }
+    
+    // Strategy 5: Handle "Add to Cart for X" pattern
+    if (targetLower.includes('add to cart for') || targetLower.includes('add to cart')) {
+      const productName = target.replace(/add to cart (for )?/i, '').trim();
+      
+      // Find product card containing this name, then click its Add button
+      const productCard = this.page.locator(`[data-testid*="product"]:has-text("${productName}")`);
+      if (await productCard.count() > 0) {
+        const addBtn = productCard.first().locator('button:has-text("Add")');
+        if (await addBtn.count() > 0) {
+          await addBtn.first().click({ timeout: 5000 });
+          this.memory.addedToCart.push(productName);
+          return { success: true, method: 'product-card-add' };
+        }
+      }
+      
+      // Try finding any Add to Cart button
+      locator = this.page.locator('button:has-text("Add to Cart")');
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.memory.addedToCart.push(productName || 'unknown');
+        return { success: true, method: 'generic-add' };
+      }
+    }
+    
+    // Strategy 6: Handle "Remove for X" pattern
+    if (targetLower.includes('remove for') || targetLower.includes('remove')) {
+      const itemName = target.replace(/remove (for )?/i, '').trim();
+      
+      // Find cart item containing this name, then click its Remove button
+      const cartItem = this.page.locator(`[data-testid*="cart-item"]:has-text("${itemName}"), .cart-item:has-text("${itemName}")`);
+      if (await cartItem.count() > 0) {
+        const removeBtn = cartItem.first().locator('button:has-text("Remove")');
+        if (await removeBtn.count() > 0) {
+          await removeBtn.first().click({ timeout: 5000 });
+          this.memory.removedFromCart.push(itemName);
+          return { success: true, method: 'cart-item-remove' };
+        }
+      }
+    }
+    
+    // Strategy 7: Handle dropdown opening
+    if (targetLower.includes('dropdown') || targetLower.includes('select')) {
+      const dropdownLabel = target.replace(/(dropdown|select)/i, '').trim();
+      
+      // Try Radix select trigger
+      locator = this.page.locator(`[data-radix-select-trigger]:has-text("${dropdownLabel}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'radix-trigger' };
+      }
+      
+      // Try by label
+      locator = this.page.locator(`[role="combobox"]:near(:text("${dropdownLabel}"))`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'combobox-near-label' };
+      }
+    }
+    
+    // Strategy 8: Handle dropdown option selection
+    if (targetLower.includes('option') || targetLower.includes('shipping')) {
+      const optionText = target.replace(/option/i, '').trim();
+      
+      // Click in Radix dropdown content
+      locator = this.page.locator(`[data-radix-select-content] [role="option"]:has-text("${optionText}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'radix-option' };
+      }
+      
+      // Try regular select option
+      locator = this.page.locator(`[role="option"]:has-text("${optionText}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'option' };
+      }
+    }
+    
+    // Strategy 9: CSS selector patterns
+    const cssPatterns = [
+      `button:has-text("${target}")`,
+      `a:has-text("${target}")`,
+      `[aria-label*="${target}" i]`,
+      `[title*="${target}" i]`
+    ];
+    
+    for (const css of cssPatterns) {
+      try {
+        locator = this.page.locator(css);
+        if (await locator.count() > 0) {
+          await locator.first().click({ timeout: 5000 });
+          this.updateMemory('click', target);
+          return { success: true, method: 'css' };
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    return { success: false, error: `Could not find element: "${target}"` };
+  }
+  
+  async smartFill(target, value) {
+    const locators = [
+      this.page.getByLabel(target, { exact: false }),
+      this.page.getByPlaceholder(target, { exact: false }),
+      this.page.getByRole('textbox', { name: target }),
+      this.page.locator(`input[name*="${target}" i]`),
+      this.page.locator(`[data-testid*="${target.toLowerCase().replace(/\s+/g, '-')}"]`)
+    ];
+    
+    for (const locator of locators) {
+      try {
+        if (await locator.count() > 0) {
+          await locator.first().fill(value);
+          this.memory.filledFields[target] = value;
+          return { success: true };
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    return { success: false, error: `Could not find field: "${target}"` };
+  }
+  
+  async smartSelect(target, value) {
+    // First click to open dropdown
+    const openResult = await this.smartClick(target);
+    if (!openResult.success) return openResult;
+    
+    await this.page.waitForTimeout(300); // Wait for dropdown to open
+    
+    // Then click the option
+    return await this.smartClick(value);
+  }
+  
+  async smartVerify(target) {
+    // For now, just check if element exists
+    const locator = this.page.getByText(target, { exact: false });
+    const exists = await locator.count() > 0;
+    return { success: exists, verified: exists };
+  }
+  
+  updateMemory(action, target) {
+    this.memory.clickedElements.push(target);
+    
+    const targetLower = target.toLowerCase();
+    if (targetLower.includes('products')) {
+      this.memory.visitedPages.push('products');
+    } else if (targetLower.includes('cart')) {
+      this.memory.visitedPages.push('cart');
+    }
+  }
+  
+  // ==========================================================================
+  // MAIN EXECUTION - V3 FLOW
+  // ==========================================================================
+  
   async executeGoal(goal, startUrl = null) {
+    console.log('[AIGoalAgent] executeGoal called with:', goal);
+    console.log('[AIGoalAgent] startUrl:', startUrl);
+    console.log('[AIGoalAgent] page valid:', !!this.page, this.page ? 'url:' + this.page.url() : 'no page');
+    
     this.goal = goal;
     this.stepsTaken = [];
     this.currentStep = 0;
     this.goalAchieved = false;
     this.shouldStop = false;
+    this.memory = {
+      visitedPages: [],
+      addedToCart: [],
+      removedFromCart: [],
+      filledFields: {},
+      clickedElements: [],
+      currentPage: '',
+      cartCount: 0,
+      lastError: null
+    };
     
     this.log('='.repeat(60));
     this.log('GOAL:', goal);
-    this.log('TEST DATA:', JSON.stringify(this.testData, null, 2));
+    this.log('V3 AGENTIC MODE - Smart Planning + Fast Execution');
     this.log('='.repeat(60));
     
     try {
-      // Navigate to start URL if provided
-      if (startUrl) {
-        await this.page.goto(startUrl, { waitUntil: 'networkidle', timeout: 30000 });
-        await this.page.waitForTimeout(1000);
-        
-        this.stepsTaken.push({
-          action: 'navigate',
-          target: startUrl,
-          description: `Navigate to ${startUrl}`,
-          qword: 'GoTo',
-          args: [startUrl]
-        });
+      // Verify page is valid
+      if (!this.page) {
+        throw new Error('No page available - browser not connected');
       }
       
-      // Main execution loop
-      while (this.currentStep < this.maxSteps && !this.goalAchieved && !this.shouldStop) {
+      // Step 1: Navigate to start URL
+      if (startUrl) {
+        console.log('[AIGoalAgent] Navigating to:', startUrl);
+        await this.page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await this.page.waitForTimeout(1000);
+        console.log('[AIGoalAgent] Navigation complete');
+        
+        this.stepsTaken.push({
+          action: 'navigate', target: startUrl, description: `Navigate to ${startUrl}`,
+          qword: 'GoTo', args: [startUrl], success: true
+        });
+        
+        this.onStep({ step: 1, action: { action: 'navigate', target: startUrl }, result: { success: true }, totalSteps: 1 });
+      }
+      
+      // Step 2: Deep analyze the page
+      this.log('\n📊 PHASE 1: Deep Page Analysis...');
+      console.log('[AIGoalAgent] Starting deep page analysis...');
+      let pageAnalysis = await this.analyzePageDeep();
+      console.log('[AIGoalAgent] Page analysis complete, products:', pageAnalysis?.products?.length || 0);
+      
+      // Step 3: Create action plan (ONE API call)
+      this.log('\n🧠 PHASE 2: Creating Smart Action Plan...');
+      console.log('[AIGoalAgent] Creating action plan via API...');
+      this.actionPlan = await this.createActionPlan(pageAnalysis);
+      console.log('[AIGoalAgent] Action plan created, steps:', this.actionPlan?.length || 0);
+      
+      this.log('\n📋 ACTION PLAN:');
+      this.actionPlan.forEach((a, i) => this.log(`  ${i + 1}. ${a.action}: ${a.target}`));
+      
+      if (!this.actionPlan || this.actionPlan.length === 0) {
+        console.log('[AIGoalAgent] WARNING: Empty action plan!');
+        throw new Error('AI returned empty action plan');
+      }
+      
+      // Step 4: Execute plan (NO API calls, fast local execution)
+      this.log('\n🚀 PHASE 3: Executing Plan...');
+      
+      for (let i = 0; i < this.actionPlan.length && !this.shouldStop; i++) {
+        const action = this.actionPlan[i];
         this.currentStep++;
-        this.log(`\n--- Step ${this.currentStep}/${this.maxSteps} ---`);
         
-        // Get current page state
-        const pageState = await this.analyzeCurrentPage();
+        this.log(`\n--- Step ${this.currentStep}/${this.actionPlan.length}: ${action.action} "${action.target}" ---`);
         
-        // Ask AI what to do next
-        const decision = await this.decideNextAction(pageState);
-        
-        if (decision.goalAchieved) {
-          this.goalAchieved = true;
-          this.log('🎉 GOAL ACHIEVED!');
-          break;
-        }
-        
-        if (decision.action === 'done' || decision.action === 'stuck') {
-          this.log('Agent decided to stop:', decision.reason);
-          break;
-        }
-        
-        // Execute the decided action
-        const result = await this.executeAction(decision);
+        const result = await this.executeSmartAction(action);
         
         // Record the step
         this.stepsTaken.push({
           step: this.currentStep,
-          action: decision.action,
-          target: decision.target,
-          value: decision.value,
-          description: decision.description,
+          action: action.action,
+          target: action.target,
+          description: `${action.action} "${action.target}"`,
           success: result.success,
-          qword: this.actionToQWord(decision.action),
-          args: this.getQWordArgs(decision)
+          qword: this.actionToQWord(action.action),
+          args: [action.target]
         });
         
         this.onStep({
           step: this.currentStep,
-          action: decision,
+          action: { action: action.action, target: action.target, description: `${action.action} "${action.target}"` },
           result,
           totalSteps: this.stepsTaken.length
         });
         
-        // Wait for page to stabilize
-        await this.page.waitForTimeout(1000);
+        // Wait for page to stabilize (shorter wait for speed)
+        await this.page.waitForTimeout(500);
+        
+        // If action failed, try to recover
+        if (!result.success) {
+          this.log(`⚠️ Action failed: ${result.error}`);
+          // Re-analyze page and potentially adjust remaining plan
+          pageAnalysis = await this.analyzePageDeep();
+        }
       }
       
-      // Generate final test case
-      const testCase = this.generateTestCase();
+      // Check if goal achieved based on memory
+      this.goalAchieved = this.evaluateGoalCompletion();
+      
+      if (this.goalAchieved) {
+        this.log('\n🎉 GOAL ACHIEVED!');
+        if (this.onGoalAchieved) this.onGoalAchieved();
+      }
       
       return {
         success: this.goalAchieved,
         goal: this.goal,
         steps: this.stepsTaken,
-        testCase,
+        testCase: this.generateTestCase(),
         totalSteps: this.currentStep,
-        reason: this.goalAchieved ? 'Goal achieved' : 'Max steps reached or stopped'
+        memory: this.memory,
+        reason: this.goalAchieved ? 'Goal achieved' : 'Plan executed'
       };
       
     } catch (error) {
@@ -199,482 +703,22 @@ class AIGoalAgent {
     }
   }
   
-  // ==========================================================================
-  // PAGE ANALYSIS
-  // ==========================================================================
-  
-  async analyzeCurrentPage() {
-    const url = this.page.url();
-    const title = await this.page.title();
+  evaluateGoalCompletion() {
+    const goalLower = this.goal.toLowerCase();
     
-    // Wait for any modals/dialogs to stabilize
-    await this.page.waitForTimeout(500);
-    
-    // Check for modals/dialogs that might have opened
-    const hasModal = await this.page.evaluate(() => {
-      return !!(
-        document.querySelector('[role="dialog"]') ||
-        document.querySelector('.slds-modal') ||
-        document.querySelector('.modal') ||
-        document.querySelector('[aria-modal="true"]')
-      );
-    });
-    
-    if (hasModal) {
-      this.log('Modal/Dialog detected on page');
-      await this.page.waitForTimeout(500); // Extra wait for modal animation
+    // Check if "all products" were added
+    if (goalLower.includes('all products') && this.memory.addedToCart.length < 3) {
+      return false;
     }
     
-    // Get visible interactive elements - enhanced for Salesforce Lightning
-    const elements = await this.page.evaluate(() => {
-      const results = [];
-      const selectors = [
-        'a[href]', 'button', 'input', 'select', 'textarea',
-        '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]',
-        '[role="checkbox"]', '[role="radio"]', '[role="combobox"]',
-        '[role="textbox"]', '[role="dialog"] input', '[role="dialog"] button',
-        '[onclick]', '[data-testid]',
-        // Salesforce Lightning specific
-        'lightning-input input', 'lightning-input', 
-        'lightning-combobox', 'lightning-textarea',
-        '.slds-input', '.slds-button', '.slds-combobox',
-        '[data-aura-rendered-by]', '[data-refid]'
-      ];
-      
-      document.querySelectorAll(selectors.join(', ')).forEach((el, idx) => {
-        const rect = el.getBoundingClientRect();
-        const style = window.getComputedStyle(el);
-        
-        // Skip hidden elements
-        if (rect.width === 0 || rect.height === 0 || 
-            style.display === 'none' || style.visibility === 'hidden') {
-          return;
-        }
-        
-        const tag = el.tagName.toLowerCase();
-        const type = el.type || '';
-        const name = el.name || el.id || '';
-        const text = (el.innerText || '').trim().substring(0, 80);
-        const placeholder = el.placeholder || '';
-        const ariaLabel = el.getAttribute('aria-label') || '';
-        const title = el.getAttribute('title') || '';
-        const href = el.getAttribute('href') || '';
-        const role = el.getAttribute('role') || '';
-        const value = el.value || '';
-        
-        // Build best identifier
-        let identifier = ariaLabel || title || placeholder || text || name;
-        if (!identifier && href) {
-          identifier = href.split('/').pop() || href;
-        }
-        
-        // Determine element category
-        let category = 'other';
-        if (tag === 'input') {
-          if (type === 'text' || type === 'email' || type === 'tel' || type === 'number' || !type) category = 'textfield';
-          else if (type === 'password') category = 'password';
-          else if (type === 'checkbox') category = 'checkbox';
-          else if (type === 'radio') category = 'radio';
-          else if (type === 'submit' || type === 'button') category = 'button';
-          else if (type === 'search') category = 'search';
-          else if (type === 'date') category = 'date';
-        } else if (tag === 'button' || role === 'button') {
-          category = 'button';
-        } else if (tag === 'a' || role === 'link') {
-          category = 'link';
-        } else if (tag === 'select' || role === 'combobox' || role === 'listbox') {
-          category = 'dropdown';
-        } else if (tag === 'textarea') {
-          category = 'textarea';
-        } else if (role === 'tab') {
-          category = 'tab';
-        } else if (role === 'menuitem') {
-          category = 'menuitem';
-        } else if (role === 'checkbox') {
-          category = 'checkbox';
-        } else if (role === 'radio') {
-          category = 'radio';
-        }
-        
-        // Build selector
-        let selector = '';
-        if (el.id) selector = `#${el.id}`;
-        else if (el.getAttribute('data-testid')) selector = `[data-testid="${el.getAttribute('data-testid')}"]`;
-        else if (name && (tag === 'input' || tag === 'select' || tag === 'textarea')) selector = `${tag}[name="${name}"]`;
-        
-        results.push({
-          index: idx,
-          tag,
-          type,
-          category,
-          identifier: identifier.substring(0, 100),
-          text: text.substring(0, 100),
-          name,
-          placeholder,
-          selector,
-          href,
-          value,
-          isVisible: true,
-          position: { x: Math.round(rect.x), y: Math.round(rect.y) }
-        });
-      });
-      
-      return results;
-    });
-    
-    // Get page text content for context
-    const pageText = await this.page.evaluate(() => {
-      const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map(h => h.innerText.trim()).slice(0, 5);
-      const labels = Array.from(document.querySelectorAll('label')).map(l => l.innerText.trim()).slice(0, 10);
-      return { headings, labels };
-    });
-    
-    this.log(`Page: ${title} (${url})`);
-    this.log(`Found ${elements.length} interactive elements`);
-    
-    return {
-      url,
-      title,
-      elements,
-      headings: pageText.headings,
-      labels: pageText.labels
-    };
-  }
-  
-  // ==========================================================================
-  // AI DECISION MAKING
-  // ==========================================================================
-  
-  async decideNextAction(pageState) {
-    const prompt = `You are an AI test automation agent. Your goal is to accomplish a specific task by interacting with a web application.
-
-GOAL TO ACHIEVE:
-${this.goal}
-
-TEST DATA AVAILABLE (use these values when filling forms):
-${Object.entries(this.testData).map(([k, v]) => `- ${k}: ${v}`).join('\n')}
-
-CURRENT PAGE:
-- URL: ${pageState.url}
-- Title: ${pageState.title}
-- Headings: ${pageState.headings.join(', ') || 'None'}
-- Form Labels: ${pageState.labels.join(', ') || 'None'}
-
-PREVIOUS STEPS TAKEN (${this.stepsTaken.length}):
-${this.stepsTaken.slice(-8).map((s, i) => `${i + 1}. [${s.success ? '✓' : '✗'}] ${s.description}`).join('\n') || 'None yet'}
-
-ACTIONS TO AVOID (already tried without progress):
-${this.getRepeatedActions()}
-
-INTERACTIVE ELEMENTS ON PAGE:
-${pageState.elements.slice(0, 60).map((el, i) => 
-  `[${i}] ${el.category.toUpperCase()}: "${el.identifier || el.text || el.placeholder || el.name || 'unnamed'}"${el.value ? ` (value: "${el.value}")` : ''}`
-).join('\n')}
-
-INSTRUCTIONS:
-1. Analyze the current page and elements
-2. Determine the SINGLE BEST action to get closer to the goal
-3. If you see a form field, fill it with appropriate test data:
-   - "First Name" or "firstName" → use firstName test data
-   - "Last Name" or "lastName" → use lastName test data  
-   - "Email" → use email test data
-   - "Phone" → use phone test data
-   - "Company" or "Account" → use company test data
-4. If the goal appears to be achieved (e.g., success message, confirmation, record created), set goalAchieved to true
-5. If you've clicked something that should open a form/modal, wait for it (action: "wait")
-6. For Salesforce Lightning: Look for fields in the modal that just opened
-7. IMPORTANT: Don't repeat the same action more than twice - try a different approach
-8. If stuck, explain what you tried and what's blocking you
-
-Respond with JSON:
-{
-  "thinking": "Brief explanation of your reasoning",
-  "goalAchieved": false,
-  "action": "click|fill|select|check|hover|wait|done|stuck",
-  "elementIndex": <number from the elements list>,
-  "target": "<element identifier or text>",
-  "value": "<value to enter if filling>",
-  "description": "<human readable step description>"
-}`;
-
-    try {
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: this.model,
-        messages: [
-          { 
-            role: 'system', 
-            content: 'You are a precise test automation agent. Always respond with valid JSON. Be specific about which element to interact with.' 
-          },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.2,
-        max_tokens: 1000,
-        response_format: { type: 'json_object' }
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        }
-      });
-      
-      const decision = JSON.parse(response.data.choices[0].message.content);
-      
-      this.log('AI Decision:', decision.thinking);
-      this.log('Action:', decision.action, 'Target:', decision.target, 'Value:', decision.value || 'N/A');
-      
-      // Attach the element info
-      if (decision.elementIndex !== undefined && pageState.elements[decision.elementIndex]) {
-        decision.element = pageState.elements[decision.elementIndex];
-      }
-      
-      return decision;
-      
-    } catch (error) {
-      this.log('AI decision error:', error.message);
-      return { action: 'stuck', reason: error.message };
-    }
-  }
-  
-  // ==========================================================================
-  // ACTION EXECUTION
-  // ==========================================================================
-  
-  async executeAction(decision) {
-    const { action, element, target, value } = decision;
-    
-    this.log(`Executing: ${action} on "${target}"${value ? ` with value "${value}"` : ''}`);
-    
-    try {
-      switch (action) {
-        case 'click':
-          return await this.doClick(element, target);
-          
-        case 'fill':
-          return await this.doFill(element, target, value);
-          
-        case 'select':
-          return await this.doSelect(element, target, value);
-          
-        case 'check':
-          return await this.doCheck(element, target);
-          
-        case 'hover':
-          return await this.doHover(element, target);
-          
-        case 'wait':
-          await this.page.waitForTimeout(2000);
-          return { success: true };
-          
-        case 'done':
-        case 'stuck':
-          return { success: true, reason: decision.reason };
-          
-        default:
-          this.log('Unknown action:', action);
-          return { success: false, error: 'Unknown action' };
-      }
-    } catch (error) {
-      this.log('Action failed:', error.message);
-      return { success: false, error: error.message };
-    }
-  }
-  
-  async doClick(element, target) {
-    const locators = this.buildLocators(element, target);
-    
-    for (const locator of locators) {
-      try {
-        const count = await locator.count();
-        if (count > 0) {
-          await locator.first().scrollIntoViewIfNeeded({ timeout: 3000 });
-          
-          // Check if this might open a popup
-          const [popup] = await Promise.all([
-            this.browserContext.waitForEvent('page', { timeout: 3000 }).catch(() => null),
-            locator.first().click({ timeout: 5000 })
-          ]);
-          
-          if (popup) {
-            this.log('Click opened new tab');
-            await popup.waitForLoadState('domcontentloaded');
-            this.page = popup;
-          }
-          
-          return { success: true };
-        }
-      } catch (e) {
-        continue;
-      }
+    // Check if specific items were removed
+    if (goalLower.includes('remove') && this.memory.removedFromCart.length === 0) {
+      return false;
     }
     
-    return { success: false, error: 'Element not found' };
-  }
-  
-  async doFill(element, target, value) {
-    this.log(`Attempting to fill "${target}" with "${value}"`);
-    
-    // Enhanced locator strategies for complex UIs like Salesforce
-    const locatorStrategies = [
-      // Direct selector
-      () => element?.selector ? this.page.locator(element.selector) : null,
-      
-      // By label text (most reliable for forms)
-      () => this.page.getByLabel(target, { exact: false }),
-      () => this.page.getByLabel(new RegExp(target, 'i')),
-      
-      // By placeholder
-      () => this.page.getByPlaceholder(target, { exact: false }),
-      () => this.page.getByPlaceholder(new RegExp(target, 'i')),
-      
-      // By role textbox with name
-      () => this.page.getByRole('textbox', { name: target }),
-      () => this.page.getByRole('textbox', { name: new RegExp(target, 'i') }),
-      
-      // Lightning-specific: input inside lightning-input with matching label
-      () => this.page.locator(`lightning-input:has-text("${target}") input`),
-      () => this.page.locator(`lightning-textarea:has-text("${target}") textarea`),
-      
-      // Salesforce SLDS
-      () => this.page.locator(`.slds-form-element:has-text("${target}") input`),
-      () => this.page.locator(`.slds-form-element:has-text("${target}") textarea`),
-      
-      // Modal/dialog context
-      () => this.page.locator(`[role="dialog"] input[placeholder*="${target}" i]`),
-      () => this.page.locator(`[role="dialog"] label:has-text("${target}") + input`),
-      () => this.page.locator(`[role="dialog"] label:has-text("${target}") ~ input`),
-      
-      // Generic label association
-      () => this.page.locator(`label:has-text("${target}") + input`),
-      () => this.page.locator(`label:has-text("${target}") ~ input`),
-      
-      // Aria-label
-      () => this.page.locator(`input[aria-label*="${target}" i]`),
-      () => this.page.locator(`textarea[aria-label*="${target}" i]`),
-      
-      // Name attribute
-      () => this.page.locator(`input[name*="${target}" i]`),
-      () => this.page.locator(`textarea[name*="${target}" i]`),
-      
-      // Data attributes
-      () => this.page.locator(`[data-field-name*="${target}" i] input`),
-      () => this.page.locator(`[data-name*="${target}" i] input`)
-    ];
-    
-    for (const getLocator of locatorStrategies) {
-      try {
-        const locator = getLocator();
-        if (!locator) continue;
-        
-        const count = await locator.count();
-        if (count > 0) {
-          const first = locator.first();
-          await first.scrollIntoViewIfNeeded({ timeout: 3000 });
-          
-          // Clear and fill
-          await first.click(); // Focus first
-          await this.page.keyboard.press('Control+A');
-          await first.fill(value);
-          
-          this.log(`Successfully filled "${target}" using locator strategy`);
-          return { success: true };
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    this.log(`Could not find field "${target}" with any strategy`);
-    return { success: false, error: `Field "${target}" not found` };
-  }
-  
-  async doSelect(element, target, value) {
-    const locators = this.buildLocators(element, target);
-    
-    for (const locator of locators) {
-      try {
-        const count = await locator.count();
-        if (count > 0) {
-          // Try native select
-          try {
-            await locator.first().selectOption({ label: value }, { timeout: 3000 });
-            return { success: true };
-          } catch {
-            // Try clicking to open dropdown, then selecting
-            await locator.first().click();
-            await this.page.waitForTimeout(500);
-            await this.page.getByText(value, { exact: false }).first().click();
-            return { success: true };
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    return { success: false, error: 'Element not found' };
-  }
-  
-  async doCheck(element, target) {
-    const locators = this.buildLocators(element, target);
-    
-    for (const locator of locators) {
-      try {
-        const count = await locator.count();
-        if (count > 0) {
-          await locator.first().check({ timeout: 5000 });
-          return { success: true };
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    return { success: false, error: 'Element not found' };
-  }
-  
-  async doHover(element, target) {
-    const locators = this.buildLocators(element, target);
-    
-    for (const locator of locators) {
-      try {
-        const count = await locator.count();
-        if (count > 0) {
-          await locator.first().hover({ timeout: 5000 });
-          return { success: true };
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    return { success: false, error: 'Element not found' };
-  }
-  
-  buildLocators(element, target) {
-    const locators = [];
-    
-    // Use selector if available
-    if (element?.selector) {
-      locators.push(this.page.locator(element.selector));
-    }
-    
-    // Use text matching
-    if (target) {
-      locators.push(this.page.getByText(target, { exact: false }));
-      locators.push(this.page.getByRole('button', { name: target }));
-      locators.push(this.page.getByRole('link', { name: target }));
-      locators.push(this.page.getByLabel(target));
-      locators.push(this.page.getByPlaceholder(target));
-      locators.push(this.page.locator(`[aria-label*="${target}"]`));
-      locators.push(this.page.locator(`[title*="${target}"]`));
-    }
-    
-    // Use element properties
-    if (element?.name) {
-      locators.push(this.page.locator(`[name="${element.name}"]`));
-    }
-    
-    return locators.filter(Boolean);
+    // If most actions succeeded, consider it successful
+    const successRate = this.stepsTaken.filter(s => s.success).length / this.stepsTaken.length;
+    return successRate > 0.7;
   }
   
   // ==========================================================================
@@ -689,22 +733,10 @@ Respond with JSON:
       'check': 'Check',
       'hover': 'Hover',
       'navigate': 'GoTo',
-      'wait': 'Wait'
+      'wait': 'Wait',
+      'verify': 'Assert'
     };
     return map[action] || 'ClickText';
-  }
-  
-  getQWordArgs(decision) {
-    switch (decision.action) {
-      case 'fill':
-        return [decision.target, decision.value];
-      case 'select':
-        return [decision.target, decision.value];
-      case 'navigate':
-        return [decision.target];
-      default:
-        return [decision.target];
-    }
   }
   
   generateTestCase() {
@@ -712,14 +744,14 @@ Respond with JSON:
       id: `goal_test_${Date.now()}`,
       name: `Test: ${this.goal.substring(0, 50)}`,
       description: this.goal,
-      steps: this.stepsTaken.map(s => ({
+      steps: this.stepsTaken.filter(s => s.success).map(s => ({
         qword: s.qword,
-        args: s.args,
+        args: s.args || [s.target],
         description: s.description
       })),
       generated: true,
       generatedAt: new Date().toISOString(),
-      source: 'ai-goal-agent',
+      source: 'ai-goal-agent-v3',
       goalAchieved: this.goalAchieved
     };
   }

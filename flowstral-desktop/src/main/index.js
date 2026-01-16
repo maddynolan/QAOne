@@ -711,6 +711,12 @@ ipcMain.handle('playwright-recorder-start', async (event, url) => {
         webappView?.webContents.send('playwright-recorder-paused');
       });
       
+      // Forward cross-origin tab event so UI can prompt user
+      playwrightRecorder.on('crossOriginTab', (data) => {
+        console.log('[PlaywrightRecorder] Cross-origin tab detected:', data.url);
+        webappView?.webContents.send('playwright-recorder-cross-origin', data);
+      });
+      
       playwrightRecorder.on('resumed', () => {
         console.log('[PlaywrightRecorder] Forwarding resumed event');
         webappView?.webContents.send('playwright-recorder-resumed');
@@ -1439,7 +1445,12 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
   try {
     const { goal, startUrl, apiKey, testData, maxSteps } = options;
     
+    console.log('[GoalAgent] Received execute request');
+    console.log('[GoalAgent] Goal:', goal);
+    console.log('[GoalAgent] Start URL:', startUrl);
+    
     if (!goal) {
+      console.log('[GoalAgent] ERROR: No goal provided');
       return { success: false, error: 'No goal provided' };
     }
     
@@ -1455,23 +1466,59 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
     }
     
     if (!actualApiKey) {
-      return { success: false, error: 'No API key available' };
+      console.log('[GoalAgent] ERROR: No API key available');
+      return { success: false, error: 'No API key available. Set OPENAI_API_KEY or configure in settings.' };
     }
     
-    if (!playwrightRecorder || !playwrightRecorder.page) {
-      return { success: false, error: 'No active recording session. Start recording first.' };
+    console.log('[GoalAgent] API key available: yes');
+    
+    // If no active browser, launch one
+    let page = null;
+    let needsCleanup = false;
+    
+    if (playwrightRecorder && playwrightRecorder.page && !playwrightRecorder.page.isClosed()) {
+      console.log('[GoalAgent] Using existing browser page');
+      page = playwrightRecorder.page;
+    } else {
+      console.log('[GoalAgent] No active browser, launching new one...');
+      try {
+        const { chromium } = require('playwright');
+        const path = require('path');
+        const { app } = require('electron');
+        const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
+        
+        const context = await chromium.launchPersistentContext(userDataDir, {
+          headless: false,
+          viewport: null,
+          args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
+          ignoreHTTPSErrors: true
+        });
+        
+        const pages = context.pages();
+        page = pages.length > 0 ? pages[0] : await context.newPage();
+        needsCleanup = true; // We'll need to close this after
+        
+        // Store for cleanup
+        page._goalAgentContext = context;
+        
+        console.log('[GoalAgent] Browser launched successfully');
+      } catch (launchError) {
+        console.error('[GoalAgent] Failed to launch browser:', launchError);
+        return { success: false, error: 'Failed to launch browser: ' + launchError.message };
+      }
     }
     
     console.log('[GoalAgent] Starting goal execution:', goal);
     console.log('[GoalAgent] Test data:', testData);
     
-    currentGoalAgent = new AIGoalAgent(playwrightRecorder.page, {
+    currentGoalAgent = new AIGoalAgent(page, {
       apiKey: actualApiKey,
       testData: testData || {},
       maxSteps: maxSteps || 50,
       debug: true,
       
       onStep: (stepInfo) => {
+        console.log('[GoalAgent] Step:', stepInfo.step, '-', stepInfo.action?.description || stepInfo.action?.target);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('goal-agent-step', stepInfo);
         }
@@ -1484,12 +1531,14 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
       },
       
       onGoalAchieved: () => {
+        console.log('[GoalAgent] Goal achieved!');
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('goal-agent-complete', { success: true });
         }
       },
       
       onError: (error) => {
+        console.error('[GoalAgent] Error callback:', error);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('goal-agent-error', error);
         }
@@ -1502,10 +1551,21 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
     console.log('[GoalAgent] Execution complete:', result.success ? 'SUCCESS' : 'INCOMPLETE');
     console.log('[GoalAgent] Steps taken:', result.steps?.length || 0);
     
+    // Cleanup if we launched our own browser
+    if (needsCleanup && page._goalAgentContext) {
+      console.log('[GoalAgent] Closing browser...');
+      try {
+        await page._goalAgentContext.close();
+      } catch (e) {
+        console.log('[GoalAgent] Browser close error (may already be closed):', e.message);
+      }
+    }
+    
     return result;
     
   } catch (error) {
-    console.error('[GoalAgent] Error:', error);
+    console.error('[GoalAgent] Error:', error.message);
+    console.error('[GoalAgent] Stack:', error.stack);
     return { success: false, error: error.message };
   }
 });

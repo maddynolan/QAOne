@@ -401,6 +401,47 @@ function getElementAnalyzerScript() {
       return null;
     },
     
+    // NEW: Get position among ALL matching elements on page (for duplicate "Add to Cart" etc.)
+    getGlobalPosition: function(element) {
+      var role = this.getRole(element);
+      var text = this.getVisibleText(element);
+      
+      if (!text) return null;
+      
+      // Find all elements with same role and text
+      var selector = role ? '[role="' + role + '"]' : element.tagName.toLowerCase();
+      var allMatching = [];
+      
+      try {
+        var candidates = document.querySelectorAll(selector + ', button, a, [role="button"]');
+        for (var i = 0; i < candidates.length; i++) {
+          var candidate = candidates[i];
+          var candidateRole = this.getRole(candidate);
+          var candidateText = this.getVisibleText(candidate);
+          
+          // Match by role+text or just text for buttons
+          if (candidateText === text && (!role || candidateRole === role)) {
+            allMatching.push(candidate);
+          }
+        }
+      } catch (e) {
+        console.log('[ElementRecipe] Error in getGlobalPosition:', e);
+        return null;
+      }
+      
+      // If only one, no position needed
+      if (allMatching.length <= 1) return null;
+      
+      // Find position (1-based)
+      for (var j = 0; j < allMatching.length; j++) {
+        if (allMatching[j] === element) {
+          return { position: j + 1, total: allMatching.length };
+        }
+      }
+      
+      return null;
+    },
+    
     getTestId: function(element) {
       for (var i = 0; i < this.testIdAttributes.length; i++) {
         var attr = this.testIdAttributes[i];
@@ -468,10 +509,21 @@ function getElementAnalyzerScript() {
       if (nearText) recipe.where.nearText = nearText;
       
       // WHICH ONE is it?
+      // First try testId (most stable)
+      if (testId) recipe.which.testId = testId;
+      
+      // Then try sibling position
       var position = this.getPositionAmongSiblings(element);
       if (position) recipe.which.position = position;
       
-      if (testId) recipe.which.testId = testId;
+      // If no sibling position, try global position (for duplicate "Add to Cart" buttons etc.)
+      if (!position && !testId) {
+        var globalPos = this.getGlobalPosition(element);
+        if (globalPos) {
+          recipe.which.position = globalPos.position;
+          recipe.which.totalMatching = globalPos.total;
+        }
+      }
       
       if (id && !this.isUnstableId(id)) {
         recipe.which.id = id;

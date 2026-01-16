@@ -180,10 +180,11 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
     // @ts-ignore
     window.electronAPI?.on('flow-explorer-error', handleError);
     
-    // Goal Agent listeners
-    const handleGoalStep = (_: any, data: any) => {
+    // Goal Agent listeners - Note: preload strips event object, so we only get data
+    const handleGoalStep = (data: any) => {
+      console.log('[AIFlowExplorer] Got goal-agent-step:', data);
       setGoalSteps(prev => [...prev, data]);
-      addLog('info', `Step ${data.step}: ${data.action?.description || 'Action'}`);
+      addLog('info', `Step ${data?.step}: ${data?.action?.description || 'Action'}`);
     };
     
     // @ts-ignore
@@ -319,6 +320,12 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
     
     const apiKeyToUse = config.apiKey || (isElectron ? '***env***' : '');
     
+    console.log('[AIFlowExplorer] Starting goal execution...');
+    console.log('[AIFlowExplorer] Goal:', goalInput);
+    console.log('[AIFlowExplorer] Start URL:', startUrl);
+    console.log('[AIFlowExplorer] API key:', apiKeyToUse ? 'present' : 'missing');
+    console.log('[AIFlowExplorer] electronAPI available:', !!window.electronAPI);
+    
     setIsExecutingGoal(true);
     setGoalSteps([]);
     setGoalResult(null);
@@ -328,6 +335,7 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
     
     try {
       // @ts-ignore
+      console.log('[AIFlowExplorer] Calling goal-agent-execute IPC...');
       const result = await window.electronAPI?.invoke('goal-agent-execute', {
         goal: goalInput,
         startUrl: startUrl,
@@ -335,6 +343,8 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
         maxSteps: 50,
         testData: customTestData
       });
+      
+      console.log('[AIFlowExplorer] IPC result:', result);
       
       setGoalResult(result);
       
@@ -348,8 +358,12 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
         }
       } else {
         addLog('error', result?.error || 'Goal not achieved');
+        if (!result) {
+          addLog('error', 'IPC returned undefined - check if electronAPI is available');
+        }
       }
     } catch (error: any) {
+      console.error('[AIFlowExplorer] Goal execution error:', error);
       addLog('error', error.message);
     }
     
@@ -375,36 +389,36 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 border-indigo-500/30">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:via-indigo-950/20 dark:to-slate-900 border-slate-200 dark:border-indigo-500/30">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Workflow className="h-6 w-6 text-indigo-400" />
+          <DialogTitle className="flex items-center gap-2 text-xl text-slate-900 dark:text-white">
+            <Workflow className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
             AI Flow Explorer
-            <Badge variant="outline" className="ml-2 bg-indigo-500/20 text-indigo-300 border-indigo-500/50">
+            <Badge variant="outline" className="ml-2 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-500/50">
               v2.0
             </Badge>
           </DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="text-slate-600 dark:text-slate-400">
             Autonomous discovery of ALL application flows, elements, and navigation paths
           </DialogDescription>
         </DialogHeader>
         
         <div className="flex-1 overflow-hidden flex flex-col gap-4">
           {/* Configuration */}
-          <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+          <div className="bg-slate-100 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700/50">
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="text-slate-300">Landing Page URL</Label>
+                <Label className="text-slate-700 dark:text-slate-300">Landing Page URL</Label>
                 <Input
                   value={startUrl}
                   onChange={(e) => setStartUrl(e.target.value)}
                   placeholder="https://example.com"
                   disabled={isRunning}
-                  className="bg-slate-900/50 border-slate-600"
+                  className="bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-300">Max Pages: {maxPages}</Label>
+                <Label className="text-slate-700 dark:text-slate-300">Max Pages: {maxPages}</Label>
                 <Slider
                   value={[maxPages]}
                   onValueChange={([v]) => setMaxPages(v)}
@@ -416,12 +430,12 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-300">Test Credentials</Label>
+                <Label className="text-slate-700 dark:text-slate-300">Test Credentials</Label>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowTestData(!showTestData)}
-                  className="w-full justify-between text-indigo-300"
+                  className="w-full justify-between text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/20"
                   disabled={isRunning}
                 >
                   <span className="flex items-center gap-2">
@@ -433,19 +447,19 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
             </div>
             
             {showTestData && (
-              <div className="mt-3 grid grid-cols-3 gap-3 p-3 bg-slate-900/30 rounded-lg">
+              <div className="mt-3 grid grid-cols-3 gap-3 p-3 bg-slate-50 dark:bg-slate-900/30 rounded-lg">
                 <Input
                   value={customTestData.username}
                   onChange={(e) => setCustomTestData(prev => ({ ...prev, username: e.target.value, email: e.target.value }))}
                   placeholder="Username/Email"
-                  className="bg-slate-800/50 border-slate-600 h-8 text-sm"
+                  className="bg-white dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 h-8 text-sm text-slate-900 dark:text-white"
                 />
                 <Input
                   type="password"
                   value={customTestData.password}
                   onChange={(e) => setCustomTestData(prev => ({ ...prev, password: e.target.value }))}
                   placeholder="Password"
-                  className="bg-slate-800/50 border-slate-600 h-8 text-sm"
+                  className="bg-white dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 h-8 text-sm text-slate-900 dark:text-white"
                 />
               </div>
             )}
@@ -453,11 +467,11 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
           
           {/* Running Progress */}
           {isRunning && (
-            <div className="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/30">
-              <div className="flex items-center gap-2 text-indigo-300">
+            <div className="bg-indigo-100 dark:bg-indigo-500/10 rounded-lg p-3 border border-indigo-300 dark:border-indigo-500/30">
+              <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Exploring application flows...</span>
-                <span className="ml-auto text-sm text-slate-400">
+                <span className="ml-auto text-sm text-slate-600 dark:text-slate-400">
                   {pageGraph.nodes.length} pages | {pageGraph.edges.length} paths | {discoveredTests.length} tests
                 </span>
               </div>
@@ -466,24 +480,24 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
           
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="bg-slate-800/50 border border-slate-700/50">
-              <TabsTrigger value="goal" className="data-[state=active]:bg-emerald-500/20">
+            <TabsList className="bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50">
+              <TabsTrigger value="goal" className="text-slate-700 dark:text-slate-300 data-[state=active]:bg-emerald-100 dark:data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-800 dark:data-[state=active]:text-emerald-300">
                 <Target className="h-4 w-4 mr-2" />
                 Goal Agent
               </TabsTrigger>
-              <TabsTrigger value="graph" className="data-[state=active]:bg-indigo-500/20">
+              <TabsTrigger value="graph" className="text-slate-700 dark:text-slate-300 data-[state=active]:bg-indigo-100 dark:data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-800 dark:data-[state=active]:text-indigo-300">
                 <Network className="h-4 w-4 mr-2" />
                 Navigation Graph
               </TabsTrigger>
-              <TabsTrigger value="tests" className="data-[state=active]:bg-indigo-500/20">
+              <TabsTrigger value="tests" className="text-slate-700 dark:text-slate-300 data-[state=active]:bg-indigo-100 dark:data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-800 dark:data-[state=active]:text-indigo-300">
                 <TestTube2 className="h-4 w-4 mr-2" />
                 Tests ({discoveredTests.length})
               </TabsTrigger>
-              <TabsTrigger value="manual" className="data-[state=active]:bg-indigo-500/20">
+              <TabsTrigger value="manual" className="text-slate-700 dark:text-slate-300 data-[state=active]:bg-indigo-100 dark:data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-800 dark:data-[state=active]:text-indigo-300">
                 <FileText className="h-4 w-4 mr-2" />
                 Manual → Auto
               </TabsTrigger>
-              <TabsTrigger value="logs" className="data-[state=active]:bg-indigo-500/20">
+              <TabsTrigger value="logs" className="text-slate-700 dark:text-slate-300 data-[state=active]:bg-indigo-100 dark:data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-800 dark:data-[state=active]:text-indigo-300">
                 <List className="h-4 w-4 mr-2" />
                 Logs
               </TabsTrigger>
@@ -493,10 +507,10 @@ export function AIFlowExplorer({ isOpen, onClose, currentUrl, onSaveTests }: AIF
             <TabsContent value="goal" className="flex-1 mt-4 min-h-0">
               <div className="h-full grid grid-cols-2 gap-4">
                 {/* Goal Input */}
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-emerald-500/30 p-4">
+                <div className="flex flex-col bg-emerald-50 dark:bg-slate-800/30 rounded-lg border border-emerald-200 dark:border-emerald-500/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <Target className="h-5 w-5 text-emerald-400" />
-                    <Label className="text-emerald-300 text-lg font-medium">What do you want to achieve?</Label>
+                    <Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <Label className="text-emerald-700 dark:text-emerald-300 text-lg font-medium">What do you want to achieve?</Label>
                   </div>
                   <Textarea
                     value={goalInput}
@@ -515,12 +529,12 @@ The AI agent will automatically:
 3. Fill forms with your test data
 4. Navigate through the app
 5. Complete the entire flow`}
-                    className="flex-1 bg-slate-900/50 border-slate-600 resize-none min-h-[200px]"
+                    className="flex-1 bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-600 resize-none min-h-[200px] text-slate-900 dark:text-white"
                     disabled={isExecutingGoal}
                   />
                   
                   {isExecutingGoal && (
-                    <div className="mt-4 flex items-center gap-2 text-emerald-300 text-sm bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30">
+                    <div className="mt-4 flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-sm bg-emerald-100 dark:bg-emerald-500/10 rounded-lg p-3 border border-emerald-300 dark:border-emerald-500/30">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       AI is working towards your goal... Check Steps panel →
                     </div>
@@ -532,13 +546,13 @@ The AI agent will automatically:
                 </div>
                 
                 {/* Steps Taken */}
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="p-3 border-b border-slate-700/50 flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-amber-400" />
-                    <span className="font-medium text-slate-200">Steps Taken</span>
+                <div className="flex flex-col bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                  <div className="p-3 border-b border-slate-200 dark:border-slate-700/50 flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">Steps Taken</span>
                     <Badge variant="outline" className="ml-auto">{goalSteps.length}</Badge>
                     {goalResult?.success && (
-                      <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/50">
+                      <Badge className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/50">
                         Goal Achieved!
                       </Badge>
                     )}
@@ -557,22 +571,22 @@ The AI agent will automatically:
                             key={i} 
                             className={`p-3 rounded-lg border ${
                               step.result?.success 
-                                ? 'bg-emerald-500/10 border-emerald-500/30' 
-                                : 'bg-amber-500/10 border-amber-500/30'
+                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' 
+                                : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30'
                             }`}
                           >
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-400 text-sm">Step {step.step}</span>
-                              <span className={`font-medium ${step.result?.success ? 'text-emerald-300' : 'text-amber-300'}`}>
+                              <span className="text-slate-500 dark:text-slate-400 text-sm">Step {step.step}</span>
+                              <span className={`font-medium ${step.result?.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
                                 {step.action?.action || 'action'}
                               </span>
                               {step.result?.success ? (
                                 <Check className="h-4 w-4 text-emerald-400 ml-auto" />
                               ) : (
-                                <AlertCircle className="h-4 w-4 text-amber-400 ml-auto" />
+                                <AlertCircle className="h-4 w-4 text-amber-500 dark:text-amber-400 ml-auto" />
                               )}
                             </div>
-                            <div className="text-sm text-slate-300 mt-1">
+                            <div className="text-sm text-slate-700 dark:text-slate-300 mt-1">
                               {step.action?.description || step.action?.target}
                             </div>
                             {step.action?.value && (
@@ -587,7 +601,7 @@ The AI agent will automatically:
                   </ScrollArea>
                   
                   {goalResult?.testCase && (
-                    <div className="p-3 border-t border-slate-700/50">
+                    <div className="p-3 border-t border-slate-200 dark:border-slate-700/50">
                       <Button
                         onClick={() => {
                           onSaveTests([goalResult.testCase]);
@@ -609,10 +623,10 @@ The AI agent will automatically:
             <TabsContent value="graph" className="flex-1 mt-4 min-h-0">
               <div className="h-full grid grid-cols-2 gap-4">
                 {/* Pages */}
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="p-3 border-b border-slate-700/50 flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-blue-400" />
-                    <span className="font-medium text-slate-200">Discovered Pages</span>
+                <div className="flex flex-col bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                  <div className="p-3 border-b border-slate-200 dark:border-slate-700/50 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">Discovered Pages</span>
                     <Badge variant="outline" className="ml-auto">{pageGraph.nodes.length}</Badge>
                   </div>
                   <ScrollArea className="flex-1 p-2">
@@ -649,10 +663,10 @@ The AI agent will automatically:
                 </div>
                 
                 {/* Navigation Paths */}
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="p-3 border-b border-slate-700/50 flex items-center gap-2">
-                    <ArrowRight className="h-4 w-4 text-purple-400" />
-                    <span className="font-medium text-slate-200">Navigation Paths</span>
+                <div className="flex flex-col bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                  <div className="p-3 border-b border-slate-200 dark:border-slate-700/50 flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">Navigation Paths</span>
                     <Badge variant="outline" className="ml-auto">{pageGraph.edges.length}</Badge>
                   </div>
                   <ScrollArea className="flex-1 p-2">
@@ -664,9 +678,9 @@ The AI agent will automatically:
                     ) : (
                       <div className="space-y-2">
                         {pageGraph.edges.map((edge) => (
-                          <div key={edge.id} className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                          <div key={edge.id} className="p-3 rounded-lg bg-purple-100 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30">
                             <div className="flex items-center gap-2 text-sm">
-                              <span className="text-purple-200">"{edge.trigger}"</span>
+                              <span className="text-purple-700 dark:text-purple-200">"{edge.trigger}"</span>
                               <ArrowRight className="h-3 w-3 text-slate-500" />
                               <Badge variant="outline" className="text-xs">{edge.stepCount} steps</Badge>
                             </div>
@@ -691,21 +705,21 @@ The AI agent will automatically:
                 ) : (
                   <div className="space-y-3 p-2">
                     {discoveredTests.map((test) => (
-                      <div key={test.id} className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                      <div key={test.id} className="p-4 rounded-lg bg-purple-100 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30">
                         <div className="flex items-start justify-between">
-                          <h4 className="font-medium text-purple-200">{test.name}</h4>
+                          <h4 className="font-medium text-purple-700 dark:text-purple-200">{test.name}</h4>
                           <Badge 
                             variant="outline" 
                             className={
                               test.priority === 'high' 
-                                ? 'bg-red-500/20 text-red-300 border-red-500/50'
-                                : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50'
+                                ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/50'
+                                : 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-500/50'
                             }
                           >
                             {test.priority}
                           </Badge>
                         </div>
-                        <p className="text-sm text-slate-400 mt-1">{test.description}</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{test.description}</p>
                         <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
                           <span>{test.steps?.length || 0} steps</span>
                           <span>{test.assertions?.length || 0} assertions</span>
@@ -713,9 +727,9 @@ The AI agent will automatically:
                         {/* Show steps preview */}
                         <div className="mt-3 space-y-1">
                           {test.steps?.slice(0, 3).map((step: any, i: number) => (
-                            <div key={i} className="text-xs text-slate-400 flex items-center gap-2">
+                            <div key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
                               <span className="w-4 text-right text-slate-500">{i + 1}.</span>
-                              <span className="text-indigo-300">{step.qword}</span>
+                              <span className="text-indigo-600 dark:text-indigo-300">{step.qword}</span>
                               <span className="truncate">{step.args?.join(' ')}</span>
                             </div>
                           ))}
@@ -735,8 +749,8 @@ The AI agent will automatically:
             {/* Manual → Auto Tab */}
             <TabsContent value="manual" className="flex-1 mt-4 min-h-0">
               <div className="h-full grid grid-cols-2 gap-4">
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50 p-4">
-                  <Label className="text-slate-300 mb-2">Manual Test Case</Label>
+                <div className="flex flex-col bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50 p-4">
+                  <Label className="text-slate-700 dark:text-slate-300 mb-2">Manual Test Case</Label>
                   <Textarea
                     value={manualTestInput}
                     onChange={(e) => setManualTestInput(e.target.value)}
@@ -771,10 +785,10 @@ The AI agent will automatically:
                   </Button>
                 </div>
                 
-                <div className="flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50">
-                  <div className="p-3 border-b border-slate-700/50 flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-amber-400" />
-                    <span className="font-medium text-slate-200">Automated Steps</span>
+                <div className="flex flex-col bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                  <div className="p-3 border-b border-slate-200 dark:border-slate-700/50 flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                    <span className="font-medium text-slate-800 dark:text-slate-200">Automated Steps</span>
                     <Badge variant="outline" className="ml-auto">{automatedSteps.length}</Badge>
                   </div>
                   <ScrollArea className="flex-1 p-2">
@@ -787,10 +801,10 @@ The AI agent will automatically:
                     ) : (
                       <div className="space-y-2">
                         {automatedSteps.map((step, i) => (
-                          <div key={step.id || i} className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-sm">
+                          <div key={step.id || i} className="p-2 rounded bg-amber-100 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-sm">
                             <div className="flex items-center gap-2">
-                              <span className="text-amber-300 font-medium">{step.qword}</span>
-                              <span className="text-slate-400 truncate">{step.args?.join(' | ')}</span>
+                              <span className="text-amber-700 dark:text-amber-300 font-medium">{step.qword}</span>
+                              <span className="text-slate-600 dark:text-slate-400 truncate">{step.args?.join(' | ')}</span>
                             </div>
                             <div className="text-xs text-slate-500 mt-1">{step.description}</div>
                           </div>
@@ -799,7 +813,7 @@ The AI agent will automatically:
                     )}
                   </ScrollArea>
                   {automatedSteps.length > 0 && (
-                    <div className="p-3 border-t border-slate-700/50">
+                    <div className="p-3 border-t border-slate-200 dark:border-slate-700/50">
                       <Button
                         onClick={() => {
                           onSaveTests([{
@@ -826,7 +840,7 @@ The AI agent will automatically:
             
             {/* Logs Tab */}
             <TabsContent value="logs" className="flex-1 mt-4 min-h-0">
-              <ScrollArea className="h-full bg-slate-800/30 rounded-lg border border-slate-700/50 p-2">
+              <ScrollArea className="h-full bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700/50 p-2">
                 {logs.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
                     <List className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -835,15 +849,15 @@ The AI agent will automatically:
                 ) : (
                   <div className="space-y-1 font-mono text-xs">
                     {logs.map((log) => (
-                      <div key={log.id} className="flex items-start gap-2 px-2 py-1 hover:bg-slate-700/30 rounded">
+                      <div key={log.id} className="flex items-start gap-2 px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-700/30 rounded">
                         {getLogIcon(log.type)}
                         <span className="text-slate-500">{log.timestamp.toLocaleTimeString()}</span>
                         <span className={
-                          log.type === 'error' ? 'text-red-400' :
-                          log.type === 'success' ? 'text-emerald-400' :
-                          log.type === 'page' ? 'text-blue-400' :
-                          log.type === 'test' ? 'text-purple-400' :
-                          'text-slate-300'
+                          log.type === 'error' ? 'text-red-600 dark:text-red-400' :
+                          log.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                          log.type === 'page' ? 'text-blue-600 dark:text-blue-400' :
+                          log.type === 'test' ? 'text-purple-600 dark:text-purple-400' :
+                          'text-slate-700 dark:text-slate-300'
                         }>{log.message}</span>
                       </div>
                     ))}
@@ -856,29 +870,29 @@ The AI agent will automatically:
           
           {/* Coverage Summary */}
           {coverage && (
-            <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30">
+            <div className="bg-emerald-100 dark:bg-emerald-500/10 rounded-lg p-3 border border-emerald-200 dark:border-emerald-500/30">
               <div className="flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2 text-emerald-300">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                   <Check className="h-4 w-4" />
                   <span>Exploration Complete</span>
                 </div>
-                <div className="flex items-center gap-1 text-slate-400">
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                   <Globe className="h-3 w-3" />
                   <span>{coverage.pagesDiscovered} pages</span>
                 </div>
-                <div className="flex items-center gap-1 text-slate-400">
+                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
                   <Layers className="h-3 w-3" />
                   <span>{coverage.elementsDiscovered} elements</span>
                 </div>
-                <div className="flex items-center gap-1 text-amber-400">
+                <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
                   <EyeOff className="h-3 w-3" />
                   <span>{coverage.hiddenElementsFound} hidden</span>
                 </div>
-                <div className="flex items-center gap-1 text-indigo-400">
+                <div className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
                   <Navigation className="h-3 w-3" />
                   <span>{coverage.navigationPathsFound} paths</span>
                 </div>
-                <div className="flex items-center gap-1 text-purple-400">
+                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
                   <TestTube2 className="h-3 w-3" />
                   <span>{coverage.flowsGenerated} tests</span>
                 </div>
@@ -887,9 +901,9 @@ The AI agent will automatically:
           )}
         </div>
         
-        <DialogFooter className="border-t border-slate-700/50 pt-4">
+        <DialogFooter className="border-t border-slate-200 dark:border-slate-700/50 pt-4">
           <div className="flex items-center gap-3 w-full">
-            <Button variant="outline" onClick={onClose} className="border-slate-600">
+            <Button variant="outline" onClick={onClose} className="border-slate-300 dark:border-slate-600">
               Close
             </Button>
             
