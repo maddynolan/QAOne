@@ -611,15 +611,26 @@ Return JSON:
       }
     }
     
-    // PRIORITY 3: Handle TAB clicks (e.g., "Products tab", "Cart tab", or just "Cart", "Products")
+    // PRIORITY 3: Handle TAB clicks (e.g., "Products tab", "Cart tab", "Shopping Cart", or just "Cart")
     // Detect tab navigation even without "tab" keyword
-    const knownTabs = ['products', 'cart', 'forms', 'tables', 'frames', 'alerts', 'api', 'settings'];
+    const knownTabs = ['products', 'cart', 'forms', 'tables', 'frames', 'alerts', 'api', 'settings', 'login', 'interactions', 'downloads', 'advanced'];
     const isLikelyTab = targetLower.includes('tab') || 
-                        knownTabs.some(t => targetLower === t || targetLower === `${t} tab`);
+                        knownTabs.some(t => targetLower === t || targetLower === `${t} tab` || targetLower.includes(t));
     
     if (isLikelyTab) {
-      const tabName = target.replace(/\s*tab\s*/i, '').trim();
-      this.log(`Looking for tab: "${tabName}"`);
+      // Extract the known tab name from the target
+      let tabName = target.replace(/\s*tab\s*/i, '').trim();
+      
+      // If target contains a known tab name, use that instead of the full target
+      // e.g., "Shopping Cart & Checkout" → "Cart"
+      for (const kt of knownTabs) {
+        if (targetLower.includes(kt)) {
+          tabName = kt.charAt(0).toUpperCase() + kt.slice(1); // Capitalize first letter
+          break;
+        }
+      }
+      
+      this.log(`Looking for tab: "${tabName}" (from target: "${target}")`);
       
       // Try role-based tab finding FIRST (most reliable)
       let locator = this.page.getByRole('tab', { name: new RegExp(`^${tabName}$`, 'i') });
