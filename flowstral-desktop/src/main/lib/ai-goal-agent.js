@@ -25,6 +25,12 @@ class AIGoalAgent {
     this.timeout = options.timeout || 10000;
     this.debug = options.debug !== false;
     
+    // CRITICAL: Reference to PlaywrightRecorder for proper action execution & recording
+    // When available, actions will use the recorder's system which handles:
+    // - Radix dropdowns, Shadow DOM, tabs, modals, iframes
+    // - Full recipe data capture for reliable playback
+    this.playwrightRecorder = options.playwrightRecorder || null;
+    
     // Test data for filling forms
     this.testData = {
       email: 'test@example.com',
@@ -357,6 +363,19 @@ Return JSON:
     this.log(`Executing: ${actionType} - "${target}" (${reason})`);
     
     try {
+      // PRIORITY: Try using PlaywrightRecorder if available
+      // This leverages our existing system that handles:
+      // - Radix dropdowns, Shadow DOM, tabs, modals, iframes
+      // - Full recipe data capture for reliable playback
+      if (this.playwrightRecorder) {
+        const recorderResult = await this.executeViaRecorder(action);
+        if (recorderResult.success) {
+          return recorderResult;
+        }
+        this.log(`Recorder execution failed, falling back to smartClick: ${recorderResult.error}`);
+      }
+      
+      // Fallback: Use direct Playwright execution
       switch (actionType) {
         case 'click':
           return await this.smartClick(target);
@@ -378,6 +397,60 @@ Return JSON:
     } catch (error) {
       this.log('Action failed:', error.message);
       this.memory.lastError = error.message;
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Execute action via PlaywrightRecorder's system
+   * This ensures proper recipe data capture for playback
+   */
+  async executeViaRecorder(action) {
+    const { action: actionType, target } = action;
+    
+    try {
+      // Clean the target for better matching
+      const cleanTarget = this.cleanTargetForPlayback(target, actionType);
+      
+      // Build action object for PlaywrightRecorder
+      const recorderAction = {
+        type: actionType,
+        label: `${actionType} "${cleanTarget}"`,
+        text: cleanTarget,
+        value: action.value || '',
+        // Include element index if this is a duplicate element
+        elementIndex: this.memory.addedToCart.length, // For Add to Cart buttons
+        // Let the recorder's SmartFinder handle complex element finding
+        selectorObj: {
+          text: cleanTarget,
+          role: this.inferRole(actionType, target)
+        }
+      };
+      
+      this.log(`Executing via recorder: ${JSON.stringify(recorderAction)}`);
+      
+      // Use PlaywrightRecorder's executeAction which handles all complex cases
+      const result = await this.playwrightRecorder.executeAction(recorderAction);
+      
+      if (result && result.success) {
+        // Update memory based on action
+        this.updateMemory(actionType, target);
+        
+        // Get the recorded action data (includes full recipe)
+        const recordedActions = this.playwrightRecorder.actions || [];
+        const lastRecordedAction = recordedActions[recordedActions.length - 1];
+        
+        return {
+          success: true,
+          method: 'recorder',
+          // Include the full recorded action for test case generation
+          recordedAction: lastRecordedAction || null
+        };
+      }
+      
+      return { success: false, error: result?.error || 'Recorder execution failed' };
+    } catch (error) {
+      this.log(`Recorder execution error: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -803,24 +876,31 @@ Return JSON:
         const actualTarget = result.actualText || result.actualTarget || action.target;
         const cleanTarget = this.cleanTargetForPlayback(action.target, action.action);
         
+        // If we have a recorded action from PlaywrightRecorder, use its data
+        // This includes full recipe data that ensures reliable playback
+        const recordedAction = result.recordedAction;
+        
         this.stepsTaken.push({
           step: this.currentStep,
           action: action.action,
           target: cleanTarget,
           originalTarget: action.target,
-          description: `${action.action} "${cleanTarget}"`,
+          description: recordedAction?.description || `${action.action} "${cleanTarget}"`,
           success: result.success,
-          qword: this.actionToQWord(action.action),
-          args: [cleanTarget],
+          qword: recordedAction?.qword || this.actionToQWord(action.action),
+          args: recordedAction?.args || [cleanTarget],
           // Store method used for debugging
           method: result.method,
-          // CRITICAL: Store element index for playback of duplicate elements
-          elementIndex: result.elementIndex ?? null,
-          // Store testId if available (best for playback)
-          testId: result.testId || null,
-          ariaLabel: result.ariaLabel || null,
-          // Store actual element info if available
-          actualElement: result.actualElement || null
+          // CRITICAL: Use data from recorder if available (has full recipe)
+          elementIndex: recordedAction?.elementIndex ?? result.elementIndex ?? null,
+          testId: recordedAction?.testId || recordedAction?.selectorObj?.testId || result.testId || null,
+          ariaLabel: recordedAction?.ariaLabel || result.ariaLabel || null,
+          // Store the FULL recorded action for best playback compatibility
+          recordedAction: recordedAction || null,
+          // Store recipe from recorder (handles Radix, Shadow DOM, etc.)
+          recipe: recordedAction?.recipe || recordedAction?.target || null,
+          selectorObj: recordedAction?.selectorObj || null,
+          element: recordedAction?.element || null
         });
         
         this.onStep({
@@ -923,7 +1003,20 @@ Return JSON:
    */
   generateTestCase() {
     const steps = this.stepsTaken.filter(s => s.success).map((s, index) => {
-      // Use cleaned target for playback
+      // BEST: If we have a recorded action from PlaywrightRecorder, use it directly
+      // This has full recipe data that handles Radix, Shadow DOM, tabs, etc.
+      if (s.recordedAction) {
+        this.log(`Using recorded action for step ${index + 1}: ${s.recordedAction.description}`);
+        return {
+          ...s.recordedAction,
+          // Ensure these are set
+          qword: s.recordedAction.qword || this.actionToQWord(s.action),
+          args: s.recordedAction.args || [s.target],
+          description: s.recordedAction.description || s.description
+        };
+      }
+      
+      // FALLBACK: Build step from Goal Agent data
       const targetText = s.target;
       const role = this.inferRole(s.action, s.originalTarget || s.target);
       const tag = this.inferTag(s.action);
@@ -932,63 +1025,35 @@ Return JSON:
       const testId = s.testId || this.inferTestId(targetText);
       
       // CRITICAL: Use actual element index from execution (1-based for SmartFinder)
-      // elementIndex from execution is 0-based, SmartFinder position is 1-based
       const position = s.elementIndex !== null && s.elementIndex !== undefined 
-        ? s.elementIndex + 1  // Convert 0-based to 1-based
+        ? s.elementIndex + 1
         : 1;
       
-      // Build proper step structure for PlaywrightRecorder playback
+      // Build step structure for PlaywrightRecorder playback
       const step = {
         qword: s.qword || this.actionToQWord(s.action),
-        args: [targetText],
+        args: s.args || [targetText],
         description: s.description,
         type: s.action || 'click',
         label: s.description,
-        // CRITICAL: Include elementIndex for duplicate elements
         elementIndex: s.elementIndex,
-        // Include selector data for SmartFinder
-        selectorObj: {
+        // Use stored selector data if available
+        selectorObj: s.selectorObj || {
           text: targetText,
           role: role,
           testId: testId,
           ariaLabel: s.ariaLabel || targetText,
-          recipe: {
-            what: {
-              role: role,
-              text: targetText,
-              tag: tag
-            },
-            where: {
-              landmark: 'main'
-            },
-            which: {
-              position: position,
-              testId: testId,
-              uniqueText: false
-            }
+          recipe: s.recipe || {
+            what: { role, text: targetText, tag },
+            where: { landmark: 'main' },
+            which: { position, testId, uniqueText: false }
           }
         },
-        // Include element data
-        element: {
-          role: role,
-          text: targetText,
-          tagName: tag
-        },
-        // Include recipe for SmartFinder - CRITICAL: position must match actual clicked element
-        recipe: {
-          what: {
-            role: role,
-            text: targetText,
-            tag: tag
-          },
-          where: {
-            landmark: 'main'
-          },
-          which: {
-            position: position,  // Use actual position from execution
-            testId: testId,
-            uniqueText: false
-          }
+        element: s.element || { role, text: targetText, tagName: tag },
+        recipe: s.recipe || {
+          what: { role, text: targetText, tag },
+          where: { landmark: 'main' },
+          which: { position, testId, uniqueText: false }
         }
       };
       

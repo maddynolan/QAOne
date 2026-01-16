@@ -1510,12 +1510,17 @@ ipcMain.handle('goal-agent-execute', async (event, options = {}) => {
     
     console.log('[GoalAgent] Starting goal execution:', goal);
     console.log('[GoalAgent] Test data:', testData);
+    console.log('[GoalAgent] PlaywrightRecorder available:', !!playwrightRecorder);
     
     currentGoalAgent = new AIGoalAgent(page, {
       apiKey: actualApiKey,
       testData: testData || {},
       maxSteps: maxSteps || 50,
       debug: true,
+      // CRITICAL: Pass PlaywrightRecorder for proper action execution & recording
+      // This enables the Goal Agent to use our existing system that handles:
+      // Radix dropdowns, Shadow DOM, tabs, modals, iframes, element indexes
+      playwrightRecorder: playwrightRecorder,
       
       onStep: (stepInfo) => {
         console.log('[GoalAgent] Step:', stepInfo.step, '-', stepInfo.action?.description || stepInfo.action?.target);
