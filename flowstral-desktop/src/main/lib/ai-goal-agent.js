@@ -363,19 +363,30 @@ Return JSON:
     this.log(`Executing: ${actionType} - "${target}" (${reason})`);
     
     try {
-      // PRIORITY: Try using PlaywrightRecorder if available
-      // This leverages our existing system that handles:
-      // - Radix dropdowns, Shadow DOM, tabs, modals, iframes
-      // - Full recipe data capture for reliable playback
-      if (this.playwrightRecorder) {
-        const recorderResult = await this.executeViaRecorder(action);
-        if (recorderResult.success) {
-          return recorderResult;
+      // SMART ROUTING: Some actions need special handling, others can use recorder
+      const isCartAction = /add.*cart|remove.*cart|cart.*add|cart.*remove/i.test(target);
+      const isDropdownAction = actionType === 'select';
+      const isTabAction = /tab|products|cart|forms|tables/i.test(target) && !isCartAction;
+      
+      // For complex actions (cart, dropdown), use smartClick/smartSelect directly
+      // These methods have product-specific logic that the recorder doesn't have
+      if (isCartAction || isDropdownAction) {
+        this.log(`Using smart handler for: ${target} (cart: ${isCartAction}, dropdown: ${isDropdownAction})`);
+        let result;
+        if (isDropdownAction) {
+          result = await this.smartSelect(target, action.value);
+        } else {
+          result = await this.smartClick(target);
         }
-        this.log(`Recorder execution failed, falling back to smartClick: ${recorderResult.error}`);
+        // Update memory and enhance result with recording data
+        if (result.success) {
+          this.updateMemory(actionType, target);
+        }
+        return result;
       }
       
-      // Fallback: Use direct Playwright execution
+      // For simple clicks (tabs, buttons), use Playwright directly (FAST)
+      // Don't use recorder to avoid slowness
       switch (actionType) {
         case 'click':
           return await this.smartClick(target);
@@ -482,6 +493,9 @@ Return JSON:
         `div:has(h4:has-text("${productName}")):has(button:has-text("Add"))`
       ];
       
+      // Get the current index BEFORE clicking (for Nth element tracking)
+      const currentIndex = this.memory.addedToCart.length;
+      
       for (const selector of cardSelectors) {
         try {
           const productCard = this.page.locator(selector).first();
@@ -489,10 +503,26 @@ Return JSON:
             const addBtn = productCard.locator('button:has-text("Add")');
             if (await addBtn.count() > 0) {
               await addBtn.first().scrollIntoViewIfNeeded().catch(() => {});
+              
+              // Get unique identifiers for playback
+              const testId = await addBtn.first().getAttribute('data-testid').catch(() => null);
+              const ariaLabel = await addBtn.first().getAttribute('aria-label').catch(() => null);
+              
               await addBtn.first().click({ timeout: 5000 });
               this.memory.addedToCart.push(productName);
-              this.log(`✓ Added ${productName} via ${selector}`);
-              return { success: true, method: 'product-card-add' };
+              this.log(`✓ Added ${productName} via product card`);
+              
+              // CRITICAL: Return data for PLAYBACK - use product name as target
+              return { 
+                success: true, 
+                method: 'product-card-add',
+                // For playback: use PRODUCT NAME, not "Add to Cart"
+                actualTarget: productName,
+                actualText: `Add to Cart for ${productName}`,
+                elementIndex: currentIndex,
+                testId: testId,
+                ariaLabel: ariaLabel
+              };
             }
           }
         } catch (e) {
@@ -504,19 +534,26 @@ Return JSON:
       const testIdName = productName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       const testIdBtn = this.page.locator(`[data-testid*="add"][data-testid*="${testIdName}"], [data-testid="add-to-cart-${testIdName}"]`);
       if (await testIdBtn.count() > 0) {
+        const testId = await testIdBtn.first().getAttribute('data-testid').catch(() => null);
         await testIdBtn.first().click({ timeout: 5000 });
         this.memory.addedToCart.push(productName);
         this.log(`✓ Added ${productName} via testId`);
-        return { success: true, method: 'testid-add' };
+        return { 
+          success: true, 
+          method: 'testid-add',
+          actualTarget: productName,
+          actualText: `Add to Cart for ${productName}`,
+          elementIndex: currentIndex,
+          testId: testId
+        };
       }
       
       // Strategy C: Find the Nth Add to Cart button (based on how many we've added)
       const addButtons = this.page.locator('button:has-text("Add to Cart"), button:has-text("Add")');
       const btnCount = await addButtons.count();
-      const alreadyAddedCount = this.memory.addedToCart.length;
       
-      if (btnCount > alreadyAddedCount) {
-        const btnElement = addButtons.nth(alreadyAddedCount);
+      if (btnCount > currentIndex) {
+        const btnElement = addButtons.nth(currentIndex);
         await btnElement.scrollIntoViewIfNeeded().catch(() => {});
         
         // Try to get testId or other unique identifier
@@ -525,16 +562,17 @@ Return JSON:
         
         await btnElement.click({ timeout: 5000 });
         this.memory.addedToCart.push(productName);
-        this.log(`✓ Added ${productName} via nth(${alreadyAddedCount})`);
+        this.log(`✓ Added ${productName} via nth(${currentIndex})`);
         
-        // Return the index and any unique identifier for playback
+        // CRITICAL: Return the index for playback
         return { 
           success: true, 
           method: 'nth-add',
-          elementIndex: alreadyAddedCount,  // 0-based index
+          actualTarget: productName,
+          actualText: `Add to Cart (${currentIndex + 1}st of ${btnCount})`,
+          elementIndex: currentIndex,  // 0-based index
           testId: testId,
-          ariaLabel: ariaLabel,
-          actualText: 'Add to Cart'
+          ariaLabel: ariaLabel
         };
       }
       
@@ -873,25 +911,30 @@ Return JSON:
         const result = await this.executeSmartAction(action);
         
         // Record the step with actual element data from execution
-        const actualTarget = result.actualText || result.actualTarget || action.target;
-        const cleanTarget = this.cleanTargetForPlayback(action.target, action.action);
+        // PRIORITY: Use actual target from execution (e.g., "iPhone 15 Pro"), not AI's target ("Add to Cart")
+        const actualTarget = result.actualTarget || action.target;
+        const displayText = result.actualText || `${action.action} "${actualTarget}"`;
+        
+        // Clean target for SmartFinder playback
+        const cleanTarget = this.cleanTargetForPlayback(actualTarget, action.action);
         
         // If we have a recorded action from PlaywrightRecorder, use its data
-        // This includes full recipe data that ensures reliable playback
         const recordedAction = result.recordedAction;
         
         this.stepsTaken.push({
           step: this.currentStep,
           action: action.action,
+          // CRITICAL: Use ACTUAL target (product name), not AI's generic description
           target: cleanTarget,
           originalTarget: action.target,
-          description: recordedAction?.description || `${action.action} "${cleanTarget}"`,
+          // Use actual text for display (e.g., "Add to Cart for iPhone 15 Pro")
+          description: recordedAction?.description || displayText,
           success: result.success,
           qword: recordedAction?.qword || this.actionToQWord(action.action),
           args: recordedAction?.args || [cleanTarget],
           // Store method used for debugging
           method: result.method,
-          // CRITICAL: Use data from recorder if available (has full recipe)
+          // CRITICAL: Store elementIndex for duplicate elements like "Add to Cart" buttons
           elementIndex: recordedAction?.elementIndex ?? result.elementIndex ?? null,
           testId: recordedAction?.testId || recordedAction?.selectorObj?.testId || result.testId || null,
           ariaLabel: recordedAction?.ariaLabel || result.ariaLabel || null,
