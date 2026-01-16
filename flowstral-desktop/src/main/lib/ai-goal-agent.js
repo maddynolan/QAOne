@@ -611,17 +611,30 @@ Return JSON:
       }
     }
     
-    // PRIORITY 3: Handle TAB clicks (e.g., "Products tab", "Cart tab")
-    if (targetLower.includes('tab')) {
+    // PRIORITY 3: Handle TAB clicks (e.g., "Products tab", "Cart tab", or just "Cart", "Products")
+    // Detect tab navigation even without "tab" keyword
+    const knownTabs = ['products', 'cart', 'forms', 'tables', 'frames', 'alerts', 'api', 'settings'];
+    const isLikelyTab = targetLower.includes('tab') || 
+                        knownTabs.some(t => targetLower === t || targetLower === `${t} tab`);
+    
+    if (isLikelyTab) {
       const tabName = target.replace(/\s*tab\s*/i, '').trim();
       this.log(`Looking for tab: "${tabName}"`);
       
-      // Try role-based tab finding
-      let locator = this.page.getByRole('tab', { name: new RegExp(tabName, 'i') });
+      // Try role-based tab finding FIRST (most reliable)
+      let locator = this.page.getByRole('tab', { name: new RegExp(`^${tabName}$`, 'i') });
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.log(`✓ Clicked tab ${tabName} via role (exact)`);
+        return { success: true, method: 'role-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+      }
+      
+      // Try partial match role
+      locator = this.page.getByRole('tab', { name: new RegExp(tabName, 'i') });
       if (await locator.count() > 0) {
         await locator.first().click({ timeout: 5000 });
         this.log(`✓ Clicked tab ${tabName} via role`);
-        return { success: true, method: 'role-tab' };
+        return { success: true, method: 'role-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
       }
       
       // Try Radix tabs
@@ -629,15 +642,18 @@ Return JSON:
       if (await locator.count() > 0) {
         await locator.first().click({ timeout: 5000 });
         this.log(`✓ Clicked tab ${tabName} via radix`);
-        return { success: true, method: 'radix-tab' };
+        return { success: true, method: 'radix-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
       }
       
-      // Try text-based
+      // Try text-based with role restriction
       locator = this.page.locator(`[role="tab"]:has-text("${tabName}")`);
       if (await locator.count() > 0) {
         await locator.first().click({ timeout: 5000 });
-        return { success: true, method: 'role-tab-text' };
+        this.log(`✓ Clicked tab ${tabName} via role-tab-text`);
+        return { success: true, method: 'role-tab-text', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
       }
+      
+      this.log(`⚠️ Tab "${tabName}" not found via tab strategies, trying generic click...`);
     }
     
     // PRIORITY 4: Handle dropdown/select
@@ -917,6 +933,18 @@ Return JSON:
         
         // Clean target for SmartFinder playback
         const cleanTarget = this.cleanTargetForPlayback(actualTarget, action.action);
+        
+        // DUPLICATE DETECTION: Skip recording if same action as last step
+        const lastStep = this.stepsTaken[this.stepsTaken.length - 1];
+        const isDuplicate = lastStep && 
+          lastStep.action === action.action && 
+          lastStep.target === cleanTarget &&
+          lastStep.elementIndex === result.elementIndex;
+        
+        if (isDuplicate) {
+          this.log(`⚠️ Skipping duplicate action: ${action.action} "${cleanTarget}"`);
+          continue;
+        }
         
         // If we have a recorded action from PlaywrightRecorder, use its data
         const recordedAction = result.recordedAction;
