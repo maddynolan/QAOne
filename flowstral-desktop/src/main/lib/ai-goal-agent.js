@@ -384,6 +384,185 @@ Return JSON:
   
   async smartClick(target) {
     const targetLower = target.toLowerCase();
+    this.log(`SmartClick: "${target}"`);
+    
+    // PRIORITY 1: Handle "Add to Cart for X" pattern - MUST find specific product
+    if (targetLower.includes('add to cart for') || targetLower.includes('add') && targetLower.includes('cart')) {
+      const productName = target.replace(/add to cart (for )?/i, '').replace(/add (to )?cart/i, '').trim();
+      this.log(`Looking for product: "${productName}"`);
+      
+      // Skip if already added
+      if (this.memory.addedToCart.includes(productName)) {
+        this.log(`Already added ${productName}, skipping`);
+        return { success: true, method: 'already-added', skipped: true };
+      }
+      
+      // Strategy A: Find product card by name, then its Add button
+      // Try multiple card selectors
+      const cardSelectors = [
+        `[data-testid*="product"]:has-text("${productName}")`,
+        `.product-card:has-text("${productName}")`,
+        `[class*="product"]:has-text("${productName}")`,
+        `[class*="card"]:has-text("${productName}")`,
+        // Just find a div containing the product name and an Add button
+        `div:has(h3:has-text("${productName}")):has(button:has-text("Add"))`,
+        `div:has(h4:has-text("${productName}")):has(button:has-text("Add"))`
+      ];
+      
+      for (const selector of cardSelectors) {
+        try {
+          const productCard = this.page.locator(selector).first();
+          if (await productCard.count() > 0) {
+            const addBtn = productCard.locator('button:has-text("Add")');
+            if (await addBtn.count() > 0) {
+              await addBtn.first().scrollIntoViewIfNeeded().catch(() => {});
+              await addBtn.first().click({ timeout: 5000 });
+              this.memory.addedToCart.push(productName);
+              this.log(`✓ Added ${productName} via ${selector}`);
+              return { success: true, method: 'product-card-add' };
+            }
+          }
+        } catch (e) {
+          // Try next selector
+        }
+      }
+      
+      // Strategy B: Find by data-testid pattern
+      const testIdName = productName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const testIdBtn = this.page.locator(`[data-testid*="add"][data-testid*="${testIdName}"], [data-testid="add-to-cart-${testIdName}"]`);
+      if (await testIdBtn.count() > 0) {
+        await testIdBtn.first().click({ timeout: 5000 });
+        this.memory.addedToCart.push(productName);
+        this.log(`✓ Added ${productName} via testId`);
+        return { success: true, method: 'testid-add' };
+      }
+      
+      // Strategy C: Find the Nth Add to Cart button (based on how many we've added)
+      const addButtons = this.page.locator('button:has-text("Add to Cart"), button:has-text("Add")');
+      const btnCount = await addButtons.count();
+      const alreadyAddedCount = this.memory.addedToCart.length;
+      
+      if (btnCount > alreadyAddedCount) {
+        await addButtons.nth(alreadyAddedCount).scrollIntoViewIfNeeded().catch(() => {});
+        await addButtons.nth(alreadyAddedCount).click({ timeout: 5000 });
+        this.memory.addedToCart.push(productName);
+        this.log(`✓ Added ${productName} via nth(${alreadyAddedCount})`);
+        return { success: true, method: 'nth-add' };
+      }
+      
+      this.log(`✗ Could not find Add button for ${productName}`);
+    }
+    
+    // PRIORITY 2: Handle "Remove for X" pattern
+    if (targetLower.includes('remove for') || targetLower.includes('remove')) {
+      const itemName = target.replace(/remove (for )?/i, '').trim();
+      this.log(`Looking to remove: "${itemName}"`);
+      
+      // Find cart item containing this name, then click its Remove button
+      const itemSelectors = [
+        `[data-testid*="cart-item"]:has-text("${itemName}")`,
+        `.cart-item:has-text("${itemName}")`,
+        `[class*="cart"]:has-text("${itemName}")`,
+        `tr:has-text("${itemName}")`,
+        `div:has-text("${itemName}"):has(button:has-text("Remove"))`
+      ];
+      
+      for (const selector of itemSelectors) {
+        try {
+          const cartItem = this.page.locator(selector).first();
+          if (await cartItem.count() > 0) {
+            const removeBtn = cartItem.locator('button:has-text("Remove"), button:has-text("Delete"), [aria-label*="remove"]');
+            if (await removeBtn.count() > 0) {
+              await removeBtn.first().click({ timeout: 5000 });
+              this.memory.removedFromCart.push(itemName);
+              this.log(`✓ Removed ${itemName}`);
+              return { success: true, method: 'cart-item-remove' };
+            }
+          }
+        } catch (e) {
+          // Try next
+        }
+      }
+    }
+    
+    // PRIORITY 3: Handle TAB clicks (e.g., "Products tab", "Cart tab")
+    if (targetLower.includes('tab')) {
+      const tabName = target.replace(/\s*tab\s*/i, '').trim();
+      this.log(`Looking for tab: "${tabName}"`);
+      
+      // Try role-based tab finding
+      let locator = this.page.getByRole('tab', { name: new RegExp(tabName, 'i') });
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.log(`✓ Clicked tab ${tabName} via role`);
+        return { success: true, method: 'role-tab' };
+      }
+      
+      // Try Radix tabs
+      locator = this.page.locator(`[data-radix-collection-item]:has-text("${tabName}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.log(`✓ Clicked tab ${tabName} via radix`);
+        return { success: true, method: 'radix-tab' };
+      }
+      
+      // Try text-based
+      locator = this.page.locator(`[role="tab"]:has-text("${tabName}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'role-tab-text' };
+      }
+    }
+    
+    // PRIORITY 4: Handle dropdown/select
+    if (targetLower.includes('dropdown') || targetLower.includes('shipping') || targetLower.includes('select')) {
+      const dropdownLabel = target.replace(/(dropdown|select)/i, '').trim();
+      this.log(`Looking for dropdown: "${dropdownLabel}"`);
+      
+      // Try Radix select trigger
+      let locator = this.page.locator('[data-radix-select-trigger]');
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.log(`✓ Clicked Radix dropdown`);
+        return { success: true, method: 'radix-trigger' };
+      }
+      
+      // Try by role combobox
+      locator = this.page.getByRole('combobox');
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'combobox' };
+      }
+    }
+    
+    // PRIORITY 5: Handle dropdown OPTION selection
+    if (targetLower.includes('option') || targetLower.includes('shipping')) {
+      const optionText = target.replace(/(option|shipping)/gi, '').trim();
+      this.log(`Looking for option: "${optionText}"`);
+      
+      // Try role option
+      let locator = this.page.getByRole('option', { name: new RegExp(optionText, 'i') });
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'role-option' };
+      }
+      
+      // Try Radix select item
+      locator = this.page.locator(`[data-radix-collection-item]:has-text("${optionText}")`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'radix-option' };
+      }
+      
+      // Try text in listbox
+      locator = this.page.locator(`[role="listbox"] >> text=${optionText}`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        return { success: true, method: 'listbox-text' };
+      }
+    }
+    
+    // FALLBACK STRATEGIES
     
     // Strategy 1: Exact text match
     let locator = this.page.getByText(target, { exact: true });
@@ -393,7 +572,17 @@ Return JSON:
       return { success: true, method: 'exact-text' };
     }
     
-    // Strategy 2: Partial text match
+    // Strategy 2: Role-based (buttons, tabs, links)
+    for (const role of ['button', 'tab', 'link', 'menuitem']) {
+      locator = this.page.getByRole(role, { name: new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.updateMemory('click', target);
+        return { success: true, method: `role-${role}` };
+      }
+    }
+    
+    // Strategy 3: Partial text match
     locator = this.page.getByText(target, { exact: false });
     if (await locator.count() > 0) {
       await locator.first().scrollIntoViewIfNeeded().catch(() => {});
@@ -402,21 +591,9 @@ Return JSON:
       return { success: true, method: 'partial-text' };
     }
     
-    // Strategy 3: Role-based (buttons, tabs, links)
-    for (const role of ['button', 'tab', 'link', 'menuitem']) {
-      locator = this.page.getByRole(role, { name: target });
-      if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
-        this.updateMemory('click', target);
-        return { success: true, method: `role-${role}` };
-      }
-    }
-    
     // Strategy 4: testId patterns
     const testIdPatterns = [
       target.toLowerCase().replace(/\s+/g, '-'),
-      `add-to-cart-${target.toLowerCase().replace(/\s+/g, '-')}`,
-      `remove-${target.toLowerCase().replace(/\s+/g, '-')}`,
       `trigger-${target.toLowerCase().replace(/\s+/g, '-')}`
     ];
     
@@ -426,65 +603,6 @@ Return JSON:
         await locator.first().click({ timeout: 5000 });
         this.updateMemory('click', target);
         return { success: true, method: 'testid' };
-      }
-    }
-    
-    // Strategy 5: Handle "Add to Cart for X" pattern
-    if (targetLower.includes('add to cart for') || targetLower.includes('add to cart')) {
-      const productName = target.replace(/add to cart (for )?/i, '').trim();
-      
-      // Find product card containing this name, then click its Add button
-      const productCard = this.page.locator(`[data-testid*="product"]:has-text("${productName}")`);
-      if (await productCard.count() > 0) {
-        const addBtn = productCard.first().locator('button:has-text("Add")');
-        if (await addBtn.count() > 0) {
-          await addBtn.first().click({ timeout: 5000 });
-          this.memory.addedToCart.push(productName);
-          return { success: true, method: 'product-card-add' };
-        }
-      }
-      
-      // Try finding any Add to Cart button
-      locator = this.page.locator('button:has-text("Add to Cart")');
-      if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
-        this.memory.addedToCart.push(productName || 'unknown');
-        return { success: true, method: 'generic-add' };
-      }
-    }
-    
-    // Strategy 6: Handle "Remove for X" pattern
-    if (targetLower.includes('remove for') || targetLower.includes('remove')) {
-      const itemName = target.replace(/remove (for )?/i, '').trim();
-      
-      // Find cart item containing this name, then click its Remove button
-      const cartItem = this.page.locator(`[data-testid*="cart-item"]:has-text("${itemName}"), .cart-item:has-text("${itemName}")`);
-      if (await cartItem.count() > 0) {
-        const removeBtn = cartItem.first().locator('button:has-text("Remove")');
-        if (await removeBtn.count() > 0) {
-          await removeBtn.first().click({ timeout: 5000 });
-          this.memory.removedFromCart.push(itemName);
-          return { success: true, method: 'cart-item-remove' };
-        }
-      }
-    }
-    
-    // Strategy 7: Handle dropdown opening
-    if (targetLower.includes('dropdown') || targetLower.includes('select')) {
-      const dropdownLabel = target.replace(/(dropdown|select)/i, '').trim();
-      
-      // Try Radix select trigger
-      locator = this.page.locator(`[data-radix-select-trigger]:has-text("${dropdownLabel}")`);
-      if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
-        return { success: true, method: 'radix-trigger' };
-      }
-      
-      // Try by label
-      locator = this.page.locator(`[role="combobox"]:near(:text("${dropdownLabel}"))`);
-      if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
-        return { success: true, method: 'combobox-near-label' };
       }
     }
     
