@@ -124,7 +124,18 @@ class AIGoalAgent {
       document.querySelectorAll('[data-testid*="product"], .product, .product-card, [class*="product"]').forEach(product => {
         const name = product.querySelector('h3, h4, [class*="title"], [class*="name"]')?.innerText?.trim();
         const price = product.querySelector('[class*="price"], .price')?.innerText?.trim();
-        const addBtn = product.querySelector('button[data-testid*="add"], button:has-text("Add"), [data-testid*="add-to-cart"]');
+        // Find add button - use valid CSS selectors only (no :has-text)
+        let addBtn = product.querySelector('button[data-testid*="add"], [data-testid*="add-to-cart"]');
+        if (!addBtn) {
+          // Fallback: find button containing "Add" text
+          const buttons = product.querySelectorAll('button');
+          for (const btn of buttons) {
+            if (btn.innerText?.toLowerCase().includes('add')) {
+              addBtn = btn;
+              break;
+            }
+          }
+        }
         const testId = product.getAttribute('data-testid');
         
         if (name) {
@@ -190,7 +201,18 @@ class AIGoalAgent {
       const cartItems = [];
       document.querySelectorAll('[data-testid*="cart-item"], .cart-item, [class*="cart"] [class*="item"]').forEach(item => {
         const name = item.querySelector('[class*="name"], [class*="title"], h3, h4')?.innerText?.trim();
-        const removeBtn = item.querySelector('button[data-testid*="remove"], button:has-text("Remove")');
+        // Find remove button - use valid CSS selectors only (no :has-text)
+        let removeBtn = item.querySelector('button[data-testid*="remove"]');
+        if (!removeBtn) {
+          // Fallback: find button containing "Remove" text
+          const buttons = item.querySelectorAll('button');
+          for (const btn of buttons) {
+            if (btn.innerText?.toLowerCase().includes('remove')) {
+              removeBtn = btn;
+              break;
+            }
+          }
+        }
         if (name) cartItems.push({ name, hasRemoveButton: !!removeBtn });
       });
       
