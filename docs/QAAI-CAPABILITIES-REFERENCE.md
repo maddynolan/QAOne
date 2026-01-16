@@ -609,10 +609,100 @@ When working on QAAI recording/playback issues:
 
 ---
 
+## AI Goal Agent (v3.0)
+
+The AI Goal Agent enables natural language test creation without manual recording.
+
+### Architecture: Plan-First, Execute-Fast
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: ANALYZE                                                     │
+│ analyzePageDeep() → Products, Buttons, Dropdowns, Cart, Modals       │
+│ [Local Playwright scan - NO API call]                                │
+└──────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: PLAN                                                        │
+│ createActionPlan() → GPT-4o creates ordered action sequence          │
+│ [SINGLE API call for entire goal]                                    │
+└──────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: EXECUTE                                                     │
+│ executeSmartAction() → Playwright executes each planned action       │
+│ [NO API calls - fast local execution]                                │
+└──────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: RECORD                                                      │
+│ generateTestCase() → Creates playback-compatible test steps          │
+│ [Includes elementIndex, testId, recipe for SmartFinder]              │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Smart Execution Strategies
+| Action Type | Strategy | Handles |
+|------------|----------|---------|
+| Add to Cart | Product card detection → specific Add button | Multiple products |
+| Remove from Cart | Cart item detection → specific Remove button | Cart management |
+| Tab Navigation | Role-based and text matching | Radix tabs |
+| Dropdown Select | Radix combobox detection → option finding | Complex dropdowns |
+| Fill Form | Label/placeholder/testId matching | Various inputs |
+
+### Memory State Tracking
+```javascript
+this.memory = {
+  visitedPages: ['products', 'cart'],
+  addedToCart: ['iPhone 15 Pro', 'MacBook Pro'],
+  removedFromCart: ['AirPods'],
+  filledFields: { email: 'test@example.com' },
+  cartCount: 2
+};
+```
+
+### Key Differences from Manual Recording
+| Aspect | Manual Recording | Goal Agent |
+|--------|-----------------|------------|
+| Element Finding | User clicks exact element | Agent finds by product name |
+| Duplicate Handling | Automatic index tracking | Memory-based index tracking |
+| Recipe Data | Full recipe captured | Inferred from execution |
+| Playback Reliability | High (exact recipe) | High (product-specific targets) |
+
+### Example Goal & Execution
+```
+Goal: "Add 3 different phones to cart, remove the cheapest one, apply promo SAVE10"
+
+Generated Plan:
+1. click "Products" tab
+2. click "Add to Cart for iPhone 15 Pro" 
+3. click "Add to Cart for Samsung Galaxy S24"
+4. click "Add to Cart for Google Pixel 8"
+5. click "Cart" tab
+6. click "Remove for Google Pixel 8"
+7. fill "Promo Code" with "SAVE10"
+8. click "Apply"
+
+Execution Result:
+- Each product added via product-card strategy
+- Element indexes: 0, 1, 2
+- Remove via cart-item detection
+- Promo filled via input detection
+```
+
+---
+
 ## Version History
 
 | Date | Changes |
 |------|---------|
+| Jan 16, 2026 | **AI Goal Agent v3.1** - Product-specific recording for correct playback |
+| Jan 16, 2026 | Goal Agent smartClick now returns actualTarget (product name) |
+| Jan 16, 2026 | Step recording uses actual product names, not generic "Add to Cart" |
+| Jan 16, 2026 | Element indexes tracked correctly via memory.addedToCart.length |
+| Jan 16, 2026 | Removed recorder overhead for cart actions (faster execution) |
 | Jan 16, 2026 | **AI Goal Agent v3.0** - Plan-first agentic architecture |
 | Jan 16, 2026 | Fixed Goal Agent IPC channels in preload (events weren't whitelisted) |
 | Jan 16, 2026 | Fixed Goal Agent event handler signature in frontend |

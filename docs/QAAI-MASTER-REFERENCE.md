@@ -348,6 +348,41 @@ page.locator('lightning-button >> button');
 
 ## 10. AI Features
 
+### AI Goal Agent (v3.0) - Plan-First Architecture
+
+The AI Goal Agent allows natural language test generation:
+
+```
+Goal: "Add iPhone 15 Pro and MacBook Pro to cart, remove AirPods, select Express shipping"
+```
+
+**Architecture:**
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Natural Goal   │ ──► │  Deep Analysis   │ ──► │  Smart Planning │
+│  (User Input)   │     │  (Page Scan)     │     │  (1 API Call)   │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                                                          │
+┌─────────────────┐     ┌──────────────────┐              │
+│  Test Case      │ ◄── │  Local Execution │ ◄────────────┘
+│  (Playback OK)  │     │  (No API Calls)  │
+└─────────────────┘     └──────────────────┘
+```
+
+**Key Features:**
+- **Plan First**: Single GPT-4o call creates full action plan
+- **Execute Locally**: Playwright executes plan without further API calls  
+- **Product-Specific**: Records actual product names (not generic "Add to Cart")
+- **Smart Selectors**: Handles Radix dropdowns, Shadow DOM, tabs, modals
+- **Element Indexing**: Tracks Nth element for duplicate buttons
+- **Memory State**: Tracks cart items, visited pages, filled fields
+
+**Usage (Flow Map → Goal Agent):**
+1. Enter natural language goal
+2. Optionally provide test data (email, username, etc.)
+3. Click "Execute Goal"
+4. Save generated test for playback
+
 ### AI Agents (6 Personas)
 | Agent | Purpose |
 |-------|---------|
@@ -363,17 +398,17 @@ page.locator('lightning-button >> button');
 |---------|-------------|
 | Self-Healing | AI Vision finds moved elements |
 | AI Exploration | Autonomous page exploration |
-| Test Generation | Generate tests from goals |
+| Goal-Based Testing | Generate tests from natural language |
 | Gap Analysis | Find missing test coverage |
 | Recording Enhancement | Improve recorded selectors |
 
 ### Key Files
 | File | Purpose |
 |------|---------|
-| `flowstral-desktop/src/main/lib/ai-explorer-agent.js` | Exploration |
-| `flowstral-desktop/src/main/lib/ai-goal-agent.js` | Goal-based |
-| `flowstral-desktop/src/main/lib/ai-test-generator.js` | Test gen |
-| `backend/app/services/agents/` | AI personas |
+| `flowstral-desktop/src/main/lib/ai-goal-agent.js` | Goal-based agent (v3.0) |
+| `flowstral-desktop/src/main/lib/ai-explorer-agent.js` | Autonomous exploration |
+| `flowstral-desktop/src/main/lib/ai-test-generator.js` | Test generation |
+| `backend/app/services/agents/` | AI personas (6) |
 | `backend/app/services/ai/vision_self_healing.py` | Self-healing |
 
 ### AI Fallback (Playback)
@@ -440,12 +475,18 @@ page.locator('lightning-button >> button');
 ### Desktop App (flowstral-desktop)
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/main/index.js` | ~2800 | Main entry, IPC handlers |
-| `src/main/playwright-recorder.js` | ~8500 | Recording & playback |
+| `src/main/index.js` | ~2900 | Main entry, IPC handlers |
+| `src/main/playwright-recorder.js` | ~8700 | Recording & playback |
 | `src/main/test-executor.js` | ~3500 | Test execution |
-| `src/main/lib/smart-finder.js` | ~600 | Element finding |
-| `src/main/lib/element-recipe.js` | ~400 | Recipe model |
+| `src/main/lib/smart-finder.js` | ~600 | Element finding (8 phases) |
+| `src/main/lib/element-recipe.js` | ~400 | Recipe model (what/where/which) |
+| `src/main/lib/ai-goal-agent.js` | ~1200 | Goal-based AI agent (v3.0) |
 | `src/main/lib/ai-explorer-agent.js` | ~1000 | AI exploration |
+| `src/main/lib/action-handlers.js` | ~400 | Modular action handlers |
+| `src/main/lib/tab-manager.js` | ~300 | Multi-tab/window handlers |
+| `src/main/lib/salesforce-handlers.js` | ~200 | Salesforce-specific handlers |
+| `src/main/lib/recipe-recorder-integration.js` | ~600 | Browser injection script |
+| `src/main/lib/action-coalescer.js` | ~300 | Dropdown sequence detection |
 
 ### Backend (backend/app)
 | Directory | Files | Purpose |
