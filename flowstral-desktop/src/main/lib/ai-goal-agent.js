@@ -513,7 +513,7 @@ Return JSON:
               const testId = await addBtn.first().getAttribute('data-testid').catch(() => null);
               const ariaLabel = await addBtn.first().getAttribute('aria-label').catch(() => null);
               
-              await addBtn.first().click({ timeout: 5000 });
+              await addBtn.first().click({ timeout: 5000, force: true });
               this.memory.addedToCart.push(productName);
               this.log(`✓ Added ${productName} via product card`);
               
@@ -540,7 +540,7 @@ Return JSON:
       const testIdBtn = this.page.locator(`[data-testid*="add"][data-testid*="${testIdName}"], [data-testid="add-to-cart-${testIdName}"]`);
       if (await testIdBtn.count() > 0) {
         const testId = await testIdBtn.first().getAttribute('data-testid').catch(() => null);
-        await testIdBtn.first().click({ timeout: 5000 });
+        await testIdBtn.first().click({ timeout: 5000, force: true });
         this.memory.addedToCart.push(productName);
         this.log(`✓ Added ${productName} via testId`);
         return { 
@@ -565,7 +565,8 @@ Return JSON:
         const testId = await btnElement.getAttribute('data-testid').catch(() => null);
         const ariaLabel = await btnElement.getAttribute('aria-label').catch(() => null);
         
-        await btnElement.click({ timeout: 5000 });
+        // Use force:true to bypass any overlay elements blocking clicks
+        await btnElement.click({ timeout: 5000, force: true });
         this.memory.addedToCart.push(productName);
         this.log(`✓ Added ${productName} via nth(${currentIndex})`);
         
@@ -604,7 +605,7 @@ Return JSON:
           if (await cartItem.count() > 0) {
             const removeBtn = cartItem.locator('button:has-text("Remove"), button:has-text("Delete"), [aria-label*="remove"]');
             if (await removeBtn.count() > 0) {
-              await removeBtn.first().click({ timeout: 5000 });
+              await removeBtn.first().click({ timeout: 5000, force: true });
               this.memory.removedFromCart.push(itemName);
               this.log(`✓ Removed ${itemName}`);
               return { success: true, method: 'cart-item-remove' };
@@ -649,7 +650,7 @@ Return JSON:
       let locator = this.page.getByRole('tab', { name: new RegExp(`^${tabName}$`, 'i') });
       if (await locator.count() > 0) {
         const clickedText = await locator.first().textContent().catch(() => tabName);
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked tab "${clickedText}" via role (exact)`);
         return { success: true, method: 'role-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
@@ -658,7 +659,7 @@ Return JSON:
       locator = this.page.getByRole('tab', { name: new RegExp(tabName, 'i') });
       if (await locator.count() > 0) {
         const clickedText = await locator.first().textContent().catch(() => tabName);
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked tab "${clickedText}" via role (partial)`);
         return { success: true, method: 'role-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
@@ -667,7 +668,7 @@ Return JSON:
       locator = this.page.locator(`[data-radix-collection-item]:has-text("${tabName}")`);
       if (await locator.count() > 0) {
         const clickedText = await locator.first().textContent().catch(() => tabName);
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked tab "${clickedText}" via radix`);
         return { success: true, method: 'radix-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
@@ -676,7 +677,7 @@ Return JSON:
       locator = this.page.locator(`[role="tab"]:has-text("${tabName}")`);
       if (await locator.count() > 0) {
         const clickedText = await locator.first().textContent().catch(() => tabName);
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked tab "${clickedText}" via role-tab-text`);
         return { success: true, method: 'role-tab-text', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
@@ -688,7 +689,7 @@ Return JSON:
       // Last resort: try clicking any element with exact tab name text
       locator = this.page.locator(`text="${tabName}"`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked element with exact text "${tabName}"`);
         return { success: true, method: 'exact-text-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
       }
@@ -705,7 +706,7 @@ Return JSON:
       // Try Radix select trigger
       let locator = this.page.locator('[data-radix-select-trigger]');
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.log(`✓ Clicked Radix dropdown`);
         return { success: true, method: 'radix-trigger' };
       }
@@ -713,7 +714,7 @@ Return JSON:
       // Try by role combobox
       locator = this.page.getByRole('combobox');
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'combobox' };
       }
     }
@@ -726,21 +727,21 @@ Return JSON:
       // Try role option
       let locator = this.page.getByRole('option', { name: new RegExp(optionText, 'i') });
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'role-option' };
       }
       
       // Try Radix select item
       locator = this.page.locator(`[data-radix-collection-item]:has-text("${optionText}")`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'radix-option' };
       }
       
       // Try text in listbox
       locator = this.page.locator(`[role="listbox"] >> text=${optionText}`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'listbox-text' };
       }
     }
@@ -750,7 +751,7 @@ Return JSON:
     // Strategy 1: Exact text match
     let locator = this.page.getByText(target, { exact: true });
     if (await locator.count() > 0) {
-      await locator.first().click({ timeout: 5000 });
+      await locator.first().click({ timeout: 5000, force: true });
       this.updateMemory('click', target);
       return { success: true, method: 'exact-text' };
     }
@@ -759,7 +760,7 @@ Return JSON:
     for (const role of ['button', 'tab', 'link', 'menuitem']) {
       locator = this.page.getByRole(role, { name: new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.updateMemory('click', target);
         return { success: true, method: `role-${role}` };
       }
@@ -769,7 +770,7 @@ Return JSON:
     locator = this.page.getByText(target, { exact: false });
     if (await locator.count() > 0) {
       await locator.first().scrollIntoViewIfNeeded().catch(() => {});
-      await locator.first().click({ timeout: 5000 });
+      await locator.first().click({ timeout: 5000, force: true });
       this.updateMemory('click', target);
       return { success: true, method: 'partial-text' };
     }
@@ -783,7 +784,7 @@ Return JSON:
     for (const testId of testIdPatterns) {
       locator = this.page.locator(`[data-testid*="${testId}"]`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         this.updateMemory('click', target);
         return { success: true, method: 'testid' };
       }
@@ -796,14 +797,14 @@ Return JSON:
       // Click in Radix dropdown content
       locator = this.page.locator(`[data-radix-select-content] [role="option"]:has-text("${optionText}")`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'radix-option' };
       }
       
       // Try regular select option
       locator = this.page.locator(`[role="option"]:has-text("${optionText}")`);
       if (await locator.count() > 0) {
-        await locator.first().click({ timeout: 5000 });
+        await locator.first().click({ timeout: 5000, force: true });
         return { success: true, method: 'option' };
       }
     }
@@ -820,7 +821,7 @@ Return JSON:
       try {
         locator = this.page.locator(css);
         if (await locator.count() > 0) {
-          await locator.first().click({ timeout: 5000 });
+          await locator.first().click({ timeout: 5000, force: true });
           this.updateMemory('click', target);
           return { success: true, method: 'css' };
         }
