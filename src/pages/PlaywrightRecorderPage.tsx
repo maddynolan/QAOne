@@ -504,28 +504,93 @@ export default function PlaywrightRecorderPage() {
   const [captureForApiTest, setCaptureForApiTest] = useState(false);
   const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
   
-  // Mobile device emulation
+  // Mobile device emulation - 50+ devices
   const [selectedMobileDevice, setSelectedMobileDevice] = useState<string>('desktop');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('none');
-  const mobileDevices = [
-    { id: 'desktop', name: '🖥️ Desktop', category: 'desktop' },
-    { id: 'iphone-15-pro', name: 'iPhone 15 Pro', category: 'ios' },
-    { id: 'iphone-14', name: 'iPhone 14', category: 'ios' },
-    { id: 'iphone-13', name: 'iPhone 13', category: 'ios' },
-    { id: 'iphone-se', name: 'iPhone SE', category: 'ios' },
-    { id: 'ipad-pro', name: 'iPad Pro 12.9"', category: 'ios' },
-    { id: 'pixel-8', name: 'Pixel 8', category: 'android' },
-    { id: 'pixel-7', name: 'Pixel 7', category: 'android' },
-    { id: 'galaxy-s24', name: 'Galaxy S24 Ultra', category: 'android' },
-    { id: 'galaxy-s23', name: 'Galaxy S23', category: 'android' },
-  ];
+  
+  // Device categories for organized dropdown
+  const deviceCategories = {
+    'Popular': [
+      { id: 'iPhone 15 Pro Max', name: 'iPhone 15 Pro Max' },
+      { id: 'iPhone 14 Pro', name: 'iPhone 14 Pro' },
+      { id: 'Pixel 8', name: 'Pixel 8' },
+      { id: 'Galaxy S24', name: 'Galaxy S24' },
+      { id: 'iPad Pro 11', name: 'iPad Pro 11"' },
+    ],
+    'iOS - iPhone': [
+      { id: 'iPhone 15 Pro Max', name: 'iPhone 15 Pro Max' },
+      { id: 'iPhone 15 Pro', name: 'iPhone 15 Pro' },
+      { id: 'iPhone 15', name: 'iPhone 15' },
+      { id: 'iPhone 14 Pro Max', name: 'iPhone 14 Pro Max' },
+      { id: 'iPhone 14 Pro', name: 'iPhone 14 Pro' },
+      { id: 'iPhone 14', name: 'iPhone 14' },
+      { id: 'iPhone 13 Pro Max', name: 'iPhone 13 Pro Max' },
+      { id: 'iPhone 13 Pro', name: 'iPhone 13 Pro' },
+      { id: 'iPhone 13', name: 'iPhone 13' },
+      { id: 'iPhone 13 Mini', name: 'iPhone 13 Mini' },
+      { id: 'iPhone 12 Pro Max', name: 'iPhone 12 Pro Max' },
+      { id: 'iPhone 12 Pro', name: 'iPhone 12 Pro' },
+      { id: 'iPhone 12', name: 'iPhone 12' },
+      { id: 'iPhone SE (3rd Gen)', name: 'iPhone SE (3rd Gen)' },
+      { id: 'iPhone SE', name: 'iPhone SE' },
+      { id: 'iPhone 11', name: 'iPhone 11' },
+    ],
+    'iOS - iPad': [
+      { id: 'iPad Pro 12.9', name: 'iPad Pro 12.9"' },
+      { id: 'iPad Pro 11', name: 'iPad Pro 11"' },
+      { id: 'iPad Air', name: 'iPad Air' },
+      { id: 'iPad Mini', name: 'iPad Mini' },
+      { id: 'iPad', name: 'iPad (10th Gen)' },
+    ],
+    'Android - Google Pixel': [
+      { id: 'Pixel 8 Pro', name: 'Pixel 8 Pro' },
+      { id: 'Pixel 8', name: 'Pixel 8' },
+      { id: 'Pixel 7 Pro', name: 'Pixel 7 Pro' },
+      { id: 'Pixel 7', name: 'Pixel 7' },
+      { id: 'Pixel 6 Pro', name: 'Pixel 6 Pro' },
+      { id: 'Pixel 6', name: 'Pixel 6' },
+      { id: 'Pixel 5', name: 'Pixel 5' },
+    ],
+    'Android - Samsung Galaxy': [
+      { id: 'Galaxy S24 Ultra', name: 'Galaxy S24 Ultra' },
+      { id: 'Galaxy S24+', name: 'Galaxy S24+' },
+      { id: 'Galaxy S24', name: 'Galaxy S24' },
+      { id: 'Galaxy S23 Ultra', name: 'Galaxy S23 Ultra' },
+      { id: 'Galaxy S23', name: 'Galaxy S23' },
+      { id: 'Galaxy S22 Ultra', name: 'Galaxy S22 Ultra' },
+      { id: 'Galaxy S21', name: 'Galaxy S21' },
+      { id: 'Galaxy A54', name: 'Galaxy A54' },
+      { id: 'Galaxy A34', name: 'Galaxy A34' },
+      { id: 'Galaxy Tab S9', name: 'Galaxy Tab S9' },
+      { id: 'Galaxy Tab S8', name: 'Galaxy Tab S8' },
+    ],
+    'Android - Other Brands': [
+      { id: 'OnePlus 12', name: 'OnePlus 12' },
+      { id: 'OnePlus 11', name: 'OnePlus 11' },
+      { id: 'Xiaomi 14 Pro', name: 'Xiaomi 14 Pro' },
+      { id: 'Redmi Note 13 Pro', name: 'Redmi Note 13 Pro' },
+    ],
+  };
+  
   const networkPresets = [
     { id: 'none', name: 'No Throttling' },
-    { id: '4g-lte', name: '4G LTE' },
-    { id: '4g', name: '4G' },
-    { id: '3g', name: '3G' },
-    { id: 'slow-3g', name: 'Slow 3G' },
+    { id: '5G', name: '5G' },
+    { id: '4G LTE', name: '4G LTE' },
+    { id: '4G', name: '4G' },
+    { id: '3G', name: '3G' },
+    { id: 'Slow 3G', name: 'Slow 3G' },
+    { id: '2G', name: '2G' },
   ];
+  
+  // Helper to get device display name
+  const getDeviceName = (deviceId: string) => {
+    if (deviceId === 'desktop') return 'Desktop';
+    for (const category of Object.values(deviceCategories)) {
+      const device = category.find(d => d.id === deviceId);
+      if (device) return device.name;
+    }
+    return deviceId;
+  };
   
   // Visual checkpoint state
   const [isCapturingVisual, setIsCapturingVisual] = useState(false);
@@ -2245,7 +2310,7 @@ export default function PlaywrightRecorderPage() {
       
       // Determine if we need mobile emulation
       const isMobile = selectedMobileDevice !== 'desktop';
-      const mobileDevice = isMobile ? mobileDevices.find(d => d.id === selectedMobileDevice)?.name : null;
+      const mobileDevice = isMobile ? selectedMobileDevice : null; // Use device ID directly (matches mobile-devices.js keys)
       const mobileNetwork = isMobile && selectedNetwork !== 'none' ? selectedNetwork : null;
       
       if (electronAPI?.invoke && isMobile) {
@@ -2271,7 +2336,7 @@ export default function PlaywrightRecorderPage() {
         setIsPaused(false);
         setCurrentUrl(url);
         const captureMsg = captureNetwork ? " (capturing network traffic)" : "";
-        const mobileMsg = isMobile ? ` on ${mobileDevice}` : "";
+        const mobileMsg = isMobile ? ` on ${getDeviceName(selectedMobileDevice)}` : "";
         toast.success(`Recording started${mobileMsg}!${captureMsg}`);
       } else {
         toast.error(result?.error || "Failed to start");
@@ -3804,29 +3869,29 @@ Recorded Test
             {!isRecording && (
               <div className="flex gap-2 mb-2">
                 <Select value={selectedMobileDevice} onValueChange={setSelectedMobileDevice}>
-                  <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectTrigger className="h-8 w-[200px] text-xs">
                     {selectedMobileDevice === 'desktop' ? (
                       <Monitor className="h-3.5 w-3.5 mr-1.5" />
                     ) : (
                       <Smartphone className="h-3.5 w-3.5 mr-1.5" />
                     )}
-                    <SelectValue placeholder="Device" />
+                    <SelectValue placeholder="Device">{getDeviceName(selectedMobileDevice)}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[400px]">
                     <SelectItem value="desktop" className="text-xs">
-                      <span className="flex items-center gap-2">🖥️ Desktop</span>
+                      <span className="flex items-center gap-2">🖥️ Desktop (Default)</span>
                     </SelectItem>
-                    <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium">iOS</div>
-                    {mobileDevices.filter(d => d.category === 'ios').map(device => (
-                      <SelectItem key={device.id} value={device.id} className="text-xs">
-                        📱 {device.name}
-                      </SelectItem>
-                    ))}
-                    <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium">Android</div>
-                    {mobileDevices.filter(d => d.category === 'android').map(device => (
-                      <SelectItem key={device.id} value={device.id} className="text-xs">
-                        📱 {device.name}
-                      </SelectItem>
+                    {Object.entries(deviceCategories).map(([category, devices]) => (
+                      <div key={category}>
+                        <div className="px-2 py-1.5 text-[10px] text-muted-foreground font-semibold bg-muted/50 sticky top-0">
+                          {category} ({devices.length})
+                        </div>
+                        {devices.map(device => (
+                          <SelectItem key={device.id} value={device.id} className="text-xs pl-4">
+                            {category.includes('iOS') ? '📱' : '🤖'} {device.name}
+                          </SelectItem>
+                        ))}
+                      </div>
                     ))}
                   </SelectContent>
                 </Select>
@@ -3861,7 +3926,7 @@ Recorded Test
               <div className="flex items-center gap-2 mb-2 p-2 bg-sky-500/10 rounded-lg border border-sky-500/30">
                 <Smartphone className="h-4 w-4 text-sky-500" />
                 <span className="text-xs text-sky-500 font-medium">
-                  Recording on {mobileDevices.find(d => d.id === selectedMobileDevice)?.name}
+                  Recording on {getDeviceName(selectedMobileDevice)}
                 </span>
                 {selectedNetwork !== 'none' && (
                   <Badge variant="outline" className="text-[10px] h-5 bg-violet-500/10 text-violet-400 border-violet-500/30">
