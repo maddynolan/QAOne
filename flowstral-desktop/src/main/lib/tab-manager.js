@@ -1,154 +1,102 @@
 /**
- * Tab Manager Module
+ * Tab Manager Module (Simplified)
  * 
- * Handles multi-tab, multi-window operations including:
- * - New tab detection and tracking
- * - Tab switching
- * - Tab closing
- * - Cross-origin tab handling
+ * Leverages Playwright's NATIVE multi-tab/cross-origin support:
+ * - Playwright runs out-of-process = full access to any origin
+ * - context.waitForEvent('page') handles new tabs/popups
+ * - page.frameLocator() handles iframes seamlessly
+ * - Regular locators work on cross-origin pages!
+ * 
+ * This module adds RECORDING/PLAYBACK tracking on top of native capabilities.
  */
-
-const { SmartFinder } = require('./smart-finder');
 
 /**
  * Handle new tab action during playback
- * Waits for a new tab to open and switches context to it
+ * 
+ * Uses Playwright's native multi-tab support via context.waitForEvent('page')
  */
 async function handleNewTab(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
-  const expectedUrl = action.url || action.args?.[0];
   const targetIndex = action.tabIndex;
   
-  console.log(`[TabManager] NewTab action - expecting URL: ${expectedUrl}, index: ${targetIndex}`);
+  console.log(`[TabManager] NewTab - index: ${targetIndex}`);
   
   const pages = ctx.context.pages();
   
-  // If target index is provided and tab already exists, switch to it
+  // Tab already exists? Switch to it
   if (typeof targetIndex === 'number' && pages[targetIndex]) {
     ctx.page = pages[targetIndex];
     await ctx.page.bringToFront();
-    console.log(`[TabManager] ✓ Switched to existing tab ${targetIndex}`);
-    
-    // Re-initialize SmartFinder for new page
-    if (ctx.useSmartFinderForPlayback) {
-      ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-    }
-    
+    console.log(`[TabManager] ✓ Switched to tab ${targetIndex}`);
     return { success: true };
   }
   
-  // Wait for new page if not already available
+  // Wait for new page using Playwright's native event
   if (pages.length === 1) {
     try {
-      console.log(`[TabManager] Waiting for new page to open...`);
+      console.log(`[TabManager] Waiting for new page...`);
       const newPage = await ctx.context.waitForEvent('page', { timeout });
       await newPage.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
-      
       ctx.page = newPage;
       await ctx.page.bringToFront();
-      console.log(`[TabManager] ✓ New tab opened: ${newPage.url().substring(0, 60)}`);
-      
-      // Re-initialize SmartFinder for new page
-      if (ctx.useSmartFinderForPlayback) {
-        ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-      }
-      
+      console.log(`[TabManager] ✓ New tab: ${newPage.url().substring(0, 60)}`);
       return { success: true };
     } catch (e) {
-      console.log(`[TabManager] No new page opened within timeout`);
+      console.log(`[TabManager] Timeout waiting for new page`);
     }
   }
   
-  // Multiple pages exist - find the right one
-  const latestIndex = pages.length - 1;
-  ctx.page = pages[latestIndex];
+  // Multiple pages - switch to latest
+  ctx.page = pages[pages.length - 1];
   await ctx.page.bringToFront();
-  console.log(`[TabManager] ✓ Switched to latest tab (${latestIndex}): ${ctx.page.url().substring(0, 60)}`);
-  
-  // Re-initialize SmartFinder for new page
-  if (ctx.useSmartFinderForPlayback) {
-    ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-  }
-  
+  console.log(`[TabManager] ✓ Switched to latest tab: ${ctx.page.url().substring(0, 60)}`);
   return { success: true };
 }
 
 /**
  * Handle tab switch action during playback
- * Finds the target tab by index, URL, or hostname
+ * 
+ * Simple tab switching using Playwright's page tracking
  */
 async function handleSwitchTab(ctx, action, options = {}) {
-  const { timeout = 30000 } = options;
   const targetIndex = action.tabIndex ?? action.args?.[0];
   const targetUrl = action.url || action.args?.[1];
   
-  console.log(`[TabManager] SwitchTab action - index: ${targetIndex}, url: ${targetUrl}`);
+  console.log(`[TabManager] SwitchTab - index: ${targetIndex}, url: ${targetUrl}`);
   
   const pages = ctx.context.pages();
   
-  // Strategy 1: By index
+  // By index (most reliable)
   if (typeof targetIndex === 'number' && pages[targetIndex]) {
     ctx.page = pages[targetIndex];
     await ctx.page.bringToFront();
-    console.log(`[TabManager] ✓ Switched to tab ${targetIndex}: ${ctx.page.url().substring(0, 60)}`);
-    
-    if (ctx.useSmartFinderForPlayback) {
-      ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-    }
-    
+    console.log(`[TabManager] ✓ Tab ${targetIndex}: ${ctx.page.url().substring(0, 60)}`);
     return { success: true };
   }
   
-  // Strategy 2: By URL match
+  // By URL match
   if (targetUrl) {
-    for (let i = 0; i < pages.length; i++) {
-      const pageUrl = pages[i].url();
-      if (pageUrl === targetUrl || pageUrl.includes(targetUrl)) {
-        ctx.page = pages[i];
-        await ctx.page.bringToFront();
-        console.log(`[TabManager] ✓ Switched to tab by URL match (${i}): ${pageUrl.substring(0, 60)}`);
-        
-        if (ctx.useSmartFinderForPlayback) {
-          ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-        }
-        
-        return { success: true };
-      }
-    }
+    const match = pages.find(p => {
+      try {
+        const url = p.url();
+        return url === targetUrl || url.includes(targetUrl) || 
+               new URL(url).hostname === new URL(targetUrl).hostname;
+      } catch { return false; }
+    });
     
-    // Try hostname match
-    try {
-      const targetHost = new URL(targetUrl).hostname;
-      for (let i = 0; i < pages.length; i++) {
-        try {
-          const pageHost = new URL(pages[i].url()).hostname;
-          if (pageHost === targetHost) {
-            ctx.page = pages[i];
-            await ctx.page.bringToFront();
-            console.log(`[TabManager] ✓ Switched to tab by hostname match (${i}): ${pageHost}`);
-            
-            if (ctx.useSmartFinderForPlayback) {
-              ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-            }
-            
-            return { success: true };
-          }
-        } catch (e) {}
-      }
-    } catch (e) {}
+    if (match) {
+      ctx.page = match;
+      await ctx.page.bringToFront();
+      console.log(`[TabManager] ✓ Tab by URL: ${ctx.page.url().substring(0, 60)}`);
+      return { success: true };
+    }
   }
   
-  // Strategy 3: Fallback to first or last tab
-  const fallbackIndex = targetIndex >= pages.length ? pages.length - 1 : 0;
-  if (pages[fallbackIndex]) {
-    ctx.page = pages[fallbackIndex];
+  // Fallback to first tab
+  if (pages.length > 0) {
+    ctx.page = pages[0];
     await ctx.page.bringToFront();
-    console.log(`[TabManager] Fallback to tab ${fallbackIndex}: ${ctx.page.url().substring(0, 60)}`);
-    
-    if (ctx.useSmartFinderForPlayback) {
-      ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-    }
-    
+    console.log(`[TabManager] ✓ Fallback to tab 0`);
     return { success: true };
   }
   
@@ -161,262 +109,206 @@ async function handleSwitchTab(ctx, action, options = {}) {
 async function handleCloseTab(ctx, action, options = {}) {
   const targetIndex = action.tabIndex ?? action.args?.[0];
   
-  console.log(`[TabManager] CloseTab action - index: ${targetIndex}`);
+  console.log(`[TabManager] CloseTab - index: ${targetIndex}`);
   
   const pages = ctx.context.pages();
   
   // Determine which tab to close
-  let tabToClose = null;
-  if (typeof targetIndex === 'number' && pages[targetIndex]) {
-    tabToClose = pages[targetIndex];
-  } else {
-    // Close current tab (not the first one)
-    tabToClose = pages[pages.length - 1];
-  }
+  let tabToClose = typeof targetIndex === 'number' && pages[targetIndex] 
+    ? pages[targetIndex] 
+    : pages[pages.length - 1];
   
   if (tabToClose && pages.length > 1) {
     await tabToClose.close();
     console.log(`[TabManager] ✓ Closed tab`);
     
-    // Switch to remaining tab (prefer first/parent)
+    // Switch to parent tab
     const remainingPages = ctx.context.pages();
     if (remainingPages.length > 0) {
       ctx.page = remainingPages[0];
       await ctx.page.bringToFront();
-      console.log(`[TabManager] ✓ Switched to parent tab: ${ctx.page.url().substring(0, 60)}`);
-      
-      if (ctx.useSmartFinderForPlayback) {
-        ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-      }
+      console.log(`[TabManager] ✓ Parent tab: ${ctx.page.url().substring(0, 60)}`);
     }
     
     return { success: true };
   }
   
-  console.log(`[TabManager] No tab to close or only one tab remaining`);
+  console.log(`[TabManager] No tab to close`);
   return { success: true };
 }
 
 /**
  * Handle cross-origin placeholder action during playback
- * Executes user-defined actions in cross-origin tabs
+ * 
+ * SIMPLIFIED: Leverages Playwright's native cross-origin support.
+ * Playwright runs out-of-process and has FULL ACCESS to cross-origin pages.
+ * No special workarounds needed - just use regular locators!
  */
 async function handleCrossOrigin(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const userActions = action.userActions || [];
   const externalUrl = action.url || action.label || action.args?.[0];
   
-  console.log(`[TabManager] CrossOrigin action - URL: ${externalUrl}, userActions: ${userActions.length}`);
+  console.log(`[TabManager] CrossOrigin - URL: ${externalUrl}, actions: ${userActions.length}`);
   
   const pages = ctx.context.pages();
   
-  // Find the cross-origin tab
-  let targetCrossTabIndex = -1;
+  // Find the cross-origin tab (simple: by URL or latest non-parent)
+  let targetPage = null;
   
-  // Strategy 1: By URL match
   if (externalUrl) {
-    for (let i = 0; i < pages.length; i++) {
-      const pageUrl = pages[i].url();
-      if (pageUrl.includes(externalUrl) || externalUrl.includes(new URL(pageUrl).hostname)) {
-        targetCrossTabIndex = i;
-        break;
-      }
+    targetPage = pages.find(p => {
+      try {
+        return p.url().includes(externalUrl) || new URL(p.url()).hostname.includes(externalUrl);
+      } catch { return false; }
+    });
+  }
+  
+  if (!targetPage && pages.length > 1) {
+    targetPage = pages[pages.length - 1];
+  }
+  
+  if (!targetPage) {
+    console.log(`[TabManager] No cross-origin tab found, skipping`);
+    return { success: true };
+  }
+  
+  // Switch to target page - Playwright has FULL access even cross-origin!
+  ctx.page = targetPage;
+  await ctx.page.bringToFront();
+  await ctx.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+  console.log(`[TabManager] ✓ Switched to: ${ctx.page.url().substring(0, 60)}`);
+  
+  // Execute user actions using Playwright's native locators
+  for (const userAction of userActions) {
+    console.log(`[TabManager] Action: ${userAction.action || userAction.type} - ${userAction.description || userAction.selector}`);
+    const result = await executeUserAction(ctx, userAction, timeout);
+    if (!result.success) {
+      console.log(`[TabManager] ⚠ Action failed: ${result.error}`);
     }
   }
   
-  // Strategy 2: Use latest non-parent tab
-  if (targetCrossTabIndex === -1 && pages.length > 1) {
-    targetCrossTabIndex = pages.length - 1;
-  }
-  
-  // Execute user actions if we have a target tab
-  if (targetCrossTabIndex > 0 && pages[targetCrossTabIndex]) {
-    ctx.page = pages[targetCrossTabIndex];
-    await ctx.page.bringToFront();
-    await ctx.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
-    console.log(`[TabManager] ✓ Switched to cross-origin tab (${targetCrossTabIndex}): ${ctx.page.url().substring(0, 60)}`);
-    
-    // Re-initialize SmartFinder for cross-origin page
-    if (ctx.useSmartFinderForPlayback) {
-      ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-    }
-    
-    // Execute each user action
-    for (const userAction of userActions) {
-      console.log(`[TabManager] Executing user action: ${userAction.action} - ${userAction.description}`);
-      
-      const actionResult = await executeUserAction(ctx, userAction, timeout);
-      if (!actionResult.success) {
-        console.log(`[TabManager] User action failed: ${actionResult.error}`);
-        // Continue with other actions, don't fail the whole step
-      }
-    }
-  } else {
-    console.log(`[TabManager] No cross-origin tab found, skipping user actions`);
-  }
-  
-  // CRITICAL: After cross-origin step, switch back to the PARENT tab (tab 0)
-  const pagesAfter = ctx.context.pages();
-  if (pagesAfter.length > 1 && targetCrossTabIndex > 0) {
-    // Close the cross-origin tab if it's still open
-    const crossTab = pagesAfter[targetCrossTabIndex];
-    if (crossTab && crossTab !== pagesAfter[0]) {
-      console.log('[TabManager] Closing cross-origin tab and switching to parent...');
-      await crossTab.close().catch(() => {});
-    }
-  }
-  
-  // Switch back to parent tab (tab 0)
+  // Return to parent tab
   const remainingPages = ctx.context.pages();
   if (remainingPages.length > 0) {
     ctx.page = remainingPages[0];
     await ctx.page.bringToFront();
-    console.log(`[TabManager] ✓ Returned to parent tab: ${ctx.page.url().substring(0, 50)}`);
-    
-    // Re-initialize SmartFinder for parent page
-    if (ctx.useSmartFinderForPlayback) {
-      ctx.smartFinder = new SmartFinder(ctx.page, { debug: true, timeout: 15000 });
-    }
+    console.log(`[TabManager] ✓ Returned to parent: ${ctx.page.url().substring(0, 50)}`);
   }
   
   return { success: true };
 }
 
 /**
- * Execute a single user-defined action in cross-origin context
- * Handles both naming conventions:
- * - UI format: { type, findBy, selector, value, description, coords }
- * - Legacy format: { action, selectorType, text, selector, value, description, coords }
+ * Execute a single user-defined action
+ * 
+ * SIMPLIFIED: Uses Playwright's native locator strategies directly.
+ * Playwright handles cross-origin, shadow DOM (open), and iframes natively.
  */
-async function executeUserAction(ctx, userAction, timeout) {
-  // Normalize field names (UI uses 'type'/'findBy', legacy uses 'action'/'selectorType')
+async function executeUserAction(ctx, userAction, timeout = 10000) {
+  // Normalize field names (UI vs legacy format)
   const actionType = userAction.type || userAction.action || 'click';
   const findBy = userAction.findBy || userAction.selectorType || 'text';
-  const selectorValue = userAction.selector || userAction.text || '';
-  const description = userAction.description || selectorValue;
+  const selector = userAction.selector || userAction.text || '';
   const value = userAction.value || '';
   const coords = userAction.coords;
   
-  console.log(`[TabManager] executeUserAction: type=${actionType}, findBy=${findBy}, selector="${selectorValue}"`);
+  console.log(`[TabManager] Execute: ${actionType} | ${findBy}="${selector}"`);
   
   try {
-    // Handle wait action specially
+    // Wait action
     if (actionType === 'wait') {
-      const duration = parseInt(value) || parseInt(selectorValue) || 2000;
-      console.log(`[TabManager] Waiting ${duration}ms`);
-      await ctx.page.waitForTimeout(duration);
+      const ms = parseInt(value) || parseInt(selector) || 2000;
+      await ctx.page.waitForTimeout(ms);
       return { success: true };
     }
     
-    // Build locator based on find method
-    let locator = null;
-    
-    // Strategy 1: Coordinates
+    // Coordinate-based click
     if (findBy === 'coords' && coords) {
       await ctx.page.mouse.click(coords.x, coords.y);
-      console.log(`[TabManager] ✓ Clicked at (${coords.x}, ${coords.y})`);
+      console.log(`[TabManager] ✓ Clicked (${coords.x}, ${coords.y})`);
       return { success: true };
     }
     
-    // Strategy 2: CSS Selector
-    if (findBy === 'css' && selectorValue) {
-      locator = ctx.page.locator(selectorValue).first();
-      console.log(`[TabManager] Trying CSS selector: ${selectorValue}`);
-    }
-    // Strategy 3: XPath
-    else if (findBy === 'xpath' && selectorValue) {
-      locator = ctx.page.locator(`xpath=${selectorValue}`).first();
-      console.log(`[TabManager] Trying XPath: ${selectorValue}`);
-    }
-    // Strategy 4: Test ID
-    else if (findBy === 'testId' && selectorValue) {
-      locator = ctx.page.locator(`[data-testid="${selectorValue}"]`).first();
-      console.log(`[TabManager] Trying testId: ${selectorValue}`);
-    }
-    // Strategy 5: Text Content (most common from UI)
-    else if ((findBy === 'text' || findBy === 'Text Content') && selectorValue) {
-      console.log(`[TabManager] Finding by text: "${selectorValue}"`);
-      
-      // Try getByText first
-      locator = ctx.page.getByText(selectorValue, { exact: false }).first();
-      
-      // If not visible, try getByRole with name
-      if (!(await locator.isVisible({ timeout: 3000 }).catch(() => false))) {
-        console.log(`[TabManager] getByText failed, trying getByRole...`);
-        locator = ctx.page.getByRole('link', { name: selectorValue }).first();
-      }
-      
-      // If still not visible, try locator with text
-      if (!(await locator.isVisible({ timeout: 2000 }).catch(() => false))) {
-        console.log(`[TabManager] getByRole failed, trying locator...`);
-        locator = ctx.page.locator(`text="${selectorValue}"`).first();
-      }
-      
-      // If still not visible, try partial match
-      if (!(await locator.isVisible({ timeout: 2000 }).catch(() => false))) {
-        console.log(`[TabManager] Exact text failed, trying partial...`);
-        locator = ctx.page.locator(`text=${selectorValue}`).first();
-      }
-    }
-    // Fallback: Use selector value as text
-    else if (selectorValue) {
-      console.log(`[TabManager] Fallback: treating selector as text: "${selectorValue}"`);
-      locator = ctx.page.getByText(selectorValue, { exact: false }).first();
+    if (!selector) {
+      return { success: false, error: 'No selector provided' };
     }
     
-    // Try AI fallback if element not found
-    if (!locator || !(await locator.isVisible({ timeout: 3000 }).catch(() => false))) {
-      if (ctx.enableAIFallback && selectorValue) {
-        console.log(`[TabManager] Element not found, trying AI fallback for: "${selectorValue}"`);
-        const aiResult = await ctx.findElementWithAI(selectorValue, actionType);
-        if (aiResult) {
-          if (actionType === 'click') {
-            await ctx.clickAtCoordinates(aiResult.x, aiResult.y);
-            console.log(`[TabManager] ✓ AI click at (${aiResult.x}, ${aiResult.y})`);
-          } else if (actionType === 'fill') {
-            await ctx.page.mouse.click(aiResult.x, aiResult.y);
-            await ctx.page.keyboard.type(value || '');
-            console.log(`[TabManager] ✓ AI fill completed`);
-          }
-          return { success: true, strategy: 'AI' };
-        }
-      }
-      
-      return { success: false, error: `Element not found: "${selectorValue}"` };
+    // Build locator using Playwright's native methods
+    let locator;
+    
+    switch (findBy) {
+      case 'css':
+        locator = ctx.page.locator(selector).first();
+        break;
+      case 'xpath':
+        locator = ctx.page.locator(`xpath=${selector}`).first();
+        break;
+      case 'testId':
+        locator = ctx.page.getByTestId(selector);
+        break;
+      case 'role':
+        locator = ctx.page.getByRole(selector.split(':')[0], { name: selector.split(':')[1] });
+        break;
+      case 'label':
+        locator = ctx.page.getByLabel(selector);
+        break;
+      case 'placeholder':
+        locator = ctx.page.getByPlaceholder(selector);
+        break;
+      case 'text':
+      case 'Text Content':
+      default:
+        // Playwright's getByText auto-pierces open shadow DOM!
+        locator = ctx.page.getByText(selector, { exact: false }).first();
+        break;
     }
     
-    // Execute the action
-    if (actionType === 'click') {
-      // Wait for element to be stable
-      await locator.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-      await locator.click({ timeout: 10000 });
-      console.log(`[TabManager] ✓ Clicked: "${selectorValue}"`);
-      await ctx.page.waitForTimeout(500); // Allow for navigation
-    } else if (actionType === 'fill') {
-      await locator.clear().catch(() => {});
-      await locator.fill(value || '', { timeout: 10000 });
-      console.log(`[TabManager] ✓ Filled: "${selectorValue}" with "${value}"`);
-    } else if (actionType === 'select') {
-      // For dropdowns, click then select option
-      await locator.click({ timeout: 5000 });
-      await ctx.page.waitForTimeout(300);
-      const option = ctx.page.locator(`[role="option"]:has-text("${value}")`).first();
-      await option.click({ timeout: 5000 });
-      console.log(`[TabManager] ✓ Selected: "${value}"`);
+    // Wait for element to be actionable
+    await locator.waitFor({ state: 'visible', timeout }).catch(() => {});
+    
+    // Execute action
+    switch (actionType) {
+      case 'click':
+        await locator.click({ timeout, force: true });
+        console.log(`[TabManager] ✓ Clicked: "${selector}"`);
+        break;
+      case 'fill':
+      case 'type':
+      case 'input':
+        await locator.fill(value, { timeout });
+        console.log(`[TabManager] ✓ Filled: "${selector}" = "${value}"`);
+        break;
+      case 'select':
+        await locator.selectOption(value, { timeout });
+        console.log(`[TabManager] ✓ Selected: "${value}"`);
+        break;
+      case 'check':
+        await locator.check({ timeout });
+        break;
+      case 'uncheck':
+        await locator.uncheck({ timeout });
+        break;
+      case 'hover':
+        await locator.hover({ timeout });
+        break;
+      default:
+        await locator.click({ timeout, force: true });
     }
     
     return { success: true };
   } catch (e) {
-    console.error(`[TabManager] executeUserAction failed:`, e.message);
+    console.error(`[TabManager] Action failed:`, e.message);
     return { success: false, error: e.message };
   }
 }
 
 /**
  * Handle frame switch action
+ * 
+ * Uses Playwright's native frameLocator() which handles iframes seamlessly
  */
 async function handleSwitchToFrame(ctx, action, options = {}) {
-  const { timeout = 30000 } = options;
   const frameSelector = action.frameSelector || action.selector || action.value;
   const frameName = action.frameName || action.name;
   const frameIndex = action.frameIndex;
@@ -424,26 +316,24 @@ async function handleSwitchToFrame(ctx, action, options = {}) {
   console.log(`[TabManager] SwitchToFrame - selector: ${frameSelector}, name: ${frameName}, index: ${frameIndex}`);
   
   try {
-    let frame = null;
+    // Playwright's frameLocator() provides FULL access to iframe content
+    let frame;
     
     if (frameSelector) {
       frame = ctx.page.frameLocator(frameSelector);
     } else if (frameName) {
       frame = ctx.page.frameLocator(`iframe[name="${frameName}"]`);
     } else if (typeof frameIndex === 'number') {
-      frame = ctx.page.frameLocator(`iframe >> nth=${frameIndex}`);
+      frame = ctx.page.frameLocator('iframe').nth(frameIndex);
     } else {
-      // Default to first iframe
       frame = ctx.page.frameLocator('iframe').first();
     }
     
-    // Store frame context for subsequent actions
     ctx._currentFrame = frame;
-    console.log(`[TabManager] ✓ Switched to frame`);
-    
+    console.log(`[TabManager] ✓ Frame context set`);
     return { success: true };
   } catch (e) {
-    return { success: false, error: `Could not switch to frame: ${e.message}` };
+    return { success: false, error: `Frame switch failed: ${e.message}` };
   }
 }
 
