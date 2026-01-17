@@ -40,6 +40,8 @@ import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
 import EnhancedAPITesting from "./pages/EnhancedAPITesting";
 import VirtualUserGenerator from "./pages/VirtualUserGenerator";
 import SalesforceToolsPage from "./pages/SalesforceToolsPage";
+import MobileTestingPage from "./pages/MobileTestingPage";
+import FlowpilotPage from "./pages/FlowpilotPage";
 
 // Test Cases related pages
 import TestCases from "./pages/TestCases";
@@ -263,6 +265,23 @@ const App = () => {
                   
                   {/* Legacy routes */}
                   <Route path="/salesforce-tools" element={<Navigate to="/salesforce" replace />} />
+
+                  {/* ─────────────────────────────────────────────────────────
+                      6. MOBILE TESTING MODULE
+                      Mobile device emulation and native app testing
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/mobile" element={<MobileTestingPage />} />
+                  <Route path="/mobile/devices" element={<MobileTestingPage />} />
+                  <Route path="/mobile/native" element={<MobileTestingPage />} />
+                  
+                  {/* ─────────────────────────────────────────────────────────
+                      7. FLOWPILOT MODULE
+                      Goal-based agentic testing with AI
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/flowpilot" element={<FlowpilotPage />} />
+                  <Route path="/flowpilot/explorer" element={<FlowpilotPage />} />
+                  <Route path="/flowpilot/generator" element={<FlowpilotPage />} />
+                  <Route path="/flowpilot/self-healer" element={<FlowpilotPage />} />
 
                   {/* ═══════════════════════════════════════════════════════════
                       WEB-ONLY ADDITIONAL FEATURES

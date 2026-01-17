@@ -70,6 +70,12 @@ const mainNavItems: NavItem[] = [
     description: 'Repository, Suites, Plans, Runs',
   },
   {
+    id: 'mobile',
+    label: 'Mobile',
+    path: '/mobile',
+    description: 'Mobile device testing',
+  },
+  {
     id: 'api',
     label: 'API',
     path: '/api',
@@ -104,6 +110,12 @@ const mainNavItems: NavItem[] = [
     label: 'SF',
     path: '/salesforce',
     description: 'Salesforce tools',
+  },
+  {
+    id: 'flowpilot',
+    label: 'Flowpilot',
+    path: '/flowpilot',
+    description: 'Goal-based AI testing',
   },
 ];
 
