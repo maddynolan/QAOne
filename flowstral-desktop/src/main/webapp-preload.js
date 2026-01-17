@@ -255,6 +255,11 @@ contextBridge.exposeInMainWorld('flowstral', {
     
     // Get available native devices (emulators/simulators)
     getNativeDevices: (platform) => ipcRenderer.invoke('mobile-get-native-devices', platform),
+    
+    // Maestro Studio - Interactive recorder for native apps
+    startStudio: (deviceId) => ipcRenderer.invoke('mobile-start-studio', { deviceId }),
+    stopStudio: () => ipcRenderer.invoke('mobile-stop-studio'),
+    getStudioStatus: () => ipcRenderer.invoke('mobile-studio-status'),
   },
   
   // Network Capture API (ported from browser extension)

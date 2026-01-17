@@ -463,6 +463,31 @@ export const mobile = {
     }
     return null;
   },
+  
+  // Maestro Studio - Interactive native app recorder
+  startStudio: async (deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-start-studio', { deviceId });
+    }
+    return { success: false, error: 'Not available in browser' };
+  },
+  
+  stopStudio: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-stop-studio');
+    }
+    return { success: false, error: 'Not available in browser' };
+  },
+  
+  getStudioStatus: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-studio-status');
+    }
+    return { running: false };
+  },
 };
 
 // Export a single object for convenience

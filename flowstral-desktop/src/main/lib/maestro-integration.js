@@ -265,16 +265,117 @@ class MaestroRunner {
     this.timeout = options.timeout || 60000;
     this.outputDir = options.outputDir || path.join(process.cwd(), '.maestro-output');
     this.debug = options.debug || false;
+    this.studioProcess = null;
     
     // Callbacks
     this.onStep = options.onStep || (() => {});
     this.onProgress = options.onProgress || (() => {});
     this.onError = options.onError || (() => {});
+    this.onStudioOutput = options.onStudioOutput || (() => {});
     
     // Ensure output directory exists
     if (!fs.existsSync(this.outputDir)) {
       fs.mkdirSync(this.outputDir, { recursive: true });
     }
+  }
+  
+  /**
+   * Start Maestro Studio - Interactive recorder for native apps
+   * This opens a web UI where you can click on your app and it records the actions
+   * @param {string} deviceId - Optional device ID
+   * @returns {Promise<object>} Studio info including URL
+   */
+  async startStudio(deviceId = null) {
+    return new Promise((resolve, reject) => {
+      if (this.studioProcess) {
+        console.log('[Maestro] Studio already running');
+        return resolve({ success: true, url: 'http://localhost:9999', alreadyRunning: true });
+      }
+      
+      const args = ['studio'];
+      if (deviceId || this.deviceId) {
+        args.push('--device', deviceId || this.deviceId);
+      }
+      
+      console.log(`[Maestro] Starting Studio: maestro ${args.join(' ')}`);
+      
+      this.studioProcess = spawn('maestro', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false
+      });
+      
+      let started = false;
+      
+      this.studioProcess.stdout.on('data', (data) => {
+        const text = data.toString();
+        console.log('[Maestro Studio]', text);
+        this.onStudioOutput({ type: 'stdout', text });
+        
+        // Detect when Studio is ready (it outputs the URL)
+        if (text.includes('localhost') || text.includes('9999')) {
+          if (!started) {
+            started = true;
+            resolve({ 
+              success: true, 
+              url: 'http://localhost:9999',
+              message: 'Maestro Studio is running. Open your browser to record actions.'
+            });
+          }
+        }
+      });
+      
+      this.studioProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        console.error('[Maestro Studio Error]', text);
+        this.onStudioOutput({ type: 'stderr', text });
+      });
+      
+      this.studioProcess.on('close', (code) => {
+        console.log(`[Maestro] Studio closed with code ${code}`);
+        this.studioProcess = null;
+        if (!started) {
+          reject(new Error(`Maestro Studio exited with code ${code}`));
+        }
+      });
+      
+      this.studioProcess.on('error', (err) => {
+        console.error('[Maestro] Studio error:', err);
+        this.studioProcess = null;
+        reject(err);
+      });
+      
+      // Timeout - if Studio doesn't start in 30 seconds, assume it's running
+      setTimeout(() => {
+        if (!started) {
+          started = true;
+          resolve({ 
+            success: true, 
+            url: 'http://localhost:9999',
+            message: 'Maestro Studio should be running at http://localhost:9999'
+          });
+        }
+      }, 10000);
+    });
+  }
+  
+  /**
+   * Stop Maestro Studio
+   */
+  stopStudio() {
+    if (this.studioProcess) {
+      console.log('[Maestro] Stopping Studio');
+      this.studioProcess.kill();
+      this.studioProcess = null;
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * Check if Studio is running
+   */
+  isStudioRunning() {
+    return this.studioProcess !== null;
   }
   
   /**

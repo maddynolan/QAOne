@@ -1076,6 +1076,65 @@ ipcMain.handle('mobile-get-native-devices', async (event, platform) => {
   }
 });
 
+// Store Maestro Studio runner instance globally
+let maestroStudioRunner = null;
+
+// Start Maestro Studio - Interactive native app recorder
+ipcMain.handle('mobile-start-studio', async (event, { deviceId } = {}) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    
+    // Create or reuse runner
+    if (!maestroStudioRunner) {
+      maestroStudioRunner = new MaestroRunner({
+        deviceId,
+        debug: true,
+        onStudioOutput: (output) => {
+          webappView?.webContents.send('mobile-studio-output', output);
+        }
+      });
+    }
+    
+    const result = await maestroStudioRunner.startStudio(deviceId);
+    
+    // Open Studio in default browser
+    if (result.success && result.url) {
+      const { shell } = require('electron');
+      shell.openExternal(result.url);
+    }
+    
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop Maestro Studio
+ipcMain.handle('mobile-stop-studio', async () => {
+  try {
+    if (maestroStudioRunner) {
+      maestroStudioRunner.stopStudio();
+      return { success: true };
+    }
+    return { success: false, error: 'Studio not running' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Check if Maestro Studio is running
+ipcMain.handle('mobile-studio-status', async () => {
+  try {
+    return { 
+      success: true, 
+      running: maestroStudioRunner?.isStudioRunning() || false,
+      url: 'http://localhost:9999'
+    };
+  } catch (error) {
+    return { success: false, running: false };
+  }
+});
+
 // Debug mode: Run single step
 ipcMain.handle('playwright-recorder-run-single-step', async (event, options) => {
   try {

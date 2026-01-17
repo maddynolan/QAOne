@@ -77,7 +77,11 @@ contextBridge.exposeInMainWorld('flowstral', {
     // Run native app test via Maestro
     runNativeTest: (options) => ipcRenderer.invoke('mobile-run-native-test', options),
     // Get native devices (emulators/simulators)
-    getNativeDevices: (platform) => ipcRenderer.invoke('mobile-get-native-devices', platform)
+    getNativeDevices: (platform) => ipcRenderer.invoke('mobile-get-native-devices', platform),
+    // Maestro Studio - Interactive recorder for native apps
+    startStudio: (deviceId) => ipcRenderer.invoke('mobile-start-studio', { deviceId }),
+    stopStudio: () => ipcRenderer.invoke('mobile-stop-studio'),
+    getStudioStatus: () => ipcRenderer.invoke('mobile-studio-status')
   },
   
   // Test Export

@@ -42,6 +42,9 @@ import {
   List,
   Copy,
   Check,
+  Video,
+  CircleDot,
+  Eye,
 } from 'lucide-react';
 
 export default function MobileTestingPage() {
@@ -57,6 +60,8 @@ export default function MobileTestingPage() {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [isRunningTest, setIsRunningTest] = useState(false);
   const [testOutput, setTestOutput] = useState<string[]>([]);
+  const [isStudioRunning, setIsStudioRunning] = useState(false);
+  const [isStartingStudio, setIsStartingStudio] = useState(false);
   const [yamlFlow, setYamlFlow] = useState(`appId: com.example.app
 ---
 - launchApp
@@ -71,10 +76,60 @@ export default function MobileTestingPage() {
 - assertVisible: "Welcome"`);
   const [copiedInstall, setCopiedInstall] = useState(false);
 
-  // Check Maestro installation on mount
+  // Check Maestro installation and Studio status on mount
   useEffect(() => {
     checkMaestro();
+    checkStudioStatus();
   }, [inElectron]);
+  
+  const checkStudioStatus = async () => {
+    if (!inElectron) return;
+    try {
+      const status = await mobile.getStudioStatus();
+      setIsStudioRunning(status?.running || false);
+    } catch (error) {
+      console.error('Failed to check Studio status:', error);
+    }
+  };
+  
+  const handleStartStudio = async () => {
+    if (!inElectron) {
+      toast.error('Native app recording requires the desktop app');
+      return;
+    }
+    
+    setIsStartingStudio(true);
+    setTestOutput(prev => [...prev, '🎬 Starting Maestro Studio...']);
+    
+    try {
+      const result = await mobile.startStudio(selectedDevice || undefined);
+      
+      if (result.success) {
+        setIsStudioRunning(true);
+        setTestOutput(prev => [...prev, `✅ Studio started at ${result.url}`, '📱 Click on your app to record actions', '📝 Actions will appear in the Studio web UI']);
+        toast.success('Maestro Studio is running! Your browser will open automatically.');
+      } else {
+        setTestOutput(prev => [...prev, `❌ Failed: ${result.error}`]);
+        toast.error(result.error || 'Failed to start Studio');
+      }
+    } catch (error: any) {
+      setTestOutput(prev => [...prev, `❌ Error: ${error.message}`]);
+      toast.error(error.message || 'Failed to start Studio');
+    } finally {
+      setIsStartingStudio(false);
+    }
+  };
+  
+  const handleStopStudio = async () => {
+    try {
+      await mobile.stopStudio();
+      setIsStudioRunning(false);
+      setTestOutput(prev => [...prev, '⏹️ Studio stopped']);
+      toast.success('Maestro Studio stopped');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to stop Studio');
+    }
+  };
 
   const checkMaestro = async () => {
     if (!inElectron) return;
@@ -219,6 +274,118 @@ export default function MobileTestingPage() {
             <strong>Looking for mobile web testing?</strong> Use the <button onClick={() => navigate('/recorder')} className="underline font-semibold">Record tab</button> with 50+ device profiles for mobile browser emulation.
           </p>
         </div>
+      </div>
+
+      {/* Recording Section - Prominent at Top */}
+      <div className={cn(
+        "rounded-xl border p-6 mb-6",
+        isStudioRunning
+          ? theme === 'light'
+            ? "bg-gradient-to-r from-red-50 to-orange-50 border-red-300"
+            : "bg-gradient-to-r from-red-900/20 to-orange-900/20 border-red-500/50"
+          : theme === 'light'
+            ? "bg-gradient-to-r from-violet-50 to-purple-50 border-violet-200"
+            : "bg-gradient-to-r from-violet-900/20 to-purple-900/20 border-violet-500/30"
+      )}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              "w-14 h-14 rounded-xl flex items-center justify-center",
+              isStudioRunning
+                ? "bg-red-500 animate-pulse"
+                : "bg-gradient-to-br from-violet-500 to-purple-600"
+            )}>
+              {isStudioRunning ? (
+                <CircleDot className="w-7 h-7 text-white" />
+              ) : (
+                <Video className="w-7 h-7 text-white" />
+              )}
+            </div>
+            <div>
+              <h2 className={cn(
+                "text-xl font-bold",
+                theme === 'light' ? 'text-gray-900' : 'text-white'
+              )}>
+                {isStudioRunning ? '🔴 Recording Native App' : 'Record Native App Actions'}
+              </h2>
+              <p className={cn(
+                "text-sm",
+                theme === 'light' ? 'text-gray-600' : 'text-gray-400'
+              )}>
+                {isStudioRunning 
+                  ? 'Maestro Studio is running - interact with your app to record actions'
+                  : 'Start Maestro Studio to record interactions on iOS/Android apps'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {isStudioRunning ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open('http://localhost:9999', '_blank')}
+                  className={cn(
+                    theme === 'light'
+                      ? "border-gray-300 text-gray-700"
+                      : "border-gray-600 text-gray-300"
+                  )}
+                >
+                  <Eye className="w-4 h-4 mr-2" /> Open Studio UI
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleStopStudio}
+                >
+                  <Square className="w-4 h-4 mr-2" /> Stop Recording
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={handleStartStudio}
+                disabled={!maestroInstalled || isStartingStudio}
+                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white px-6"
+                size="lg"
+              >
+                {isStartingStudio ? (
+                  <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Starting...</>
+                ) : (
+                  <><CircleDot className="w-5 h-5 mr-2" /> Start Recording</>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+        
+        {isStudioRunning && (
+          <div className={cn(
+            "mt-4 p-3 rounded-lg",
+            theme === 'light' ? 'bg-white/80' : 'bg-gray-900/50'
+          )}>
+            <p className={cn(
+              "text-sm",
+              theme === 'light' ? 'text-gray-700' : 'text-gray-300'
+            )}>
+              <strong>How to use:</strong> The Maestro Studio web UI has opened in your browser. 
+              Click on elements in your running app to record tap, swipe, and input actions. 
+              The YAML commands will be generated automatically.
+            </p>
+          </div>
+        )}
+        
+        {!maestroInstalled && (
+          <div className={cn(
+            "mt-4 p-3 rounded-lg",
+            theme === 'light' ? 'bg-amber-50' : 'bg-amber-500/10'
+          )}>
+            <p className={cn(
+              "text-sm",
+              theme === 'light' ? 'text-amber-700' : 'text-amber-400'
+            )}>
+              ⚠️ Install Maestro first to enable native app recording. See setup below.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
