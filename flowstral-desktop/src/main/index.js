@@ -688,9 +688,16 @@ ipcMain.handle('embedded-browser-get-zoom', () => {
 // Uses EXACT SAME recorder-engine.js as browser extension
 // ============================================================================
 
-ipcMain.handle('playwright-recorder-start', async (event, url) => {
+ipcMain.handle('playwright-recorder-start', async (event, { url, mobileDevice, mobileNetwork } = {}) => {
   try {
-    console.log('[PlaywrightRecorder] Starting with URL:', url);
+    // Handle both old (url-only) and new (options object) call formats for backward compatibility
+    const actualUrl = typeof url === 'string' ? url : (url?.url || url);
+    const device = typeof url === 'object' ? url.mobileDevice : mobileDevice;
+    const network = typeof url === 'object' ? url.mobileNetwork : mobileNetwork;
+    
+    console.log('[PlaywrightRecorder] Starting with URL:', actualUrl);
+    if (device) console.log('[PlaywrightRecorder] Mobile device:', device);
+    if (network) console.log('[PlaywrightRecorder] Network:', network);
     
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
@@ -733,9 +740,28 @@ ipcMain.handle('playwright-recorder-start', async (event, url) => {
       });
     }
     
-    await playwrightRecorder.start(url);
-    webappView?.webContents.send('recording-status', { recording: true, mode: 'playwright' });
-    return { success: true };
+    // Configure mobile device if specified (backward compatible: no device = desktop mode)
+    if (device) {
+      playwrightRecorder.setMobileDevice(device);
+    } else {
+      playwrightRecorder.clearMobileDevice(); // Ensure desktop mode
+    }
+    
+    // Configure network throttling if specified
+    if (network) {
+      playwrightRecorder.setMobileNetwork(network);
+    }
+    
+    await playwrightRecorder.start(actualUrl);
+    
+    // Include mobile config in status for UI display
+    const mobileConfig = playwrightRecorder.getMobileConfig();
+    webappView?.webContents.send('recording-status', { 
+      recording: true, 
+      mode: 'playwright',
+      mobile: mobileConfig
+    });
+    return { success: true, mobile: mobileConfig };
   } catch (error) {
     console.error('[PlaywrightRecorder] Start failed:', error.message);
     return { success: false, error: error.message };
@@ -908,6 +934,133 @@ ipcMain.handle('playwright-recorder-stop-test', async (event, options) => {
     return await playwrightRecorder.stopTest(options);
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// MOBILE TESTING IPC HANDLERS
+// Phase 1: Mobile Web Emulation (Playwright devices)
+// Phase 2: Native App Testing (Maestro integration)
+// ============================================================================
+
+// Get available mobile devices for UI dropdown
+ipcMain.handle('mobile-get-devices', async () => {
+  try {
+    const PlaywrightRecorder = require('./playwright-recorder');
+    return {
+      success: true,
+      devices: PlaywrightRecorder.getAvailableDevices()
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Set mobile device for recording/testing
+ipcMain.handle('mobile-set-device', async (event, { deviceName, network }) => {
+  try {
+    if (!playwrightRecorder) {
+      return { success: false, error: 'No recorder initialized. Start recording first.' };
+    }
+    
+    if (deviceName) {
+      const device = playwrightRecorder.setMobileDevice(deviceName);
+      if (!device) {
+        return { success: false, error: `Unknown device: ${deviceName}` };
+      }
+    } else {
+      playwrightRecorder.clearMobileDevice();
+    }
+    
+    if (network) {
+      playwrightRecorder.setMobileNetwork(network);
+    }
+    
+    return { 
+      success: true, 
+      config: playwrightRecorder.getMobileConfig()
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get current mobile configuration
+ipcMain.handle('mobile-get-config', async () => {
+  try {
+    if (!playwrightRecorder) {
+      return { success: true, config: null, isMobile: false };
+    }
+    return { 
+      success: true, 
+      config: playwrightRecorder.getMobileConfig(),
+      isMobile: playwrightRecorder.isInMobileMode()
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Clear mobile device (return to desktop mode)
+ipcMain.handle('mobile-clear-device', async () => {
+  try {
+    if (playwrightRecorder) {
+      playwrightRecorder.clearMobileDevice();
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Check Maestro availability for native app testing
+ipcMain.handle('mobile-check-maestro', async () => {
+  try {
+    const { validateMaestroSetup } = require('./lib/maestro-integration');
+    const status = validateMaestroSetup();
+    return { success: true, ...status };
+  } catch (error) {
+    return { success: false, error: error.message, installed: false };
+  }
+});
+
+// Run test on native app via Maestro
+ipcMain.handle('mobile-run-native-test', async (event, { steps, appId, platform, deviceId }) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    
+    const runner = new MaestroRunner({
+      appId,
+      platform: platform || 'android',
+      deviceId,
+      debug: true,
+      onStep: (step) => {
+        webappView?.webContents.send('mobile-native-test-step', step);
+      },
+      onProgress: (progress) => {
+        webappView?.webContents.send('mobile-native-test-progress', progress);
+      },
+      onError: (error) => {
+        webappView?.webContents.send('mobile-native-test-error', error);
+      }
+    });
+    
+    const result = await runner.runTest(steps, { appId, platform, deviceId });
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get available native devices (emulators/simulators)
+ipcMain.handle('mobile-get-native-devices', async (event, platform) => {
+  try {
+    const { MaestroRunner } = require('./lib/maestro-integration');
+    const runner = new MaestroRunner({ platform: platform || 'android' });
+    const devices = await runner.listDevices();
+    return { success: true, devices };
+  } catch (error) {
+    return { success: false, error: error.message, devices: [] };
   }
 });
 

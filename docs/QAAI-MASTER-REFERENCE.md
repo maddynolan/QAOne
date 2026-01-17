@@ -18,6 +18,7 @@ QAAI is a full-suite enterprise QA platform with:
 - Accessibility Testing (WCAG 2.1 + Axe-core)
 - Visual Testing (Screenshot diff)
 - Salesforce Testing (Lightning Web Components)
+- Mobile Testing (50+ devices + Maestro for native apps)
 - AI Features (Self-healing, Exploration, Generation)
 ```
 
@@ -34,11 +35,12 @@ QAAI is a full-suite enterprise QA platform with:
 7. [Accessibility Testing](#7-accessibility-testing)
 8. [Visual Testing](#8-visual-testing)
 9. [Salesforce Testing](#9-salesforce-testing)
-10. [AI Features](#10-ai-features)
-11. [Complex Verifications](#11-complex-verifications)
-12. [Test Management](#12-test-management)
-13. [Key Files Reference](#13-key-files-reference)
-14. [Troubleshooting](#14-troubleshooting)
+10. [Mobile Testing](#10-mobile-testing)
+11. [AI Features](#11-ai-features)
+12. [Complex Verifications](#12-complex-verifications)
+13. [Test Management](#13-test-management)
+14. [Key Files Reference](#14-key-files-reference)
+15. [Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -346,7 +348,49 @@ page.locator('lightning-button >> button');
 
 ---
 
-## 10. AI Features
+## 10. Mobile Testing
+
+### Overview
+QAAI's Mobile Testing Pack provides comprehensive mobile testing without a device cloud:
+
+1. **Mobile Web Emulation** - Test responsive web apps with 50+ real device profiles
+2. **Native App Testing** - Test iOS/Android apps via Maestro integration
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| Device Profiles | 50+ real devices (iPhone, iPad, Pixel, Galaxy, etc.) |
+| Network Throttling | 5G, 4G, 3G, 2G, Slow 3G, Offline |
+| Touch Events | Accurate touch simulation |
+| Device Scale | Retina/high-DPI support |
+| Maestro Integration | Native iOS/Android app testing |
+
+### Quick Start
+
+```javascript
+// Mobile web testing
+playwrightRecorder.setMobileDevice('iPhone 15 Pro');
+playwrightRecorder.setMobileNetwork('4G');
+await playwrightRecorder.start('https://your-app.com');
+
+// Native app testing (requires Maestro)
+const runner = new MaestroRunner({ appId: 'com.example.app', platform: 'android' });
+await runner.runTest(steps);
+```
+
+### Key Files
+- `flowstral-desktop/src/main/lib/mobile-devices.js` - 50+ device profiles
+- `flowstral-desktop/src/main/lib/maestro-integration.js` - Native app testing
+- `flowstral-desktop/src/main/lib/mobile-test-runner.js` - Unified interface
+- `src/components/MobileDeviceSelector.tsx` - UI component
+
+### Documentation
+- `docs/MOBILE_TESTING_GUIDE.md` - Complete guide
+
+---
+
+## 11. AI Features
 
 ### AI Goal Agent (v3.0) - Plan-First Architecture
 

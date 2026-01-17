@@ -231,6 +231,32 @@ contextBridge.exposeInMainWorld('flowstral', {
     getTestStatus: () => ipcRenderer.invoke('playwright-recorder-get-test-status'),
   },
   
+  // ========================================================================
+  // MOBILE TESTING API (Phase 1: Emulation, Phase 2: Native Apps)
+  // ========================================================================
+  mobile: {
+    // Get available devices for UI dropdown
+    getDevices: () => ipcRenderer.invoke('mobile-get-devices'),
+    
+    // Set mobile device for recording/testing
+    setDevice: (deviceName, network) => ipcRenderer.invoke('mobile-set-device', { deviceName, network }),
+    
+    // Get current mobile configuration
+    getConfig: () => ipcRenderer.invoke('mobile-get-config'),
+    
+    // Clear mobile device (return to desktop mode)
+    clearDevice: () => ipcRenderer.invoke('mobile-clear-device'),
+    
+    // Check Maestro availability for native app testing
+    checkMaestro: () => ipcRenderer.invoke('mobile-check-maestro'),
+    
+    // Run test on native app via Maestro
+    runNativeTest: (options) => ipcRenderer.invoke('mobile-run-native-test', options),
+    
+    // Get available native devices (emulators/simulators)
+    getNativeDevices: (platform) => ipcRenderer.invoke('mobile-get-native-devices', platform),
+  },
+  
   // Network Capture API (ported from browser extension)
   networkCapture: {
     start: (sessionId) => ipcRenderer.invoke('network-capture-start', sessionId),
@@ -272,6 +298,10 @@ contextBridge.exposeInMainWorld('flowstral', {
       'test-runner:test-resumed',
       'test-runner:test-complete',
       'test-runner:test-stopped',
+      // Mobile native test events
+      'mobile-native-test-step',
+      'mobile-native-test-progress',
+      'mobile-native-test-error',
       // Network capture events
       'network-request-start',
       'network-request-complete',

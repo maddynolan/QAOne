@@ -69,6 +69,9 @@ const ActionHandlers = require('./lib/action-handlers');
 const TabManager = require('./lib/tab-manager');
 const SalesforceHandlers = require('./lib/salesforce-handlers');
 
+// Mobile testing support (Phase 1: Emulation, Phase 2: Maestro)
+const { MOBILE_DEVICES, getDevice, getDeviceCategories, NETWORK_PRESETS, getNetworkPreset } = require('./lib/mobile-devices');
+
 class PlaywrightRecorder extends EventEmitter {
   constructor(options = {}) {
     super();
@@ -95,6 +98,12 @@ class PlaywrightRecorder extends EventEmitter {
     this._currentTestSteps = [];
     this._stepByStep = false;
     
+    // ========== MOBILE TESTING CONFIGURATION ==========
+    // Backward compatible: null = desktop mode (default)
+    this.mobileDevice = options.mobileDevice || null; // e.g., 'iPhone 15 Pro', 'Pixel 8'
+    this.mobileNetwork = options.mobileNetwork || null; // e.g., '4G', '3G', 'Slow 3G'
+    this.isMobileMode = false; // Set to true when running in mobile emulation
+    
     // V2 Recipe-based recorder (more robust element identification)
     // ENABLED: Better element finding on modern frameworks (Radix, Salesforce, etc.)
     this.useRecipeRecorder = options.useRecipeRecorder !== false; // ENABLED by default
@@ -115,6 +124,152 @@ class PlaywrightRecorder extends EventEmitter {
     } catch (e) {
       console.error('[PlaywrightRecorder] Failed to load recorder-engine.js:', e.message);
     }
+  }
+
+  // ===========================================================================
+  // MOBILE TESTING METHODS (Phase 1: Emulation)
+  // Backward compatible: All existing code continues to work unchanged
+  // ===========================================================================
+  
+  /**
+   * Configure mobile device emulation
+   * Call this BEFORE start() to record/test in mobile mode
+   * @param {string} deviceName - Name of device (e.g., 'iPhone 15 Pro', 'Pixel 8')
+   * @param {object} options - Additional options
+   * @returns {object} Device configuration
+   */
+  setMobileDevice(deviceName, options = {}) {
+    const device = getDevice(deviceName);
+    
+    if (!device) {
+      console.warn(`[PlaywrightRecorder] Unknown device: ${deviceName}`);
+      console.log('[PlaywrightRecorder] Available devices:', Object.keys(MOBILE_DEVICES).slice(0, 10).join(', ') + '...');
+      return null;
+    }
+    
+    this.mobileDevice = {
+      name: deviceName,
+      config: { ...device },
+      // Custom overrides
+      ...(options.geolocation && { geolocation: options.geolocation }),
+      ...(options.permissions && { permissions: options.permissions })
+    };
+    
+    this.isMobileMode = true;
+    
+    console.log(`[PlaywrightRecorder] Mobile mode: ${deviceName}`);
+    console.log(`[PlaywrightRecorder] Viewport: ${device.viewport.width}x${device.viewport.height}`);
+    
+    return this.mobileDevice;
+  }
+  
+  /**
+   * Configure network throttling for mobile testing
+   * @param {string} networkPreset - Network preset (e.g., '4G', '3G', 'Slow 3G')
+   */
+  setMobileNetwork(networkPreset) {
+    const preset = getNetworkPreset(networkPreset);
+    
+    if (!preset) {
+      console.warn(`[PlaywrightRecorder] Unknown network preset: ${networkPreset}`);
+      console.log('[PlaywrightRecorder] Available presets:', Object.keys(NETWORK_PRESETS).join(', '));
+      return null;
+    }
+    
+    this.mobileNetwork = { name: networkPreset, config: preset };
+    console.log(`[PlaywrightRecorder] Network throttling: ${networkPreset}`);
+    
+    return this.mobileNetwork;
+  }
+  
+  /**
+   * Clear mobile configuration (return to desktop mode)
+   */
+  clearMobileDevice() {
+    this.mobileDevice = null;
+    this.mobileNetwork = null;
+    this.isMobileMode = false;
+    console.log('[PlaywrightRecorder] Reset to desktop mode');
+  }
+  
+  /**
+   * Get mobile context options for Playwright
+   * @returns {object} Context options for mobile emulation
+   */
+  getMobileContextOptions() {
+    if (!this.mobileDevice) {
+      return {}; // Desktop mode - no special options
+    }
+    
+    const device = this.mobileDevice.config;
+    return {
+      viewport: device.viewport,
+      deviceScaleFactor: device.deviceScaleFactor,
+      isMobile: device.isMobile,
+      hasTouch: device.hasTouch,
+      userAgent: device.userAgent,
+      // Optional extras
+      ...(this.mobileDevice.geolocation && { 
+        geolocation: this.mobileDevice.geolocation,
+        permissions: ['geolocation']
+      }),
+      ...(this.mobileDevice.permissions && { permissions: this.mobileDevice.permissions })
+    };
+  }
+  
+  /**
+   * Apply network throttling to the context
+   * @param {object} context - Playwright browser context
+   */
+  async applyMobileNetwork(context) {
+    if (!this.mobileNetwork || !context) return;
+    
+    try {
+      const page = context.pages()[0];
+      if (!page) return;
+      
+      const cdpSession = await context.newCDPSession(page);
+      await cdpSession.send('Network.enable');
+      await cdpSession.send('Network.emulateNetworkConditions', this.mobileNetwork.config);
+      console.log(`[PlaywrightRecorder] Applied network throttling: ${this.mobileNetwork.name}`);
+    } catch (e) {
+      console.log('[PlaywrightRecorder] Could not apply network conditions:', e.message);
+    }
+  }
+  
+  /**
+   * Get available devices for UI display
+   * @returns {object} Device categories and all devices
+   */
+  static getAvailableDevices() {
+    return {
+      categories: getDeviceCategories(),
+      devices: MOBILE_DEVICES,
+      networks: NETWORK_PRESETS
+    };
+  }
+  
+  /**
+   * Check if currently in mobile mode
+   * @returns {boolean}
+   */
+  isInMobileMode() {
+    return this.isMobileMode && this.mobileDevice !== null;
+  }
+  
+  /**
+   * Get current mobile configuration
+   * @returns {object|null}
+   */
+  getMobileConfig() {
+    if (!this.isMobileMode) return null;
+    
+    return {
+      device: this.mobileDevice?.name,
+      viewport: this.mobileDevice?.config?.viewport,
+      userAgent: this.mobileDevice?.config?.userAgent,
+      network: this.mobileNetwork?.name
+    };
   }
 
   /**
@@ -669,15 +824,35 @@ class PlaywrightRecorder extends EventEmitter {
     const path = require('path');
     const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
     
+    // Get mobile emulation options if configured (backward compatible: desktop by default)
+    const mobileOptions = this.getMobileContextOptions();
+    const isMobile = this.isInMobileMode();
+    
+    if (isMobile) {
+      console.log(`[PlaywrightRecorder] Mobile mode: ${this.mobileDevice.name}`);
+      console.log(`[PlaywrightRecorder] Viewport: ${mobileOptions.viewport.width}x${mobileOptions.viewport.height}`);
+    }
+    
     // Launch browser with PERSISTENT context (keeps cookies, localStorage, auth)
+    // MOBILE SUPPORT: Merges mobile options when configured, otherwise uses desktop defaults
     this.context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
-      viewport: null, // Use full window
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      // Mobile: use device viewport, Desktop: full window
+      viewport: isMobile ? mobileOptions.viewport : null,
+      // Mobile: use device user agent, Desktop: Chrome UA
+      userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       args: [
         '--start-maximized',
         '--disable-blink-features=AutomationControlled'
       ],
+      // Mobile-specific options
+      ...(isMobile && {
+        deviceScaleFactor: mobileOptions.deviceScaleFactor,
+        isMobile: mobileOptions.isMobile,
+        hasTouch: mobileOptions.hasTouch,
+        ...(mobileOptions.geolocation && { geolocation: mobileOptions.geolocation }),
+        ...(mobileOptions.permissions && { permissions: mobileOptions.permissions })
+      }),
       // Ignore HTTPS errors for dev environments
       ignoreHTTPSErrors: true,
     });
@@ -2381,10 +2556,25 @@ class PlaywrightRecorder extends EventEmitter {
             ]
           });
           
+          // Get mobile emulation options (backward compatible)
+          const mobileOptions = this.getMobileContextOptions();
+          const isMobile = this.isInMobileMode();
+          
+          if (isMobile) {
+            console.log(`[PlaywrightRecorder] Fresh browser in mobile mode: ${this.mobileDevice.name}`);
+          }
+          
           // Create a brand new context with no stored data
           this.context = await this.browser.newContext({
-            viewport: null,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            // Mobile: use device viewport, Desktop: full window
+            viewport: isMobile ? mobileOptions.viewport : null,
+            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            // Mobile-specific options
+            ...(isMobile && {
+              deviceScaleFactor: mobileOptions.deviceScaleFactor,
+              isMobile: mobileOptions.isMobile,
+              hasTouch: mobileOptions.hasTouch
+            }),
             ignoreHTTPSErrors: true,
           });
           
@@ -2404,14 +2594,30 @@ class PlaywrightRecorder extends EventEmitter {
           
           console.log('[PlaywrightRecorder] Using persistent user data dir:', userDataDir);
           
+          // Get mobile emulation options (backward compatible: empty object = desktop)
+          const mobileOptions = this.getMobileContextOptions();
+          const isMobile = this.isInMobileMode();
+          
+          if (isMobile) {
+            console.log(`[PlaywrightRecorder] Test running in mobile mode: ${this.mobileDevice.name}`);
+          }
+          
           this.context = await chromium.launchPersistentContext(userDataDir, {
             headless,
-            viewport: null,
+            // Mobile: use device viewport, Desktop: full window
+            viewport: isMobile ? mobileOptions.viewport : null,
             args: [
               '--start-maximized', 
               '--disable-blink-features=AutomationControlled'
             ],
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            // Mobile: use device user agent, Desktop: Chrome UA  
+            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            // Mobile-specific options
+            ...(isMobile && {
+              deviceScaleFactor: mobileOptions.deviceScaleFactor,
+              isMobile: mobileOptions.isMobile,
+              hasTouch: mobileOptions.hasTouch
+            }),
             ignoreHTTPSErrors: true,
           });
           
@@ -2668,11 +2874,20 @@ class PlaywrightRecorder extends EventEmitter {
         const path = require('path');
         const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
         
+        // Get mobile emulation options (backward compatible)
+        const mobileOptions = this.getMobileContextOptions();
+        const isMobile = this.isInMobileMode();
+        
         this.context = await chromium.launchPersistentContext(userDataDir, {
           headless,
-          viewport: null,
+          viewport: isMobile ? mobileOptions.viewport : null,
           args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          ...(isMobile && {
+            deviceScaleFactor: mobileOptions.deviceScaleFactor,
+            isMobile: mobileOptions.isMobile,
+            hasTouch: mobileOptions.hasTouch
+          }),
           ignoreHTTPSErrors: true,
         });
         
