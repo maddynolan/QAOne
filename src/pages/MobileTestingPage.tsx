@@ -339,6 +339,7 @@ export default function MobileTestingPage() {
       </div>
 
       {activeTab === 'web' ? (
+        <>
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left: Device Selection */}
           <div className={cn(
@@ -784,6 +785,7 @@ export default function MobileTestingPage() {
             )}
           </div>
         )}
+        </>
       ) : (
         /* Native App Testing Tab */
         <div className={cn(
