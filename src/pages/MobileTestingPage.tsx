@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,12 @@ import {
   Signal,
   Hand,
   Loader2,
+  MousePointer,
+  Type,
+  Navigation,
+  Trash2,
+  Save,
+  ExternalLink,
 } from 'lucide-react';
 
 // Device profiles
@@ -68,6 +75,7 @@ const networkPresets = [
 
 export default function MobileTestingPage() {
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const [selectedDevice, setSelectedDevice] = useState(iosDevices[0]);
   const [selectedNetwork, setSelectedNetwork] = useState(networkPresets[0]);
   const [targetUrl, setTargetUrl] = useState('https://');
@@ -76,12 +84,101 @@ export default function MobileTestingPage() {
   const [maestroInstalled, setMaestroInstalled] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<'web' | 'native'>('web');
   const [inElectron] = useState(() => isElectron());
+  const [recordedActions, setRecordedActions] = useState<any[]>([]);
+
+  // Helper to get action icon
+  const getActionIcon = (action: any) => {
+    const type = action.type || action.action || '';
+    if (type.includes('click')) return <MousePointer className="w-3.5 h-3.5" />;
+    if (type.includes('fill') || type.includes('type')) return <Type className="w-3.5 h-3.5" />;
+    if (type.includes('navigate') || type.includes('goto')) return <Navigation className="w-3.5 h-3.5" />;
+    return <CheckCircle2 className="w-3.5 h-3.5" />;
+  };
+
+  // Clear recorded actions
+  const handleClearActions = async () => {
+    const flowstral = (window as any).flowstral;
+    const electronAPI = (window as any).electronAPI;
+    
+    if (electronAPI?.invoke) {
+      await electronAPI.invoke('playwright-recorder-clear-actions');
+    } else if (flowstral?.playwrightRecorder) {
+      await flowstral.playwrightRecorder.clearActions();
+    }
+    setRecordedActions([]);
+    toast.success('Actions cleared');
+  };
+
+  // Save to Test Builder
+  const handleSaveToBuilder = () => {
+    if (recordedActions.length === 0) {
+      toast.error('No actions to save');
+      return;
+    }
+    
+    // Store actions in sessionStorage for the builder to pick up
+    sessionStorage.setItem('mobile-recorded-actions', JSON.stringify({
+      actions: recordedActions,
+      device: selectedDevice,
+      network: selectedNetwork,
+      url: targetUrl,
+      timestamp: new Date().toISOString()
+    }));
+    
+    toast.success('Opening Test Builder...');
+    navigate('/test-cases/builder');
+  };
+
+  // Navigate to Record tab with actions
+  const handleViewInRecorder = () => {
+    navigate('/recorder');
+  };
 
   // Check Maestro installation on mount
   useEffect(() => {
     if (inElectron) {
       mobile.checkMaestro().then(setMaestroInstalled);
     }
+  }, [inElectron]);
+
+  // Listen for recorded actions from the recorder
+  useEffect(() => {
+    if (!inElectron) return;
+
+    const electronAPI = (window as any).electronAPI;
+    const flowstral = (window as any).flowstral;
+
+    // Handler for new actions
+    const handleAction = (action: any) => {
+      console.log('[MobileTestingPage] Received action:', action);
+      setRecordedActions(prev => [...prev, action]);
+    };
+
+    // Handler for recording stopped
+    const handleStopped = ({ actions }: { actions: any[] }) => {
+      console.log('[MobileTestingPage] Recording stopped, actions:', actions?.length);
+      if (actions) {
+        setRecordedActions(actions);
+      }
+      setIsRecording(false);
+    };
+
+    // Subscribe to events
+    let unsubAction: (() => void) | undefined;
+    let unsubStopped: (() => void) | undefined;
+
+    if (electronAPI?.on) {
+      unsubAction = electronAPI.on('playwright-recorder-action', handleAction);
+      unsubStopped = electronAPI.on('playwright-recorder-stopped', handleStopped);
+    } else if (flowstral?.on) {
+      unsubAction = flowstral.on('playwright-recorder-action', handleAction);
+      unsubStopped = flowstral.on('playwright-recorder-stopped', handleStopped);
+    }
+
+    return () => {
+      unsubAction?.();
+      unsubStopped?.();
+    };
   }, [inElectron]);
 
   const handleStartRecording = async () => {
@@ -139,12 +236,22 @@ export default function MobileTestingPage() {
       
       if (electronAPI?.invoke) {
         await electronAPI.invoke('playwright-recorder-stop');
+        // Fetch the recorded actions
+        const actions = await electronAPI.invoke('playwright-recorder-get-actions');
+        if (actions && Array.isArray(actions)) {
+          setRecordedActions(actions);
+        }
       } else if (flowstral?.playwrightRecorder) {
         await flowstral.playwrightRecorder.stop();
+        // Fetch the recorded actions
+        const actions = await flowstral.playwrightRecorder.getActions();
+        if (actions && Array.isArray(actions)) {
+          setRecordedActions(actions);
+        }
       }
       
       setIsRecording(false);
-      toast.success('Recording stopped');
+      toast.success(`Recording stopped - ${recordedActions.length} steps captured`);
     } catch (error: any) {
       console.error('Failed to stop recording:', error);
       toast.error(error.message || 'Failed to stop recording');
@@ -532,6 +639,151 @@ export default function MobileTestingPage() {
             </div>
           </div>
         </div>
+
+        {/* Recorded Steps Panel */}
+        {(recordedActions.length > 0 || isRecording) && (
+          <div className={cn(
+            "mt-6 rounded-xl border p-5",
+            theme === 'light'
+              ? "bg-white border-gray-200"
+              : "bg-gray-900 border-gray-800"
+          )}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h3 className={cn(
+                  "text-sm font-semibold",
+                  theme === 'light' ? 'text-gray-900' : 'text-white'
+                )}>
+                  Recorded Steps
+                </h3>
+                <Badge className={cn(
+                  theme === 'light'
+                    ? "bg-sky-100 text-sky-700"
+                    : "bg-sky-500/20 text-sky-400"
+                )}>
+                  {recordedActions.length}
+                </Badge>
+                {isRecording && (
+                  <Badge className="bg-red-500 text-white animate-pulse">
+                    Recording...
+                  </Badge>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearActions}
+                  disabled={recordedActions.length === 0 || isRecording}
+                  className={cn(
+                    "h-8",
+                    theme === 'light'
+                      ? "text-gray-500 hover:text-gray-700"
+                      : "text-gray-400 hover:text-white"
+                  )}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Clear
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleViewInRecorder}
+                  className={cn(
+                    "h-8",
+                    theme === 'light'
+                      ? "text-gray-500 hover:text-gray-700"
+                      : "text-gray-400 hover:text-white"
+                  )}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 mr-1" /> View in Record
+                </Button>
+              </div>
+            </div>
+
+            {/* Steps List */}
+            <div className={cn(
+              "rounded-lg border max-h-64 overflow-y-auto",
+              theme === 'light'
+                ? "bg-gray-50 border-gray-200"
+                : "bg-gray-950 border-gray-800"
+            )}>
+              {recordedActions.length === 0 ? (
+                <div className={cn(
+                  "p-8 text-center",
+                  theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                )}>
+                  <MousePointer className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Interact with the browser to record steps</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {recordedActions.map((action, idx) => (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "flex items-start gap-3 p-3 transition-colors",
+                        theme === 'light'
+                          ? "hover:bg-gray-100"
+                          : "hover:bg-gray-900"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                        theme === 'light'
+                          ? "bg-sky-100 text-sky-600"
+                          : "bg-sky-500/20 text-sky-400"
+                      )}>
+                        {getActionIcon(action)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={cn(
+                          "text-sm font-medium",
+                          theme === 'light' ? 'text-gray-900' : 'text-white'
+                        )}>
+                          {action.description || action.type || 'Action'}
+                        </div>
+                        {action.selector && (
+                          <div className={cn(
+                            "text-xs font-mono truncate mt-0.5",
+                            theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                          )}>
+                            {action.selector}
+                          </div>
+                        )}
+                        {action.value && (
+                          <div className={cn(
+                            "text-xs mt-0.5",
+                            theme === 'light' ? 'text-gray-500' : 'text-gray-400'
+                          )}>
+                            Value: "{action.value}"
+                          </div>
+                        )}
+                      </div>
+                      <span className={cn(
+                        "text-xs flex-shrink-0",
+                        theme === 'light' ? 'text-gray-400' : 'text-gray-500'
+                      )}>
+                        #{idx + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Save Actions */}
+            {recordedActions.length > 0 && !isRecording && (
+              <div className="mt-4 flex gap-2">
+                <Button
+                  onClick={handleSaveToBuilder}
+                  className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white"
+                >
+                  <Save className="w-4 h-4 mr-2" /> Save to Test Builder
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       ) : (
         /* Native App Testing Tab */
         <div className={cn(
