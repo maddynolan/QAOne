@@ -17,6 +17,8 @@ QAAI is a full-suite enterprise QA automation platform with:
 - **Accessibility Testing**: WCAG 2.1 with Axe-core
 - **Visual Testing**: Screenshot comparison
 - **Salesforce Testing**: Shadow DOM + Lightning support
+- **Mobile Testing**: 50+ device profiles + Maestro for native apps
+- **Flowpilot**: Goal-based agentic testing (Flowmap, Explorer, Self-Healer, Generator)
 - **AI Features**: Self-healing, exploration, test generation
 
 ## Key Architecture

@@ -19,6 +19,7 @@ QAAI is a full-suite enterprise QA platform with:
 - Visual Testing (Screenshot diff)
 - Salesforce Testing (Lightning Web Components)
 - Mobile Testing (50+ devices + Maestro for native apps)
+- Flowpilot (Goal-based agentic testing - Flowmap, Explorer, Self-Healer, Generator)
 - AI Features (Self-healing, Exploration, Generation)
 ```
 
@@ -36,7 +37,7 @@ QAAI is a full-suite enterprise QA platform with:
 8. [Visual Testing](#8-visual-testing)
 9. [Salesforce Testing](#9-salesforce-testing)
 10. [Mobile Testing](#10-mobile-testing)
-11. [AI Features](#11-ai-features)
+11. [Flowpilot & AI Features](#11-ai-features) ⭐ NEW
 12. [Complex Verifications](#12-complex-verifications)
 13. [Test Management](#13-test-management)
 14. [Key Files Reference](#14-key-files-reference)
@@ -391,6 +392,30 @@ await runner.runTest(steps);
 ---
 
 ## 11. AI Features
+
+### 🚀 Flowpilot - Goal-Based Agentic Testing
+
+Flowpilot is QAAI's breakthrough AI capability - the first goal-based agentic testing platform. It consists of four autonomous agents:
+
+| Agent | Purpose | Key Features |
+|-------|---------|--------------|
+| **Flowmap** | Journey Discovery | Visualize all user paths, find coverage gaps automatically |
+| **Explorer** | Autonomous Testing | AI crawls your app finding bugs while you sleep |
+| **Self-Healer** | Smart Locators | Auto-repair broken selectors, zero flaky tests |
+| **Generator** | Test Creation | Describe goals in plain English, get working tests |
+
+**How Flowpilot Works:**
+```
+User Goal: "Test checkout with invalid coupon"
+     ↓
+[Explorer] Scans page → Finds cart, coupon field, checkout button
+     ↓  
+[Generator] Creates steps → Navigate, add items, enter coupon, verify error
+     ↓
+[Self-Healer] Optimizes → Creates resilient locators with fallbacks
+     ↓
+Working Test: Ready for playback and CI/CD integration
+```
 
 ### AI Goal Agent (v3.0) - Plan-First Architecture
 
