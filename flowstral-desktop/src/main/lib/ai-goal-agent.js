@@ -391,7 +391,12 @@ Return JSON:
         case 'click':
           return await this.smartClick(target);
         case 'fill':
-          return await this.smartFill(target, action.value);
+        case 'input':  // AI sometimes uses 'input' instead of 'fill'
+        case 'type':   // Also handle 'type'
+          // Extract value from goal if not in action
+          const fillValue = action.value || this.extractValueFromGoal(target);
+          this.log(`SmartFill: "${target}" with value "${fillValue}"`);
+          return await this.smartFill(target, fillValue);
         case 'select':
           return await this.smartSelect(target, action.value);
         case 'verify':
@@ -1230,6 +1235,50 @@ Return JSON:
     }
     
     return clean;
+  }
+  
+  /**
+   * Extract value from the goal text for input fields
+   * e.g., "Input SAVE10 in promo code" → "SAVE10"
+   */
+  extractValueFromGoal(target) {
+    const goalLower = this.goal.toLowerCase();
+    const targetLower = target.toLowerCase();
+    
+    // Common patterns: "input X in Y", "enter X in Y", "type X in Y"
+    const patterns = [
+      /(?:input|enter|type|fill)\s+["']?(\w+)["']?\s+(?:in|into|for)/i,
+      /(?:promo|code|coupon).*?["']?(\w+)["']?/i,
+      /["'](\w+)["']\s+(?:in|into|for)\s+(?:promo|code|coupon)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = this.goal.match(pattern);
+      if (match && match[1]) {
+        this.log(`Extracted value "${match[1]}" from goal for "${target}"`);
+        return match[1];
+      }
+    }
+    
+    // Try to find a promo code pattern (all caps or numbers)
+    if (targetLower.includes('promo') || targetLower.includes('code') || targetLower.includes('coupon')) {
+      const promoMatch = this.goal.match(/\b([A-Z0-9]{4,20})\b/);
+      if (promoMatch) {
+        this.log(`Extracted promo code "${promoMatch[1]}" from goal`);
+        return promoMatch[1];
+      }
+    }
+    
+    // Check testData for common field names
+    if (targetLower.includes('email')) return this.testData.email || 'test@example.com';
+    if (targetLower.includes('username')) return this.testData.username || 'testuser';
+    if (targetLower.includes('password')) return this.testData.password || 'Test123!';
+    if (targetLower.includes('first') && targetLower.includes('name')) return this.testData.firstName || 'John';
+    if (targetLower.includes('last') && targetLower.includes('name')) return this.testData.lastName || 'Doe';
+    if (targetLower.includes('phone')) return this.testData.phone || '555-123-4567';
+    
+    this.log(`⚠️ Could not extract value for "${target}" from goal`);
+    return '';
   }
   
   /**
