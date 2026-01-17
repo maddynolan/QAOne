@@ -208,10 +208,10 @@ const featureConfigs: Record<string, {
     ],
     highlights: ['Coverage', 'Trends', 'Team Metrics', 'Custom Reports', 'Alerts']
   },
-  'telic-agents': {
-    title: 'Telic Agents',
+  'flowpilot': {
+    title: 'Flowpilot',
     tagline: 'Goal-Based Agentic Testing',
-    description: 'The first QA platform with autonomous AI agents that understand goals, explore intelligently, and test purposefully. Let Telic Agents discover bugs while you sleep.',
+    description: 'The first QA platform with Flowpilot — autonomous AI agents that understand goals, explore intelligently, and test purposefully. Let Flowpilot discover bugs while you sleep.',
     icon: Compass,
     gradient: 'from-fuchsia-500 to-pink-500',
     bgGradient: 'from-fuchsia-50 to-pink-50',

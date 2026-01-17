@@ -789,12 +789,12 @@ const features = [
   },
   {
     icon: Compass,
-    title: 'Telic Agents',
+    title: 'Flowpilot',
     description: 'Goal-based AI agents that explore, test, and validate autonomously. Flowmap, Explorer, and more.',
     gradient: 'from-fuchsia-500 to-pink-500',
     bgGradient: 'from-fuchsia-50 to-pink-50',
     highlights: ['Goal-Driven', 'Flowmap', 'Explorer', 'Self-Healing'],
-    href: '/products/telic-agents',
+    href: '/products/flowpilot',
     isNew: true
   },
   {
@@ -1151,10 +1151,10 @@ function VisualA11ySection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TELIC AGENTS - GOAL-BASED AGENTIC TESTING
+// FLOWPILOT - GOAL-BASED AGENTIC TESTING
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TelicAgentsSection() {
+function FlowpilotSection() {
   const navigate = useNavigate();
   const [activeAgent, setActiveAgent] = useState(0);
   
@@ -1217,7 +1217,7 @@ function TelicAgentsSection() {
         {/* Section Header */}
         <div className="text-center mb-16">
           <Badge className="mb-4 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 px-4 py-1.5 shadow-lg">
-            <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> NEW: Telic Agents
+            <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> NEW: Flowpilot
           </Badge>
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
             Goal-Based{' '}
@@ -1226,7 +1226,7 @@ function TelicAgentsSection() {
             </span>
           </h2>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            The first QA platform with <span className="text-fuchsia-400 font-semibold">Telic Agents</span> — 
+            The first QA platform with <span className="text-fuchsia-400 font-semibold">Flowpilot</span> — 
             autonomous AI agents that understand goals, explore intelligently, and test purposefully.
           </p>
         </div>
@@ -1321,11 +1321,11 @@ function TelicAgentsSection() {
         <div className="text-center">
           <Button 
             size="lg"
-            onClick={() => navigate('/products/telic-agents')}
+            onClick={() => navigate('/products/flowpilot')}
             className="h-14 px-10 bg-gradient-to-r from-fuchsia-500 to-pink-500 hover:from-fuchsia-600 hover:to-pink-600 text-white font-semibold rounded-xl shadow-lg shadow-fuchsia-500/30 transition-all hover:scale-105"
           >
             <BrainCircuit className="w-5 h-5 mr-2" />
-            Explore Telic Agents
+            Explore Flowpilot
             <ArrowRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
@@ -1616,7 +1616,7 @@ function Footer() {
     Product: [
       { name: 'Smart Recorder', href: '/products/smart-recorder' },
       { name: 'Visual Builder', href: '/products/visual-builder' },
-      { name: 'Telic Agents ✨', href: '/products/telic-agents' },
+      { name: 'Flowpilot ✨', href: '/products/flowpilot' },
       { name: 'Mobile Testing ✨', href: '/products/mobile-testing' },
       { name: 'API Testing', href: '/products/api-testing' },
       { name: 'Performance', href: '/products/performance' },
@@ -1728,7 +1728,7 @@ export default function LandingPage() {
       <main>
         <HeroSection />
         <FlowstralSection />
-        <TelicAgentsSection />
+        <FlowpilotSection />
         <MobileTestingSection />
         <FeaturesSection />
         <PerformanceAPISection />

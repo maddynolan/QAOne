@@ -62,7 +62,7 @@ function MarketingHeader() {
 // 8 Testing Packs
 const testingPacks = [
   { name: 'Automation', icon: TestTube, color: 'blue', desc: 'Record, build & run tests' },
-  { name: 'Telic', icon: Compass, color: 'fuchsia', desc: 'Goal-based AI agents', isNew: true },
+  { name: 'Flowpilot', icon: Compass, color: 'fuchsia', desc: 'Goal-based AI agents', isNew: true },
   { name: 'Mobile', icon: Smartphone, color: 'sky', desc: '50+ devices & throttling', isNew: true },
   { name: 'Performance', icon: Gauge, color: 'orange', desc: 'Load & stress testing' },
   { name: 'API', icon: Code, color: 'emerald', desc: 'REST, GraphQL, gRPC, SOAP' },
@@ -116,7 +116,7 @@ const plans = [
     ],
     packs: {
       automation: 'full',
-      telic: 'basic',
+      flowpilot: 'basic',
       mobile: 'basic',
       api: 'basic',
       visual: 'basic',
@@ -174,7 +174,7 @@ const plans = [
     ],
     packs: {
       automation: 'full',
-      telic: 'full',
+      flowpilot: 'full',
       mobile: 'full',
       api: 'full',
       visual: 'full',
@@ -217,7 +217,7 @@ const plans = [
     ],
     packs: {
       automation: 'full',
-      telic: 'enterprise',
+      flowpilot: 'enterprise',
       mobile: 'full',
       api: 'full',
       visual: 'full',
@@ -478,10 +478,10 @@ export default function PricingPage() {
               ))}
             </div>
 
-            {/* Telic Agents Pack - NEW */}
+            {/* Flowpilot Pack - NEW */}
             <div className="border-b border-slate-100">
               <div className="px-6 py-3 bg-fuchsia-50 font-semibold text-sm text-fuchsia-700 uppercase tracking-wider flex items-center gap-2">
-                <Compass className="w-4 h-4" /> Telic Agents Pack
+                <Compass className="w-4 h-4" /> Flowpilot Pack
                 <Badge className="bg-fuchsia-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
               </div>
               {[
