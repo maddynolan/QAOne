@@ -7,7 +7,8 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { 
   ArrowRight, Play, Pause, SkipForward, RotateCcw, CheckCircle2, 
   MousePointer, Type, Eye, Zap, Database, BarChart3, Shield, Workflow,
-  ChevronRight, ChevronLeft, Maximize2, Volume2, VolumeX, Code
+  ChevronRight, ChevronLeft, Maximize2, Volume2, VolumeX, Code,
+  Compass, Map, Sparkles, RefreshCw, Target, Smartphone, Wifi, Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,36 @@ const demoSteps = [
     icon: Shield,
     color: 'cyan'
   },
+  {
+    id: 'flowpilot',
+    title: 'Flowpilot',
+    subtitle: 'Goal-based agentic testing',
+    description: 'Watch autonomous AI agents explore your app, find bugs, and generate tests from natural language goals.',
+    duration: 55,
+    highlights: [
+      'Describe goals in natural language',
+      'AI agents autonomously explore your app',
+      'Auto-generate test steps from discoveries',
+      'Self-healing locators that adapt to changes'
+    ],
+    icon: Compass,
+    color: 'fuchsia'
+  },
+  {
+    id: 'mobile',
+    title: 'Mobile Testing',
+    subtitle: 'Test on 50+ real devices',
+    description: 'See how to test mobile web apps with real device emulation, network throttling, and native app testing.',
+    duration: 45,
+    highlights: [
+      '50+ iOS and Android device profiles',
+      'Network throttling (4G, 3G, Offline)',
+      'Touch events and gestures',
+      'Native app testing with Maestro'
+    ],
+    icon: Smartphone,
+    color: 'sky'
+  },
 ];
 
 function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[0]; isPlaying: boolean; progress: number }) {
@@ -168,6 +199,8 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
     violet: { bg: 'bg-violet-500', text: 'text-violet-600', border: 'border-violet-300', light: 'bg-violet-50' },
     rose: { bg: 'bg-rose-500', text: 'text-rose-600', border: 'border-rose-300', light: 'bg-rose-50' },
     cyan: { bg: 'bg-cyan-500', text: 'text-cyan-600', border: 'border-cyan-300', light: 'bg-cyan-50' },
+    fuchsia: { bg: 'bg-fuchsia-500', text: 'text-fuchsia-600', border: 'border-fuchsia-300', light: 'bg-fuchsia-50' },
+    sky: { bg: 'bg-sky-500', text: 'text-sky-600', border: 'border-sky-300', light: 'bg-sky-50' },
   };
 
   const colors = colorClasses[step.color as keyof typeof colorClasses];
@@ -535,6 +568,177 @@ function DemoVisualizer({ step, isPlaying, progress }: { step: typeof demoSteps[
           </div>
         );
 
+      case 'flowpilot':
+        return (
+          <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
+            {/* Goal Input */}
+            <div className="flex items-center gap-2 mb-3 p-2 bg-fuchsia-50 rounded-lg border border-fuchsia-200">
+              <Target className="w-4 h-4 text-fuchsia-500" />
+              <span className="text-xs text-fuchsia-700 font-medium">
+                {isPlaying ? '"Test user login with invalid credentials"' : 'Enter your test goal...'}
+              </span>
+              {isPlaying && (
+                <Badge className="ml-auto text-[8px] bg-fuchsia-500 text-white border-0 animate-pulse">
+                  AI Processing
+                </Badge>
+              )}
+            </div>
+
+            {/* Agent Activity */}
+            <div className="space-y-2 mb-3">
+              {[
+                { agent: 'Explorer', action: 'Scanning login page...', icon: Compass, status: animationStep > 0 },
+                { agent: 'Generator', action: 'Creating test steps...', icon: Sparkles, status: animationStep > 2 },
+                { agent: 'Self-Healer', action: 'Optimizing locators...', icon: RefreshCw, status: animationStep > 4 },
+              ].map((item, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg border transition-all",
+                    isPlaying && item.status 
+                      ? "bg-emerald-50 border-emerald-300" 
+                      : "bg-slate-50 border-slate-200"
+                  )}
+                >
+                  <item.icon className={cn(
+                    "w-4 h-4",
+                    isPlaying && item.status ? "text-emerald-500" : "text-slate-400"
+                  )} />
+                  <div className="flex-1">
+                    <div className="text-xs font-medium text-slate-700">{item.agent}</div>
+                    <div className="text-[10px] text-slate-500">{isPlaying && item.status ? item.action : 'Waiting...'}</div>
+                  </div>
+                  {isPlaying && item.status && (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Generated Steps */}
+            {isPlaying && animationStep > 3 && (
+              <div className="p-2 bg-slate-900 rounded-lg">
+                <div className="text-[9px] text-slate-400 mb-1">Generated Test Steps</div>
+                <div className="text-[10px] font-mono text-emerald-400 space-y-0.5">
+                  <div>1. Navigate to /login</div>
+                  <div>2. Fill username: "test@demo.com"</div>
+                  <div>3. Fill password: "wrong123"</div>
+                  <div className={cn(animationStep > 5 ? "opacity-100" : "opacity-0", "transition-opacity")}>
+                    4. Click "Sign In" button
+                  </div>
+                  <div className={cn(animationStep > 5 ? "opacity-100" : "opacity-0", "transition-opacity")}>
+                    5. Assert error: "Invalid credentials"
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 'mobile':
+        return (
+          <div className="h-full bg-white rounded-lg p-3 overflow-hidden border border-slate-200">
+            {/* Device Selector */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex gap-1">
+                {['iPhone 15', 'Pixel 8', 'iPad Pro'].map((device, idx) => (
+                  <button
+                    key={device}
+                    className={cn(
+                      "px-2 py-1 text-[10px] rounded-lg border transition-all",
+                      isPlaying && animationStep % 3 === idx
+                        ? "bg-sky-500 text-white border-sky-500"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-sky-300"
+                    )}
+                  >
+                    {device}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Phone Frame */}
+            <div className="flex gap-3">
+              <div className="flex-shrink-0">
+                <div className="w-24 h-44 bg-slate-900 rounded-xl p-1 relative">
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 w-8 h-1 bg-slate-700 rounded-full" />
+                  <div className="w-full h-full bg-gradient-to-b from-sky-100 to-white rounded-lg overflow-hidden flex flex-col">
+                    <div className="h-4 bg-sky-500 flex items-center justify-center">
+                      <span className="text-[6px] text-white font-medium">app.example.com</span>
+                    </div>
+                    <div className="flex-1 p-1.5 space-y-1">
+                      <div className="h-2 bg-slate-200 rounded w-3/4" />
+                      <div className="h-2 bg-slate-200 rounded w-1/2" />
+                      <div className={cn(
+                        "h-4 rounded flex items-center justify-center transition-all",
+                        isPlaying ? "bg-sky-500" : "bg-slate-300"
+                      )}>
+                        <span className="text-[5px] text-white font-medium">Login</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Network & Touch Info */}
+              <div className="flex-1 space-y-2">
+                <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Wifi className="w-3 h-3 text-sky-500" />
+                    <span className="text-[10px] font-medium text-slate-700">Network</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {['4G LTE', '3G', 'Slow 3G', 'Offline'].map((net, idx) => (
+                      <div
+                        key={net}
+                        className={cn(
+                          "px-1.5 py-0.5 text-[8px] rounded text-center transition-all",
+                          isPlaying && animationStep % 4 === idx
+                            ? "bg-sky-500 text-white"
+                            : "bg-white text-slate-500 border border-slate-200"
+                        )}
+                      >
+                        {net}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Smartphone className="w-3 h-3 text-emerald-500" />
+                    <span className="text-[10px] font-medium text-slate-700">Touch Events</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {['Tap', 'Swipe', 'Pinch', 'Long Press'].map((touch, idx) => (
+                      <Badge
+                        key={touch}
+                        className={cn(
+                          "text-[7px] border-0",
+                          isPlaying && animationStep === idx + 1
+                            ? "bg-emerald-500 text-white animate-pulse"
+                            : "bg-emerald-100 text-emerald-700"
+                        )}
+                      >
+                        {touch}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {isPlaying && (
+                  <div className="flex items-center gap-1.5 p-1.5 bg-emerald-50 rounded border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    <span className="text-[9px] text-emerald-700 font-medium">
+                      Recording on {['iPhone 15', 'Pixel 8', 'iPad Pro'][animationStep % 3]}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -619,6 +823,8 @@ const featureToStepMap: Record<string, string> = {
   'performance': 'performance',
   'dashboards': 'dashboards',
   'smart-recorder': 'recorder',
+  'flowpilot': 'flowpilot',
+  'mobile-testing': 'mobile',
 };
 
 export default function DemoPage() {

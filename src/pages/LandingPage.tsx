@@ -147,12 +147,17 @@ function HeroSection() {
                   <div className="text-xs text-emerald-600">End-to-end test automation</div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-violet-50 border border-violet-200 hover:border-violet-300 transition-colors cursor-default">
-                <BrainCircuit className="w-5 h-5 text-violet-600 flex-shrink-0" />
-                <div className="text-left">
-                  <div className="text-sm font-semibold text-slate-800">Optional AI</div>
-                  <div className="text-xs text-slate-500">Smart test generation & NLP assertions</div>
+              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-to-r from-fuchsia-50 to-pink-50 border-2 border-fuchsia-300 shadow-sm hover:shadow-md transition-shadow cursor-pointer group" onClick={() => navigate('/products/flowpilot')}>
+                <div className="w-9 h-9 rounded-full bg-gradient-to-r from-fuchsia-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                  <Compass className="w-4 h-4 text-white" />
                 </div>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-fuchsia-800 flex items-center gap-1">
+                    Flowpilot <span className="text-[10px] bg-fuchsia-500 text-white px-1.5 py-0.5 rounded-full">NEW</span>
+                  </div>
+                  <div className="text-xs text-fuchsia-600">Goal-based AI agents that test for you</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-fuchsia-400 group-hover:translate-x-1 transition-transform" />
               </div>
               <Button 
                 size="lg" 
@@ -1201,15 +1206,15 @@ function FlowpilotSection() {
   }, []);
 
   return (
-    <section className="py-24 relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <section className="py-24 relative overflow-hidden bg-gradient-to-b from-white via-fuchsia-50/30 to-white">
       {/* Animated Background */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-fuchsia-500/20 rounded-full blur-[150px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[120px]" />
-        {/* Neural network lines */}
-        <div className="absolute inset-0 opacity-20" style={{
-          backgroundImage: `radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: '50px 50px'
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-fuchsia-400/10 rounded-full blur-[150px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-violet-400/10 rounded-full blur-[120px]" />
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
+          backgroundImage: `linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)`,
+          backgroundSize: '60px 60px'
         }} />
       </div>
 
@@ -1219,14 +1224,14 @@ function FlowpilotSection() {
           <Badge className="mb-4 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 px-4 py-1.5 shadow-lg">
             <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> NEW: Flowpilot
           </Badge>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
+          <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6">
             Goal-Based{' '}
-            <span className="bg-gradient-to-r from-fuchsia-400 via-pink-400 to-violet-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-violet-500 bg-clip-text text-transparent">
               Agentic Testing
             </span>
           </h2>
-          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            The first QA platform with <span className="text-fuchsia-400 font-semibold">Flowpilot</span> — 
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            The first QA platform with <span className="text-fuchsia-600 font-semibold">Flowpilot</span> — 
             autonomous AI agents that understand goals, explore intelligently, and test purposefully.
           </p>
         </div>
@@ -1244,13 +1249,13 @@ function FlowpilotSection() {
                 className={cn(
                   "relative p-6 rounded-2xl cursor-pointer transition-all duration-500",
                   isActive 
-                    ? `bg-gradient-to-b ${agent.bgColor} border-2 border-white/30 shadow-2xl scale-105`
-                    : "bg-white/5 border border-white/10 hover:bg-white/10"
+                    ? `bg-gradient-to-b ${agent.bgColor} border-2 border-fuchsia-200 shadow-xl scale-105`
+                    : "bg-white border border-slate-200 hover:border-fuchsia-200 hover:shadow-md"
                 )}
               >
                 {isActive && (
                   <div className={cn(
-                    "absolute -inset-px rounded-2xl bg-gradient-to-r opacity-50 blur-sm -z-10",
+                    "absolute -inset-px rounded-2xl bg-gradient-to-r opacity-30 blur-sm -z-10",
                     agent.color
                   )} />
                 )}
@@ -1259,24 +1264,24 @@ function FlowpilotSection() {
                   "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-all",
                   isActive 
                     ? `bg-gradient-to-r ${agent.color} shadow-lg`
-                    : "bg-white/10"
+                    : "bg-slate-100"
                 )}>
                   <Icon className={cn(
                     "w-6 h-6 transition-colors",
-                    isActive ? "text-white" : "text-white/60"
+                    isActive ? "text-white" : "text-slate-500"
                   )} />
                 </div>
 
                 <h3 className={cn(
                   "text-lg font-bold mb-2 transition-colors",
-                  isActive ? "text-slate-900" : "text-white"
+                  isActive ? "text-slate-900" : "text-slate-700"
                 )}>
                   {agent.name}
                 </h3>
 
                 <p className={cn(
                   "text-sm mb-4 transition-colors",
-                  isActive ? "text-slate-600" : "text-white/60"
+                  isActive ? "text-slate-600" : "text-slate-500"
                 )}>
                   {agent.description}
                 </p>
@@ -1289,7 +1294,7 @@ function FlowpilotSection() {
                         "text-[10px] border-0 transition-all",
                         isActive 
                           ? `bg-gradient-to-r ${agent.color} text-white`
-                          : "bg-white/10 text-white/60"
+                          : "bg-slate-100 text-slate-600"
                       )}
                     >
                       {f}
@@ -1311,7 +1316,7 @@ function FlowpilotSection() {
                 "h-2 rounded-full transition-all duration-500",
                 activeAgent === idx 
                   ? `w-8 bg-gradient-to-r ${agent.color}`
-                  : "w-2 bg-white/30 hover:bg-white/50"
+                  : "w-2 bg-slate-300 hover:bg-slate-400"
               )}
             />
           ))}
