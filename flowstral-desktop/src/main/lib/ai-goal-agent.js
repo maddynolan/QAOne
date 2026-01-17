@@ -983,26 +983,35 @@ Return JSON:
         }
         
         // If we have a recorded action from PlaywrightRecorder, use its data
-        const recordedAction = result.recordedAction;
+        // BUT: For tab clicks via direct Playwright, DON'T use Recipe recorder data
+        // (Recipe recorder often misidentifies tab clicks as page title clicks)
+        const isTabClick = result.method && result.method.includes('tab');
+        const recordedAction = isTabClick ? null : result.recordedAction;
+        
+        // For tab clicks, always use the Goal Agent's actualTarget which is correct
+        const finalTarget = isTabClick ? (result.actualTarget || cleanTarget) : cleanTarget;
+        const finalDescription = isTabClick ? (result.actualText || displayText) : (recordedAction?.description || displayText);
+        
+        this.log(`Recording step: target="${finalTarget}", isTab=${isTabClick}, method=${result.method}`);
         
         this.stepsTaken.push({
           step: this.currentStep,
           action: action.action,
-          // CRITICAL: Use ACTUAL target (product name), not AI's generic description
-          target: cleanTarget,
+          // CRITICAL: For tabs, use actualTarget; for others, use cleanTarget
+          target: finalTarget,
           originalTarget: action.target,
-          // Use actual text for display (e.g., "Add to Cart for iPhone 15 Pro")
-          description: recordedAction?.description || displayText,
+          // Use actual text for display
+          description: finalDescription,
           success: result.success,
           qword: recordedAction?.qword || this.actionToQWord(action.action),
-          args: recordedAction?.args || [cleanTarget],
+          args: recordedAction?.args || [finalTarget],
           // Store method used for debugging
           method: result.method,
           // CRITICAL: Store elementIndex for duplicate elements like "Add to Cart" buttons
           elementIndex: recordedAction?.elementIndex ?? result.elementIndex ?? null,
           testId: recordedAction?.testId || recordedAction?.selectorObj?.testId || result.testId || null,
           ariaLabel: recordedAction?.ariaLabel || result.ariaLabel || null,
-          // Store the FULL recorded action for best playback compatibility
+          // Store the FULL recorded action for best playback compatibility (null for tabs)
           recordedAction: recordedAction || null,
           // Store recipe from recorder (handles Radix, Shadow DOM, etc.)
           recipe: recordedAction?.recipe || recordedAction?.target || null,

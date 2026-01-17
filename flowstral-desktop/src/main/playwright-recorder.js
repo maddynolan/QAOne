@@ -10006,6 +10006,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         continue;
       }
       
+      // FILTER: Skip actions that are likely misidentified page title clicks
+      // This happens when Recipe recorder sees a click but can't identify the element
+      const desc = action.description || action.text || '';
+      const isMisidentifiedPageTitle = 
+        desc.includes('Flowstral Test Playground') || 
+        desc.includes('🧪') ||
+        (desc.includes('Shopping Cart') && action.type === 'click' && !desc.includes('tab'));
+      
+      if (isMisidentifiedPageTitle) {
+        console.log('[PlaywrightRecorder] Skipping misidentified page title action:', desc);
+        continue;
+      }
+      
       // Mark both IDs as seen
       if (action.id) this.seenActionIds.add(action.id);
       this.seenActionIds.add(contentId);
