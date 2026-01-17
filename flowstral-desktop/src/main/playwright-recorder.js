@@ -2119,6 +2119,16 @@ class PlaywrightRecorder extends EventEmitter {
   async _processRecipeAction(recipeAction) {
     const { type, target, value, description, timestamp } = recipeAction;
     
+    // FILTER: Skip misidentified page title clicks
+    // Recipe recorder sometimes misidentifies tab clicks as page title clicks
+    const descText = description || target?.what?.text || '';
+    if (descText.includes('Flowstral Test Playground') || 
+        descText.includes('🧪') ||
+        (descText.includes('Shopping Cart') && type === 'click' && !descText.includes('tab'))) {
+      console.log('[PlaywrightRecorder] Skipping misidentified page title (recipe):', descText);
+      return;
+    }
+    
     // Generate unique ID
     const actionId = `recipe_${timestamp}_${type}_${target?.what?.text || 'element'}`;
     if (this.seenActionIds.has(actionId)) return;
