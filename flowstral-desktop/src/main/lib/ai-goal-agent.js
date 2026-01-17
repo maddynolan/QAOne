@@ -632,39 +632,64 @@ Return JSON:
       
       this.log(`Looking for tab: "${tabName}" (from target: "${target}")`);
       
+      // Log available tabs for debugging
+      const allTabs = await this.page.getByRole('tab').all();
+      this.log(`Available tabs: ${allTabs.length}`);
+      for (let i = 0; i < allTabs.length; i++) {
+        const tabText = await allTabs[i].textContent().catch(() => 'unknown');
+        this.log(`  Tab ${i}: "${tabText}"`);
+      }
+      
       // Try role-based tab finding FIRST (most reliable)
       let locator = this.page.getByRole('tab', { name: new RegExp(`^${tabName}$`, 'i') });
       if (await locator.count() > 0) {
+        const clickedText = await locator.first().textContent().catch(() => tabName);
         await locator.first().click({ timeout: 5000 });
-        this.log(`✓ Clicked tab ${tabName} via role (exact)`);
-        return { success: true, method: 'role-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+        this.log(`✓ Clicked tab "${clickedText}" via role (exact)`);
+        return { success: true, method: 'role-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
       
       // Try partial match role
       locator = this.page.getByRole('tab', { name: new RegExp(tabName, 'i') });
       if (await locator.count() > 0) {
+        const clickedText = await locator.first().textContent().catch(() => tabName);
         await locator.first().click({ timeout: 5000 });
-        this.log(`✓ Clicked tab ${tabName} via role`);
-        return { success: true, method: 'role-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+        this.log(`✓ Clicked tab "${clickedText}" via role (partial)`);
+        return { success: true, method: 'role-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
       
       // Try Radix tabs
       locator = this.page.locator(`[data-radix-collection-item]:has-text("${tabName}")`);
       if (await locator.count() > 0) {
+        const clickedText = await locator.first().textContent().catch(() => tabName);
         await locator.first().click({ timeout: 5000 });
-        this.log(`✓ Clicked tab ${tabName} via radix`);
-        return { success: true, method: 'radix-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+        this.log(`✓ Clicked tab "${clickedText}" via radix`);
+        return { success: true, method: 'radix-tab', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
       
       // Try text-based with role restriction
       locator = this.page.locator(`[role="tab"]:has-text("${tabName}")`);
       if (await locator.count() > 0) {
+        const clickedText = await locator.first().textContent().catch(() => tabName);
         await locator.first().click({ timeout: 5000 });
-        this.log(`✓ Clicked tab ${tabName} via role-tab-text`);
-        return { success: true, method: 'role-tab-text', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+        this.log(`✓ Clicked tab "${clickedText}" via role-tab-text`);
+        return { success: true, method: 'role-tab-text', actualTarget: clickedText.trim(), actualText: `Click "${clickedText.trim()}" tab` };
       }
       
-      this.log(`⚠️ Tab "${tabName}" not found via tab strategies, trying generic click...`);
+      // Tab-specific strategies exhausted, STOP here for tab actions
+      // Don't fall through to generic click which might click wrong element (like page title)
+      this.log(`❌ Tab "${tabName}" not found via any tab strategy`);
+      
+      // Last resort: try clicking any element with exact tab name text
+      locator = this.page.locator(`text="${tabName}"`);
+      if (await locator.count() > 0) {
+        await locator.first().click({ timeout: 5000 });
+        this.log(`✓ Clicked element with exact text "${tabName}"`);
+        return { success: true, method: 'exact-text-tab', actualTarget: tabName, actualText: `Click "${tabName}" tab` };
+      }
+      
+      // Return failure for tab, don't fall through to generic click
+      return { success: false, error: `Tab "${tabName}" not found`, actualTarget: tabName };
     }
     
     // PRIORITY 4: Handle dropdown/select
