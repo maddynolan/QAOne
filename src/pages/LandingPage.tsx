@@ -32,7 +32,8 @@ import {
   Twitter, Linkedin, Github, Youtube,
   PauseCircle, Square, CheckSquare, XCircle, Circle,
   Pencil, Trash2, Copy, MoreHorizontal, Filter, Download,
-  FileSpreadsheet, TestTube, Beaker, Microscope
+  FileSpreadsheet, TestTube, Beaker, Microscope,
+  Smartphone, Wifi, Map, Compass, Navigation, Route
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -787,6 +788,26 @@ const features = [
     href: '/products/visual-builder'
   },
   {
+    icon: Compass,
+    title: 'Telic Agents',
+    description: 'Goal-based AI agents that explore, test, and validate autonomously. Flowmap, Explorer, and more.',
+    gradient: 'from-fuchsia-500 to-pink-500',
+    bgGradient: 'from-fuchsia-50 to-pink-50',
+    highlights: ['Goal-Driven', 'Flowmap', 'Explorer', 'Self-Healing'],
+    href: '/products/telic-agents',
+    isNew: true
+  },
+  {
+    icon: Smartphone,
+    title: 'Mobile Testing',
+    description: 'Test on 50+ real device profiles. Network throttling, touch gestures, and native app support.',
+    gradient: 'from-sky-500 to-indigo-500',
+    bgGradient: 'from-sky-50 to-indigo-50',
+    highlights: ['50+ Devices', 'Network Throttling', 'Native Apps'],
+    href: '/products/mobile-testing',
+    isNew: true
+  },
+  {
     icon: ClipboardCheck,
     title: 'Test Management',
     description: 'Complete test lifecycle. Cases, Suites, Plans, Releases, Runs, Defects - all connected.',
@@ -794,15 +815,6 @@ const features = [
     bgGradient: 'from-violet-50 to-purple-50',
     highlights: ['6 Modules', 'Manual + Auto', 'Traceability'],
     href: '/products/test-management'
-  },
-  {
-    icon: BarChart3,
-    title: 'Dashboards',
-    description: 'Beautiful, actionable dashboards. Track coverage, trends, and team performance at a glance.',
-    gradient: 'from-orange-500 to-amber-500',
-    bgGradient: 'from-orange-50 to-amber-50',
-    highlights: ['Coverage Metrics', 'Trend Analysis', 'Custom Reports'],
-    href: '/products/dashboards'
   },
   {
     icon: Globe,
@@ -869,6 +881,15 @@ function FeaturesSection() {
               onClick={() => navigate(feature.href)}
               className="group relative p-6 rounded-2xl bg-white border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
             >
+              {/* NEW Badge */}
+              {(feature as any).isNew && (
+                <div className="absolute -top-2 -right-2 z-10">
+                  <Badge className="bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 text-[10px] font-bold px-2 py-0.5 animate-pulse shadow-lg">
+                    ✨ NEW
+                  </Badge>
+                </div>
+              )}
+              
               {/* Gradient Border on Hover */}
               <div className={cn(
                 "absolute inset-0 rounded-2xl bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-sm",
@@ -1130,6 +1151,360 @@ function VisualA11ySection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TELIC AGENTS - GOAL-BASED AGENTIC TESTING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TelicAgentsSection() {
+  const navigate = useNavigate();
+  const [activeAgent, setActiveAgent] = useState(0);
+  
+  const agents = [
+    {
+      name: 'Flowmap',
+      icon: Map,
+      description: 'Visualize and explore all possible user journeys. Discover untested paths automatically.',
+      color: 'from-fuchsia-500 to-pink-500',
+      bgColor: 'from-fuchsia-50 to-pink-50',
+      features: ['Journey Discovery', 'Path Visualization', 'Coverage Gaps']
+    },
+    {
+      name: 'Explorer',
+      icon: Compass,
+      description: 'AI-powered autonomous exploration. Let the agent find bugs while you sleep.',
+      color: 'from-violet-500 to-purple-500',
+      bgColor: 'from-violet-50 to-purple-50',
+      features: ['Auto-Exploration', 'Bug Detection', 'Edge Cases']
+    },
+    {
+      name: 'Self-Healer',
+      icon: RefreshCw,
+      description: 'Automatic locator repair when elements change. Zero maintenance overhead.',
+      color: 'from-emerald-500 to-teal-500',
+      bgColor: 'from-emerald-50 to-teal-50',
+      features: ['Auto-Repair', 'Smart Locators', 'Zero Flakes']
+    },
+    {
+      name: 'Generator',
+      icon: Sparkles,
+      description: 'Generate tests from goals. Describe what to test, AI creates the steps.',
+      color: 'from-amber-500 to-orange-500',
+      bgColor: 'from-amber-50 to-orange-50',
+      features: ['NLP Input', 'Test Generation', 'Goal-to-Test']
+    },
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveAgent(prev => (prev + 1) % agents.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="py-24 relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-fuchsia-500/20 rounded-full blur-[150px] animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[120px]" />
+        {/* Neural network lines */}
+        <div className="absolute inset-0 opacity-20" style={{
+          backgroundImage: `radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+          backgroundSize: '50px 50px'
+        }} />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-6">
+        {/* Section Header */}
+        <div className="text-center mb-16">
+          <Badge className="mb-4 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 px-4 py-1.5 shadow-lg">
+            <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> NEW: Telic Agents
+          </Badge>
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
+            Goal-Based{' '}
+            <span className="bg-gradient-to-r from-fuchsia-400 via-pink-400 to-violet-400 bg-clip-text text-transparent">
+              Agentic Testing
+            </span>
+          </h2>
+          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+            The first QA platform with <span className="text-fuchsia-400 font-semibold">Telic Agents</span> — 
+            autonomous AI agents that understand goals, explore intelligently, and test purposefully.
+          </p>
+        </div>
+
+        {/* Agent Cards */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          {agents.map((agent, idx) => {
+            const Icon = agent.icon;
+            const isActive = activeAgent === idx;
+            
+            return (
+              <div
+                key={idx}
+                onClick={() => setActiveAgent(idx)}
+                className={cn(
+                  "relative p-6 rounded-2xl cursor-pointer transition-all duration-500",
+                  isActive 
+                    ? `bg-gradient-to-b ${agent.bgColor} border-2 border-white/30 shadow-2xl scale-105`
+                    : "bg-white/5 border border-white/10 hover:bg-white/10"
+                )}
+              >
+                {isActive && (
+                  <div className={cn(
+                    "absolute -inset-px rounded-2xl bg-gradient-to-r opacity-50 blur-sm -z-10",
+                    agent.color
+                  )} />
+                )}
+                
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-all",
+                  isActive 
+                    ? `bg-gradient-to-r ${agent.color} shadow-lg`
+                    : "bg-white/10"
+                )}>
+                  <Icon className={cn(
+                    "w-6 h-6 transition-colors",
+                    isActive ? "text-white" : "text-white/60"
+                  )} />
+                </div>
+
+                <h3 className={cn(
+                  "text-lg font-bold mb-2 transition-colors",
+                  isActive ? "text-slate-900" : "text-white"
+                )}>
+                  {agent.name}
+                </h3>
+
+                <p className={cn(
+                  "text-sm mb-4 transition-colors",
+                  isActive ? "text-slate-600" : "text-white/60"
+                )}>
+                  {agent.description}
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {agent.features.map((f, i) => (
+                    <Badge 
+                      key={i} 
+                      className={cn(
+                        "text-[10px] border-0 transition-all",
+                        isActive 
+                          ? `bg-gradient-to-r ${agent.color} text-white`
+                          : "bg-white/10 text-white/60"
+                      )}
+                    >
+                      {f}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Progress dots */}
+        <div className="flex justify-center gap-2 mb-12">
+          {agents.map((agent, idx) => (
+            <button
+              key={idx}
+              onClick={() => setActiveAgent(idx)}
+              className={cn(
+                "h-2 rounded-full transition-all duration-500",
+                activeAgent === idx 
+                  ? `w-8 bg-gradient-to-r ${agent.color}`
+                  : "w-2 bg-white/30 hover:bg-white/50"
+              )}
+            />
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div className="text-center">
+          <Button 
+            size="lg"
+            onClick={() => navigate('/products/telic-agents')}
+            className="h-14 px-10 bg-gradient-to-r from-fuchsia-500 to-pink-500 hover:from-fuchsia-600 hover:to-pink-600 text-white font-semibold rounded-xl shadow-lg shadow-fuchsia-500/30 transition-all hover:scale-105"
+          >
+            <BrainCircuit className="w-5 h-5 mr-2" />
+            Explore Telic Agents
+            <ArrowRight className="w-5 h-5 ml-2" />
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOBILE TESTING SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MobileTestingSection() {
+  const navigate = useNavigate();
+  const [selectedDevice, setSelectedDevice] = useState(0);
+  
+  const devices = [
+    { name: 'iPhone 15 Pro', viewport: '393×852', category: 'iOS' },
+    { name: 'iPhone 14', viewport: '390×844', category: 'iOS' },
+    { name: 'Pixel 8', viewport: '412×915', category: 'Android' },
+    { name: 'Galaxy S24', viewport: '360×780', category: 'Android' },
+    { name: 'iPad Pro', viewport: '1024×1366', category: 'Tablet' },
+  ];
+
+  const networkPresets = [
+    { name: '4G LTE', speed: '12 Mbps', icon: '📶' },
+    { name: '3G', speed: '1.5 Mbps', icon: '📱' },
+    { name: 'Slow 3G', speed: '400 Kbps', icon: '🐢' },
+    { name: 'Offline', speed: '—', icon: '✈️' },
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSelectedDevice(prev => (prev + 1) % devices.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <section className="py-24 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
+      {/* Background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-sky-400/10 rounded-full blur-[150px]" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-400/10 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-6">
+        <div className="grid lg:grid-cols-2 gap-16 items-center">
+          {/* Left - Content */}
+          <div>
+            <Badge className="mb-4 bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-0 px-4 py-1.5 shadow-md">
+              <Smartphone className="w-4 h-4 mr-1.5 inline" /> NEW: Mobile Testing
+            </Badge>
+            <h2 className="text-4xl font-bold text-slate-900 mb-6">
+              Test on{' '}
+              <span className="bg-gradient-to-r from-sky-500 to-indigo-500 bg-clip-text text-transparent">
+                50+ Real Devices
+              </span>
+            </h2>
+            <p className="text-lg text-slate-600 mb-8">
+              Complete mobile web emulation with real device profiles, network throttling, 
+              and native app testing via Maestro integration.
+            </p>
+
+            {/* Device Categories */}
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <div className="w-10 h-10 rounded-lg bg-sky-100 flex items-center justify-center">
+                  <Smartphone className="w-5 h-5 text-sky-600" />
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-800">iOS Devices</div>
+                  <div className="text-sm text-slate-500">iPhone 15, 14, 13, SE, iPad Pro & more</div>
+                </div>
+                <Badge className="ml-auto bg-sky-100 text-sky-700 border-0">20+ devices</Badge>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                  <Smartphone className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-800">Android Devices</div>
+                  <div className="text-sm text-slate-500">Pixel, Galaxy, OnePlus, Xiaomi & more</div>
+                </div>
+                <Badge className="ml-auto bg-emerald-100 text-emerald-700 border-0">25+ devices</Badge>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
+                  <Wifi className="w-5 h-5 text-violet-600" />
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-800">Network Conditions</div>
+                  <div className="text-sm text-slate-500">4G, 3G, Slow 3G, Offline simulation</div>
+                </div>
+                <Badge className="ml-auto bg-violet-100 text-violet-700 border-0">6 presets</Badge>
+              </div>
+            </div>
+
+            <Button 
+              size="lg"
+              onClick={() => navigate('/products/mobile-testing')}
+              className="h-12 px-8 bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-semibold rounded-xl shadow-lg transition-all hover:scale-105"
+            >
+              <Smartphone className="w-5 h-5 mr-2" />
+              Explore Mobile Testing
+            </Button>
+          </div>
+
+          {/* Right - Device Preview */}
+          <div className="relative flex justify-center">
+            {/* Phone Frame */}
+            <div className="relative w-[280px] h-[560px] bg-slate-900 rounded-[40px] p-3 shadow-2xl">
+              {/* Notch */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-7 bg-slate-900 rounded-b-2xl z-10" />
+              
+              {/* Screen */}
+              <div className="w-full h-full bg-white rounded-[32px] overflow-hidden relative">
+                {/* Status Bar */}
+                <div className="flex items-center justify-between px-6 py-2 bg-slate-100">
+                  <span className="text-xs text-slate-600">9:41</span>
+                  <div className="flex items-center gap-1">
+                    <Wifi className="w-3 h-3 text-slate-600" />
+                    <div className="w-6 h-3 bg-slate-600 rounded-sm" />
+                  </div>
+                </div>
+
+                {/* Device Info */}
+                <div className="p-4 bg-gradient-to-r from-sky-500 to-indigo-500 text-white">
+                  <div className="text-lg font-bold">{devices[selectedDevice].name}</div>
+                  <div className="text-sm text-white/80">{devices[selectedDevice].viewport}</div>
+                  <Badge className="mt-2 bg-white/20 text-white border-0 text-xs">
+                    {devices[selectedDevice].category}
+                  </Badge>
+                </div>
+
+                {/* Network Preview */}
+                <div className="p-4">
+                  <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Network</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {networkPresets.map((n, i) => (
+                      <div key={i} className="p-2 bg-slate-50 rounded-lg text-center">
+                        <div className="text-lg">{n.icon}</div>
+                        <div className="text-xs font-medium text-slate-700">{n.name}</div>
+                        <div className="text-[10px] text-slate-400">{n.speed}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recording indicator */}
+                <div className="absolute bottom-4 left-4 right-4 p-3 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-white text-center shadow-lg">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <span className="text-sm font-semibold">Recording on {devices[selectedDevice].name}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Floating badges */}
+            <div className="absolute -right-4 top-20 bg-white p-3 rounded-xl shadow-lg border border-slate-200">
+              <div className="text-sm font-bold text-slate-800">Touch Events</div>
+              <div className="text-xs text-slate-500">Tap, Swipe, Pinch</div>
+            </div>
+            
+            <div className="absolute -left-4 bottom-32 bg-white p-3 rounded-xl shadow-lg border border-slate-200">
+              <div className="text-sm font-bold text-slate-800">Native Apps</div>
+              <div className="text-xs text-slate-500">Maestro Integration</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CTA SECTION
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1241,7 +1616,8 @@ function Footer() {
     Product: [
       { name: 'Smart Recorder', href: '/products/smart-recorder' },
       { name: 'Visual Builder', href: '/products/visual-builder' },
-      { name: 'Test Management', href: '/products/test-management' },
+      { name: 'Telic Agents ✨', href: '/products/telic-agents' },
+      { name: 'Mobile Testing ✨', href: '/products/mobile-testing' },
       { name: 'API Testing', href: '/products/api-testing' },
       { name: 'Performance', href: '/products/performance' },
       { name: 'Download Desktop', href: '/download' },
@@ -1352,6 +1728,8 @@ export default function LandingPage() {
       <main>
         <HeroSection />
         <FlowstralSection />
+        <TelicAgentsSection />
+        <MobileTestingSection />
         <FeaturesSection />
         <PerformanceAPISection />
         <VisualA11ySection />

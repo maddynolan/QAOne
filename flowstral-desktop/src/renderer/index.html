@@ -62,6 +62,13 @@
             </svg>
             <span>Tests</span>
           </button>
+          <button class="nav-item" data-view="mobile">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            <span>Mobile</span>
+          </button>
           <button class="nav-item" data-view="runs">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"/>
@@ -237,6 +244,183 @@
             </svg>
             <h3>No tests yet</h3>
             <p>Create your first test by recording in the Studio</p>
+          </div>
+        </div>
+
+        <!-- Mobile Testing View -->
+        <div class="view" id="view-mobile">
+          <div class="view-header">
+            <h1>Mobile Testing</h1>
+            <p>Test on 50+ real device profiles with network simulation</p>
+          </div>
+          
+          <div class="settings-content">
+            <!-- Device Selection Section -->
+            <section class="settings-section">
+              <h2>📱 Device Emulation</h2>
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Select a mobile device profile to emulate during recording and playback</p>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Current Device</label>
+                  <span id="mobile-current-device">Desktop (No emulation)</span>
+                </div>
+                <div class="setting-control">
+                  <button class="btn btn-ghost" id="btn-clear-device">Clear Device</button>
+                </div>
+              </div>
+
+              <div class="device-categories" id="device-categories">
+                <!-- Popular Devices -->
+                <div class="device-category">
+                  <h3>⭐ Popular</h3>
+                  <div class="device-grid" id="popular-devices"></div>
+                </div>
+                
+                <!-- iOS Devices -->
+                <div class="device-category">
+                  <h3>🍎 iOS - iPhone</h3>
+                  <div class="device-grid" id="ios-iphone-devices"></div>
+                </div>
+                
+                <div class="device-category">
+                  <h3>🍎 iOS - iPad</h3>
+                  <div class="device-grid" id="ios-ipad-devices"></div>
+                </div>
+                
+                <!-- Android Devices -->
+                <div class="device-category">
+                  <h3>🤖 Android - Google</h3>
+                  <div class="device-grid" id="android-google-devices"></div>
+                </div>
+                
+                <div class="device-category">
+                  <h3>🤖 Android - Samsung</h3>
+                  <div class="device-grid" id="android-samsung-devices"></div>
+                </div>
+                
+                <div class="device-category">
+                  <h3>🤖 Android - Other</h3>
+                  <div class="device-grid" id="android-other-devices"></div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Network Simulation Section -->
+            <section class="settings-section">
+              <h2>📶 Network Simulation</h2>
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Simulate different mobile network conditions</p>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Current Network</label>
+                  <span id="mobile-current-network">No throttling</span>
+                </div>
+              </div>
+              
+              <div class="network-presets" id="network-presets">
+                <button class="network-btn" data-network="5G">
+                  <span class="network-name">5G</span>
+                  <span class="network-speed">100 Mbps • 10ms</span>
+                </button>
+                <button class="network-btn" data-network="4G LTE">
+                  <span class="network-name">4G LTE</span>
+                  <span class="network-speed">50 Mbps • 20ms</span>
+                </button>
+                <button class="network-btn" data-network="4G">
+                  <span class="network-name">4G</span>
+                  <span class="network-speed">20 Mbps • 50ms</span>
+                </button>
+                <button class="network-btn" data-network="3G">
+                  <span class="network-name">3G</span>
+                  <span class="network-speed">1.5 Mbps • 100ms</span>
+                </button>
+                <button class="network-btn" data-network="Slow 3G">
+                  <span class="network-name">Slow 3G</span>
+                  <span class="network-speed">500 Kbps • 400ms</span>
+                </button>
+                <button class="network-btn" data-network="Offline">
+                  <span class="network-name">Offline</span>
+                  <span class="network-speed">No connection</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- Native App Testing Section -->
+            <section class="settings-section">
+              <h2>📲 Native App Testing (Maestro)</h2>
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Test iOS/Android native apps using Maestro</p>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Maestro Status</label>
+                  <span id="maestro-status">Checking...</span>
+                </div>
+                <div class="setting-control">
+                  <button class="btn btn-secondary" id="btn-install-maestro">Install Maestro</button>
+                </div>
+              </div>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Platform</label>
+                  <span>Select target platform for native testing</span>
+                </div>
+                <div class="setting-control">
+                  <select id="native-platform-select">
+                    <option value="android">Android</option>
+                    <option value="ios">iOS (macOS only)</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>App ID</label>
+                  <span>Bundle identifier for the app to test</span>
+                </div>
+                <div class="setting-control">
+                  <input type="text" id="native-app-id" placeholder="com.example.myapp" style="width: 200px;">
+                </div>
+              </div>
+              
+              <div class="setting-row">
+                <div class="setting-info">
+                  <label>Available Devices</label>
+                  <span id="native-devices-status">No devices found</span>
+                </div>
+                <div class="setting-control">
+                  <button class="btn btn-ghost" id="btn-refresh-devices">Refresh</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="settings-section">
+              <h2>🚀 Quick Actions</h2>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-accent" id="btn-record-mobile">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="6"/>
+                  </svg>
+                  Record on Mobile
+                </button>
+                <button class="btn btn-secondary" id="btn-run-mobile-test">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  Run Test on Device
+                </button>
+                <button class="btn btn-ghost" id="btn-mobile-help">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  Help
+                </button>
+              </div>
+            </section>
           </div>
         </div>
 

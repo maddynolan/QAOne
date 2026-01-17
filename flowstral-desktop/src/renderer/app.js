@@ -57,8 +57,31 @@ const elements = {
   appVersion: document.getElementById('app-version'),
   btnCheckUpdates: document.getElementById('btn-check-updates'),
   
+  // Mobile Testing
+  mobileCurrentDevice: document.getElementById('mobile-current-device'),
+  mobileCurrentNetwork: document.getElementById('mobile-current-network'),
+  btnClearDevice: document.getElementById('btn-clear-device'),
+  networkPresets: document.getElementById('network-presets'),
+  maestroStatus: document.getElementById('maestro-status'),
+  btnInstallMaestro: document.getElementById('btn-install-maestro'),
+  nativePlatformSelect: document.getElementById('native-platform-select'),
+  nativeAppId: document.getElementById('native-app-id'),
+  nativeDevicesStatus: document.getElementById('native-devices-status'),
+  btnRefreshDevices: document.getElementById('btn-refresh-devices'),
+  btnRecordMobile: document.getElementById('btn-record-mobile'),
+  btnRunMobileTest: document.getElementById('btn-run-mobile-test'),
+  btnMobileHelp: document.getElementById('btn-mobile-help'),
+  
   // Toast
   toastContainer: document.getElementById('toast-container')
+};
+
+// Mobile state
+const mobileState = {
+  selectedDevice: null,
+  selectedNetwork: null,
+  devices: null,
+  maestroInstalled: false
 };
 
 // Initialize
@@ -153,6 +176,19 @@ function setupEventListeners() {
   
   // Handle window resize to update browser bounds
   window.addEventListener('resize', updateBrowserBounds);
+  
+  // Mobile Testing
+  elements.btnClearDevice?.addEventListener('click', clearMobileDevice);
+  elements.btnInstallMaestro?.addEventListener('click', installMaestro);
+  elements.btnRefreshDevices?.addEventListener('click', refreshNativeDevices);
+  elements.btnRecordMobile?.addEventListener('click', startMobileRecording);
+  elements.btnRunMobileTest?.addEventListener('click', runMobileTest);
+  elements.btnMobileHelp?.addEventListener('click', showMobileHelp);
+  
+  // Network preset buttons
+  elements.networkPresets?.querySelectorAll('.network-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectNetwork(btn.dataset.network));
+  });
 }
 
 // Setup IPC listeners
@@ -273,6 +309,11 @@ function switchView(viewName) {
   
   // Update browser bounds when switching views
   setTimeout(updateBrowserBounds, 100);
+  
+  // Initialize mobile view when switching to it
+  if (viewName === 'mobile') {
+    initMobileView();
+  }
 }
 
 // Toggle recording
@@ -750,6 +791,318 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text || '';
   return div.innerHTML;
+}
+
+// =============================================================================
+// MOBILE TESTING FUNCTIONS
+// =============================================================================
+
+// Load mobile devices and populate UI
+async function loadMobileDevices() {
+  try {
+    if (!window.flowstral?.mobile?.getDevices) {
+      console.log('[Mobile] Mobile API not available');
+      return;
+    }
+    
+    const data = await window.flowstral.mobile.getDevices();
+    mobileState.devices = data;
+    
+    if (!data?.categories) return;
+    
+    const categoryMap = {
+      'Popular': 'popular-devices',
+      'iOS - iPhone': 'ios-iphone-devices',
+      'iOS - iPad': 'ios-ipad-devices',
+      'Android - Google': 'android-google-devices',
+      'Android - Samsung': 'android-samsung-devices',
+      'Android - Other': 'android-other-devices'
+    };
+    
+    for (const [category, elementId] of Object.entries(categoryMap)) {
+      const container = document.getElementById(elementId);
+      if (!container) continue;
+      
+      const devices = data.categories[category] || [];
+      container.innerHTML = devices.map(deviceName => {
+        const device = data.devices[deviceName];
+        if (!device) return '';
+        
+        return `
+          <button class="device-btn" data-device="${deviceName}">
+            <span class="device-name">${deviceName}</span>
+            <span class="device-info">${device.viewport.width}×${device.viewport.height}</span>
+          </button>
+        `;
+      }).join('');
+      
+      // Add click handlers
+      container.querySelectorAll('.device-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectDevice(btn.dataset.device));
+      });
+    }
+    
+    // Load current config
+    const config = await window.flowstral.mobile.getConfig();
+    if (config?.device) {
+      mobileState.selectedDevice = config.device;
+      updateMobileUI();
+    }
+    
+    console.log('[Mobile] Loaded', Object.keys(data.devices || {}).length, 'devices');
+  } catch (error) {
+    console.error('[Mobile] Failed to load devices:', error);
+  }
+}
+
+// Select a mobile device
+async function selectDevice(deviceName) {
+  try {
+    const network = mobileState.selectedNetwork || null;
+    await window.flowstral.mobile.setDevice(deviceName, network);
+    mobileState.selectedDevice = deviceName;
+    updateMobileUI();
+    showToast(`Device set to ${deviceName}`, 'success');
+  } catch (error) {
+    showToast('Failed to set device: ' + error.message, 'error');
+  }
+}
+
+// Select network preset
+async function selectNetwork(networkName) {
+  try {
+    if (networkName === mobileState.selectedNetwork) {
+      // Deselect
+      mobileState.selectedNetwork = null;
+      if (mobileState.selectedDevice) {
+        await window.flowstral.mobile.setDevice(mobileState.selectedDevice, null);
+      }
+    } else {
+      mobileState.selectedNetwork = networkName;
+      if (mobileState.selectedDevice) {
+        await window.flowstral.mobile.setDevice(mobileState.selectedDevice, networkName);
+      }
+    }
+    updateMobileUI();
+    showToast(`Network: ${mobileState.selectedNetwork || 'No throttling'}`, 'info');
+  } catch (error) {
+    showToast('Failed to set network: ' + error.message, 'error');
+  }
+}
+
+// Clear mobile device (return to desktop mode)
+async function clearMobileDevice() {
+  try {
+    await window.flowstral.mobile.clearDevice();
+    mobileState.selectedDevice = null;
+    mobileState.selectedNetwork = null;
+    updateMobileUI();
+    showToast('Switched to desktop mode', 'info');
+  } catch (error) {
+    showToast('Failed to clear device: ' + error.message, 'error');
+  }
+}
+
+// Update mobile UI state
+function updateMobileUI() {
+  // Update current device display
+  if (elements.mobileCurrentDevice) {
+    elements.mobileCurrentDevice.textContent = mobileState.selectedDevice 
+      ? mobileState.selectedDevice 
+      : 'Desktop (No emulation)';
+  }
+  
+  // Update current network display
+  if (elements.mobileCurrentNetwork) {
+    elements.mobileCurrentNetwork.textContent = mobileState.selectedNetwork 
+      ? mobileState.selectedNetwork 
+      : 'No throttling';
+  }
+  
+  // Highlight selected device
+  document.querySelectorAll('.device-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.device === mobileState.selectedDevice);
+  });
+  
+  // Highlight selected network
+  document.querySelectorAll('.network-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.network === mobileState.selectedNetwork);
+  });
+}
+
+// Check Maestro installation status
+async function checkMaestroStatus() {
+  try {
+    if (!window.flowstral?.mobile?.checkMaestro) {
+      updateMaestroUI({ installed: false, message: 'API not available' });
+      return;
+    }
+    
+    const status = await window.flowstral.mobile.checkMaestro();
+    mobileState.maestroInstalled = status.installed;
+    updateMaestroUI(status);
+  } catch (error) {
+    updateMaestroUI({ installed: false, message: error.message });
+  }
+}
+
+// Update Maestro status UI
+function updateMaestroUI(status) {
+  if (elements.maestroStatus) {
+    if (status.installed) {
+      elements.maestroStatus.textContent = `✓ Installed (${status.version || 'Unknown version'})`;
+      elements.maestroStatus.className = 'maestro-installed';
+    } else {
+      elements.maestroStatus.textContent = `✗ Not installed`;
+      elements.maestroStatus.className = 'maestro-not-installed';
+    }
+  }
+  
+  if (elements.btnInstallMaestro) {
+    elements.btnInstallMaestro.style.display = status.installed ? 'none' : 'inline-flex';
+  }
+}
+
+// Install Maestro
+async function installMaestro() {
+  showToast('Opening Maestro installation page...', 'info');
+  // Open Maestro installation URL
+  window.open('https://maestro.mobile.dev/getting-started/installing-maestro', '_blank');
+}
+
+// Refresh native devices list
+async function refreshNativeDevices() {
+  try {
+    const platform = elements.nativePlatformSelect?.value || 'android';
+    const devices = await window.flowstral.mobile.getNativeDevices(platform);
+    
+    if (elements.nativeDevicesStatus) {
+      if (devices && devices.length > 0) {
+        elements.nativeDevicesStatus.textContent = `${devices.length} device(s) found`;
+      } else {
+        elements.nativeDevicesStatus.textContent = 'No devices found - start emulator/simulator';
+      }
+    }
+    
+    showToast(`Found ${devices?.length || 0} ${platform} device(s)`, 'info');
+  } catch (error) {
+    showToast('Failed to list devices: ' + error.message, 'error');
+  }
+}
+
+// Start mobile recording
+async function startMobileRecording() {
+  if (!mobileState.selectedDevice) {
+    showToast('Please select a device first', 'warning');
+    return;
+  }
+  
+  // Switch to Studio view
+  switchView('studio');
+  
+  // Small delay to ensure view switch, then trigger recording
+  setTimeout(() => {
+    if (!state.recording) {
+      toggleRecording();
+    }
+  }, 100);
+}
+
+// Run test on mobile
+async function runMobileTest() {
+  if (!mobileState.selectedDevice) {
+    showToast('Please select a device first', 'warning');
+    return;
+  }
+  
+  if (state.actions.length === 0) {
+    showToast('No test steps to run. Record a test first.', 'warning');
+    return;
+  }
+  
+  showToast(`Running test on ${mobileState.selectedDevice}...`, 'info');
+  
+  try {
+    // The device is already set, so just run the test
+    const result = await window.flowstral.embeddedBrowser.runTest({
+      steps: state.actions,
+      url: elements.urlInput?.value
+    });
+    
+    if (result.success) {
+      showToast('Test passed on mobile!', 'success');
+    } else {
+      showToast('Test failed: ' + (result.error || 'Unknown error'), 'error');
+    }
+  } catch (error) {
+    showToast('Test execution failed: ' + error.message, 'error');
+  }
+}
+
+// Show mobile help
+function showMobileHelp() {
+  // Create help modal
+  let modal = document.getElementById('mobile-help-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'mobile-help-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width: 600px; max-height: 80vh; overflow-y: auto;">
+        <h3>📱 Mobile Testing Guide</h3>
+        
+        <div style="margin: 16px 0;">
+          <h4 style="color: var(--accent-cyan); margin-bottom: 8px;">Mobile Web Testing</h4>
+          <ol style="margin-left: 20px; color: var(--text-secondary);">
+            <li>Select a device from the grid above</li>
+            <li>Optionally select a network condition</li>
+            <li>Click "Record on Mobile" to start recording</li>
+            <li>The browser will emulate the selected device</li>
+            <li>Record your test as normal</li>
+          </ol>
+        </div>
+        
+        <div style="margin: 16px 0;">
+          <h4 style="color: var(--accent-purple); margin-bottom: 8px;">Native App Testing (Maestro)</h4>
+          <ol style="margin-left: 20px; color: var(--text-secondary);">
+            <li>Install Maestro: <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">curl -Ls "https://get.maestro.mobile.dev" | bash</code></li>
+            <li>Start an Android emulator or iOS simulator</li>
+            <li>Enter your app's bundle ID</li>
+            <li>QAAI will convert your test steps to Maestro commands</li>
+          </ol>
+        </div>
+        
+        <div style="margin: 16px 0;">
+          <h4 style="color: var(--success); margin-bottom: 8px;">Tips</h4>
+          <ul style="margin-left: 20px; color: var(--text-secondary);">
+            <li>Use "Slow 3G" to test loading states</li>
+            <li>iPad/Tablet tests may need wider viewports</li>
+            <li>Tests recorded on mobile work on desktop too</li>
+          </ul>
+        </div>
+        
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="document.getElementById('mobile-help-modal').style.display='none'">Close</button>
+          <button class="btn btn-secondary" onclick="window.open('file:///${encodeURIComponent('C:/QAAI/docs/MOBILE_TESTING_GUIDE.md')}')">View Full Docs</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  }
+  
+  modal.style.display = 'flex';
+}
+
+// Initialize mobile view when switching to it
+function initMobileView() {
+  if (!mobileState.devices) {
+    loadMobileDevices();
+  }
+  checkMaestroStatus();
 }
 
 // Initialize app

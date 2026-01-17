@@ -10,7 +10,8 @@ import {
   ChevronRight, Sparkles, Layers, RefreshCw, Database, Rocket,
   ClipboardCheck, BarChart3, GitBranch, Settings, FileText,
   Accessibility, TrendingUp, Lock, PieChart, LayoutDashboard,
-  Users, Server, Code2, Gauge, AlertTriangle, CheckSquare
+  Users, Server, Code2, Gauge, AlertTriangle, CheckSquare,
+  Smartphone, Wifi, Map, Compass, Navigation, BrainCircuit, Route
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -206,6 +207,40 @@ const featureConfigs: Record<string, {
       { icon: AlertTriangle, title: 'Alerts & Notifications', desc: 'Get notified when metrics cross thresholds.' },
     ],
     highlights: ['Coverage', 'Trends', 'Team Metrics', 'Custom Reports', 'Alerts']
+  },
+  'telic-agents': {
+    title: 'Telic Agents',
+    tagline: 'Goal-Based Agentic Testing',
+    description: 'The first QA platform with autonomous AI agents that understand goals, explore intelligently, and test purposefully. Let Telic Agents discover bugs while you sleep.',
+    icon: Compass,
+    gradient: 'from-fuchsia-500 to-pink-500',
+    bgGradient: 'from-fuchsia-50 to-pink-50',
+    features: [
+      { icon: Map, title: 'Flowmap Explorer', desc: 'Visualize and explore all possible user journeys. Discover untested paths automatically.' },
+      { icon: Compass, title: 'Autonomous Explorer', desc: 'AI-powered exploration that finds edge cases and bugs without human guidance.' },
+      { icon: RefreshCw, title: 'Self-Healing', desc: 'Automatic locator repair when elements change. Zero maintenance, zero flakes.' },
+      { icon: Sparkles, title: 'Test Generator', desc: 'Describe what to test in natural language. AI creates the complete test steps.' },
+      { icon: BrainCircuit, title: 'Goal Understanding', desc: 'Agents understand business goals and translate them into test coverage.' },
+      { icon: Route, title: 'Path Optimization', desc: 'Intelligent test path selection for maximum coverage with minimum steps.' },
+    ],
+    highlights: ['Flowmap', 'Explorer', 'Self-Healing', 'AI Generation', 'Goal-Driven']
+  },
+  'mobile-testing': {
+    title: 'Mobile Testing',
+    tagline: 'Test on 50+ Real Devices',
+    description: 'Complete mobile web emulation with real device profiles, network throttling, touch gestures, and native app testing via Maestro integration.',
+    icon: Smartphone,
+    gradient: 'from-sky-500 to-indigo-500',
+    bgGradient: 'from-sky-50 to-indigo-50',
+    features: [
+      { icon: Smartphone, title: '50+ Device Profiles', desc: 'iPhone, iPad, Pixel, Galaxy, OnePlus - all major devices with accurate viewports.' },
+      { icon: Wifi, title: 'Network Throttling', desc: '4G LTE, 3G, Slow 3G, Offline - test how your app behaves on any connection.' },
+      { icon: Navigation, title: 'Touch Gestures', desc: 'Tap, swipe, pinch, scroll - full touch event emulation for realistic testing.' },
+      { icon: Target, title: 'Native App Testing', desc: 'Test iOS and Android native apps with Maestro integration.' },
+      { icon: Layers, title: 'Viewport Emulation', desc: 'Accurate device viewports with proper device pixel ratio and user agents.' },
+      { icon: Activity, title: 'Performance Metrics', desc: 'Mobile-specific performance tracking including First Contentful Paint and Time to Interactive.' },
+    ],
+    highlights: ['50+ Devices', 'Network Throttling', 'Touch Events', 'Native Apps', 'Maestro']
   },
 };
 

@@ -61,6 +61,25 @@ contextBridge.exposeInMainWorld('flowstral', {
     addManualAction: (action) => ipcRenderer.invoke('playwright-recorder-add-manual-action', action)
   },
   
+  // Mobile Testing
+  // 50+ device profiles with network simulation
+  mobile: {
+    // Get available devices for UI dropdown
+    getDevices: () => ipcRenderer.invoke('mobile-get-devices'),
+    // Set mobile device for recording/testing
+    setDevice: (deviceName, network) => ipcRenderer.invoke('mobile-set-device', { deviceName, network }),
+    // Get current mobile configuration
+    getConfig: () => ipcRenderer.invoke('mobile-get-config'),
+    // Clear mobile device (return to desktop mode)
+    clearDevice: () => ipcRenderer.invoke('mobile-clear-device'),
+    // Check Maestro installation
+    checkMaestro: () => ipcRenderer.invoke('mobile-check-maestro'),
+    // Run native app test via Maestro
+    runNativeTest: (options) => ipcRenderer.invoke('mobile-run-native-test', options),
+    // Get native devices (emulators/simulators)
+    getNativeDevices: (platform) => ipcRenderer.invoke('mobile-get-native-devices', platform)
+  },
+  
   // Test Export
   export: {
     flowstralTest: (testName) => ipcRenderer.invoke('export-flowstral-test', testName),
@@ -107,7 +126,11 @@ contextBridge.exposeInMainWorld('flowstral', {
       'ai-explorer-action',
       'ai-explorer-test-discovered',
       'ai-explorer-error',
-      'ai-explorer-state-change'
+      'ai-explorer-state-change',
+      // Mobile testing channels
+      'mobile-native-test-step',
+      'mobile-native-test-progress',
+      'mobile-native-test-error'
     ];
     
     // Store listeners for explicit removal

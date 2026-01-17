@@ -1221,3 +1221,204 @@ input:checked + .slider:before {
   opacity: 1;
 }
 
+
+/* =============================================================================
+   LIGHT MODE (System preference)
+   ============================================================================= */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f8f9fc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f0f2f5;
+    --bg-elevated: #e4e6eb;
+    --text-primary: #1a1a2e;
+    --text-secondary: #4a4a60;
+    --text-muted: #7a7a90;
+    --accent-cyan: #0088bb;
+    --accent-purple: #6d28d9;
+    --accent-gradient: linear-gradient(135deg, #0088bb 0%, #6d28d9 100%);
+    --success: #059669;
+    --warning: #d97706;
+    --error: #dc2626;
+    --border-subtle: rgba(0, 0, 0, 0.05);
+    --border-default: rgba(0, 0, 0, 0.1);
+    --border-hover: rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    color-scheme: light;
+  }
+  
+  /* Light mode specific overrides */
+  .modal {
+    background: rgba(0, 0, 0, 0.4);
+  }
+  
+  .device-btn.selected {
+    background: rgba(0, 136, 187, 0.12);
+    box-shadow: 0 0 0 2px rgba(0, 136, 187, 0.2);
+  }
+  
+  .network-btn.selected {
+    background: rgba(109, 40, 217, 0.12);
+    box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.2);
+  }
+  
+  .toast {
+    color: var(--text-primary);
+  }
+  
+  .modal-content,
+  .modal-content h3,
+  .modal-content h4 {
+    color: var(--text-primary);
+  }
+  
+  .modal-content p,
+  .modal-content ol,
+  .modal-content ul {
+    color: var(--text-secondary);
+  }
+  
+  .modal-content code {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+}
+
+/* =============================================================================
+   MOBILE TESTING VIEW
+   ============================================================================= */
+
+/* Device Categories */
+.device-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.device-category h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.device-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.device-btn:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-elevated);
+}
+
+.device-btn.selected {
+  border-color: var(--accent-cyan);
+  background: rgba(0, 217, 255, 0.12);
+  box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
+}
+
+.device-btn .device-name {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.device-btn .device-info {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Network Presets */
+.network-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.network-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.network-btn:hover {
+  border-color: var(--accent-purple);
+  background: var(--bg-elevated);
+}
+
+.network-btn.selected {
+  border-color: var(--accent-purple);
+  background: rgba(124, 58, 237, 0.12);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
+.network-btn .network-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.network-btn .network-speed {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Maestro Status */
+.maestro-installed {
+  color: var(--success) !important;
+  font-weight: 500;
+}
+
+.maestro-not-installed {
+  color: var(--warning) !important;
+  font-weight: 500;
+}
+
+/* Mobile Quick Actions */
+#view-mobile .btn {
+  gap: 6px;
+}
+
+#view-mobile .btn svg {
+  flex-shrink: 0;
+}
+
+/* Mobile view section headers */
+#view-mobile .settings-section h2 {
+  color: var(--text-primary);
+}
+
+#view-mobile .settings-section p {
+  color: var(--text-secondary);
+}

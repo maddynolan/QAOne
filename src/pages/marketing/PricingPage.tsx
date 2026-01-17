@@ -8,7 +8,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { 
   Check, X, ArrowRight, Rocket, Building2, Users, Zap,
   ChevronRight, HelpCircle, Mail, MessageSquare, Sparkles,
-  TestTube, Gauge, Code, Eye, Accessibility, Cloud
+  TestTube, Gauge, Code, Eye, Accessibility, Cloud,
+  Smartphone, Compass, BrainCircuit
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -58,9 +59,11 @@ function MarketingHeader() {
   );
 }
 
-// 6 Testing Packs
+// 8 Testing Packs
 const testingPacks = [
   { name: 'Automation', icon: TestTube, color: 'blue', desc: 'Record, build & run tests' },
+  { name: 'Telic', icon: Compass, color: 'fuchsia', desc: 'Goal-based AI agents', isNew: true },
+  { name: 'Mobile', icon: Smartphone, color: 'sky', desc: '50+ devices & throttling', isNew: true },
   { name: 'Performance', icon: Gauge, color: 'orange', desc: 'Load & stress testing' },
   { name: 'API', icon: Code, color: 'emerald', desc: 'REST, GraphQL, gRPC, SOAP' },
   { name: 'Visual', icon: Eye, color: 'purple', desc: 'Visual regression testing' },
@@ -113,6 +116,8 @@ const plans = [
     ],
     packs: {
       automation: 'full',
+      telic: 'basic',
+      mobile: 'basic',
       api: 'basic',
       visual: 'basic',
       accessibility: 'basic',
@@ -169,6 +174,8 @@ const plans = [
     ],
     packs: {
       automation: 'full',
+      telic: 'full',
+      mobile: 'full',
       api: 'full',
       visual: 'full',
       accessibility: 'full',
@@ -210,6 +217,8 @@ const plans = [
     ],
     packs: {
       automation: 'full',
+      telic: 'enterprise',
+      mobile: 'full',
       api: 'full',
       visual: 'full',
       accessibility: 'full',
@@ -255,27 +264,34 @@ export default function PricingPage() {
             All-in-One Testing Platform
           </Badge>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
-            One Platform, Six Testing Packs
+            One Platform, Eight Testing Packs
           </h1>
           <p className="text-xl text-slate-600 mb-6 max-w-2xl mx-auto">
             Everything you need for comprehensive QA. Start free, scale as you grow.
           </p>
 
-          {/* 6 Packs Showcase */}
+          {/* 8 Packs Showcase */}
           <div className="flex flex-wrap justify-center gap-3 mb-10">
             {testingPacks.map((pack) => (
               <div 
                 key={pack.name}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full border transition-all hover:scale-105",
+                  "relative flex items-center gap-2 px-4 py-2 rounded-full border transition-all hover:scale-105",
                   pack.color === 'blue' && "bg-blue-50 border-blue-200 text-blue-700",
                   pack.color === 'orange' && "bg-orange-50 border-orange-200 text-orange-700",
                   pack.color === 'emerald' && "bg-emerald-50 border-emerald-200 text-emerald-700",
                   pack.color === 'purple' && "bg-purple-50 border-purple-200 text-purple-700",
                   pack.color === 'pink' && "bg-pink-50 border-pink-200 text-pink-700",
                   pack.color === 'cyan' && "bg-cyan-50 border-cyan-200 text-cyan-700",
+                  pack.color === 'fuchsia' && "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
+                  pack.color === 'sky' && "bg-sky-50 border-sky-200 text-sky-700",
                 )}
               >
+                {(pack as any).isNew && (
+                  <Badge className="absolute -top-2 -right-2 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 text-[8px] font-bold px-1.5 py-0 animate-pulse">
+                    NEW
+                  </Badge>
+                )}
                 <pack.icon className="w-4 h-4" />
                 <span className="text-sm font-semibold">{pack.name}</span>
               </div>
@@ -458,6 +474,50 @@ export default function PricingPage() {
                   <div className="text-center">{row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
                   <div className="text-center">{row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
                   <div className="text-center">{row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Telic Agents Pack - NEW */}
+            <div className="border-b border-slate-100">
+              <div className="px-6 py-3 bg-fuchsia-50 font-semibold text-sm text-fuchsia-700 uppercase tracking-wider flex items-center gap-2">
+                <Compass className="w-4 h-4" /> Telic Agents Pack
+                <Badge className="bg-fuchsia-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
+              </div>
+              {[
+                { feature: 'Flowmap Explorer', starter: 'Basic', pro: true, enterprise: true },
+                { feature: 'Autonomous Explorer', starter: '—', pro: true, enterprise: true },
+                { feature: 'Self-Healing AI', starter: true, pro: true, enterprise: true },
+                { feature: 'Test Generator', starter: '5/mo', pro: '50/mo', enterprise: 'Unlimited' },
+                { feature: 'Goal-Based Testing', starter: '—', pro: true, enterprise: true },
+              ].map((row, i) => (
+                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
+                  <div className="text-slate-700">{row.feature}</div>
+                  <div className="text-center">{typeof row.starter === 'string' ? <span className={row.starter === '—' ? "text-slate-400" : "text-slate-600"}>{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
+                  <div className="text-center">{typeof row.pro === 'string' ? <span className="text-slate-900 font-medium">{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
+                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Mobile Testing Pack - NEW */}
+            <div className="border-b border-slate-100">
+              <div className="px-6 py-3 bg-sky-50 font-semibold text-sm text-sky-700 uppercase tracking-wider flex items-center gap-2">
+                <Smartphone className="w-4 h-4" /> Mobile Testing Pack
+                <Badge className="bg-sky-500 text-white border-0 text-[10px] ml-1">NEW</Badge>
+              </div>
+              {[
+                { feature: 'Device Profiles', starter: '10 devices', pro: '50+ devices', enterprise: 'All devices' },
+                { feature: 'Network Throttling', starter: true, pro: true, enterprise: true },
+                { feature: 'Touch Gestures', starter: true, pro: true, enterprise: true },
+                { feature: 'Native App Testing (Maestro)', starter: '—', pro: true, enterprise: true },
+                { feature: 'Device Cloud Integration', starter: '—', pro: '—', enterprise: true },
+              ].map((row, i) => (
+                <div key={i} className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-slate-50/50">
+                  <div className="text-slate-700">{row.feature}</div>
+                  <div className="text-center">{typeof row.starter === 'string' ? <span className={row.starter === '—' ? "text-slate-400" : "text-slate-600"}>{row.starter}</span> : (row.starter ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
+                  <div className="text-center">{typeof row.pro === 'string' ? <span className={row.pro === '—' ? "text-slate-400" : "text-slate-900 font-medium"}>{row.pro}</span> : (row.pro ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
+                  <div className="text-center">{typeof row.enterprise === 'string' ? <span className="text-violet-600 font-semibold">{row.enterprise}</span> : (row.enterprise ? <Check className="w-5 h-5 text-emerald-500 mx-auto" /> : <X className="w-5 h-5 text-slate-300 mx-auto" />)}</div>
                 </div>
               ))}
             </div>
