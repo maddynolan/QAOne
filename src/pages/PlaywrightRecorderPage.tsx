@@ -23,7 +23,7 @@ import {
   PenLine, LayoutGrid, ArrowRight, Upload, Activity,
   Navigation, Building2, Users, User, Contact, Briefcase,
   FileBox, MapPin, Compass, Route, TestTube, FlaskConical,
-  Accessibility, Scan, Link2, Bug, Bot, Network
+  Accessibility, Scan, Link2, Bug, Bot, Network, Smartphone, Wifi, Monitor
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -503,6 +503,29 @@ export default function PlaywrightRecorderPage() {
   const [captureForLoadTest, setCaptureForLoadTest] = useState(false);
   const [captureForApiTest, setCaptureForApiTest] = useState(false);
   const [capturedNetworkRequests, setCapturedNetworkRequests] = useState<any[]>([]);
+  
+  // Mobile device emulation
+  const [selectedMobileDevice, setSelectedMobileDevice] = useState<string>('desktop');
+  const [selectedNetwork, setSelectedNetwork] = useState<string>('none');
+  const mobileDevices = [
+    { id: 'desktop', name: '🖥️ Desktop', category: 'desktop' },
+    { id: 'iphone-15-pro', name: 'iPhone 15 Pro', category: 'ios' },
+    { id: 'iphone-14', name: 'iPhone 14', category: 'ios' },
+    { id: 'iphone-13', name: 'iPhone 13', category: 'ios' },
+    { id: 'iphone-se', name: 'iPhone SE', category: 'ios' },
+    { id: 'ipad-pro', name: 'iPad Pro 12.9"', category: 'ios' },
+    { id: 'pixel-8', name: 'Pixel 8', category: 'android' },
+    { id: 'pixel-7', name: 'Pixel 7', category: 'android' },
+    { id: 'galaxy-s24', name: 'Galaxy S24 Ultra', category: 'android' },
+    { id: 'galaxy-s23', name: 'Galaxy S23', category: 'android' },
+  ];
+  const networkPresets = [
+    { id: 'none', name: 'No Throttling' },
+    { id: '4g-lte', name: '4G LTE' },
+    { id: '4g', name: '4G' },
+    { id: '3g', name: '3G' },
+    { id: 'slow-3g', name: 'Slow 3G' },
+  ];
   
   // Visual checkpoint state
   const [isCapturingVisual, setIsCapturingVisual] = useState(false);
@@ -2219,8 +2242,24 @@ export default function PlaywrightRecorderPage() {
 
     try {
       let result;
-      if (flowstral?.playwrightRecorder) {
-        // Pass capture options to recorder
+      
+      // Determine if we need mobile emulation
+      const isMobile = selectedMobileDevice !== 'desktop';
+      const mobileDevice = isMobile ? mobileDevices.find(d => d.id === selectedMobileDevice)?.name : null;
+      const mobileNetwork = isMobile && selectedNetwork !== 'none' ? selectedNetwork : null;
+      
+      if (electronAPI?.invoke && isMobile) {
+        // Use invoke API for mobile emulation (passes device settings to main process)
+        result = await electronAPI.invoke('playwright-recorder-start', {
+          url,
+          mobileDevice,
+          mobileNetwork
+        });
+      } else if (flowstral?.playwrightRecorder) {
+        // Standard desktop recording or mobile via preload
+        if (isMobile && flowstral.mobile?.setDevice) {
+          await flowstral.mobile.setDevice(mobileDevice, mobileNetwork);
+        }
         result = await flowstral.playwrightRecorder.start(url, { captureNetwork });
       } else if (electronAPI?.startRecording) {
         await electronAPI.navigateEmbeddedBrowser?.(url);
@@ -2232,7 +2271,8 @@ export default function PlaywrightRecorderPage() {
         setIsPaused(false);
         setCurrentUrl(url);
         const captureMsg = captureNetwork ? " (capturing network traffic)" : "";
-        toast.success(`Recording started!${captureMsg}`);
+        const mobileMsg = isMobile ? ` on ${mobileDevice}` : "";
+        toast.success(`Recording started${mobileMsg}!${captureMsg}`);
       } else {
         toast.error(result?.error || "Failed to start");
       }
@@ -3760,6 +3800,78 @@ Recorded Test
         <div className="w-[55%] min-w-[500px] flex flex-col border-r border-border overflow-hidden">
           {/* URL Bar */}
           <div className="p-3 border-b border-border">
+            {/* Device & Network Selection - Only show when NOT recording */}
+            {!isRecording && (
+              <div className="flex gap-2 mb-2">
+                <Select value={selectedMobileDevice} onValueChange={setSelectedMobileDevice}>
+                  <SelectTrigger className="h-8 w-[180px] text-xs">
+                    {selectedMobileDevice === 'desktop' ? (
+                      <Monitor className="h-3.5 w-3.5 mr-1.5" />
+                    ) : (
+                      <Smartphone className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    <SelectValue placeholder="Device" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desktop" className="text-xs">
+                      <span className="flex items-center gap-2">🖥️ Desktop</span>
+                    </SelectItem>
+                    <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium">iOS</div>
+                    {mobileDevices.filter(d => d.category === 'ios').map(device => (
+                      <SelectItem key={device.id} value={device.id} className="text-xs">
+                        📱 {device.name}
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1 text-[10px] text-muted-foreground font-medium">Android</div>
+                    {mobileDevices.filter(d => d.category === 'android').map(device => (
+                      <SelectItem key={device.id} value={device.id} className="text-xs">
+                        📱 {device.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {selectedMobileDevice !== 'desktop' && (
+                  <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
+                    <SelectTrigger className="h-8 w-[130px] text-xs">
+                      <Wifi className="h-3.5 w-3.5 mr-1.5" />
+                      <SelectValue placeholder="Network" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {networkPresets.map(network => (
+                        <SelectItem key={network.id} value={network.id} className="text-xs">
+                          {network.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                
+                {selectedMobileDevice !== 'desktop' && (
+                  <Badge variant="outline" className="h-8 px-2 text-[10px] bg-sky-500/10 text-sky-500 border-sky-500/30">
+                    <Smartphone className="h-3 w-3 mr-1" />
+                    Mobile Mode
+                  </Badge>
+                )}
+              </div>
+            )}
+            
+            {/* Show active device during recording */}
+            {isRecording && selectedMobileDevice !== 'desktop' && (
+              <div className="flex items-center gap-2 mb-2 p-2 bg-sky-500/10 rounded-lg border border-sky-500/30">
+                <Smartphone className="h-4 w-4 text-sky-500" />
+                <span className="text-xs text-sky-500 font-medium">
+                  Recording on {mobileDevices.find(d => d.id === selectedMobileDevice)?.name}
+                </span>
+                {selectedNetwork !== 'none' && (
+                  <Badge variant="outline" className="text-[10px] h-5 bg-violet-500/10 text-violet-400 border-violet-500/30">
+                    <Wifi className="h-3 w-3 mr-1" />
+                    {networkPresets.find(n => n.id === selectedNetwork)?.name}
+                  </Badge>
+                )}
+              </div>
+            )}
+            
             <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg border border-border">
               <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
               <Input
