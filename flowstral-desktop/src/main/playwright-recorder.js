@@ -982,6 +982,30 @@ class PlaywrightRecorder extends EventEmitter {
     // ============================================================
     this._setupTabFocusDetection();
     
+    // Handle popup windows opened via window.open()
+    // Note: This is in ADDITION to context.on('page') which handles all new pages
+    this.page.on('popup', async (popup) => {
+      const popupUrl = popup.url();
+      console.log(`[PlaywrightRecorder] Popup window: ${popupUrl}`);
+      
+      // Wait for popup to load
+      await popup.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+      
+      // Try to inject recorder into popup
+      if (this.recording && !this._isRunningTest) {
+        try {
+          await popup.evaluate(this._getRecorderScript());
+          await popup.evaluate(this._getClickCaptureScript());
+          if (this.useRecipeRecorder) {
+            await popup.evaluate(getRecipeClickCaptureScript());
+          }
+          console.log('[PlaywrightRecorder] Recorder injected into popup window');
+        } catch (e) {
+          console.log('[PlaywrightRecorder] Could not inject into popup (may be cross-origin):', e.message);
+        }
+      }
+    });
+
     // Handle downloads
     this.page.on('download', async (download) => {
       const suggestedFilename = download.suggestedFilename();
@@ -1989,10 +2013,18 @@ class PlaywrightRecorder extends EventEmitter {
               
               // If same focus AND we've been focused long enough AND it's different from current
               if (i !== this._currentPageIndex && (now - this._focusDetectedAt) >= FOCUS_DEBOUNCE_MS) {
-                // Check if last action was already a switch to this tab (avoid duplicates)
-                const lastAction = this.actions[this.actions.length - 1];
-                if (lastAction?.type === 'switchTab' && lastAction?.tabIndex === i) {
-                  break; // Already recorded this switch
+                // Check if RECENT actions (last 5) already include a switch to this tab
+                // This prevents duplicate switchTab when action polling already added one
+                const recentActions = this.actions.slice(-5);
+                const alreadyHasSwitch = recentActions.some(a => 
+                  a.type === 'switchTab' && a.tabIndex === i
+                );
+                
+                if (alreadyHasSwitch) {
+                  // Just update tracking without adding duplicate switchTab
+                  this._currentPageIndex = i;
+                  this.page = page;
+                  break;
                 }
                 
                 console.log(`[PlaywrightRecorder] Tab focus confirmed: ${this._currentPageIndex} → ${i}`);
