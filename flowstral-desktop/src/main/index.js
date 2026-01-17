@@ -688,12 +688,24 @@ ipcMain.handle('embedded-browser-get-zoom', () => {
 // Uses EXACT SAME recorder-engine.js as browser extension
 // ============================================================================
 
-ipcMain.handle('playwright-recorder-start', async (event, { url, mobileDevice, mobileNetwork } = {}) => {
+ipcMain.handle('playwright-recorder-start', async (event, arg) => {
   try {
-    // Handle both old (url-only) and new (options object) call formats for backward compatibility
-    const actualUrl = typeof url === 'string' ? url : (url?.url || url);
-    const device = typeof url === 'object' ? url.mobileDevice : mobileDevice;
-    const network = typeof url === 'object' ? url.mobileNetwork : mobileNetwork;
+    // Handle both old (url-only string) and new (options object) call formats for backward compatibility
+    let actualUrl, device, network;
+    
+    if (typeof arg === 'string') {
+      // Old format: just a URL string
+      actualUrl = arg;
+      device = null;
+      network = null;
+    } else if (arg && typeof arg === 'object') {
+      // New format: options object with url, mobileDevice, mobileNetwork
+      actualUrl = arg.url;
+      device = arg.mobileDevice;
+      network = arg.mobileNetwork;
+    } else {
+      throw new Error('Invalid argument: expected URL string or options object');
+    }
     
     console.log('[PlaywrightRecorder] Starting with URL:', actualUrl);
     if (device) console.log('[PlaywrightRecorder] Mobile device:', device);

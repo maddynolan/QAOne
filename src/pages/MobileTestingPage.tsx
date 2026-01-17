@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { mobile, isElectron, getElectronAPI } from '@/lib/electron-bridge';
+import { toast } from 'sonner';
 import {
   Smartphone,
   Tablet,
@@ -31,6 +33,7 @@ import {
   MonitorSmartphone,
   Signal,
   Hand,
+  Loader2,
 } from 'lucide-react';
 
 // Device profiles
@@ -69,33 +72,85 @@ export default function MobileTestingPage() {
   const [selectedNetwork, setSelectedNetwork] = useState(networkPresets[0]);
   const [targetUrl, setTargetUrl] = useState('https://');
   const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [maestroInstalled, setMaestroInstalled] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<'web' | 'native'>('web');
+  const [inElectron] = useState(() => isElectron());
 
   // Check Maestro installation on mount
   useEffect(() => {
-    // @ts-ignore - Electron API
-    if (window.flowstral?.mobile?.checkMaestro) {
-      // @ts-ignore
-      window.flowstral.mobile.checkMaestro().then(setMaestroInstalled);
+    if (inElectron) {
+      mobile.checkMaestro().then(setMaestroInstalled);
     }
-  }, []);
+  }, [inElectron]);
 
   const handleStartRecording = async () => {
-    setIsRecording(true);
+    if (!targetUrl || targetUrl === 'https://') {
+      toast.error('Please enter a valid URL');
+      return;
+    }
+
+    if (!inElectron) {
+      toast.error('Mobile recording requires the Flowstral Desktop app');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // @ts-ignore - Electron API
-      if (window.flowstral?.mobile?.setDevice) {
-        // @ts-ignore
-        await window.flowstral.mobile.setDevice(selectedDevice.id, selectedNetwork.id);
+      // Use flowstral API (exposed via preload) or electronAPI.invoke
+      const flowstral = (window as any).flowstral;
+      const electronAPI = (window as any).electronAPI;
+      
+      let result;
+      if (electronAPI?.invoke) {
+        // Use invoke with options object for mobile recording
+        result = await electronAPI.invoke('playwright-recorder-start', {
+          url: targetUrl,
+          mobileDevice: selectedDevice.name,
+          mobileNetwork: selectedNetwork.id
+        });
+      } else if (flowstral?.playwrightRecorder) {
+        // Fallback: set mobile device first, then start recording
+        if (flowstral.mobile?.setDevice) {
+          await flowstral.mobile.setDevice(selectedDevice.name, selectedNetwork.id);
+        }
+        result = await flowstral.playwrightRecorder.start(targetUrl);
       }
-    } catch (error) {
+      
+      if (result?.success !== false) {
+        setIsRecording(true);
+        toast.success(`Recording on ${selectedDevice.name} with ${selectedNetwork.name}`);
+      } else {
+        toast.error(result?.error || 'Failed to start recording');
+      }
+    } catch (error: any) {
       console.error('Failed to start recording:', error);
+      toast.error(error.message || 'Failed to start recording');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleStopRecording = () => {
-    setIsRecording(false);
+  const handleStopRecording = async () => {
+    setIsLoading(true);
+    try {
+      const flowstral = (window as any).flowstral;
+      const electronAPI = (window as any).electronAPI;
+      
+      if (electronAPI?.invoke) {
+        await electronAPI.invoke('playwright-recorder-stop');
+      } else if (flowstral?.playwrightRecorder) {
+        await flowstral.playwrightRecorder.stop();
+      }
+      
+      setIsRecording(false);
+      toast.success('Recording stopped');
+    } catch (error: any) {
+      console.error('Failed to stop recording:', error);
+      toast.error(error.message || 'Failed to stop recording');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -443,13 +498,19 @@ export default function MobileTestingPage() {
                 {!isRecording ? (
                   <Button
                     onClick={handleStartRecording}
-                    className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white"
+                    disabled={isLoading}
+                    className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white disabled:opacity-50"
                   >
-                    <Play className="w-4 h-4 mr-2" /> Start Recording
+                    {isLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
+                    ) : (
+                      <><Play className="w-4 h-4 mr-2" /> Start Recording</>
+                    )}
                   </Button>
                 ) : (
                   <Button
                     onClick={handleStopRecording}
+                    disabled={isLoading}
                     variant="destructive"
                     className="flex-1"
                   >

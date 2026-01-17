@@ -378,6 +378,93 @@ export const localData = {
   },
 };
 
+/**
+ * Mobile Testing APIs (Electron only)
+ */
+export const mobile = {
+  isAvailable: () => isElectron(),
+  
+  getDevices: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-get-devices');
+    }
+    return { ios: [], android: [] };
+  },
+  
+  setDevice: async (deviceName: string, network?: string) => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-set-device', { deviceName, network });
+    }
+    return null;
+  },
+  
+  getConfig: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-get-config');
+    }
+    return null;
+  },
+  
+  clearDevice: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-clear-device');
+    }
+    return null;
+  },
+  
+  checkMaestro: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-check-maestro');
+    }
+    return false;
+  },
+  
+  getNativeDevices: async (platform: 'ios' | 'android') => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-get-native-devices', platform);
+    }
+    return [];
+  },
+  
+  runNativeTest: async (steps: any[], appId: string, platform: string, deviceId?: string) => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('mobile-run-native-test', { steps, appId, platform, deviceId });
+    }
+    return { success: false, error: 'Not available in browser' };
+  },
+  
+  // Start recording with mobile emulation
+  startRecording: async (url: string, deviceName: string, network?: string) => {
+    const api = getElectronAPI();
+    if (api) {
+      // First set the mobile device
+      await api.invoke('mobile-set-device', { deviceName, network });
+      // Then start recording with mobile settings
+      return api.invoke('playwright-recorder-start', { 
+        url, 
+        mobileDevice: deviceName,
+        mobileNetwork: network 
+      });
+    }
+    return { success: false, error: 'Not available in browser' };
+  },
+  
+  stopRecording: async () => {
+    const api = getElectronAPI();
+    if (api) {
+      return api.invoke('playwright-recorder-stop');
+    }
+    return null;
+  },
+};
+
 // Export a single object for convenience
 export default {
   isElectron,
@@ -394,5 +481,6 @@ export default {
   checkUpdates,
   localData,
   testRunner,
+  mobile,
 };
 
