@@ -600,9 +600,314 @@ function generateTest() {
   modal.style.display = 'flex';
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DISPLAY-ONLY HELPERS - Pure functions that NEVER modify state.actions
+// These only improve UI display while preserving all recorded data for playback
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get a better display label from action data when args[0] is generic "element"
+ * PURE FUNCTION: Only reads data, never modifies anything
+ * Uses the full selectorObj/recipe data that recording already captured
+ */
+function getDisplayLabel(action) {
+  if (!action) return 'element';
+  
+  const args = action.args || [];
+  const label = args[0] || '';
+  
+  // If label is already good (not generic "element" or tag name), use it as-is
+  if (label && label !== 'element' && label.length > 1 && !label.match(/^(div|span|button|input|a|li|td|tr)$/i)) {
+    return label;
+  }
+  
+  // Extract better label from ALL possible sources (recording captured this!)
+  const sel = action.selectorObj || action.raw?.selectorObj || {};
+  const raw = action.raw || {};
+  const element = action.element || raw.element || {};
+  const recipe = action.recipe || action.raw?.recipe || action.target || {};
+  const recipeWhat = recipe?.what || {};
+  const recipeWhere = recipe?.where || {};
+  const recipeWhich = recipe?.which || {};
+  
+  // Priority order for finding a better label - try ALL sources exhaustively
+  const betterLabel = 
+    // First: accessible names (best for users)
+    sel.title || raw.title || element.title ||
+    sel.ariaLabel || raw.ariaLabel || element.ariaLabel ||
+    recipeWhat.text ||
+    recipeWhere.nearText ||
+    // Second: form identifiers
+    sel.placeholder || raw.placeholder || element.placeholder ||
+    sel.name || raw.name || element.name ||
+    recipeWhich.name ||
+    // Third: test IDs (developer-friendly)
+    sel.testId || raw.testId || element.testId ||
+    sel.dataTestId || raw.dataTestId || element.dataTestId ||
+    recipeWhich.testId ||
+    // Fourth: text content from multiple sources
+    sel.text || raw.text || element.text ||
+    sel.innerText || raw.innerText || element.innerText ||
+    element.textContent ||
+    // Fifth: try to extract from description
+    extractLabelFromDescription(action.description) ||
+    // Sixth: role-based description with tag
+    (sel.role || element.role ? `${sel.role || element.role}${sel.tagName || element.tagName ? ' (' + (sel.tagName || element.tagName) + ')' : ''}` : null) ||
+    // Seventh: tag with index for disambiguation (if multiple)
+    ((sel.tagName || element.tagName || raw.tag) && (sel.elementIndex !== undefined || raw.elementIndex !== undefined) && (sel.elementIndex > 0 || raw.elementIndex > 0)
+      ? `${sel.tagName || element.tagName || raw.tag} #${(sel.elementIndex || raw.elementIndex) + 1}` 
+      : null) ||
+    // Eighth: just the tag name
+    sel.tagName || element.tagName || raw.tag ||
+    // Last resort: original label
+    label;
+  
+  return betterLabel || 'element';
+}
+
+/**
+ * Try to extract a meaningful label from description text
+ * e.g., 'Click "Login"' -> 'Login', 'Fill "username"' -> 'username'
+ */
+function extractLabelFromDescription(description) {
+  if (!description) return null;
+  
+  // Pattern: Action "Label" - extract the label
+  const match = description.match(/(?:Click|Fill|Select|Check|Uncheck|Type)\s*["']([^"']+)["']/i);
+  if (match && match[1] && match[1] !== 'element' && match[1].length > 1) {
+    return match[1];
+  }
+  return null;
+}
+
+/**
+ * Get field identity for deduplication (by attributes, not display label)
+ * PURE FUNCTION: Only reads data
+ * Enhanced to check multiple sources and handle edge cases
+ */
+function getFieldIdentity(action) {
+  if (!action) return null;
+  
+  const sel = action.selectorObj || {};
+  const raw = action.raw?.selectorObj || action.raw || {};
+  const element = action.element || action.raw?.element || {};
+  const recipe = action.recipe || action.target || {};
+  const recipeWhich = recipe?.which || {};
+  
+  // Build identity from stable field attributes (NOT from display label)
+  // Check ALL possible sources
+  return sel.name || raw.name || element.name ||
+         sel.id || raw.id || element.id ||
+         sel.testId || raw.testId || element.testId ||
+         sel.dataTestId || raw.dataTestId || element.dataTestId ||
+         sel.placeholder || raw.placeholder || element.placeholder ||
+         recipeWhich.name ||
+         recipeWhich.id ||
+         recipeWhich.testId ||
+         null;
+}
+
+/**
+ * Check if a string looks like a field VALUE rather than a field LABEL
+ * Values: passwords, emails, typed content
+ * Labels: "username", "pw", "email", "password", etc.
+ */
+function looksLikeFieldValue(str) {
+  if (!str || str.length < 3) return false;
+  
+  // Common field label names - NOT values
+  const fieldLabelPatterns = /^(username|user|pw|pwd|password|pass|email|mail|name|phone|tel|address|city|zip|code|input|field|text|search|query)$/i;
+  if (fieldLabelPatterns.test(str)) return false;
+  
+  // Looks like email
+  if (str.includes('@') && str.includes('.')) return true;
+  
+  // Looks like password (mixed case + numbers/special chars, 6+ chars)
+  if (str.length >= 6 && /[A-Z]/.test(str) && /[a-z]/.test(str) && /[0-9@!#$%^&*()_+\-=]/.test(str)) return true;
+  
+  // Looks like typed content (has spaces or is very long)
+  if (str.includes(' ') && str.length > 10) return true;
+  
+  // Contains @ but not a field name
+  if (str.includes('@') && str.length > 5) return true;
+  
+  return false;
+}
+
+/**
+ * Check if two Fill actions are for the same field
+ * Uses multiple heuristics to detect duplicates even when field identity differs
+ */
+function areSameFillField(action1, action2) {
+  if (!action1 || !action2) return false;
+  if (action1.qword !== 'Fill' || action2.qword !== 'Fill') return false;
+  
+  // Check 1: Same field identity (name, id, testId, placeholder)
+  const id1 = getFieldIdentity(action1);
+  const id2 = getFieldIdentity(action2);
+  if (id1 && id2 && id1 === id2) return true;
+  
+  // Check 2: Same value being filled
+  const val1 = action1.args?.[1] || '';
+  const val2 = action2.args?.[1] || '';
+  const label1 = action1.args?.[0] || '';
+  const label2 = action2.args?.[0] || '';
+  const timeDiff = Math.abs((action1.timestamp || 0) - (action2.timestamp || 0));
+  
+  // Within 5 second window (give more room for Recipe vs CDP timing)
+  if (timeDiff < 5000) {
+    // Same value = same field
+    if (val1 && val2 && val1 === val2) return true;
+    
+    // One value contains the other (partial typing captured)
+    if (val1 && val2 && (val1.includes(val2) || val2.includes(val1))) return true;
+    
+    // Label of one equals value of other (Recipe bug)
+    if (label1 && val2 && label1 === val2) return true;
+    if (label2 && val1 && label2 === val1) return true;
+    
+    // Label of one contains value of other (truncated)
+    if (label1 && val2 && (label1.includes(val2) || val2.includes(label1))) return true;
+    if (label2 && val1 && (label2.includes(val1) || val1.includes(label2))) return true;
+  }
+  
+  // Check 3: One label looks like a VALUE (Recipe bug: uses value as label)
+  // If one has a proper field identity and the other has a value-like label
+  if (timeDiff < 5000) {
+    const label1IsValue = looksLikeFieldValue(label1);
+    const label2IsValue = looksLikeFieldValue(label2);
+    
+    // One is a real field (has identity or normal label), other used value as label
+    if (label1IsValue && (id2 || !label2IsValue)) {
+      console.log('[areSameFillField] Detected value-as-label:', label1, 'vs', label2);
+      return true;
+    }
+    if (label2IsValue && (id1 || !label1IsValue)) {
+      console.log('[areSameFillField] Detected value-as-label:', label2, 'vs', label1);
+      return true;
+    }
+    
+    // Both have identity - probably different fields
+    // Neither has identity but both have value-like labels within time window
+    if (label1IsValue && label2IsValue && !id1 && !id2) {
+      // Could be same password field captured twice with different partial values
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Create display-ready actions array with deduplication
+ * PURE FUNCTION: Returns NEW array, NEVER modifies input
+ * - Deduplicates Fill actions for the same field (keeps last/most complete)
+ * - Preserves all other action types
+ */
+function getDisplayActions(actions) {
+  if (!actions || actions.length === 0) return [];
+  
+  const result = [];
+  
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
+    
+    if (action.qword === 'Fill') {
+      // Check if we already have a fill for this same field
+      const existingIndex = result.findIndex(item => areSameFillField(item.action, action));
+      
+      if (existingIndex !== -1) {
+        // Replace with the later one (more complete value) OR the one with better field identity
+        const existing = result[existingIndex];
+        const existingId = getFieldIdentity(existing.action);
+        const newId = getFieldIdentity(action);
+        const existingVal = existing.action.args?.[1] || '';
+        const newVal = action.args?.[1] || '';
+        
+        // Keep the one with: 1) field identity, 2) longer value, 3) later timestamp
+        const shouldReplace = 
+          (!existingId && newId) || // new has identity, old doesn't
+          (newVal.length > existingVal.length) || // new has longer value
+          (action.timestamp > existing.action.timestamp); // new is later
+        
+        if (shouldReplace) {
+          result[existingIndex] = { action, originalIndex: i };
+        }
+        // Skip adding duplicate
+        continue;
+      }
+      
+      result.push({ action, originalIndex: i });
+    } else {
+      result.push({ action, originalIndex: i });
+    }
+  }
+  
+  // Sort by original index to maintain recording order
+  result.sort((a, b) => a.originalIndex - b.originalIndex);
+  
+  // Return just the actions (without the index metadata)
+  return result.map(item => item.action);
+}
+
+/**
+ * Build improved description for display
+ * PURE FUNCTION: Creates new string, doesn't modify action
+ */
+function getDisplayDescription(action) {
+  if (!action) return '';
+  
+  const qword = action.qword || action.type?.toUpperCase() || 'ACTION';
+  let description = action.description || '';
+  const betterLabel = getDisplayLabel(action);
+  
+  // If description contains generic "element", replace it
+  if (description.includes('"element"') || description.includes("'element'")) {
+    description = description.replace(/"element"|'element'/g, `"${betterLabel}"`);
+  }
+  
+  // If label is still "element" in the description after getDisplayLabel, try harder
+  if (betterLabel === 'element' || description.includes('Click "element"')) {
+    // For clicks, try to build from role/tag
+    const sel = action.selectorObj || action.raw?.selectorObj || {};
+    const element = action.element || action.raw?.element || {};
+    const role = sel.role || element.role;
+    const tag = sel.tagName || element.tagName || action.raw?.tag;
+    
+    if (role) {
+      description = `Click ${role}${tag ? ' (' + tag + ')' : ''}`;
+    } else if (tag && tag !== 'element') {
+      description = `Click ${tag}`;
+    }
+  }
+  
+  // If no description or it's just the qword, build one
+  if (!description || description === qword) {
+    if (qword === 'Fill') {
+      const value = action.displayArgs?.[1] || action.args?.[1] || '';
+      const displayVal = value.length > 20 ? value.substring(0, 20) + '...' : value;
+      description = `Fill "${betterLabel}": "${displayVal}"`;
+    } else if (qword === 'GoTo') {
+      description = `Navigate to ${action.args?.[0] || action.url || ''}`;
+    } else {
+      description = `${qword.replace(/([A-Z])/g, ' $1').trim()} "${betterLabel}"`;
+    }
+  }
+  
+  return description;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// END DISPLAY HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // Render steps list with QWord format (like browser extension)
+// Uses display helpers for cleaner UI while preserving original data
 function renderSteps() {
   if (!elements.stepsList) return;
+  
+  // DEBUG: Verify new code is running
+  console.log('[renderSteps] V2 - Display helpers active, actions:', state.actions.length);
   
   if (state.actions.length === 0) {
     elements.stepsList.innerHTML = `
@@ -612,11 +917,27 @@ function renderSteps() {
       </div>
     `;
   } else {
-    elements.stepsList.innerHTML = state.actions.map((action, index) => {
+    // DEBUG: Log raw actions to understand structure
+    console.log('[renderSteps] Raw actions:', JSON.stringify(state.actions.map(a => ({
+      qword: a.qword,
+      args: a.args,
+      desc: a.description?.substring(0, 40),
+      sel: a.selectorObj ? Object.keys(a.selectorObj).filter(k => a.selectorObj[k]) : [],
+      raw: a.raw ? Object.keys(a.raw).filter(k => a.raw[k]) : []
+    })), null, 2));
+    
+    // DISPLAY-ONLY: Get deduplicated actions for cleaner UI
+    // Original state.actions is NEVER modified - used intact for export/playback
+    const displayActions = getDisplayActions(state.actions);
+    
+    console.log('[renderSteps] After dedup:', displayActions.length, 'actions');
+    
+    elements.stepsList.innerHTML = displayActions.map((action, index) => {
       // Use QWord format (matches browser extension)
       const qword = action.qword || action.type?.toUpperCase() || 'ACTION';
-      const args = action.displayArgs || action.args || [];
-      const description = action.description || args.join(' | ') || '';
+      
+      // DISPLAY-ONLY: Get improved description using full action data
+      const description = getDisplayDescription(action);
       
       // Color coding by QWord type
       const qwordColors = {
@@ -634,13 +955,15 @@ function renderSteps() {
           <div class="step-number">${index + 1}</div>
           <div class="step-content">
             <div class="step-type" style="color: ${color};">${qword}</div>
-            <div class="step-description">${escapeHtml(description.substring(0, 50))}</div>
+            <div class="step-description">${escapeHtml(description.substring(0, 60))}</div>
           </div>
         </div>
       `;
     }).join('');
   }
   
+  // Show ORIGINAL action count (so user knows full recording scope)
+  // Display may show fewer due to deduplication, but all are preserved
   if (elements.stepCount) {
     elements.stepCount.textContent = state.actions.length;
   }

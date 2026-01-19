@@ -17,7 +17,7 @@ import {
   Folder, Tag, ChevronDown, ChevronRight, Settings, Code,
   Zap, FileText, Merge, RotateCcw, X, Sparkles,
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
-  MousePointer, Keyboard, Eye, Target, Cloud, Link,
+  MousePointer, Keyboard, Eye, Target, Cloud, Link, Edit,
   Hash, Type, CircleDot, FormInput, Database, Copy,
   Shield, Wand2, CheckSquare, Plus, Circle, Hand, SkipForward,
   PenLine, LayoutGrid, ArrowRight, Upload, Activity,
@@ -250,6 +250,251 @@ const cleanCorruptedString = (str: string, isPassword: boolean): string => {
   return str;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DISPLAY HELPERS - Improve UI display without modifying underlying data
+// Fixes "Click element" labels and deduplicates fill actions for display
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get a better display label from action data when args[0] is generic "element"
+ * PURE FUNCTION: Only reads data, never modifies anything
+ */
+const getDisplayLabel = (action: RecordedAction): string => {
+  if (!action) return 'element';
+  
+  const args = action.args || [];
+  const label = args[0] || '';
+  
+  // If label is already good (not generic), use it as-is
+  if (label && label !== 'element' && typeof label === 'string' && label.length > 1 && 
+      !/^(div|span|button|input|a|li|td|tr)$/i.test(label)) {
+    return label;
+  }
+  
+  // Extract better label from selectorObj, raw, element data
+  const sel = action.selectorObj || (action as any).raw?.selectorObj || {};
+  const raw = (action as any).raw || {};
+  const element = (action as any).element || raw.element || {};
+  const recipe = (action as any).recipe || raw.recipe || (action as any).target || {};
+  const recipeWhat = recipe?.what || {};
+  const recipeWhere = recipe?.where || {};
+  const recipeWhich = recipe?.which || {};
+  
+  // Priority order for finding a better label - try ALL sources
+  const betterLabel = 
+    // First: accessible names
+    sel.title || raw.title || element.title ||
+    sel.ariaLabel || raw.ariaLabel || element.ariaLabel ||
+    recipeWhat.text ||
+    recipeWhere.nearText ||
+    // Second: form identifiers
+    sel.placeholder || raw.placeholder || element.placeholder ||
+    sel.name || raw.name || element.name ||
+    recipeWhich.name ||
+    // Third: test IDs
+    sel.testId || raw.testId || element.testId ||
+    sel.dataTestId || raw.dataTestId || element.dataTestId ||
+    recipeWhich.testId ||
+    // Fourth: text content
+    sel.text || raw.text || element.text ||
+    sel.innerText || raw.innerText || element.innerText ||
+    element.textContent ||
+    // Fifth: try to extract from description
+    extractLabelFromDescription(action.description) ||
+    // Sixth: role-based
+    (sel.role || element.role ? `${sel.role || element.role}${sel.tagName || element.tagName ? ' (' + (sel.tagName || element.tagName) + ')' : ''}` : null) ||
+    // Seventh: tag with index
+    ((sel.tagName || element.tagName || raw.tag) && (sel.elementIndex !== undefined || raw.elementIndex !== undefined)
+      ? `${sel.tagName || element.tagName || raw.tag} #${(sel.elementIndex || raw.elementIndex || 0) + 1}` 
+      : null) ||
+    // Eighth: just tag name
+    sel.tagName || element.tagName || raw.tag ||
+    // Last resort
+    (typeof label === 'string' ? label : 'element');
+  
+  return betterLabel || 'element';
+};
+
+/**
+ * Extract label from description text like 'Click "Login"' -> 'Login'
+ */
+const extractLabelFromDescription = (description?: string): string | null => {
+  if (!description) return null;
+  const match = description.match(/(?:Click|Fill|Select|Check|Uncheck|Type)\s*["']([^"']+)["']/i);
+  if (match && match[1] && match[1] !== 'element' && match[1].length > 1) {
+    return match[1];
+  }
+  return null;
+};
+
+/**
+ * Check if a string looks like a field VALUE rather than a field LABEL
+ */
+const looksLikeFieldValue = (str?: string): boolean => {
+  if (!str || str.length < 3) return false;
+  
+  // Common field label names - NOT values
+  if (/^(username|user|pw|pwd|password|pass|email|mail|name|phone|tel|address|city|zip|code|input|field|text|search|query)$/i.test(str)) {
+    return false;
+  }
+  
+  // Looks like email
+  if (str.includes('@') && str.includes('.')) return true;
+  
+  // Looks like password (mixed case + numbers/special chars, 6+ chars)
+  if (str.length >= 6 && /[A-Z]/.test(str) && /[a-z]/.test(str) && /[0-9@!#$%^&*()_+\-=]/.test(str)) return true;
+  
+  // Contains @ but not a field name
+  if (str.includes('@') && str.length > 5) return true;
+  
+  return false;
+};
+
+/**
+ * Get field identity for deduplication (by attributes, not display label)
+ */
+const getFieldIdentity = (action: RecordedAction): string | null => {
+  const sel = action.selectorObj || {};
+  const raw = (action as any).raw?.selectorObj || (action as any).raw || {};
+  const element = (action as any).element || (action as any).raw?.element || {};
+  const recipe = (action as any).recipe || (action as any).target || {};
+  const recipeWhich = recipe?.which || {};
+  
+  return sel.name || raw.name || element.name ||
+         sel.id || raw.id || element.id ||
+         sel.testId || raw.testId || element.testId ||
+         sel.dataTestId || raw.dataTestId || element.dataTestId ||
+         sel.placeholder || raw.placeholder || element.placeholder ||
+         recipeWhich.name || recipeWhich.id || recipeWhich.testId ||
+         null;
+};
+
+/**
+ * Check if two Fill actions are for the same field
+ */
+const areSameFillField = (action1: RecordedAction, action2: RecordedAction): boolean => {
+  if (!action1 || !action2) return false;
+  if (action1.qword !== 'Fill' || action2.qword !== 'Fill') return false;
+  
+  const id1 = getFieldIdentity(action1);
+  const id2 = getFieldIdentity(action2);
+  if (id1 && id2 && id1 === id2) return true;
+  
+  const val1 = action1.args?.[1] || '';
+  const val2 = action2.args?.[1] || '';
+  const label1 = action1.args?.[0]?.toString() || '';
+  const label2 = action2.args?.[0]?.toString() || '';
+  const timeDiff = Math.abs((action1.timestamp || 0) - (action2.timestamp || 0));
+  
+  if (timeDiff < 5000) {
+    // Same value
+    if (val1 && val2 && val1 === val2) return true;
+    // One contains other
+    if (val1 && val2 && (val1.includes(val2) || val2.includes(val1))) return true;
+    // Label equals value (Recipe bug)
+    if (label1 && val2 && label1 === val2) return true;
+    if (label2 && val1 && label2 === val1) return true;
+    // One label is a value-like string
+    if (looksLikeFieldValue(label1) && (id2 || !looksLikeFieldValue(label2))) return true;
+    if (looksLikeFieldValue(label2) && (id1 || !looksLikeFieldValue(label1))) return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Deduplicate actions for display (fills with same field)
+ * PURE FUNCTION: Returns NEW array, NEVER modifies input
+ */
+const getDisplayActions = (actions: RecordedAction[]): RecordedAction[] => {
+  if (!actions || actions.length === 0) return [];
+  
+  const result: { action: RecordedAction; originalIndex: number }[] = [];
+  
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
+    
+    if (action.qword === 'Fill') {
+      const existingIndex = result.findIndex(item => areSameFillField(item.action, action));
+      
+      if (existingIndex !== -1) {
+        const existing = result[existingIndex];
+        const existingId = getFieldIdentity(existing.action);
+        const newId = getFieldIdentity(action);
+        const existingVal = (existing.action.args?.[1] || '').toString();
+        const newVal = (action.args?.[1] || '').toString();
+        
+        // Keep better one: has identity, longer value, or later timestamp
+        const shouldReplace = 
+          (!existingId && newId) ||
+          (newVal.length > existingVal.length) ||
+          (action.timestamp > existing.action.timestamp);
+        
+        if (shouldReplace) {
+          result[existingIndex] = { action, originalIndex: i };
+        }
+        continue;
+      }
+      
+      result.push({ action, originalIndex: i });
+    } else {
+      result.push({ action, originalIndex: i });
+    }
+  }
+  
+  result.sort((a, b) => a.originalIndex - b.originalIndex);
+  return result.map(item => item.action);
+};
+
+/**
+ * Get improved description for display
+ */
+const getDisplayDescription = (action: RecordedAction): string => {
+  if (!action) return '';
+  
+  const qword = action.qword || action.type?.toUpperCase() || 'ACTION';
+  let description = action.description || '';
+  const betterLabel = getDisplayLabel(action);
+  
+  // If description contains generic "element", replace it
+  if (description.includes('"element"') || description.includes("'element'")) {
+    description = description.replace(/"element"|'element'/g, `"${betterLabel}"`);
+  }
+  
+  // If label is still "element", try harder
+  if (betterLabel === 'element' || description.includes('Click "element"')) {
+    const sel = action.selectorObj || (action as any).raw?.selectorObj || {};
+    const element = (action as any).element || (action as any).raw?.element || {};
+    const role = sel.role || element.role;
+    const tag = sel.tagName || element.tagName || (action as any).raw?.tag;
+    
+    if (role) {
+      description = `Click ${role}${tag ? ' (' + tag + ')' : ''}`;
+    } else if (tag && tag !== 'element') {
+      description = `Click ${tag}`;
+    }
+  }
+  
+  // If no description, build one
+  if (!description || description === qword) {
+    if (qword === 'Fill') {
+      const value = action.displayArgs?.[1] || action.args?.[1] || '';
+      const displayVal = typeof value === 'string' && value.length > 20 ? value.substring(0, 20) + '...' : value;
+      description = `Fill "${betterLabel}": "${displayVal}"`;
+    } else if (qword === 'GoTo') {
+      description = `Navigate to ${action.args?.[0] || (action as any).url || ''}`;
+    } else {
+      description = `${qword.replace(/([A-Z])/g, ' $1').trim()} "${betterLabel}"`;
+    }
+  }
+  
+  return description;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// END DISPLAY HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 // ============================================================================
 // ROBUST STEP NORMALIZER - Option B + C Implementation
 // Normalizes steps before playback for consistent, reliable test execution
@@ -266,7 +511,13 @@ const normalizeText = (text: string | undefined): string => {
   return text
     .replace(/\s*\d+\s*$/, '')           // Strip trailing numbers (badge counts)
     .replace(/^\s*\d+\s*/, '')           // Strip leading numbers
-    .replace(/[^\x00-\x7F]/g, '')        // Strip non-ASCII (emojis)
+    // CRITICAL: Normalize apostrophe variants to straight apostrophe (don't strip them!)
+    .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4]/g, "'")  // Curly apostrophes → straight
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')        // Curly quotes → straight
+    // Only strip emojis (not ALL non-ASCII - that breaks apostrophes and accented chars)
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // Emojis in Misc Symbols and Pictographs
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
     .replace(/\s+/g, ' ')                // Normalize whitespace
     .trim();
 };
@@ -494,6 +745,13 @@ export default function PlaywrightRecorderPage() {
   const [actions, setActions] = useState<RecordedAction[]>([]);
   const [isStarting, setIsStarting] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  
+  // ============ MANUAL SELECTOR OVERRIDE STATE ============
+  // When automation fails, users can manually specify how to find an element
+  const [editSelectorModalOpen, setEditSelectorModalOpen] = useState(false);
+  const [editingActionIndex, setEditingActionIndex] = useState<number | null>(null);
+  const [manualSelectorInput, setManualSelectorInput] = useState("");
+  const [manualTextInput, setManualTextInput] = useState("");
   
   // Ref for auto-scrolling to newly added actions
   const actionsEndRef = useRef<HTMLDivElement>(null);
@@ -992,7 +1250,6 @@ export default function PlaywrightRecorderPage() {
           const response = await fetch('http://localhost:8000/test-cases/scale-data');
           if (response.ok) {
             const data = await response.json();
-            console.log('[Recorder] Loaded from scale DB:', data.testCases?.length || 0, 'test cases');
             for (const tc of (data.testCases || [])) {
               if (tc.id && !seenIds.has(tc.id)) {
                 seenIds.add(tc.id);
@@ -1013,7 +1270,7 @@ export default function PlaywrightRecorderPage() {
             }
           }
         } catch (e) {
-          console.log('[Recorder] Scale DB not available');
+          // Scale DB not available - continue with other sources
         }
         
         // 2. Try Electron storage
@@ -1051,7 +1308,6 @@ export default function PlaywrightRecorderPage() {
           return dateB - dateA;
         });
         
-        console.log('[Recorder] Total test cases loaded:', allCases.length);
         setAllTestCases(allCases);
         
         // Extract folders from localStorage
@@ -1293,6 +1549,54 @@ export default function PlaywrightRecorderPage() {
       };
     });
   }, []);
+
+  // ============ MANUAL SELECTOR OVERRIDE FUNCTIONS ============
+  // Open the edit selector modal for an action
+  const openEditSelectorModal = useCallback((index: number) => {
+    const action = actions[index];
+    if (!action) return;
+    
+    // Pre-populate with existing selectors
+    const existingSelector = action.selectorObj?.manualOverride || 
+                             action.selectorObj?.playwright || 
+                             action.selectorObj?.selector || 
+                             '';
+    const existingText = action.selectorObj?.text || 
+                         action.args?.[0] || 
+                         '';
+    
+    setEditingActionIndex(index);
+    setManualSelectorInput(existingSelector);
+    setManualTextInput(existingText);
+    setEditSelectorModalOpen(true);
+  }, [actions]);
+
+  // Save the manual selector override
+  const saveManualSelector = useCallback(() => {
+    if (editingActionIndex === null) return;
+    
+    setActions(prev => prev.map((action, idx) => {
+      if (idx !== editingActionIndex) return action;
+      
+      // Add the manual override to selectorObj
+      return {
+        ...action,
+        selectorObj: {
+          ...action.selectorObj,
+          manualOverride: manualSelectorInput.trim() || undefined,
+          text: manualTextInput.trim() || action.selectorObj?.text,
+        },
+        // Also update args[0] if it's a click action with text
+        args: manualTextInput.trim() && action.qword === 'Click' 
+          ? [manualTextInput.trim(), ...(action.args?.slice(1) || [])]
+          : action.args,
+      };
+    }));
+    
+    setEditSelectorModalOpen(false);
+    setEditingActionIndex(null);
+    toast.success('Selector updated! The playback will use your override.', { duration: 3000 });
+  }, [editingActionIndex, manualSelectorInput, manualTextInput]);
 
   // Change link mode for a step
   const changeStepLinkMode = useCallback((stepIndex: number, mode: LinkMode) => {
@@ -1896,14 +2200,10 @@ export default function PlaywrightRecorderPage() {
       
       // Try multiple APIs to get suggestions
       if (flowstral?.playwrightRecorder?.analyze) {
-        console.log('[Recorder] Calling flowstral.playwrightRecorder.analyze');
         rawResponse = await flowstral.playwrightRecorder.analyze();
-        console.log('[Recorder] analyze() response:', rawResponse);
       } else if (electronAPI?.suggestActions) {
-        console.log('[Recorder] Calling electronAPI.suggestActions');
         rawResponse = await electronAPI.suggestActions();
       } else if (electronAPI?.getPageElements) {
-        console.log('[Recorder] Calling electronAPI.getPageElements');
         rawResponse = await electronAPI.getPageElements();
       }
       
@@ -1924,7 +2224,6 @@ export default function PlaywrightRecorderPage() {
       }
       
       if (result && result.suggestions?.length > 0) {
-        console.log('[Recorder] Got suggestions:', result.suggestions.length);
         // Only update if suggestions actually changed (prevents blinking)
         const newKey = result.suggestions.map(s => s.element || s.description).join('|');
         if (newKey !== lastSuggestionsRef.current) {
@@ -1933,7 +2232,6 @@ export default function PlaywrightRecorderPage() {
         }
       } else if (!suggestResult?.suggestions?.length) {
         // Only set empty if we don't already have suggestions
-        console.log('[Recorder] No suggestions returned or empty');
         setSuggestResult({ suggestions: [], categories: {}, counts: {}, timing: 'now', total: 0 });
       }
     } catch (error) {
@@ -1948,16 +2246,9 @@ export default function PlaywrightRecorderPage() {
     const result: Suggestion[] = [];
     const counts: Record<string, number> = { buttons: 0, links: 0, inputs: 0, headings: 0 };
     
-    console.log('[Recorder] Converting', suggestions.length, 'raw suggestions');
-    
     suggestions.forEach((s, idx) => {
       const type = (s.type || '').toLowerCase();
       const label = s.label || s.text || s.description || s.element || '';
-      
-      // Debug first few
-      if (idx < 3) {
-        console.log('[Recorder] Raw suggestion', idx, ':', { type: s.type, label, isInput: s.isInput, isButton: s.isButton, isLink: s.isLink, tag: s.tag });
-      }
       
       // Categorize based on multiple indicators
       let category = 'button'; // Default
@@ -2006,8 +2297,6 @@ export default function PlaywrightRecorderPage() {
         count: s.duplicateCount || s.count || 1
       });
     });
-    
-    console.log('[Recorder] Converted to', result.length, 'suggestions. Counts:', counts);
     
     return {
       suggestions: result,
@@ -2107,11 +2396,8 @@ export default function PlaywrightRecorderPage() {
   // Group suggestions by type
   const groupedSuggestions = useMemo(() => {
     if (!suggestResult?.suggestions || suggestResult.suggestions.length === 0) {
-      console.log('[Recorder] No suggestions to group');
       return { fill: [], click: [], link: [], heading: [], other: [] };
     }
-    
-    console.log('[Recorder] Grouping', suggestResult.suggestions.length, 'suggestions');
     
     const groups: Record<string, Suggestion[]> = {
       fill: [],
@@ -2142,8 +2428,6 @@ export default function PlaywrightRecorderPage() {
         groups.other.push(s);
       }
     });
-    
-    console.log('[Recorder] Grouped - fill:', groups.fill.length, 'click:', groups.click.length, 'link:', groups.link.length, 'heading:', groups.heading.length, 'other:', groups.other.length);
     
     // Apply search filter
     if (suggestionSearch.trim()) {
@@ -2179,9 +2463,7 @@ export default function PlaywrightRecorderPage() {
   }, [groupedSuggestions, suggestResult]);
 
   const totalSuggestions = useMemo(() => {
-    const total = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
-    console.log('[Recorder] totalSuggestions:', total, 'from categoryCounts:', categoryCounts);
-    return total;
+    return Object.values(categoryCounts).reduce((a, b) => a + b, 0);
   }, [categoryCounts]);
 
   // Execute action on page (requires active recording session)
@@ -3199,15 +3481,46 @@ Recorded Test
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
+        // CRITICAL: Pass ALL action fields - TestExecutor needs text, label, element, recipe for SmartFinder
         result = await electronAPI.testRunner.executeTest({
           name: 'Recorded Test',
           steps: normalizedActions.map(a => ({
+            // Core identifiers
+            id: a.id,
             type: a.type || a.qword,  // Use sf-* type if available, fallback to qword
             qword: a.qword,
             args: a.args,
-            selector: a.selectorObj?.playwright || a.selectorObj?.selector,  // Use enhanced selector
-            selectorObj: a.selectorObj,  // Contains normalized text and fallbacks
-            description: a.description
+            // Selectors - MANUAL OVERRIDE TAKES PRIORITY
+            selector: a.selectorObj?.manualOverride || a.selectorObj?.playwright || a.selectorObj?.selector,
+            selectorObj: a.selectorObj,
+            // CRITICAL: Manual override selector (user-specified when automation fails)
+            manualOverride: a.selectorObj?.manualOverride,
+            // CRITICAL: Text/label fields needed by SmartFinder and _findElement
+            // Manual text override takes priority if set
+            text: a.selectorObj?.text || (a as any).text || a.args?.[0],
+            label: a.selectorObj?.text || (a as any).label || a.args?.[0],
+            // CRITICAL: Element data for role-based finding
+            element: (a as any).element || {
+              text: a.selectorObj?.text,
+              role: a.selectorObj?.role,
+              tagName: a.selectorObj?.tagName || a.selectorObj?.tag,
+              testId: a.selectorObj?.testId,
+              name: a.selectorObj?.name,
+              id: a.selectorObj?.id,
+              ariaLabel: a.selectorObj?.ariaLabel,
+              placeholder: a.selectorObj?.placeholder,
+            },
+            // CRITICAL: Recipe for SmartFinder V2
+            recipe: (a as any).recipe || (a as any).target,
+            // Display
+            description: a.description,
+            displayArgs: a.displayArgs,
+            // Context
+            frameContext: (a as any).frameContext,
+            tabIndex: (a as any).tabIndex,
+            // Metadata
+            timestamp: a.timestamp,
+            elementIndex: (a as any).elementIndex,
           })),
           settings: { baseUrl: url }
         });
@@ -4371,6 +4684,29 @@ Recorded Test
             ) : (
               <div className="px-2 pb-20 space-y-1"> {/* pb-20 for fixed footer space */}
                 {actions.map((action, index) => {
+                  // DISPLAY-ONLY: Skip duplicate fills (keeps original array intact for export)
+                  if (action.qword === 'Fill') {
+                    const myLabel = action.args?.[0]?.toString() || '';
+                    const myId = getFieldIdentity(action);
+                    
+                    // Check if there's a BETTER fill for the same field (earlier with proper label, or later with better data)
+                    const hasBetterFill = actions.some((other, otherIdx) => {
+                      if (otherIdx === index || other.qword !== 'Fill') return false;
+                      if (!areSameFillField(action, other)) return false;
+                      
+                      const otherId = getFieldIdentity(other);
+                      const otherLabel = other.args?.[0]?.toString() || '';
+                      
+                      // Keep the one with: 1) field identity, 2) non-value label, 3) earlier index
+                      if (otherId && !myId) return true; // Other has identity, we don't
+                      if (!looksLikeFieldValue(otherLabel) && looksLikeFieldValue(myLabel)) return true; // Other has proper label
+                      if (otherIdx < index && !looksLikeFieldValue(otherLabel)) return true; // Earlier with good label wins
+                      return false;
+                    });
+                    
+                    if (hasBetterFill) return null; // Skip - a better version exists
+                  }
+                  
                   // Apply masking for sensitive fields (passwords)
                   const displayAction = maskSensitiveAction(action);
                   const isPw = isPasswordField(action);
@@ -4441,7 +4777,7 @@ Recorded Test
                     {getActionIcon(action.qword || action.type || '')}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">
-                        {displayAction.description || `${action.qword || action.type} ${displayAction.args?.[0] || ''}`}
+                        {getDisplayDescription(displayAction)}
                         {isPw && <span className="ml-1 text-primary">🔒</span>}
                         {isCrossOriginAction(action) && (
                           <span className="ml-1 text-yellow-500">⚠️</span>
@@ -4494,6 +4830,19 @@ Recorded Test
                         <span className="text-[10px]">{currentStepIndex + 1}</span>
                       </Button>
                     )}
+                    {/* EDIT SELECTOR BUTTON - Manual Override */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditSelectorModal(index);
+                      }}
+                      title="Edit selector - Fix if playback fails"
+                    >
+                      <Edit className="h-3 w-3" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -7315,6 +7664,23 @@ Recorded Test
               <ScrollArea className={cn("flex-1 overflow-hidden", isTestPaused ? "h-[200px]" : "h-[350px]")}>
                 <div className="space-y-1 pr-2 overflow-hidden max-w-full">
                   {actions.map((action, idx) => {
+                    // DISPLAY-ONLY: Skip duplicate fills (same as recorded steps list)
+                    if (action.qword === 'Fill') {
+                      const myLabel = action.args?.[0]?.toString() || '';
+                      const myId = getFieldIdentity(action);
+                      const hasBetterFill = actions.some((other, otherIdx) => {
+                        if (otherIdx === idx || other.qword !== 'Fill') return false;
+                        if (!areSameFillField(action, other)) return false;
+                        const otherId = getFieldIdentity(other);
+                        const otherLabel = other.args?.[0]?.toString() || '';
+                        if (otherId && !myId) return true;
+                        if (!looksLikeFieldValue(otherLabel) && looksLikeFieldValue(myLabel)) return true;
+                        if (otherIdx < idx && !looksLikeFieldValue(otherLabel)) return true;
+                        return false;
+                      });
+                      if (hasBetterFill) return null;
+                    }
+                    
                     const stepResult = testExecutionResult?.stepResults.find(r => r.index === idx);
                     const isCurrent = (testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx) || 
                                      (isTestPaused && pausedAtStep === idx);
@@ -7365,7 +7731,7 @@ Recorded Test
                           )}>
                             {(() => {
                               const displayAction = maskSensitiveAction(action);
-                              return displayAction.description || `${action.qword} ${displayAction.args?.[0] || ''}`;
+                              return getDisplayDescription(displayAction);
                             })()}
                             {isPasswordField(action) && <span className="ml-1">🔒</span>}
                           </span>
@@ -8068,6 +8434,92 @@ Recorded Test
           setShowAIFlowExplorer(false);
         }}
       />
+
+      {/* ============ EDIT SELECTOR MODAL ============ */}
+      {/* When playback fails, users can manually override how to find an element */}
+      <Dialog open={editSelectorModalOpen} onOpenChange={setEditSelectorModalOpen}>
+        <DialogContent className="max-w-lg bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Edit className="h-5 w-5 text-blue-400" />
+              Edit Step Selector
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <p className="text-xs text-amber-400">
+                💡 <strong>When automation fails:</strong> Use this to manually specify how to find the element.
+                The playback will try your selector FIRST before other strategies.
+              </p>
+            </div>
+
+            {/* Current Step Info */}
+            {editingActionIndex !== null && actions[editingActionIndex] && (
+              <div className="bg-secondary/50 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Current Step</p>
+                <p className="text-sm font-medium">{getDisplayDescription(actions[editingActionIndex])}</p>
+              </div>
+            )}
+            
+            {/* Manual Text Input */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                Element Text (what the user sees)
+              </label>
+              <Input
+                value={manualTextInput}
+                onChange={(e) => setManualTextInput(e.target.value)}
+                placeholder="e.g., Go To Saver's Switch"
+                className="bg-secondary border-border text-foreground"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                The visible text of the element you want to click/interact with
+              </p>
+            </div>
+
+            {/* Manual CSS Selector */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                CSS Selector Override (optional - for advanced users)
+              </label>
+              <Input
+                value={manualSelectorInput}
+                onChange={(e) => setManualSelectorInput(e.target.value)}
+                placeholder='e.g., a[href*="savers-switch"], button.submit-btn'
+                className="bg-secondary border-border text-foreground font-mono text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                CSS selector to find the element - leave empty to use text matching
+              </p>
+            </div>
+
+            {/* Helpful Tips */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 space-y-2">
+              <p className="text-xs text-blue-400 font-medium">🔧 Quick Fix Tips:</p>
+              <ul className="text-[11px] text-blue-400/80 space-y-1 ml-3">
+                <li>• <strong>Apostrophe issues:</strong> Try both "Saver's" and "Saver's"</li>
+                <li>• <strong>Case issues:</strong> Text matching is usually case-insensitive</li>
+                <li>• <strong>Find selector:</strong> Right-click element in browser → Inspect → Copy selector</li>
+                <li>• <strong>Use data-testid:</strong> If available, use [data-testid="value"]</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditSelectorModalOpen(false)} className="border-white/20">
+              Cancel
+            </Button>
+            <Button 
+              onClick={saveManualSelector}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

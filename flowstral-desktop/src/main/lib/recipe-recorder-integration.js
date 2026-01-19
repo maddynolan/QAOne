@@ -621,14 +621,19 @@ function recipeActionToLegacy(recipeAction) {
   // Convert recipe to legacy selectorObj
   const selectorObj = recipeToLegacySelector(target);
   
+  // CRITICAL: Extract element text for args array (for playback compatibility)
+  const elementText = target?.what?.text || '';
+  
   return {
     type: type,
     qword: getQWord(type, target),
     description: description,
     timestamp: timestamp,
+    // CRITICAL: Add args array for playback compatibility with CDP-recorded actions
+    args: elementText ? [elementText] : [],
     // Legacy fields
-    text: target?.what?.text || '',
-    label: target?.where?.nearText || target?.what?.text || '',
+    text: elementText,
+    label: target?.where?.nearText || elementText,
     selector: selectorObj.selector,
     selectorObj: selectorObj,
     // New recipe field
@@ -750,6 +755,17 @@ function legacyActionToRecipe(legacyAction) {
     elementIndex = selectorObj.elementIndex;
   }
   
+  // CRITICAL: Normalize text for consistent matching
+  // Handles apostrophe variants (', ', etc.), quote variants, and whitespace
+  const normalizeText = (text) => {
+    if (!text) return text;
+    return text
+      .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'") // Apostrophe variants
+      .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')              // Quote variants
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  
   // Extract actual element text - try multiple sources
   // Priority: explicit text > element.text > extracted from label > label itself
   let elementText = legacyAction.text || element.text || selectorObj.text;
@@ -758,9 +774,34 @@ function legacyActionToRecipe(legacyAction) {
     elementText = extractTextFromLabel(legacyAction.label) || legacyAction.label;
   }
   
+  // Normalize the text for consistent playback matching
+  elementText = normalizeText(elementText);
+  
+  // CRITICAL FIX: Infer role from action type if not explicitly set
+  // This ensures SmartFinder can use role+text strategies
+  let inferredRole = element.role || selectorObj.role;
+  if (!inferredRole && legacyAction.type) {
+    const actionType = legacyAction.type.toLowerCase();
+    if (actionType.includes('click')) {
+      // For click actions, try to infer role from tag or context
+      const tag = (element.tagName || selectorObj.tag || '').toLowerCase();
+      if (tag === 'a') inferredRole = 'link';
+      else if (tag === 'button') inferredRole = 'button';
+      else if (tag === 'input' && element.type === 'submit') inferredRole = 'button';
+      // Default to trying both link and button if unknown
+      else if (!inferredRole) inferredRole = 'link'; // Most click failures are on links
+    } else if (actionType.includes('fill') || actionType.includes('type')) {
+      inferredRole = 'textbox';
+    } else if (actionType.includes('check')) {
+      inferredRole = 'checkbox';
+    } else if (actionType.includes('select')) {
+      inferredRole = 'combobox';
+    }
+  }
+  
   return {
     what: {
-      role: element.role || selectorObj.role || null,
+      role: inferredRole || null,
       text: elementText || '',
       tag: element.tagName || selectorObj.tag || null,
     },

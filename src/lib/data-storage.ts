@@ -279,17 +279,13 @@ class DataStorageService {
       if (planId) {
         url += `?plan_id=${planId}`;
       }
-      console.log('Fetching test cases from:', url);
-      
       // Fetch from main endpoint
       const response = await fetch(url);
-      console.log('Response status:', response.status, response.statusText);
       
       let testCases: TestCase[] = [];
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Backend response for getTestCases:', data);
         
         // Handle different response formats
         if (Array.isArray(data)) {
@@ -306,35 +302,22 @@ class DataStorageService {
       // Also fetch from Flowstral endpoint (recorded test cases)
       try {
         const flowstralUrl = `${this.baseUrl}/api/flowstral/test-cases`;
-        console.log('Also fetching from Flowstral:', flowstralUrl);
         const flowstralResponse = await fetch(flowstralUrl);
-        console.log('Flowstral response status:', flowstralResponse.status, flowstralResponse.statusText);
         
         if (flowstralResponse.ok) {
           const flowstralData = await flowstralResponse.json();
-          console.log('Flowstral raw data:', flowstralData);
           const flowstralCases = flowstralData.test_cases || [];
-          console.log(`Found ${flowstralCases.length} Flowstral test cases`);
           
           if (flowstralCases.length > 0) {
             // Convert Flowstral format to standard TestCase format
-            const convertedCases = flowstralCases.map((fc: any) => {
-              console.log('Converting Flowstral case:', fc.id, fc.name);
-              return this.convertFlowstralTestCase(fc);
-            });
-            
+            const convertedCases = flowstralCases.map((fc: any) => this.convertFlowstralTestCase(fc));
             // Merge (Flowstral cases first - they're newer/recorded)
             testCases = [...convertedCases, ...testCases];
-            console.log(`Added ${convertedCases.length} Flowstral recorded test cases`);
           }
-        } else {
-          console.warn('Flowstral API returned non-OK status:', flowstralResponse.status);
         }
       } catch (flowstralError) {
-        console.error('Could not fetch Flowstral test cases:', flowstralError);
+        // Silently fail - Flowstral endpoint may not exist
       }
-      
-      console.log(`Returning ${testCases.length} total test cases`);
       return testCases;
     } catch (error: any) {
       console.error('Error getting test cases:', error);

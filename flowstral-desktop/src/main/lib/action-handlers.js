@@ -5,6 +5,42 @@
  * Each handler receives (context, action, options) where context is the PlaywrightRecorder instance.
  */
 
+// ============================================================
+// TEXT NORMALIZATION UTILITIES
+// Critical for matching recorded text against page text
+// ============================================================
+const normalizeTextForMatching = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const extractTextFromDescription = (description) => {
+  if (!description) return '';
+  const match = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*"([^"]+)"/i);
+  if (match) return match[1];
+  const matchSingle = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*'([^']+)'/i);
+  if (matchSingle) return matchSingle[1];
+  return description;
+};
+
+const getActionLabel = (action) => {
+  let label = action.label || 
+              action.text || 
+              action.selectorObj?.text ||
+              action.recipe?.what?.text ||
+              action.args?.[0];
+  
+  if (!label && action.description) {
+    label = extractTextFromDescription(action.description);
+  }
+  
+  return normalizeTextForMatching(label || '');
+};
+
 /**
  * Handle navigation actions (goto, navigate)
  */
@@ -77,7 +113,7 @@ async function handleSalesforceNavigation(ctx, action, options = {}) {
  */
 async function handleClick(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   const selector = action.selector;
   
   // Try finding element with automatic retry (handles slow pages)
@@ -244,7 +280,7 @@ async function handleFill(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const selector = action.selector;
   const value = action.value;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   // Try SmartFinder first (best for modern frameworks)
   if (ctx.useSmartFinderForPlayback && ctx.smartFinder && action.recipe) {
@@ -383,7 +419,7 @@ async function handleSelect(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const selector = action.selector;
   const value = action.value;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   console.log(`[ActionHandler] Select action: "${label}" -> "${value}"`);
   
@@ -538,7 +574,7 @@ async function findDropdownOption(ctx, value) {
 async function handleHover(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const selector = action.selector;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   const hoverResult = await ctx.findElementWithRetry(action);
   if (hoverResult) {
@@ -573,7 +609,7 @@ async function handleWait(ctx, action, options = {}) {
 async function handleCheck(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const selector = action.selector;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   const checkResult = await ctx._findElement(action);
   if (checkResult) {
@@ -587,7 +623,7 @@ async function handleCheck(ctx, action, options = {}) {
 async function handleUncheck(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const selector = action.selector;
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   const uncheckResult = await ctx._findElement(action);
   if (uncheckResult) {

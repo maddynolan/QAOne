@@ -57,6 +57,50 @@ const cssEscape = (value) => {
   return result;
 };
 
+// ============================================================
+// TEXT NORMALIZATION UTILITIES (Module-level for use everywhere)
+// Critical for matching recorded text against page text
+// Handles: apostrophe variants (', ', etc.), quote variants, whitespace
+// ============================================================
+const normalizeTextForMatching = (text) => {
+  // CRITICAL: Handle null, undefined, AND non-string types (arrays, objects)
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'") // All apostrophe variants to straight
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')              // All quote variants to straight
+    .replace(/\s+/g, ' ')                                          // Normalize whitespace
+    .trim();
+};
+
+// Extract element text from description like 'Click "Submit"' -> 'Submit'
+const extractTextFromDescription = (description) => {
+  if (!description) return '';
+  const match = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*"([^"]+)"/i);
+  if (match) return match[1];
+  // Also try single quotes
+  const matchSingle = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*'([^']+)'/i);
+  if (matchSingle) return matchSingle[1];
+  return description; // Return full description as fallback
+};
+
+// Get the best label for an action from all available sources
+const getActionLabel = (action) => {
+  // Priority order: label > text > selectorObj.text > recipe.what.text > extracted from description
+  let label = action.label || 
+              action.text || 
+              action.selectorObj?.text ||
+              action.recipe?.what?.text ||
+              action.args?.[0];
+  
+  // If still no label, try extracting from description
+  if (!label && action.description) {
+    label = extractTextFromDescription(action.description);
+  }
+  
+  // Normalize the label for matching
+  return normalizeTextForMatching(label || '');
+};
+
 // Path to shared recorder engine (SINGLE SOURCE OF TRUTH)
 const RECORDER_ENGINE_PATH = path.join(__dirname, '../../../flowstral-extension/src/lib/recorder-engine.js');
 
@@ -872,43 +916,8 @@ class PlaywrightRecorder extends EventEmitter {
     this.pendingClicks = []; // Store pending clicks in main process memory
     this.pendingInputs = []; // Store pending inputs in main process memory
     
-    // Listen for special console messages to capture clicks/inputs
-    // This works across ALL page navigations and subdomains!
-    this.page.on('console', (msg) => {
-      const text = msg.text();
-      
-      // Check for click report
-      if (text.startsWith('__FLOWSTRAL_CLICK__:')) {
-        try {
-          const clickData = JSON.parse(text.substring('__FLOWSTRAL_CLICK__:'.length));
-          console.log('[PlaywrightRecorder] Click reported via console:', clickData.description);
-          this.pendingClicks.push(clickData);
-        } catch (e) {
-          console.error('[PlaywrightRecorder] Failed to parse click data:', e.message);
-        }
-      }
-      
-      // Check for input report
-      if (text.startsWith('__FLOWSTRAL_INPUT__:')) {
-        try {
-          const inputData = JSON.parse(text.substring('__FLOWSTRAL_INPUT__:'.length));
-          console.log('[PlaywrightRecorder] Input reported via console:', inputData.name || inputData.id);
-          // Update existing input for same field, or add new
-          const existingIndex = this.pendingInputs.findIndex(i => 
-            (i.key && i.key === inputData.key) ||
-            (i.name && i.name === inputData.name) ||
-            (i.id && i.id === inputData.id)
-          );
-          if (existingIndex !== -1) {
-            this.pendingInputs[existingIndex] = inputData;
-          } else {
-            this.pendingInputs.push(inputData);
-          }
-        } catch (e) {
-          console.error('[PlaywrightRecorder] Failed to parse input data:', e.message);
-        }
-      }
-    });
+    // Setup console listener for main page
+    this._setupConsoleListenerForPage(this.page, 0);
     
     console.log('[PlaywrightRecorder] Console-based click/input capture enabled');
     
@@ -920,13 +929,6 @@ class PlaywrightRecorder extends EventEmitter {
     
     // CRITICAL: Inject click capture script BEFORE navigation so login clicks are captured!
     await this.page.addInitScript(this._getClickCaptureScript());
-    
-    // Listen for console messages from the page (for debugging)
-    this.page.on('console', msg => {
-      if (msg.text().includes('[Flowstral]') || msg.text().includes('[Recorder]')) {
-        console.log('[Page]', msg.text());
-      }
-    });
 
     // Navigate to URL
     this.startUrl = url;
@@ -1113,6 +1115,10 @@ class PlaywrightRecorder extends EventEmitter {
             }
             console.log('[PlaywrightRecorder] JS recorder injected into new tab (same-origin)');
             
+            // CRITICAL: Add console listener to capture actions from new tab!
+            // Without this, actions in the new tab are NOT recorded
+            this._setupConsoleListenerForPage(newPage, newPageIndex);
+            
             // Same-origin tab - record as regular newTab
             this._addAction({
               type: 'newTab',
@@ -1240,6 +1246,61 @@ class PlaywrightRecorder extends EventEmitter {
     this.emit('started', { url });
     
     return { success: true };
+  }
+  
+  /**
+   * Setup console listener for a page to capture recorded actions
+   * CRITICAL: Must be called for EACH page (main + new tabs) to capture actions!
+   * @param {Page} page - Playwright page to listen to
+   * @param {number} pageIndex - Index of the page in our tracking array
+   */
+  _setupConsoleListenerForPage(page, pageIndex) {
+    console.log(`[PlaywrightRecorder] Setting up console listener for page ${pageIndex}`);
+    
+    // Listen for special console messages to capture clicks/inputs
+    page.on('console', (msg) => {
+      const text = msg.text();
+      
+      // Check for click report
+      if (text.startsWith('__FLOWSTRAL_CLICK__:')) {
+        try {
+          const clickData = JSON.parse(text.substring('__FLOWSTRAL_CLICK__:'.length));
+          console.log(`[PlaywrightRecorder] Click reported via console (tab ${pageIndex}):`, clickData.description);
+          clickData.tabIndex = pageIndex;
+          this.pendingClicks.push(clickData);
+        } catch (e) {
+          console.error('[PlaywrightRecorder] Failed to parse click data:', e.message);
+        }
+      }
+      
+      // Check for input report
+      if (text.startsWith('__FLOWSTRAL_INPUT__:')) {
+        try {
+          const inputData = JSON.parse(text.substring('__FLOWSTRAL_INPUT__:'.length));
+          console.log(`[PlaywrightRecorder] Input reported via console (tab ${pageIndex}):`, inputData.name || inputData.id);
+          inputData.tabIndex = pageIndex;
+          const existingIndex = this.pendingInputs.findIndex(i => 
+            (i.key && i.key === inputData.key) ||
+            (i.name && i.name === inputData.name) ||
+            (i.id && i.id === inputData.id)
+          );
+          if (existingIndex !== -1) {
+            this.pendingInputs[existingIndex] = inputData;
+          } else {
+            this.pendingInputs.push(inputData);
+          }
+        } catch (e) {
+          console.error('[PlaywrightRecorder] Failed to parse input data:', e.message);
+        }
+      }
+    });
+    
+    // Also listen for debug messages
+    page.on('console', msg => {
+      if (msg.text().includes('[Flowstral]') || msg.text().includes('[Recorder]')) {
+        console.log(`[Page ${pageIndex}]`, msg.text());
+      }
+    });
   }
   
   /**
@@ -2701,7 +2762,27 @@ class PlaywrightRecorder extends EventEmitter {
           // This ensures edited values from Builder are used, not just recorded values
           const fillValue = step.value || step.args?.[1] || '';
           const urlValue = step.url || step.args?.[0] || '';
-          const labelValue = step.target || step.args?.[0] || step.description || '';
+          
+          // CRITICAL FIX: Check ALL possible sources of element text
+          // CDP-recorded: args[0] has the text
+          // Recipe-recorded: text, label, selectorObj.text, element.text have the text
+          let labelValue = step.target || 
+                           step.args?.[0] || 
+                           step.text ||                    // Recipe recorder stores here
+                           step.label ||                   // Recipe recorder stores here
+                           step.selectorObj?.text ||       // Recipe recorder stores here
+                           step.element?.text;             // Recipe recorder stores here
+          
+          // Last resort: Extract from description like 'Click "Go To Saver's Switch"'
+          if (!labelValue && step.description) {
+            const descMatch = step.description.match(/(?:Click|Fill|Select|Type)\s*"([^"]+)"/i);
+            if (descMatch) {
+              labelValue = descMatch[1];
+            } else {
+              labelValue = step.description;
+            }
+          }
+          labelValue = labelValue || '';
           
           // Convert step to action format
           // Normalize selector - could be string or object with nested selector property
@@ -3281,7 +3362,27 @@ class PlaywrightRecorder extends EventEmitter {
     
     const fillValue = step.value || step.args?.[1] || '';
     const urlValue = step.url || step.args?.[0] || '';
-    const labelValue = step.target || step.args?.[0] || step.description || '';
+    
+    // CRITICAL FIX: Check ALL possible sources of element text
+    // CDP-recorded: args[0] has the text
+    // Recipe-recorded: text, label, selectorObj.text, element.text have the text
+    let labelValue = step.target || 
+                     step.args?.[0] || 
+                     step.text ||                    // Recipe recorder stores here
+                     step.label ||                   // Recipe recorder stores here
+                     step.selectorObj?.text ||       // Recipe recorder stores here
+                     step.element?.text;             // Recipe recorder stores here
+    
+    // Last resort: Extract from description
+    if (!labelValue && step.description) {
+      const descMatch = step.description.match(/(?:Click|Fill|Select|Type)\s*"([^"]+)"/i);
+      if (descMatch) {
+        labelValue = descMatch[1];
+      } else {
+        labelValue = step.description;
+      }
+    }
+    labelValue = labelValue || '';
     
     const normalizedSelector = typeof step.selector === 'string'
       ? step.selector
@@ -5120,10 +5221,41 @@ class PlaywrightRecorder extends EventEmitter {
   async _findElement(action) {
     const timeout = 5000;
     const strategies = [];
-    const label = action.label || action.text || action.description?.replace(/^(Click|Fill|Select)\s*"?/, '').replace(/"?$/, '');
+    // FIXED: Use comprehensive label extraction with normalization
+    const label = getActionLabel(action);
     
-    // Clean the label for matching
+    // Clean the label for matching (already normalized by getActionLabel)
     const cleanLabel = (label || '').replace(/"/g, '').trim();
+    const cleanLabelNormalized = cleanLabel; // Already normalized
+    
+    // ============================================================
+    // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
+    // When automation fails, users can specify exactly how to find the element
+    // ============================================================
+    const manualOverride = action.manualOverride || action.selectorObj?.manualOverride;
+    if (manualOverride) {
+      console.log(`[PlaywrightRecorder] 🎯 MANUAL OVERRIDE: Using user-specified selector: "${manualOverride}"`);
+      try {
+        const manualLocator = this.page.locator(manualOverride);
+        const count = await manualLocator.count();
+        if (count > 0) {
+          console.log(`[PlaywrightRecorder] ✅ Manual override found ${count} element(s)`);
+          return { locator: manualLocator.first(), strategy: { type: 'MANUAL-OVERRIDE' } };
+        } else {
+          console.log(`[PlaywrightRecorder] ⚠️ Manual override selector found 0 elements, falling back to auto-detection`);
+        }
+      } catch (e) {
+        console.log(`[PlaywrightRecorder] ⚠️ Manual override selector error: ${e.message}, falling back to auto-detection`);
+      }
+    }
+    
+    // Create regex pattern that matches any apostrophe variant
+    const createApostropheFlexRegex = (text) => {
+      const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const flexible = escaped.replace(/['\u2018\u2019\u201B\u2032\u0060\u00B4]/g, "['\u2018\u2019\u201B\u2032\u0060\u00B4']");
+      return new RegExp(flexible, 'i');
+    };
+    
     const isFillAction = action.type === 'fill' || action.type === 'type' || action.inputType;
     
     // CRITICAL: Extract element index for duplicate elements (e.g., multiple "Add to Cart" buttons)
@@ -5363,6 +5495,17 @@ class PlaywrightRecorder extends EventEmitter {
       strategies.push({ type: 'getByText', value: `getByText:${cleanLabel}` });
       strategies.push({ type: 'getByTitle', value: `getByTitle:${cleanLabel}` });
       
+      // APOSTROPHE FIX: Add strategies with normalized apostrophes if different
+      if (cleanLabelNormalized !== cleanLabel) {
+        strategies.push({ type: 'getByRole-button-apostrophe', value: `getByRole:button:${cleanLabelNormalized}` });
+        strategies.push({ type: 'getByRole-link-apostrophe', value: `getByRole:link:${cleanLabelNormalized}` });
+        strategies.push({ type: 'getByText-apostrophe', value: `getByText:${cleanLabelNormalized}` });
+      }
+      
+      // APOSTROPHE FIX: Add regex-based apostrophe-flexible strategies
+      strategies.push({ type: 'getByRoleRegex-link', value: `getByRoleRegex:link:${cleanLabel}` });
+      strategies.push({ type: 'getByText-apostrophe-flex', value: `getByTextRegex:${cleanLabel}` });
+      
       // Exact text match
       strategies.push({ type: 'exact-text', value: `text="${cleanLabel}"` });
       // Case-insensitive exact match
@@ -5386,6 +5529,23 @@ class PlaywrightRecorder extends EventEmitter {
       strategies.push({ type: 'has-text-a', value: `a:has-text("${cleanLabel}")` });
       strategies.push({ type: 'has-text-span', value: `span:has-text("${cleanLabel}")` });
       strategies.push({ type: 'has-text-div', value: `div:has-text("${cleanLabel}") >> visible=true` });
+      
+      // KEYWORD EXTRACTION: Find key phrases (proper nouns, product names)
+      // e.g., "Go To Saver's Switch" → try "Saver's Switch" (the unique product name)
+      const keyPhrases = cleanLabel
+        .split(/\s+(?:to|the|a|an|with|for|on|in|and|or|of)\s+/i) // Split on common words
+        .filter(phrase => phrase.length > 3)
+        .map(phrase => phrase.trim());
+      
+      for (const keyPhrase of keyPhrases) {
+        if (keyPhrase.length >= 5 && keyPhrase !== cleanLabel) {
+          // Try with apostrophe-flexible regex
+          strategies.push({ type: 'keyword-link', value: `getByRoleRegex:link:${keyPhrase}` });
+          strategies.push({ type: 'keyword-text', value: `getByTextRegex:${keyPhrase}` });
+          strategies.push({ type: 'has-text-keyword', value: `a:has-text("${keyPhrase}")` });
+          strategies.push({ type: 'has-text-keyword-norm', value: `a:has-text("${normalizeTextForMatching(keyPhrase)}")` });
+        }
+      }
     }
     
     // 4. Try ID if available
@@ -5405,6 +5565,20 @@ class PlaywrightRecorder extends EventEmitter {
           // HIGHEST PRIORITY: data-testid - most reliable selector
           const testIdValue = strategy.value.replace('getByTestId:', '');
           baseLocator = this.page.getByTestId(testIdValue);
+          locator = getAtIndex(baseLocator);
+        } else if (strategy.value.startsWith('getByRoleRegex:')) {
+          // APOSTROPHE FIX: Use regex for role name that matches any apostrophe variant
+          const parts = strategy.value.replace('getByRoleRegex:', '').split(':');
+          if (parts.length === 2) {
+            const flexRegex = createApostropheFlexRegex(parts[1]);
+            baseLocator = this.page.getByRole(parts[0], { name: flexRegex });
+            locator = getAtIndex(baseLocator);
+          }
+        } else if (strategy.value.startsWith('getByTextRegex:')) {
+          // APOSTROPHE FIX: Use regex that matches any apostrophe variant
+          const text = strategy.value.replace('getByTextRegex:', '');
+          const flexRegex = createApostropheFlexRegex(text);
+          baseLocator = this.page.getByText(flexRegex);
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByText:')) {
           const text = strategy.value.replace('getByText:', '');
@@ -5668,8 +5842,15 @@ class PlaywrightRecorder extends EventEmitter {
       const screenshot = await this.page.screenshot({ type: 'png' });
       const screenshotBase64 = screenshot.toString('base64');
       
-      // Get viewport dimensions
-      const viewport = await this.page.viewportSize();
+      // Get viewport dimensions (with fallback for headless/no-viewport modes)
+      let viewport = await this.page.viewportSize();
+      if (!viewport) {
+        // Try to get from evaluate if viewportSize() returns null
+        viewport = await this.page.evaluate(() => ({
+          width: window.innerWidth || document.documentElement.clientWidth || 1920,
+          height: window.innerHeight || document.documentElement.clientHeight || 1080
+        })).catch(() => ({ width: 1920, height: 1080 }));
+      }
       
       // Try to call AI service via backend API
       const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -5827,7 +6008,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
    * @returns {Promise<{locator, strategy}|null>}
    */
   async findElementWithRetry(action) {
-    const label = action.label || action.text || action.description;
+    const label = getActionLabel(action); // FIXED: Use comprehensive normalized extraction
     
     try {
       return await this.retryWithBackoff(async () => {
@@ -5844,6 +6025,18 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         }
         
         // Try SmartFinder first
+        console.log('[PlaywrightRecorder] ========== ELEMENT FINDING DEBUG ==========');
+        console.log('[PlaywrightRecorder] Action data:', JSON.stringify({
+          type: action.type,
+          text: action.text,
+          label: action.label,
+          'args[0]': action.args?.[0],
+          'selectorObj.text': action.selectorObj?.text,
+          'element.text': action.element?.text,
+          recipe: action.recipe,
+          manualOverride: action.selectorObj?.manualOverride || action.manualOverride,
+        }, null, 2));
+        
         if (this.useSmartFinderForPlayback) {
           if (!this.smartFinder) {
             // Pass scope instead of page for iframe support
@@ -5854,7 +6047,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           await this.page.waitForTimeout(300);
           
           const recipe = legacyActionToRecipe(action);
-          console.log('[PlaywrightRecorder] Recipe for SmartFinder:', JSON.stringify(recipe.what));
+          console.log('[PlaywrightRecorder] Recipe for SmartFinder:', JSON.stringify(recipe, null, 2));
           
           // For iframes, we need to search within the frame
           let locator;
@@ -5878,15 +6071,23 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               return { locator, strategy: { type: 'SmartFinder-iframe' } };
             }
           } else {
-            locator = await this.smartFinder.find(recipe);
-            if (locator) {
-              return { locator, strategy: { type: 'SmartFinder' } };
+            console.log('[PlaywrightRecorder] Calling SmartFinder.find()...');
+            try {
+              locator = await this.smartFinder.find(recipe);
+              console.log('[PlaywrightRecorder] SmartFinder result:', locator ? 'FOUND' : 'NOT FOUND');
+              if (locator) {
+                return { locator, strategy: { type: 'SmartFinder' } };
+              }
+            } catch (sfError) {
+              console.error('[PlaywrightRecorder] SmartFinder threw error:', sfError.message);
             }
           }
+        } else {
+          console.log('[PlaywrightRecorder] useSmartFinderForPlayback is DISABLED');
         }
         
         // Fallback to legacy finder
-        console.log('[PlaywrightRecorder] SmartFinder failed, trying legacy finder...');
+        console.log('[PlaywrightRecorder] SmartFinder failed, trying legacy _findElement...');
         const result = await this._findElement(action, scope);
         if (result) return result;
         
@@ -5996,7 +6197,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       const selector = action.selector;
       const value = action.value;
       const timeout = action.timeout || 30000;
-      const label = action.label || action.text;
+      const label = getActionLabel(action); // FIXED: Use comprehensive label extraction with normalization
 
       switch (action.type) {
         case 'goto':
@@ -6127,9 +6328,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           }
           
           // Layer 4: AI FALLBACK - Last resort when all deterministic strategies fail
+          console.log('[PlaywrightRecorder] ========== AI FALLBACK CHECK ==========');
+          console.log('[PlaywrightRecorder] clickResult:', clickResult ? 'FOUND' : 'NULL');
+          console.log('[PlaywrightRecorder] enableAIFallback:', this.enableAIFallback);
+          console.log('[PlaywrightRecorder] aiCallsThisRun:', this.aiCallsThisRun, '/', this.maxAICallsPerRun);
+          
           if (!clickResult && this.enableAIFallback) {
             console.log(`[PlaywrightRecorder] All strategies failed after retries, trying AI fallback...`);
+            console.log(`[PlaywrightRecorder] Searching for: "${label || selector || action.description}"`);
             const aiResult = await this.findElementWithAI(label || selector || action.description, 'click');
+            console.log('[PlaywrightRecorder] AI result:', aiResult);
             if (aiResult) {
               try {
                 await this.clickAtCoordinates(aiResult.x, aiResult.y);
@@ -6234,6 +6442,31 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               }
               }
             }
+          }
+          
+          // Check if this click opened a NEW TAB
+          const pagesBefore = this.context.pages().length;
+          await this.page.waitForTimeout(500); // Brief wait for new tab to open
+          const pagesAfter = this.context.pages();
+          
+          if (pagesAfter.length > pagesBefore) {
+            // NEW TAB DETECTED - automatically switch to it!
+            console.log(`[PlaywrightRecorder] ✨ NEW TAB DETECTED! Switching from ${pagesBefore} to ${pagesAfter.length} pages`);
+            const newPage = pagesAfter[pagesAfter.length - 1];
+            await newPage.waitForLoadState('domcontentloaded').catch(() => {});
+            
+            // Switch to the new tab
+            this.page = newPage;
+            this._playbackPages = pagesAfter;
+            this._playbackPageIndex = pagesAfter.length - 1;
+            
+            // Reinitialize SmartFinder for new page
+            if (this.useSmartFinderForPlayback) {
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+            }
+            
+            console.log(`[PlaywrightRecorder] Now on new tab: ${this.page.url()}`);
+            await this.page.waitForTimeout(1000); // Let page stabilize
           }
           
           // Check if this is a link click that should navigate

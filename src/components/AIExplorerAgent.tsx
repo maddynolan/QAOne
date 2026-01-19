@@ -71,7 +71,6 @@ interface AIExplorerAgentProps {
 }
 
 export function AIExplorerAgent({ isOpen, onClose, currentUrl, onSaveTests }: AIExplorerAgentProps) {
-  console.log('[AIExplorer] Rendering, isOpen:', isOpen);
   const { config } = useAI();
   const [isRunning, setIsRunning] = useState(false);
   const [startUrl, setStartUrl] = useState(currentUrl);

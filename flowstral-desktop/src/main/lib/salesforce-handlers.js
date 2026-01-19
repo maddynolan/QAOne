@@ -9,6 +9,41 @@
  * - Shadow DOM interactions
  */
 
+// ============================================================
+// TEXT NORMALIZATION UTILITIES
+// ============================================================
+const normalizeTextForMatching = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const extractTextFromDescription = (description) => {
+  if (!description) return '';
+  const match = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*"([^"]+)"/i);
+  if (match) return match[1];
+  const matchSingle = description.match(/(?:Click|Fill|Select|Type|Check|Uncheck|Press|Toggle)\s*'([^']+)'/i);
+  if (matchSingle) return matchSingle[1];
+  return description;
+};
+
+const getActionLabel = (action) => {
+  let label = action.label || 
+              action.text || 
+              action.selectorObj?.text ||
+              action.recipe?.what?.text ||
+              action.args?.[0];
+  
+  if (!label && action.description) {
+    label = extractTextFromDescription(action.description);
+  }
+  
+  return normalizeTextForMatching(label || '');
+};
+
 /**
  * Get Salesforce base URL from current page
  */
@@ -422,7 +457,7 @@ async function handleSFMetadataAssert(ctx, action, options = {}) {
 async function handleGenericSFAction(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
   const normalizedType = action.type.toLowerCase().replace(/_/g, '-');
-  const label = action.label || action.text;
+  const label = getActionLabel(action);
   
   const baseUrl = getSalesforceBaseUrl(ctx.page);
   if (!baseUrl) {

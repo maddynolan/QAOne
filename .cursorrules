@@ -5,6 +5,8 @@ Before working on this project, read these documents:
 
 1. **Master Reference**: `docs/QAAI-MASTER-REFERENCE.md` - Complete platform overview
 2. **Recording/Playback**: `docs/QAAI-CAPABILITIES-REFERENCE.md` - Deep dive on record/playback
+3. **Debug Session Findings**: `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed
+4. **Record/Playback Deep Dive**: `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
 
 ## Project Overview
 
@@ -36,24 +38,47 @@ Desktop App (Electron/Playwright)
 
 Browser Extension
 └── flowstral-extension/src/lib/recorder-engine.js
+
+Web App (React/TypeScript)
+└── src/pages/PlaywrightRecorderPage.tsx (main recorder UI)
 ```
 
 ## Critical Files for Recording/Playback
 
 | File | Purpose |
 |------|---------|
-| `playwright-recorder.js` | Main recorder, executeAction(), runTest() |
-| `lib/smart-finder.js` | 8-phase element finding |
+| `playwright-recorder.js` | Main recorder, executeAction(), runTest(), _setupConsoleListenerForPage() |
+| `lib/smart-finder.js` | 10-phase element finding with fallbacks |
 | `lib/element-recipe.js` | Recipe model (what/where/which) |
-| `lib/recipe-recorder-integration.js` | Legacy ↔ Recipe conversion |
+| `lib/recipe-recorder-integration.js` | Legacy ↔ Recipe conversion, role inference |
 | `test-executor.js` | Alternative executor with AI fallback |
 
 ## Playback Fallback Order
 
-1. **SmartFinder** (8-phase, with retry) → 95% success
+1. **SmartFinder** (10-phase, with retry) → 95% success
 2. **Legacy _findElement** (50+ strategies) → 4% additional
-3. **AI Vision Fallback** (GPT-4o screenshot) → 1% additional
-4. **Report failure** with details
+3. **iFrame Search** (search inside iframes)
+4. **AI Vision Fallback** (GPT-4o screenshot) → 1% additional
+5. **Report failure** with details
+
+## CRITICAL: Text Normalization
+
+**ALWAYS normalize text for matching:**
+```javascript
+const normalizeTextForMatching = (text) => {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'") // Apostrophes
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')              // Quotes
+    .replace(/\s+/g, ' ')                                          // Whitespace
+    .trim();
+};
+```
+
+## CRITICAL: New Tab Handling
+
+**Recording**: Must call `_setupConsoleListenerForPage(newPage, pageIndex)` for EACH new tab
+**Playback**: Must detect new tabs after clicks and switch `this.page`
 
 ## Key Patterns
 
@@ -69,7 +94,7 @@ await this.retryWithBackoff(async () => {
 {
   what: { role: 'button', text: 'Submit' },
   where: { landmark: 'main' },
-  which: { position: 2, testId: 'submit-btn' }  // 1-based position!
+  which: { position: 2, testId: 'submit-btn', ariaLabel: '...' }
 }
 ```
 
@@ -77,6 +102,19 @@ await this.retryWithBackoff(async () => {
 ```javascript
 const coords = await this.findElementWithAI(description, 'click');
 await this.page.mouse.click(coords.x, coords.y);
+```
+
+### Console-Based Action Capture
+```javascript
+// Recording scripts emit:
+console.log('__FLOWSTRAL_CLICK__:' + JSON.stringify(clickData));
+
+// Captured by:
+page.on('console', (msg) => {
+  if (msg.text().startsWith('__FLOWSTRAL_CLICK__:')) {
+    // Parse and store
+  }
+});
 ```
 
 ## Configuration Flags
@@ -89,19 +127,48 @@ enableAIFallback: true           // AI vision as last resort
 maxAICallsPerRun: 5              // Budget per test
 ```
 
-## Common Issues
+## Common Issues & Solutions
 
 | Issue | Solution |
 |-------|----------|
 | Wrong element clicked | Check elementIndex/position |
-| Element not found | Increase timeout, check SmartFinder logs |
-| Custom dropdown fails | Uses click-then-select for Radix |
-| AI not working | Check OPENAI_API_KEY env var |
+| Element not found | Check SmartFinder logs, verify text normalization |
+| Apostrophe mismatch | Ensure normalizeTextForMatching is applied |
+| Double space in text | normalizeText collapses with `.replace(/\s+/g, ' ')` |
+| Actions not recorded in new tab | Verify _setupConsoleListenerForPage called |
+| AI not working | Check OPENAI_API_KEY env var or backend running |
+| text.replace error | Check `typeof text === 'string'` before .replace() |
+
+## Debug Logging
+
+When troubleshooting, look for these logs:
+```
+[PlaywrightRecorder] ========== ELEMENT FINDING DEBUG ==========
+[PlaywrightRecorder] Action data: { type, text, label, ... }
+[PlaywrightRecorder] Recipe for SmartFinder: { what, where, which }
+[SmartFinder] Trying strategy: role+text
+[PlaywrightRecorder] ========== AI FALLBACK CHECK ==========
+```
+
+## Running in Dev Mode
+
+```bash
+# Start webapp dev server
+cd C:\QAAI
+npm run dev
+
+# Start Electron in dev mode (loads from dev server)
+cd flowstral-desktop
+$env:FLOWSTRAL_DEV_PORT='8082'  # Match dev server port
+npm run dev
+```
 
 ## Documentation Structure
 
 - `docs/QAAI-MASTER-REFERENCE.md` - Full platform reference
 - `docs/QAAI-CAPABILITIES-REFERENCE.md` - Recording/playback deep dive
+- `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
+- `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed (Jan 2026)
 - `docs/API_TESTING_USAGE.md` - API testing guide
 - `docs/PERFORMANCE_TESTING_USAGE.md` - Perf testing guide
 - `docs/SALESFORCE_TESTING_GUIDE.md` - Salesforce guide

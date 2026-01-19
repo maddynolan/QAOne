@@ -250,13 +250,31 @@ function getElementAnalyzerScript() {
       return this.tagToRole[tag] || null;
     },
     
+    // ========== TEXT NORMALIZATION ==========
+    
+    /**
+     * Normalize text for consistent recording and playback
+     * Handles: apostrophe variants, quote variants, whitespace
+     */
+    normalizeText: function(text) {
+      if (!text) return text;
+      return text
+        // Normalize all apostrophe variants to straight apostrophe
+        .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'")
+        // Normalize all quote variants to straight quotes
+        .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+        // Normalize whitespace (multiple spaces, tabs, newlines → single space)
+        .replace(/\s+/g, ' ')
+        .trim();
+    },
+    
     // ========== TEXT EXTRACTION ==========
     
     getVisibleText: function(element) {
       // For inputs, use value or placeholder
       var tag = element.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea') {
-        return element.value || element.placeholder || '';
+        return this.normalizeText(element.value || element.placeholder || '');
       }
       
       // For buttons with just an icon, check aria-label first
@@ -292,7 +310,9 @@ function getElementAnalyzerScript() {
         text = ariaLabel;
       }
       
-      return text;
+      // CRITICAL: Normalize text before returning
+      // This ensures consistent apostrophe characters for recording AND playback matching
+      return this.normalizeText(text);
     },
     
     // ========== LOCATION FINDING ==========
