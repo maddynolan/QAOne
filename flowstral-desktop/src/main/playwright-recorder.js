@@ -2430,21 +2430,26 @@ class PlaywrightRecorder extends EventEmitter {
               
               // If same focus AND we've been focused long enough AND it's different from current
               if (i !== this._currentPageIndex && (now - this._focusDetectedAt) >= FOCUS_DEBOUNCE_MS) {
-                // Check if RECENT actions (last 5) already include a switch to this tab
-                // This prevents duplicate switchTab when action polling already added one
+                // Check if RECENT actions (last 5) already came from or switched to this tab
+                // This prevents duplicate switchTab - actions now include tabIndex
                 const recentActions = this.actions.slice(-5);
-                const alreadyHasSwitch = recentActions.some(a => 
-                  a.type === 'switchTab' && a.tabIndex === i
+                const alreadyHasActionFromTab = recentActions.some(a => 
+                  (a.type === 'switchTab' && a.tabIndex === i) ||
+                  (a.tabIndex === i) // Any action from this tab is enough
                 );
                 
-                if (alreadyHasSwitch) {
+                if (alreadyHasActionFromTab) {
                   // Just update tracking without adding duplicate switchTab
+                  // The action already indicates the tab context
+                  console.log(`[PlaywrightRecorder] Skipping switchTab - recent action already from tab ${i}`);
                   this._currentPageIndex = i;
                   this.page = page;
                   break;
                 }
                 
-                console.log(`[PlaywrightRecorder] Tab focus confirmed: ${this._currentPageIndex} → ${i}`);
+                // Only record switchTab if NO recent actions came from this tab
+                // This handles the case where user manually switches tabs without interacting
+                console.log(`[PlaywrightRecorder] Tab focus confirmed (no recent action): ${this._currentPageIndex} → ${i}`);
                 
                 this._addAction({
                   type: 'switchTab',
@@ -2529,6 +2534,18 @@ class PlaywrightRecorder extends EventEmitter {
       
       console.log('[PlaywrightRecorder] CDP Fill captured:', label, '=', displayValue.substring(0, 20), inp.fromShadow ? '(from Shadow DOM)' : '');
       
+      // Store the tabIndex from the input - used for implicit tab switching during playback
+      const inputTabIndex = inp.tabIndex !== undefined ? inp.tabIndex : 0;
+      
+      // Update current tab tracking (so tab focus detection doesn't add redundant switchTab)
+      if (inputTabIndex !== this._currentPageIndex && this._pages && this._pages[inputTabIndex]) {
+        console.log(`[PlaywrightRecorder] Fill action from tab ${inputTabIndex}, updating current page index`);
+        this._currentPageIndex = inputTabIndex;
+        this.page = this._pages[inputTabIndex];
+        this._lastDetectedFocusTab = inputTabIndex;
+        this._focusDetectedAt = Date.now();
+      }
+      
       const action = {
         id: `cdp_fill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         qword: 'Fill',
@@ -2553,7 +2570,9 @@ class PlaywrightRecorder extends EventEmitter {
         timestamp: inp.timestamp,
         fromCDP: true,
         fromShadow: inp.fromShadow,
-        isSensitive: isPassword
+        isSensitive: isPassword,
+        // CRITICAL: Store tabIndex for implicit tab switching during playback
+        tabIndex: inputTabIndex
       };
       
       this.actions.push(action);
@@ -2666,6 +2685,19 @@ class PlaywrightRecorder extends EventEmitter {
     const hasMultipleMatching = click.totalMatching && click.totalMatching > 1;
     const elementIndex = click.elementIndex || 0;
     
+    // Store the tabIndex from the click - used for implicit tab switching during playback
+    // This REPLACES the need for separate switchTab actions
+    const clickTabIndex = click.tabIndex !== undefined ? click.tabIndex : 0;
+    
+    // Update current tab tracking (so tab focus detection doesn't add redundant switchTab)
+    if (clickTabIndex !== this._currentPageIndex && this._pages && this._pages[clickTabIndex]) {
+      console.log(`[PlaywrightRecorder] Action from tab ${clickTabIndex}, updating current page index`);
+      this._currentPageIndex = clickTabIndex;
+      this.page = this._pages[clickTabIndex];
+      this._lastDetectedFocusTab = clickTabIndex; // Prevent focus detection from adding duplicate
+      this._focusDetectedAt = Date.now(); // Reset debounce timer
+    }
+    
     const action = {
       id: `cdp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       qword: 'ClickText',
@@ -2699,7 +2731,10 @@ class PlaywrightRecorder extends EventEmitter {
       fromShadow: click.fromShadow,
       isSubmit: click.isSubmit,
       elementIndex: hasMultipleMatching ? elementIndex : undefined,
-      totalMatching: hasMultipleMatching ? click.totalMatching : undefined
+      totalMatching: hasMultipleMatching ? click.totalMatching : undefined,
+      // CRITICAL: Store tabIndex for implicit tab switching during playback
+      // This REPLACES the need for separate switchTab actions!
+      tabIndex: clickTabIndex
     };
     
     if (hasMultipleMatching) {
@@ -6372,6 +6407,27 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     console.log(`\n[executeAction] ▶ Type: "${action.type}" | QWord: "${action.qword}" | Description: "${(action.description || '').substring(0, 50)}"`);
     if (action.userActions?.length > 0) {
       console.log(`[executeAction]   Has ${action.userActions.length} userActions!`);
+    }
+
+    // ============================================================
+    // IMPLICIT TAB SWITCHING: If action has tabIndex, switch to that tab
+    // This REPLACES the need for separate switchTab actions!
+    // ============================================================
+    if (action.tabIndex !== undefined && action.type !== 'switchTab' && action.type !== 'newTab') {
+      const pages = this.context?.pages() || [];
+      const targetTabIndex = action.tabIndex;
+      
+      if (targetTabIndex >= 0 && targetTabIndex < pages.length) {
+        const targetPage = pages[targetTabIndex];
+        if (targetPage && !targetPage.isClosed() && targetPage !== this.page) {
+          console.log(`[PlaywrightRecorder] Implicit tab switch: ${targetTabIndex} (from action.tabIndex)`);
+          this.page = targetPage;
+          // Update SmartFinder with new page
+          if (this.smartFinder) {
+            this.smartFinder.updatePage(this.page);
+          }
+        }
+      }
     }
 
     try {
