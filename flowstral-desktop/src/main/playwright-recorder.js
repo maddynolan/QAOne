@@ -921,13 +921,33 @@ class PlaywrightRecorder extends EventEmitter {
     
     console.log('[PlaywrightRecorder] Console-based click/input capture enabled');
     
-    // Inject recorder script BEFORE any page loads
+    // ============================================================
+    // CONTEXT-LEVEL SCRIPT INJECTION - CRITICAL FOR MULTI-TAB!
+    // Using context.addInitScript instead of page.addInitScript ensures
+    // scripts are injected into ALL new pages/tabs in this context,
+    // including cross-subdomain navigations (e.g., tx.my.xcel -> www.xcel)
+    // ============================================================
+    
+    // Inject recorder script at CONTEXT level - will apply to ALL pages!
+    await this.context.addInitScript(this._getRecorderScript());
+    console.log('[PlaywrightRecorder] Recorder script added to CONTEXT (all pages)');
+    
+    // Inject minimal recording indicator at CONTEXT level
+    await this.context.addInitScript(this._getOverlayScript());
+    
+    // CRITICAL: Inject click capture at CONTEXT level for multi-tab recording!
+    await this.context.addInitScript(this._getClickCaptureScript());
+    console.log('[PlaywrightRecorder] Click capture added to CONTEXT (all pages)');
+    
+    // V2: Add Recipe recorder at context level too
+    if (this.useRecipeRecorder) {
+      await this.context.addInitScript(getRecipeClickCaptureScript());
+      console.log('[PlaywrightRecorder] Recipe recorder added to CONTEXT (all pages)');
+    }
+    
+    // Also inject into current page immediately (addInitScript only affects NEW navigations)
     await this.page.addInitScript(this._getRecorderScript());
-    
-    // Inject minimal recording indicator (Shadow DOM isolated)
     await this.page.addInitScript(this._getOverlayScript());
-    
-    // CRITICAL: Inject click capture script BEFORE navigation so login clicks are captured!
     await this.page.addInitScript(this._getClickCaptureScript());
 
     // Navigate to URL
@@ -1130,26 +1150,32 @@ class PlaywrightRecorder extends EventEmitter {
           } catch (e) {
             isCrossOrigin = true;
             console.log('[PlaywrightRecorder] Cross-origin tab detected:', newPageUrl);
+            console.log('[PlaywrightRecorder] Note: context.addInitScript should still work for this tab!');
             
-            // Cross-origin tab - add a placeholder step that user can edit
+            // IMPORTANT: Even though direct evaluate() failed, context.addInitScript
+            // might have already injected our scripts! Set up the console listener
+            // to capture any actions from the context-level scripts.
+            this._setupConsoleListenerForPage(newPage, newPageIndex);
+            console.log('[PlaywrightRecorder] Console listener set up for cross-origin tab (for context-level scripts)');
+            
+            // Record as newTab - with context.addInitScript we CAN capture actions!
             this._addAction({
-              type: 'crossOriginPlaceholder',
+              type: 'newTab',
               url: newPageUrl,
               tabIndex: newPageIndex,
               timestamp: Date.now(),
-              description: `⚠️ Actions in external tab (${new URL(newPageUrl).hostname}) - click to edit`,
-              // Fields user can fill in via UI
-              userActions: [],
-              editable: true,
-              instructions: 'Describe what you did in this external tab. Example: "Click Login button", "Fill username field"'
+              description: `New tab opened: ${newPageUrl.substring(0, 50)}`,
+              isCrossOrigin: true // Flag for debugging
             });
             
-            // Emit event so UI can prompt user
-            this.emit('crossOriginTab', { 
-              url: newPageUrl, 
-              tabIndex: newPageIndex,
-              message: 'External tab opened - actions cannot be auto-recorded. Please describe your actions.'
-            });
+            // ALSO try CDP capture as additional backup
+            try {
+              await this._setupCDPCaptureForPage(newPage, newPageIndex);
+              console.log('[PlaywrightRecorder] CDP capture enabled as backup for cross-origin tab');
+            } catch (cdpError) {
+              console.log('[PlaywrightRecorder] CDP capture also failed:', cdpError.message);
+              // That's OK - context.addInitScript + console listener should work
+            }
           }
         } catch (e) {
           console.log('[PlaywrightRecorder] Could not setup new tab:', e.message);
@@ -1249,6 +1275,117 @@ class PlaywrightRecorder extends EventEmitter {
   }
   
   /**
+   * Setup CDP-based click capture for a page (works for cross-origin!)
+   * Uses Chrome DevTools Protocol to capture clicks at browser level
+   * @param {Page} page - Playwright page
+   * @param {number} pageIndex - Index of the page
+   */
+  async _setupCDPCaptureForPage(page, pageIndex) {
+    console.log(`[PlaywrightRecorder] Setting up CDP capture for page ${pageIndex}`);
+    
+    // Create CDP session for this page
+    const cdpSession = await page.context().newCDPSession(page);
+    
+    // Enable DOM domain to get element info
+    await cdpSession.send('DOM.enable');
+    await cdpSession.send('Runtime.enable');
+    
+    // Track this CDP session
+    if (!this._cdpSessions) this._cdpSessions = new Map();
+    this._cdpSessions.set(pageIndex, cdpSession);
+    
+    // Listen for clicks using page events (Playwright captures these even cross-origin)
+    page.on('click', async () => {
+      // This doesn't exist in Playwright, but we can use other approaches
+    });
+    
+    // Alternative: Poll for DOM changes and use Input coordinates
+    // When user clicks, we can detect the focused element
+    page.on('framenavigated', async (frame) => {
+      if (frame === page.mainFrame()) {
+        console.log(`[PlaywrightRecorder] Cross-origin page ${pageIndex} navigated:`, frame.url().substring(0, 50));
+      }
+    });
+    
+    // Use keyboard events to track interactions
+    page.keyboard.on?.('keydown', () => {
+      // Not available in Playwright
+    });
+    
+    // WORKAROUND: Track page URL changes and focused elements via CDP
+    cdpSession.on('DOM.documentUpdated', async () => {
+      // Document was updated (navigation or dynamic content)
+      console.log(`[PlaywrightRecorder] DOM updated in cross-origin tab ${pageIndex}`);
+    });
+    
+    // The real trick: Use Runtime.evaluate with CDP (bypasses same-origin!)
+    // CDP has higher privileges than page.evaluate()
+    try {
+      // Inject a minimal click listener via CDP Runtime.evaluate
+      await cdpSession.send('Runtime.evaluate', {
+        expression: `
+          (function() {
+            if (window.__flowstralCDPCapture) return;
+            window.__flowstralCDPCapture = true;
+            window.__flowstralCDPActions = [];
+            
+            document.addEventListener('click', function(e) {
+              var target = e.target;
+              var path = e.composedPath ? e.composedPath() : [target];
+              var best = path[0];
+              
+              // Get element info
+              var info = {
+                type: 'click',
+                text: (best.textContent || '').trim().substring(0, 100),
+                tag: best.tagName,
+                id: best.id,
+                className: best.className,
+                href: best.href || best.getAttribute('href'),
+                ariaLabel: best.getAttribute('aria-label'),
+                timestamp: Date.now(),
+                tabIndex: ${pageIndex}
+              };
+              
+              window.__flowstralCDPActions.push(info);
+              console.log('__FLOWSTRAL_CDP_CLICK__:' + JSON.stringify(info));
+            }, true);
+            
+            // Also capture inputs
+            document.addEventListener('input', function(e) {
+              var target = e.target;
+              if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                var info = {
+                  type: 'input',
+                  value: target.value,
+                  name: target.name,
+                  id: target.id,
+                  placeholder: target.placeholder,
+                  timestamp: Date.now(),
+                  tabIndex: ${pageIndex}
+                };
+                window.__flowstralCDPActions.push(info);
+              }
+            }, true);
+            
+            console.log('[Flowstral] CDP capture injected into cross-origin tab');
+          })();
+        `,
+        awaitPromise: false
+      });
+      
+      console.log('[PlaywrightRecorder] CDP Runtime.evaluate succeeded for cross-origin tab!');
+      
+      // Set up console listener for this page too
+      this._setupConsoleListenerForPage(page, pageIndex);
+      
+    } catch (evalError) {
+      console.log('[PlaywrightRecorder] CDP Runtime.evaluate failed:', evalError.message);
+      throw evalError;
+    }
+  }
+  
+  /**
    * Setup console listener for a page to capture recorded actions
    * CRITICAL: Must be called for EACH page (main + new tabs) to capture actions!
    * @param {Page} page - Playwright page to listen to
@@ -1261,7 +1398,7 @@ class PlaywrightRecorder extends EventEmitter {
     page.on('console', (msg) => {
       const text = msg.text();
       
-      // Check for click report
+      // Check for click report (from same-origin JS injection)
       if (text.startsWith('__FLOWSTRAL_CLICK__:')) {
         try {
           const clickData = JSON.parse(text.substring('__FLOWSTRAL_CLICK__:'.length));
@@ -1270,6 +1407,41 @@ class PlaywrightRecorder extends EventEmitter {
           this.pendingClicks.push(clickData);
         } catch (e) {
           console.error('[PlaywrightRecorder] Failed to parse click data:', e.message);
+        }
+      }
+      
+      // Check for CDP click report (from cross-origin CDP injection)
+      if (text.startsWith('__FLOWSTRAL_CDP_CLICK__:')) {
+        try {
+          const cdpClickData = JSON.parse(text.substring('__FLOWSTRAL_CDP_CLICK__:'.length));
+          console.log(`[PlaywrightRecorder] 🌐 CROSS-ORIGIN CLICK captured (tab ${pageIndex}):`, cdpClickData.text?.substring(0, 30));
+          
+          // Convert CDP format to standard format
+          const clickData = {
+            type: 'click',
+            text: cdpClickData.text,
+            description: `Click "${cdpClickData.text?.substring(0, 50) || cdpClickData.tag}"`,
+            element: {
+              tagName: cdpClickData.tag,
+              id: cdpClickData.id,
+              className: cdpClickData.className,
+              ariaLabel: cdpClickData.ariaLabel,
+              href: cdpClickData.href
+            },
+            selectorObj: {
+              text: cdpClickData.text,
+              id: cdpClickData.id,
+              ariaLabel: cdpClickData.ariaLabel,
+              tag: cdpClickData.tag
+            },
+            tabIndex: pageIndex,
+            timestamp: cdpClickData.timestamp,
+            isCrossOrigin: true
+          };
+          
+          this.pendingClicks.push(clickData);
+        } catch (e) {
+          console.error('[PlaywrightRecorder] Failed to parse CDP click data:', e.message);
         }
       }
       
@@ -1851,26 +2023,35 @@ class PlaywrightRecorder extends EventEmitter {
             // This ensures all clicks are captured including same-page "Next" buttons
             window.__flowstralCDPClicks.push(clickData);
             
-            // For submit buttons, report directly to main process via console
-            // This works across ALL subdomains and page navigations!
-            if (isSubmitButton) {
-              try {
-                // FIRST: Report all pending inputs via console
-                var pendingInputs = window.__flowstralCDPInputs || {};
-                for (var inputKey in pendingInputs) {
-                  var inp = pendingInputs[inputKey];
-                  if (inp && inp.value) {
-                    console.log('__FLOWSTRAL_INPUT__:' + JSON.stringify(inp));
-                  }
+            // ============================================================
+            // CRITICAL: Report ALL clicks via console for cross-domain capture!
+            // Previously only submit buttons were reported, which broke
+            // recording in cross-origin tabs (context.addInitScript works
+            // but page.evaluate() fails, so we can't poll the clicks array)
+            // ============================================================
+            try {
+              // FIRST: Report all pending inputs via console (before any navigation)
+              var pendingInputs = window.__flowstralCDPInputs || {};
+              for (var inputKey in pendingInputs) {
+                var inp = pendingInputs[inputKey];
+                if (inp && inp.value) {
+                  console.log('__FLOWSTRAL_INPUT__:' + JSON.stringify(inp));
                 }
-                window.__flowstralCDPInputs = {}; // Clear after reporting
-                
-                // NOW: Report the click via console
-                console.log('__FLOWSTRAL_CLICK__:' + JSON.stringify(clickData));
-                console.log('[Flowstral] Submit click reported via console:', desc);
-              } catch(e) {
-                console.error('[Flowstral] Error reporting:', e);
               }
+              
+              // Clear inputs ONLY for submit/navigation buttons to avoid losing partial inputs
+              if (isSubmitButton) {
+                window.__flowstralCDPInputs = {};
+              }
+              
+              // Report the click via console - works across ALL origins!
+              console.log('__FLOWSTRAL_CLICK__:' + JSON.stringify(clickData));
+              
+              if (isSubmitButton) {
+                console.log('[Flowstral] Submit click reported via console:', desc);
+              }
+            } catch(e) {
+              console.error('[Flowstral] Error reporting:', e);
             }
           } catch(err) {
             // Silent
