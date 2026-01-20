@@ -138,6 +138,26 @@ maxAICallsPerRun: 5              // Budget per test
 | Actions not recorded in new tab | Verify _setupConsoleListenerForPage called |
 | AI not working | Check OPENAI_API_KEY env var or backend running |
 | text.replace error | Check `typeof text === 'string'` before .replace() |
+| Duplicate steps recorded | Check 50ms timestamp window deduplication |
+| Duplicate switchTab actions | Ensure polling loop updates `_lastDetectedFocusTab` |
+| Tab switching confusing | Check `a.qword === 'SwitchTab'` not `a.type` |
+
+## CRITICAL: Deduplication
+
+**Click deduplication uses 50ms time windows:**
+```javascript
+const roundedTimestamp = Math.floor(click.timestamp / 50) * 50;
+const clickId = `cdp_${roundedTimestamp}_${click.description}`;
+```
+
+**SwitchTab deduplication checks both qword and type:**
+```javascript
+const alreadyHasActionFromTab = recentActions.some(a => 
+  (a.qword === 'SwitchTab' && a.tabIndex === i) ||
+  (a.type === 'switchTab' && a.tabIndex === i) ||
+  (a.tabIndex === i)
+);
+```
 
 ## Debug Logging
 
@@ -163,12 +183,66 @@ $env:FLOWSTRAL_DEV_PORT='8082'  # Match dev server port
 npm run dev
 ```
 
+## Session 3 Fixes - Architecture Audit (Jan 19, 2026)
+
+| Issue | Fix |
+|-------|-----|
+| **No hover recording** | Added mouseenter handler for flyout menus in recipe-recorder-integration.js |
+| **SmartFinder text-contains too loose** | Changed to use `scope` instead of `this.page`, validate role matches |
+| **getByLabel matches non-inputs** | Added validation that matched element is actually a form input |
+| **Recipe→Legacy loses landmark** | Preserved `landmark` and `region` in recipeActionToLegacy() |
+| **Coalescer holds actions too long** | Reduced maxDelay from 5000ms to 2000ms |
+| **Execution paths not synced** | TestExecutor now uses shared ActionHandlers module |
+
+### Unified Execution Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RECORDING                                 │
+│  recipe-recorder-integration.js → Actions with Recipe        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│              SHARED: lib/action-handlers.js                  │
+│  - handleClick()  - handleFill()  - handleHover()           │
+│  - handleSelect() - All use SmartFinder + AI fallback        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+         ┌─────────────┴─────────────┐
+         ▼                           ▼
+┌─────────────────────┐   ┌─────────────────────┐
+│ PlaywrightRecorder  │   │    TestExecutor     │
+│ (Recording page)    │   │ (Builder/Tests tab) │
+│ Uses ActionHandlers │   │ Uses ActionHandlers │
+└─────────────────────┘   └─────────────────────┘
+```
+
+### Hover Recording (CRITICAL for flyout menus)
+```javascript
+// Now recorded automatically when hovering elements with:
+// - aria-haspopup attribute
+// - aria-expanded attribute
+// - Classes containing flyout/dropdown/menu-trigger/nav-item
+```
+
+### SmartFinder Scoped Search
+```javascript
+// BEFORE (searched entire page):
+const locator = this.page.getByText(what.text).first();
+
+// AFTER (respects landmark scope):
+const locator = scope.getByText(what.text).first();
+// Also validates role matches if specified
+```
+
 ## Documentation Structure
 
 - `docs/QAAI-MASTER-REFERENCE.md` - Full platform reference
 - `docs/QAAI-CAPABILITIES-REFERENCE.md` - Recording/playback deep dive
 - `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
 - `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed (Jan 2026)
+- `docs/RECORDING_PLAYBACK_AUDIT.md` - **NEW** Comprehensive audit of 18 potential issues
 - `docs/API_TESTING_USAGE.md` - API testing guide
 - `docs/PERFORMANCE_TESTING_USAGE.md` - Perf testing guide
 - `docs/SALESFORCE_TESTING_GUIDE.md` - Salesforce guide

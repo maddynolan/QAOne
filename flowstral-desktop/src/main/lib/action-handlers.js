@@ -576,13 +576,65 @@ async function handleHover(ctx, action, options = {}) {
   const selector = action.selector;
   const label = getActionLabel(action);
   
-  const hoverResult = await ctx.findElementWithRetry(action);
-  if (hoverResult) {
-    await hoverResult.locator.hover({ timeout });
-    return { success: true };
+  console.log(`[ActionHandler] Hover: "${label || selector}"`);
+  
+  // Try SmartFinder first (best for recipe-based elements)
+  let hoverResult = await ctx.findElementWithRetry(action);
+  
+  // Fallback: Try direct selectors if SmartFinder fails
+  if (!hoverResult && ctx.page) {
+    const selectorObj = action.selectorObj || {};
+    const hoverText = action.args?.[0] || selectorObj.text || label || '';
+    
+    const selectorsToTry = [];
+    if (selectorObj.testId) selectorsToTry.push(`[data-testid="${selectorObj.testId}"]`);
+    if (selectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${selectorObj.ariaLabel}"]`);
+    if (selectorObj.id) selectorsToTry.push(`#${selectorObj.id}`);
+    if (selector) selectorsToTry.push(selector);
+    if (hoverText) {
+      selectorsToTry.push(`text="${hoverText}"`);
+      selectorsToTry.push(`button:has-text("${hoverText}")`);
+      selectorsToTry.push(`[role="button"]:has-text("${hoverText}")`);
+    }
+    
+    for (const sel of selectorsToTry) {
+      try {
+        const locator = ctx.page.locator(sel);
+        const count = await locator.count();
+        if (count > 0) {
+          hoverResult = { locator: locator.first(), strategy: { type: 'selector-fallback' } };
+          console.log(`[ActionHandler] Hover: Found with fallback selector: ${sel}`);
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
   }
   
-  return { success: false, error: `Could not find element to hover: "${label || selector}"` };
+  // AI Fallback as last resort
+  if (!hoverResult && ctx.enableAIFallback && ctx.findElementWithAI) {
+    const aiResult = await ctx.findElementWithAI(label || selector, 'hover');
+    if (aiResult) {
+      await ctx.page.mouse.move(aiResult.x, aiResult.y);
+      console.log(`[ActionHandler] ✓ AI Fallback hover succeeded at (${aiResult.x}, ${aiResult.y})`);
+      // Wait for menu to appear after hover
+      await ctx.page.waitForTimeout(300);
+      return { success: true, strategy: 'AI Vision Fallback' };
+    }
+  }
+  
+  if (!hoverResult) {
+    return { success: false, error: `Could not find element to hover: "${label || selector}"` };
+  }
+  
+  await hoverResult.locator.hover({ timeout });
+  console.log(`[ActionHandler] ✓ Hover succeeded using ${hoverResult.strategy?.type || 'SmartFinder'}`);
+  
+  // Wait for flyout menus to appear after hover
+  await ctx.page.waitForTimeout(300);
+  
+  return { success: true, strategy: hoverResult.strategy?.type || 'SmartFinder' };
 }
 
 /**

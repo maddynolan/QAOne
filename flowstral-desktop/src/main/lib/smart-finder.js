@@ -328,19 +328,36 @@ class SmartFinder {
       
       // MULTI-ROLE FALLBACK: Try alternative clickable roles if initial role failed
       // This handles misclassified elements (e.g., link styled as button or vice versa)
-      const clickableRoles = ['link', 'button', 'menuitem', 'tab', 'option'];
-      const alternativeRoles = clickableRoles.filter(r => r !== what.role);
+      // IMPORTANT: Only fall back between SIMILAR roles to avoid clicking wrong element
+      // - button ↔ link (styled interchangeably)
+      // - menuitem ↔ option (similar selection concepts)
+      // - tab is unique (don't fall back)
+      const roleFallbackMap = {
+        'button': ['link'],           // Button might be styled as link
+        'link': ['button'],           // Link might be styled as button
+        'menuitem': ['option'],       // Menu items vs options
+        'option': ['menuitem'],
+        'tab': [],                    // Tabs are unique, don't fall back
+      };
       
-      for (const altRole of alternativeRoles) {
-        const altResult = await this.tryStrategy(`role-alt-${altRole}`, async () => {
-          const flexRegex = this.createFlexibleTextRegex(what.text);
-          const locator = scope.getByRole(altRole, { name: flexRegex || new RegExp(what.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
-          return await this.resolveMultiple(locator, which, `role-alt-${altRole}`);
-        }, attempts);
-        
-        if (altResult.success) {
-          this.log(`Found with alternative role "${altRole}" instead of "${what.role}"`);
-          return altResult.locator;
+      const alternativeRoles = roleFallbackMap[what.role] || [];
+      
+      // ONLY do role fallback if we're still within the correct landmark scope
+      // This prevents clicking a nav link when we wanted a button in main content
+      const isInCorrectScope = scope !== this.page; // We have a scoped search
+      
+      if (isInCorrectScope && alternativeRoles.length > 0) {
+        for (const altRole of alternativeRoles) {
+          const altResult = await this.tryStrategy(`role-alt-${altRole}`, async () => {
+            const flexRegex = this.createFlexibleTextRegex(what.text);
+            const locator = scope.getByRole(altRole, { name: flexRegex || new RegExp(what.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+            return await this.resolveMultiple(locator, which, `role-alt-${altRole}`);
+          }, attempts);
+          
+          if (altResult.success) {
+            this.log(`Found with alternative role "${altRole}" instead of "${what.role}" (within scope)`);
+            return altResult.locator;
+          }
         }
       }
     }
@@ -384,10 +401,29 @@ class SmartFinder {
       }
       
       // Try getByLabel (for form elements)
+      // CRITICAL FIX: Validate that matched element is actually a form input
       if (where?.nearText) {
         const labelResult = await this.tryStrategy('label', async () => {
           const locator = scope.getByLabel(where.nearText);
-          return await this.validateLocator(locator, 'label');
+          const validated = await this.validateLocator(locator, 'label');
+          
+          // Extra validation: getByLabel can match non-inputs, so verify
+          if (validated.success) {
+            const isFormElement = await validated.locator.evaluate(el => {
+              const tag = el.tagName.toLowerCase();
+              return tag === 'input' || tag === 'textarea' || tag === 'select' ||
+                     el.hasAttribute('contenteditable') ||
+                     el.getAttribute('role') === 'textbox' ||
+                     el.getAttribute('role') === 'combobox';
+            }).catch(() => false);
+            
+            if (!isFormElement) {
+              this.log(`getByLabel("${where.nearText}") matched non-form element, skipping`);
+              return { success: false, count: 0 };
+            }
+          }
+          
+          return validated;
         }, attempts);
         
         if (labelResult.success) return labelResult.locator;
@@ -471,22 +507,44 @@ class SmartFinder {
     
     // ==========================================================================
     // PHASE 8: Relaxed search (last resort)
+    // CRITICAL FIX: Use 'scope' instead of 'this.page' to respect landmark
     // ==========================================================================
     
     if (what?.text) {
-      const result = await this.tryStrategy('text-contains', async () => {
-        // Search entire page with partial match
-        const locator = this.page.getByText(what.text).first();
-        return await this.validateLocator(locator, 'text-contains');
+      // First try scoped search (respects landmark from Phase 1)
+      const result = await this.tryStrategy('text-contains-scoped', async () => {
+        // CRITICAL: Search within scope (may be narrowed by landmark), not entire page
+        const locator = scope.getByText(what.text).first();
+        const validated = await this.validateLocator(locator, 'text-contains-scoped');
+        
+        // EXTRA VALIDATION: If we have a role, verify the found element's role matches
+        if (validated.success && what?.role) {
+          const actualRole = await validated.locator.evaluate(el => {
+            return el.getAttribute('role') || el.tagName.toLowerCase();
+          }).catch(() => null);
+          
+          // Check if role matches (allow some flexibility)
+          const roleMatches = actualRole === what.role ||
+            (what.role === 'button' && (actualRole === 'button' || actualRole === 'BUTTON')) ||
+            (what.role === 'link' && (actualRole === 'link' || actualRole === 'a' || actualRole === 'A'));
+          
+          if (!roleMatches) {
+            this.log(`text-contains-scoped found element but role mismatch: expected ${what.role}, got ${actualRole}`);
+            return { success: false, count: 0 };
+          }
+        }
+        
+        return validated;
       }, attempts);
       
       if (result.success) return result.locator;
       
       // APOSTROPHE FIX: Last resort - try with flexible apostrophe matching
+      // Also use scope, not page
       const flexibleTextRegex = this.createFlexibleTextRegex(what.text);
       if (flexibleTextRegex) {
         const apostropheResult = await this.tryStrategy('text-contains-apostrophe-flex', async () => {
-          const locator = this.page.getByText(flexibleTextRegex).first();
+          const locator = scope.getByText(flexibleTextRegex).first();
           return await this.validateLocator(locator, 'text-contains-apostrophe-flex');
         }, attempts);
         
@@ -495,6 +553,7 @@ class SmartFinder {
       
       // KEYWORD EXTRACTION: Try key phrases from the text
       // e.g., "Go To Saver's Switch" → try "Saver's Switch"
+      // Still use scope for scoped search
       const keyPhrases = what.text
         .split(/\s+(?:to|the|a|an|with|for|on|in|and|or|of)\s+/i)
         .filter(phrase => phrase.length > 3)
@@ -505,7 +564,7 @@ class SmartFinder {
           const keywordRegex = this.createFlexibleTextRegex(keyPhrase);
           if (keywordRegex) {
             const keywordResult = await this.tryStrategy('keyword-extract', async () => {
-              const locator = this.page.getByText(keywordRegex).first();
+              const locator = scope.getByText(keywordRegex).first();
               return await this.validateLocator(locator, 'keyword-extract');
             }, attempts);
             

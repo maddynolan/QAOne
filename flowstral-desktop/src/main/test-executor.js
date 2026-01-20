@@ -11,6 +11,9 @@ const { chromium, firefox, webkit } = require('playwright');
 const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
 const { legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
 
+// UNIFIED EXECUTION: Import shared ActionHandlers for consistent behavior with PlaywrightRecorder
+const ActionHandlers = require('./lib/action-handlers');
+
 class TestExecutor {
   constructor(options = {}) {
     this.browserType = options.browserType || 'chromium';
@@ -230,6 +233,88 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       console.log('[Executor V2] SmartFinder failed:', error.message, '- falling back to legacy');
       return null;
     }
+  }
+
+  /**
+   * UNIFIED EXECUTION INTERFACE: findElementWithRetry
+   * Compatible with ActionHandlers module for shared execution logic
+   * Uses SmartFinder with retry and fallbacks
+   */
+  async findElementWithRetry(action) {
+    const maxRetries = 3;
+    const baseDelay = 500;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Try SmartFinder first (V2)
+        const v2Locator = await this.findElementV2(action);
+        if (v2Locator) {
+          return { locator: v2Locator, strategy: { type: 'SmartFinder' } };
+        }
+        
+        // Fallback to legacy selector-based finding
+        const legacyResult = await this._findElement(action);
+        if (legacyResult) {
+          return legacyResult;
+        }
+        
+        // Wait before retry
+        if (attempt < maxRetries - 1) {
+          await this.page.waitForTimeout(baseDelay * (attempt + 1));
+        }
+      } catch (e) {
+        if (attempt < maxRetries - 1) {
+          console.log(`[Executor] findElementWithRetry attempt ${attempt + 1} failed, retrying...`);
+          await this.page.waitForTimeout(baseDelay * (attempt + 1));
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * UNIFIED EXECUTION INTERFACE: _findElement
+   * Legacy selector-based element finding for ActionHandlers compatibility
+   */
+  async _findElement(action) {
+    const selectorObj = action.selectorObj || {};
+    const text = action.args?.[0] || selectorObj.text || '';
+    const elementIndex = action.args?.[1] || 0;
+    
+    const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
+    
+    const selectorsToTry = [];
+    
+    // Build selector list in priority order
+    if (selectorObj.testId) selectorsToTry.push(`[data-testid="${selectorObj.testId}"]`);
+    if (selectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${selectorObj.ariaLabel}"]`);
+    if (selectorObj.name) selectorsToTry.push(`[name="${selectorObj.name}"]`);
+    if (selectorObj.id && !/^[a-f0-9]{8,}|^\d{6,}|^:r/.test(selectorObj.id)) {
+      selectorsToTry.push(`#${selectorObj.id}`);
+    }
+    if (selectorObj.selector) selectorsToTry.push(selectorObj.selector);
+    if (action.selector) selectorsToTry.push(this.normalizeSelector(action.selector));
+    if (text) {
+      selectorsToTry.push(`text="${text}"`);
+    }
+    
+    for (const selector of selectorsToTry) {
+      try {
+        const locator = getAtIndex(this.page.locator(selector));
+        const count = await locator.count().catch(() => 0);
+        if (count > 0) {
+          const isVisible = await locator.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            return { locator, strategy: { type: 'legacy-selector', value: selector } };
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -1279,12 +1364,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           break;
         }
           
-        // Hover
+        // Hover - UNIFIED: Uses shared ActionHandlers for consistent behavior
         case 'Hover':
-        case 'hover':
-          const hoverSelector = this.normalizeSelector(resolvedStep.selector) || resolvedStep.args?.[0];
-          await this.page.hover(hoverSelector);
+        case 'hover': {
+          // Use shared ActionHandlers.handleHover for consistent execution with PlaywrightRecorder
+          const hoverResult = await ActionHandlers.handleHover(this, resolvedStep, { timeout: this.timeout });
+          if (!hoverResult.success) {
+            throw new Error(hoverResult.error || 'Hover failed');
+          }
           break;
+        }
           
         // Wait actions
         case 'Wait':

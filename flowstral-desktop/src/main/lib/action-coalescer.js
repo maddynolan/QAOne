@@ -49,7 +49,8 @@ const PATTERNS = {
       '[class*="select"][class*="content"]',
     ],
     // Maximum time between trigger click and option click (ms)
-    maxDelay: 5000,
+    // REDUCED from 5000 to 2000 - if user doesn't select within 2s, record the trigger click
+    maxDelay: 2000,
   },
   
   // Tab switching pattern
@@ -131,6 +132,8 @@ class ActionCoalescer {
   
   /**
    * Check if action is a dropdown trigger
+   * NOTE: We only coalesce SELECT/COMBOBOX patterns, NOT navigation menus
+   * Navigation menus should record both clicks (trigger + menu item)
    */
   isDropdownTrigger(action) {
     if (action.type !== 'click') return false;
@@ -140,25 +143,45 @@ class ActionCoalescer {
     
     const { what, which } = recipe;
     
-    // Check role - combobox or listbox indicates a dropdown trigger
-    if (what?.role && PATTERNS.dropdown.triggerRoles.includes(what.role)) {
-      return true;
+    // ============================================================
+    // EXCLUDE NAVIGATION MENUS - these should NOT be coalesced
+    // Navigation buttons open menus with links, not options
+    // ============================================================
+    const isNavigationMenu = 
+      what?.role === 'button' && (
+        what?.text?.toLowerCase()?.includes('customer') ||
+        what?.text?.toLowerCase()?.includes('menu') ||
+        what?.text?.toLowerCase()?.includes('nav') ||
+        // Check for Salesforce navigation patterns
+        (action.element?.id || '').includes('navItem') ||
+        (action.element?.className || '').includes('flyout')
+      );
+    
+    if (isNavigationMenu) {
+      return false; // Let the click be recorded normally
     }
+    
+    // Check role - ONLY combobox or listbox are true dropdown triggers
+    // Button role is too broad - many navigation menus use buttons
     if (what?.role === 'combobox' || what?.role === 'listbox') {
       return true;
     }
     
-    // Check for explicit indicators in element
-    // This would require the recorder to capture these attributes
-    if (action.element) {
-      const el = action.element;
-      if (el.ariaHaspopup || el.ariaExpanded !== undefined) {
-        return true;
+    // Check tag - native select is always a dropdown
+    if (what?.tag === 'select') return true;
+    
+    // For buttons, ONLY treat as dropdown if inside a form or has specific select indicators
+    if (what?.role === 'button') {
+      // Only if it looks like a select/combobox component
+      const isSelectComponent = 
+        (action.element?.className || '').includes('select') ||
+        (recipe.where?.nearText || '').toLowerCase().includes('select') ||
+        (recipe.where?.nearText || '').toLowerCase().includes('dropdown');
+      
+      if (!isSelectComponent) {
+        return false; // Navigation button, not a select
       }
     }
-    
-    // Check tag
-    if (what?.tag === 'select') return true;
     
     return false;
   }
@@ -314,6 +337,7 @@ function getActionCoalescerScript() {
     pendingTimeout: null,
     
     // Check if element is a dropdown trigger
+    // NOTE: We only coalesce SELECT/COMBOBOX patterns, NOT navigation menus
     isDropdownTrigger: function(element) {
       if (!element) return false;
       
@@ -322,41 +346,48 @@ function getActionCoalescerScript() {
       var hasPopup = element.getAttribute('aria-haspopup');
       var expanded = element.getAttribute('aria-expanded');
       var dataState = element.getAttribute('data-state');
+      var id = element.id || '';
+      var classList = element.className || '';
       
-      // Explicit indicators
-      if (hasPopup === 'listbox' || hasPopup === 'menu' || hasPopup === 'true') return true;
-      if (expanded !== null) return true;
-      if (role === 'combobox' || role === 'listbox') return true;
+      // ============================================================
+      // EXCLUDE NAVIGATION MENUS - these should NOT be coalesced
+      // Navigation buttons open menus with links, not options
+      // ============================================================
+      var isNavigationMenu = (
+        id.includes('navItem') ||
+        id.includes('navigation') ||
+        classList.includes('flyout') ||
+        classList.includes('nav-item') ||
+        classList.includes('menu-trigger') ||
+        (hasPopup === 'menu' && tag === 'button') // Menu popups with links, not options
+      );
+      
+      if (isNavigationMenu) {
+        return false; // Let the click be recorded normally
+      }
+      
+      // Only native select is ALWAYS a dropdown
       if (tag === 'select') return true;
       
-      // Check for Radix/Headless UI patterns
-      if (dataState === 'open' || dataState === 'closed') return true;
+      // Combobox/listbox roles are dropdown triggers
+      if (role === 'combobox' || role === 'listbox') return true;
       
-      // Check for Radix Select trigger attribute on element or children
+      // Check for Radix Select trigger attribute (explicit select component)
       if (element.hasAttribute('data-radix-select-trigger')) return true;
-      if (element.querySelector && element.querySelector('[data-radix-select-trigger]')) return true;
-      
-      // Check for Radix Select value (indicates this is a trigger showing selected value)
       if (element.hasAttribute('data-radix-select-value')) return true;
       
-      // Check classes
-      var classList = element.className || '';
+      // Check classes for select components (not general menus)
       if (typeof classList === 'string') {
         if (classList.includes('select') && classList.includes('trigger')) return true;
         if (classList.includes('combobox')) return true;
         if (classList.includes('SelectTrigger')) return true;
       }
       
-      // Check if parent has trigger indicators (for wrapped triggers)
-      var parent = element.parentElement;
-      if (parent) {
-        var parentDataState = parent.getAttribute('data-state');
-        var parentRole = parent.getAttribute('role');
-        if (parentDataState === 'open' || parentDataState === 'closed') return true;
-        if (parentRole === 'combobox') return true;
-        // Check if parent is a Radix trigger
-        if (parent.hasAttribute('data-radix-select-trigger')) return true;
-      }
+      // For aria-haspopup="listbox" - this IS a select pattern
+      if (hasPopup === 'listbox') return true;
+      
+      // For general buttons with aria-expanded, DON'T treat as dropdown
+      // unless it's clearly a select/combobox component
       
       return false;
     },

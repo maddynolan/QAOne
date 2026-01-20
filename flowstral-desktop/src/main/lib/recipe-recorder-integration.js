@@ -267,6 +267,53 @@ function getRecipeClickCaptureScript() {
       if (isOverlayElement(element)) return;
       if (isFrameworkInternal(element)) return;
       
+      // ============================================================
+      // SKIP CLICKS that are handled by other specialized actions
+      // ============================================================
+      var tag = element.tagName.toLowerCase();
+      var inputType = (element.type || '').toLowerCase();
+      
+      // Skip text inputs - Fill action will handle these
+      if (tag === 'input' && ['text', 'email', 'password', 'search', 'tel', 'url', 'number', ''].includes(inputType)) {
+        console.log('[Flowstral Recipe] Skip click - text input (Fill will capture)');
+        return;
+      }
+      if (tag === 'textarea') {
+        console.log('[Flowstral Recipe] Skip click - textarea (Fill will capture)');
+        return;
+      }
+      
+      // Skip checkboxes and radios - change event handler records Check/Uncheck/Select
+      if (tag === 'input' && (inputType === 'checkbox' || inputType === 'radio')) {
+        console.log('[Flowstral Recipe] Skip click - ' + inputType + ' (change handler will capture)');
+        return;
+      }
+      
+      // Skip <select> and <option> elements - change event handler records Select action
+      if (tag === 'select' || tag === 'option') {
+        console.log('[Flowstral Recipe] Skip click - ' + tag + ' (change handler will capture Select)');
+        return;
+      }
+      // Also skip clicks on labels FOR text inputs - clicking label focuses the input
+      if (tag === 'label') {
+        var forId = element.getAttribute('for');
+        if (forId) {
+          var linkedInput = document.getElementById(forId);
+          if (linkedInput) {
+            var linkedTag = linkedInput.tagName.toLowerCase();
+            var linkedType = (linkedInput.type || '').toLowerCase();
+            if (linkedTag === 'input' && ['text', 'email', 'password', 'search', 'tel', 'url', 'number', ''].includes(linkedType)) {
+              console.log('[Flowstral Recipe] Skip click - label for text input');
+              return;
+            }
+            if (linkedTag === 'textarea') {
+              console.log('[Flowstral Recipe] Skip click - label for textarea');
+              return;
+            }
+          }
+        }
+      }
+      
       // Skip if pointerdown already handled this element (within 500ms)
       if (element === lastHandledElement && (Date.now() - lastHandledTime) < 500) {
         console.log('[Flowstral Recipe] Skip click - handled by pointerdown');
@@ -334,6 +381,14 @@ function getRecipeClickCaptureScript() {
       if (isOverlayElement(element)) return;
       if (isFrameworkInternal(element)) return;
       
+      // Skip text input pointerdown - Fill will handle these
+      var tag = element.tagName.toLowerCase();
+      var inputType = (element.type || '').toLowerCase();
+      if (tag === 'input' && ['text', 'email', 'password', 'search', 'tel', 'url', 'number', ''].includes(inputType)) {
+        return;
+      }
+      if (tag === 'textarea') return;
+      
       var role = element.getAttribute && element.getAttribute('role');
       var isTrigger = coalescer.isDropdownTrigger(element);
       var isOption = coalescer.isDropdownOption(element);
@@ -380,6 +435,74 @@ function getRecipeClickCaptureScript() {
       }
     } catch (err) {
       console.error('[Flowstral Recipe] Pointerdown error:', err);
+    }
+  }, true);
+  
+  // ========== HOVER HANDLER (for flyout/dropdown menus) ==========
+  // CRITICAL: Many navigation menus open on hover, not click
+  // Without recording hover, these menus never open during playback
+  
+  var lastHoverElement = null;
+  var lastHoverTime = 0;
+  var hoverTimeout = null;
+  
+  document.addEventListener('mouseenter', function(e) {
+    try {
+      var element = e.target;
+      if (!element || !element.tagName) return;
+      if (isOverlayElement(element)) return;
+      if (isFrameworkInternal(element)) return;
+      
+      // Only record hovers on elements that reveal hidden content
+      // Check for flyout/dropdown indicators
+      var hasPopup = element.hasAttribute('aria-haspopup');
+      var hasExpanded = element.hasAttribute('aria-expanded');
+      var isFlyoutTrigger = (
+        (element.className || '').match(/flyout|dropdown|menu-trigger|nav-item|submenu/i) ||
+        (element.id || '').match(/navItem|menuTrigger/i) ||
+        element.closest('[class*="flyout"], [class*="nav-item], [class*="has-submenu"]')
+      );
+      
+      // Skip if not a hover-interactive element
+      if (!hasPopup && !hasExpanded && !isFlyoutTrigger) {
+        return;
+      }
+      
+      // Debounce - don't record multiple hovers on same element within 1s
+      if (element === lastHoverElement && (Date.now() - lastHoverTime) < 1000) {
+        return;
+      }
+      
+      // Use a small delay to avoid recording incidental hovers (just passing over)
+      // Only record if mouse stays on element for 200ms
+      clearTimeout(hoverTimeout);
+      hoverTimeout = setTimeout(function() {
+        // Verify mouse is still over this element
+        var currentHover = document.elementFromPoint(
+          e.clientX || 0,
+          e.clientY || 0
+        );
+        if (!currentHover || !element.contains(currentHover)) {
+          return; // Mouse moved away
+        }
+        
+        var recipe = analyzer.analyze(element);
+        if (!recipe) return;
+        
+        lastHoverElement = element;
+        lastHoverTime = Date.now();
+        
+        console.log('[Flowstral Recipe] ★ HOVER:', element.tagName, recipe.what.text || recipe.where.nearText);
+        
+        recordAction({
+          type: 'hover',
+          target: recipe,
+          description: 'Hover over "' + (recipe.what.text || recipe.where.nearText || element.tagName) + '"'
+        });
+      }, 200);
+      
+    } catch (err) {
+      console.error('[Flowstral Recipe] Hover capture error:', err);
     }
   }, true);
   
@@ -638,6 +761,10 @@ function recipeActionToLegacy(recipeAction) {
     selectorObj: selectorObj,
     // New recipe field
     recipe: target,
+    // CRITICAL FIX: Preserve landmark and region for scoped element finding
+    // Without these, SmartFinder can find elements in wrong page regions
+    landmark: target?.where?.landmark || null,
+    region: target?.where?.region || null,
     // Value for fill/select (handle complex values for new types)
     value: typeof value === 'object' ? (value.text || value.files || value) : value,
     displayValue: typeof value === 'object' ? (value.text || value.files?.join(', ') || JSON.stringify(value)) : value,
@@ -651,6 +778,8 @@ function recipeActionToLegacy(recipeAction) {
       testId: target?.which?.testId || '',
       ariaLabel: target?.which?.ariaLabel || '',
       placeholder: target?.which?.placeholder || '',
+      // Also preserve landmark in element for redundancy
+      landmark: target?.where?.landmark || '',
     },
     // Frame context for iframe support
     frameContext: frameContext || null,
@@ -694,6 +823,10 @@ function getQWord(type, target) {
       return 'Press';
     case 'navigate':
       return 'GoTo';
+    case 'hover':
+      return 'Hover';
+    case 'closeModal':
+      return 'CloseModal';
     default:
       return type.charAt(0).toUpperCase() + type.slice(1);
   }

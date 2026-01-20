@@ -2019,9 +2019,11 @@ class PlaywrightRecorder extends EventEmitter {
             // Log successful click detection for debugging
             console.log('[Flowstral] Click detected:', desc, '| tag:', tag, '| role:', role, '| itemText:', itemText);
             
-            // Push directly to queue - deduplication happens in Node.js (_processClick)
-            // This ensures all clicks are captured including same-page "Next" buttons
-            window.__flowstralCDPClicks.push(clickData);
+            // ============================================================
+            // NOTE: We ONLY use console.log capture now (not array push)
+            // This avoids duplicate capture since console works cross-origin
+            // and the polling loop was processing BOTH sources
+            // ============================================================
             
             // ============================================================
             // CRITICAL: Report ALL clicks via console for cross-domain capture!
@@ -2296,8 +2298,14 @@ class PlaywrightRecorder extends EventEmitter {
         const mainProcessClicks = [...(this.pendingClicks || [])];
         const mainProcessInputs = [...(this.pendingInputs || [])];
         
-        if (mainProcessClicks.length > 0) {
-          console.log('[PlaywrightRecorder] Retrieved', mainProcessClicks.length, 'clicks from main process');
+        // ============================================================
+        // CRITICAL: When Recipe recorder is enabled, DON'T process pendingClicks
+        // here - Recipe captures the same clicks with better element info.
+        // Only use pendingClicks as fallback for cross-origin pages where
+        // page.evaluate fails (we'll process them after checking recipe actions)
+        // ============================================================
+        if (mainProcessClicks.length > 0 && !this.useRecipeRecorder) {
+          console.log('[PlaywrightRecorder] Retrieved', mainProcessClicks.length, 'clicks from main process (non-recipe mode)');
           // Process main process clicks IMMEDIATELY (before page.evaluate which might fail)
           await this._processInputs(mainProcessInputs);
           for (const click of mainProcessClicks) {
@@ -2348,37 +2356,57 @@ class PlaywrightRecorder extends EventEmitter {
               return { clicks, inputs, recipeActions };
             });
             
-            // If this is a different page than current, add tab switch before actions
+            // If this is a different page than current, update context (but DON'T add switchTab)
+            // Actions already have tabIndex which is used for implicit tab switching during playback
             if (data.clicks.length > 0 || data.recipeActions.length > 0) {
               if (pageIndex !== this._currentPageIndex) {
-                console.log(`[PlaywrightRecorder] Action detected in tab ${pageIndex}, switching context`);
-                this._addAction({
-                  type: 'switchTab',
-                  tabIndex: pageIndex,
-                  timestamp: Date.now(),
-                  description: `Switched to tab ${pageIndex}`
-                });
+                console.log(`[PlaywrightRecorder] Action detected in tab ${pageIndex}, updating context (no SwitchTab needed)`);
                 this._currentPageIndex = pageIndex;
                 this.page = targetPage;
+                // Update focus tracking
+                this._lastDetectedFocusTab = pageIndex;
+                this._focusDetectedAt = Date.now();
               }
             }
           
             // V2: Process recipe actions (these have better element info)
             if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 0) {
               for (const recipeAction of data.recipeActions) {
-                await this._processRecipeAction(recipeAction);
+                // CRITICAL: Pass pageIndex for implicit tab switching during playback
+                await this._processRecipeAction(recipeAction, pageIndex);
               }
+              // Clear pendingClicks for this page since recipe handled them
+              // (they captured the same clicks)
+              this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageIndex);
+              this.pendingInputs = [];
             }
             
             // Process page data (inputs first, then clicks) - fallback if recipe not used
             if (!this.useRecipeRecorder || !data.recipeActions || data.recipeActions.length === 0) {
-              await this._processInputs(data.inputs);
+              // CRITICAL: Add pageIndex to inputs from page.evaluate (they don't have it)
+              const inputsWithTabIndex = (data.inputs || []).map(inp => ({
+                ...inp,
+                tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
+              }));
+              await this._processInputs(inputsWithTabIndex);
               for (const click of data.clicks) {
                 await this._processClick(click);
               }
             }
           } catch (e) {
-            // Page might be navigating - that's OK, main process clicks already processed
+            // Page might be cross-origin - process pendingClicks as fallback
+            if (this.useRecipeRecorder && mainProcessClicks.length > 0) {
+              const pageClicks = mainProcessClicks.filter(c => c.tabIndex === pageIndex);
+              if (pageClicks.length > 0) {
+                console.log(`[PlaywrightRecorder] Cross-origin fallback: processing ${pageClicks.length} clicks from console for tab ${pageIndex}`);
+                await this._processInputs(mainProcessInputs.filter(i => i.tabIndex === pageIndex));
+                for (const click of pageClicks) {
+                  await this._processClick(click);
+                }
+                // Clear processed clicks
+                this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageIndex);
+              }
+            }
           }
         } // End of page loop
       }, 100); // Check every 100ms for responsive capture
@@ -2400,7 +2428,7 @@ class PlaywrightRecorder extends EventEmitter {
     // Track focus state for debouncing
     this._lastDetectedFocusTab = null;
     this._focusDetectedAt = 0;
-    const FOCUS_DEBOUNCE_MS = 1500; // Must stay focused for 1.5s to record switch
+    const FOCUS_DEBOUNCE_MS = 2500; // Must stay focused for 2.5s to record switch (increased to reduce noise)
     
     // Poll every 1000ms to detect tab focus changes (slower to reduce noise)
     this._tabFocusInterval = setInterval(async () => {
@@ -2432,9 +2460,11 @@ class PlaywrightRecorder extends EventEmitter {
               if (i !== this._currentPageIndex && (now - this._focusDetectedAt) >= FOCUS_DEBOUNCE_MS) {
                 // Check if RECENT actions (last 5) already came from or switched to this tab
                 // This prevents duplicate switchTab - actions now include tabIndex
+                // NOTE: After _toQWord(), actions have 'qword' not 'type', so check both
                 const recentActions = this.actions.slice(-5);
                 const alreadyHasActionFromTab = recentActions.some(a => 
-                  (a.type === 'switchTab' && a.tabIndex === i) ||
+                  (a.qword === 'SwitchTab' && a.tabIndex === i) ||
+                  (a.type === 'switchTab' && a.tabIndex === i) ||  // Before _toQWord conversion
                   (a.tabIndex === i) // Any action from this tab is enough
                 );
                 
@@ -2447,18 +2477,29 @@ class PlaywrightRecorder extends EventEmitter {
                   break;
                 }
                 
-                // Only record switchTab if NO recent actions came from this tab
-                // This handles the case where user manually switches tabs without interacting
-                console.log(`[PlaywrightRecorder] Tab focus confirmed (no recent action): ${this._currentPageIndex} → ${i}`);
+                // CRITICAL: Suppress rapid back-and-forth tab switching (within 3 seconds)
+                // This prevents confusing sequences like: switch to tab 0, switch to tab 1
+                const recentSwitchTab = this.actions.filter(a => 
+                  a.qword === 'SwitchTab' || a.type === 'switchTab'
+                ).slice(-1)[0];
                 
-                this._addAction({
-                  type: 'switchTab',
-                  tabIndex: i,
-                  url: page.url(),
-                  timestamp: Date.now(),
-                  description: `Switched to tab ${i}: ${page.url().substring(0, 40)}`
-                });
+                if (recentSwitchTab && (now - (recentSwitchTab.timestamp || 0)) < 3000) {
+                  // We just recorded a switchTab recently - suppress this one
+                  // This prevents back-and-forth noise when user is working across tabs
+                  console.log(`[PlaywrightRecorder] Skipping switchTab - recent switch ${now - recentSwitchTab.timestamp}ms ago`);
+                  this._currentPageIndex = i;
+                  this.page = page;
+                  break;
+                }
                 
+                // ============================================================
+                // DISABLED: Don't record SwitchTab actions automatically
+                // Actions already have tabIndex which is used for implicit tab switching
+                // Recording SwitchTab just adds noise and confuses the test
+                // ============================================================
+                console.log(`[PlaywrightRecorder] Tab focus changed: ${this._currentPageIndex} → ${i} (NOT recording SwitchTab - using implicit tabIndex)`);
+                
+                // Just update tracking without adding switchTab action
                 this._currentPageIndex = i;
                 this.page = page;
                 
@@ -2506,7 +2547,8 @@ class PlaywrightRecorder extends EventEmitter {
         const existingValue = existing.args?.[1] || '';
         // Only update if new value is longer (user continued typing)
         if (inp.value.length > existingValue.length) {
-          const label = inp.placeholder || inp.ariaLabel || inp.name || inp.title || inp.id || 'input';
+          // Use associatedLabel if no other identifiers exist
+          const label = inp.placeholder || inp.ariaLabel || inp.associatedLabel || inp.name || inp.title || inp.id || 'input';
           const isPassword = inp.type === 'password';
           const displayValue = isPassword ? '••••••••' : inp.value;
           
@@ -2527,8 +2569,9 @@ class PlaywrightRecorder extends EventEmitter {
       );
       if (exactDuplicate) continue;
       
-      // Determine label
-      const label = inp.placeholder || inp.ariaLabel || inp.name || inp.title || inp.id || 'input';
+      // Determine label - CRITICAL: Use associatedLabel if no other identifiers exist
+      // This handles fields like "Account Number" that have a <label> element but no placeholder/aria-label
+      const label = inp.placeholder || inp.ariaLabel || inp.associatedLabel || inp.name || inp.title || inp.id || 'input';
       const isPassword = inp.type === 'password';
       const displayValue = isPassword ? '••••••••' : inp.value;
       
@@ -2583,8 +2626,10 @@ class PlaywrightRecorder extends EventEmitter {
   /**
    * V2: Process a recipe-based action (new format with ElementRecipe)
    * This provides better element identification for modern frameworks
+   * @param {object} recipeAction - The recipe action to process
+   * @param {number} pageIndex - The page/tab index this action was captured from
    */
-  async _processRecipeAction(recipeAction) {
+  async _processRecipeAction(recipeAction, pageIndex = 0) {
     const { type, target, value, description, timestamp } = recipeAction;
     
     // FILTER: Skip misidentified page title clicks
@@ -2597,9 +2642,13 @@ class PlaywrightRecorder extends EventEmitter {
       return;
     }
     
-    // Generate unique ID
-    const actionId = `recipe_${timestamp}_${type}_${target?.what?.text || 'element'}`;
-    if (this.seenActionIds.has(actionId)) return;
+    // Generate unique ID with rounded timestamp (50ms window) to catch near-simultaneous duplicates
+    const roundedTimestamp = Math.floor(timestamp / 50) * 50;
+    const actionId = `recipe_${roundedTimestamp}_${type}_${target?.what?.text || 'element'}`;
+    if (this.seenActionIds.has(actionId)) {
+      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (same 50ms window):', type, target?.what?.text);
+      return;
+    }
     this.seenActionIds.add(actionId);
     
     // Store the raw recipe action
@@ -2609,24 +2658,28 @@ class PlaywrightRecorder extends EventEmitter {
     const legacyAction = recipeActionToLegacy(recipeAction);
     legacyAction.id = actionId;
     legacyAction.fromRecipe = true; // Mark as v2 recipe-based
+    legacyAction.tabIndex = pageIndex; // CRITICAL: Track which tab for implicit switching during playback
     
-    console.log('[PlaywrightRecorder] Recipe action:', type, description || target?.what?.text);
+    console.log('[PlaywrightRecorder] Recipe action:', type, description || target?.what?.text, `(tab ${pageIndex})`);
     
-    // Check for duplicates in existing actions
+    // Check for duplicates in existing actions using normalized text comparison
+    const newText = legacyAction.args?.[0] || legacyAction.text || '';
+    const normalizedNewText = this._normalizeClickText(newText);
+    
     const isDuplicate = this.actions.some(a => {
       // Same type and similar description within 500ms
       if (a.qword === legacyAction.qword && 
           Math.abs((a.timestamp || 0) - timestamp) < 500) {
-        // Check if it's the same element
+        // Check if it's the same element (using normalized text)
         const aText = a.args?.[0] || a.text || '';
-        const newText = legacyAction.args?.[0] || legacyAction.text || '';
-        return aText === newText;
+        const normalizedAText = this._normalizeClickText(aText);
+        return normalizedAText === normalizedNewText;
       }
       return false;
     });
     
     if (isDuplicate) {
-      console.log('[PlaywrightRecorder] Skipping duplicate recipe action');
+      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (normalized match):', newText);
       return;
     }
     
@@ -2635,13 +2688,44 @@ class PlaywrightRecorder extends EventEmitter {
   }
 
   /**
+   * Normalize click text for deduplication - handles "Account Number" vs "Account Number *" vs "Account Number "
+   */
+  _normalizeClickText(text) {
+    if (!text || typeof text !== 'string') return '';
+    return text
+      .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'")  // Apostrophe variants
+      .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')               // Quote variants
+      .replace(/\s*\*+\s*$/g, '')                                      // Remove trailing asterisks (required field markers)
+      .replace(/\s+/g, ' ')                                            // Collapse whitespace
+      .trim();
+  }
+
+  /**
    * Process a single click action
    */
   async _processClick(click) {
-    // Deduplicate
-    const clickId = `cdp_${click.timestamp}_${click.description}`;
-    if (this.seenActionIds.has(clickId)) return;
+    // Normalize description for deduplication - handles variations like "Account Number" vs "Account Number *"
+    const normalizedDesc = this._normalizeClickText(click.description);
+    
+    // Deduplicate - use rounded timestamp (50ms window) AND normalized description
+    const roundedTimestamp = Math.floor(click.timestamp / 50) * 50;
+    const clickId = `cdp_${roundedTimestamp}_${normalizedDesc}`;
+    if (this.seenActionIds.has(clickId)) {
+      console.log('[PlaywrightRecorder] Skipping duplicate click (same 50ms window):', click.description);
+      return;
+    }
     this.seenActionIds.add(clickId);
+    
+    // Also check recent actions for same normalized text (within 500ms) - catches variations
+    const lastActions = this.actions.slice(-3);
+    for (const lastAction of lastActions) {
+      const lastNormalizedDesc = this._normalizeClickText(lastAction.description);
+      const timeDiff = Math.abs((lastAction.timestamp || 0) - click.timestamp);
+      if (lastNormalizedDesc === normalizedDesc && timeDiff < 500 && lastAction.qword === 'ClickText') {
+        console.log('[PlaywrightRecorder] Skipping variant duplicate click:', click.description, 'matches', lastAction.description);
+        return;
+      }
+    }
     
     // Only skip TRUE double-clicks: same element clicked twice within 200ms
     // This is very conservative to avoid filtering legitimate repeated clicks
@@ -4057,6 +4141,36 @@ class PlaywrightRecorder extends EventEmitter {
         
         seenNavigations.set('lastUrl', navUrl);
         seenNavigations.set('lastTimestamp', action.timestamp || 0);
+      }
+      
+      // For SwitchTab actions, aggressively skip redundant ones
+      if (action.qword === 'SwitchTab') {
+        const actionTabIndex = action.tabIndex ?? action.args?.[0];
+        
+        // Check if NEXT action (in original list) is from the same tab
+        // If so, the switchTab is redundant - the action already implies the tab
+        const nextAction = this.actions[i + 1];
+        if (nextAction && nextAction.tabIndex === actionTabIndex) {
+          console.log('[PlaywrightRecorder] Final dedupe: skipping SwitchTab - next action already from tab', actionTabIndex);
+          continue;
+        }
+        
+        // Check if PREVIOUS action (in unique list) is from the same tab
+        const prevAction = uniqueActions[uniqueActions.length - 1];
+        if (prevAction && (prevAction.tabIndex === actionTabIndex || 
+            (prevAction.qword === 'SwitchTab' && (prevAction.tabIndex ?? prevAction.args?.[0]) === actionTabIndex))) {
+          console.log('[PlaywrightRecorder] Final dedupe: skipping SwitchTab - already on tab', actionTabIndex);
+          continue;
+        }
+        
+        // Check if we already have ANY recent action from this tab (last 5 in unique list)
+        const recentFromSameTab = uniqueActions.slice(-5).some(a => 
+          a.tabIndex === actionTabIndex && a.qword !== 'SwitchTab' && a.qword !== 'NewTab'
+        );
+        if (recentFromSameTab) {
+          console.log('[PlaywrightRecorder] Final dedupe: skipping SwitchTab - recent action from tab', actionTabIndex);
+          continue;
+        }
       }
       
       // For click/hover actions, check if it's a TRUE duplicate (same action within 500ms OR same timestamp)
@@ -6786,8 +6900,76 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         case 'Fill':
         case 'type':
         case 'input':
+          // DEBUG: Log current page info
+          console.log(`[PlaywrightRecorder] Fill action - Current page URL: ${this.page?.url()}`);
+          console.log(`[PlaywrightRecorder] Fill action - action.tabIndex: ${action.tabIndex}, total pages: ${this.context?.pages()?.length || 0}`);
+          
+          // CRITICAL: Wait for page to be ready before finding input
+          // This is especially important for cross-origin tabs that may still be loading
+          try {
+            await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
+            // Also wait a moment for dynamic content
+            await this.page.waitForTimeout(500);
+          } catch (e) {
+            console.log('[PlaywrightRecorder] Page load wait skipped:', e.message);
+          }
+          
           // Find input element using multiple strategies
           let fillResult = await this._findElement(action);
+          
+          // DIRECT ID/NAME FALLBACK: If not found, try simple direct selectors
+          // This is critical for cross-origin tabs where complex strategies may fail
+          if (!fillResult) {
+            const directId = action.selectorObj?.id || action.raw?.id || action.args?.[0];
+            const directName = action.selectorObj?.name || action.raw?.name || action.args?.[0];
+            
+            console.log(`[PlaywrightRecorder] Fill: Trying direct ID/name fallback: id="${directId}", name="${directName}"`);
+            
+            // Try by ID first (most reliable)
+            if (directId) {
+              try {
+                const idLocator = this.page.locator(`#${directId}`);
+                const count = await idLocator.count();
+                if (count > 0) {
+                  fillResult = { locator: idLocator.first(), strategy: { type: 'direct-id' } };
+                  console.log(`[PlaywrightRecorder] ✓ Found by direct #${directId}`);
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Direct ID search failed:`, e.message);
+              }
+            }
+            
+            // Try by name attribute
+            if (!fillResult && directName) {
+              try {
+                const nameLocator = this.page.locator(`input[name="${directName}"], textarea[name="${directName}"]`);
+                const count = await nameLocator.count();
+                if (count > 0) {
+                  fillResult = { locator: nameLocator.first(), strategy: { type: 'direct-name' } };
+                  console.log(`[PlaywrightRecorder] ✓ Found by direct name="${directName}"`);
+                }
+              } catch (e) {
+                console.log(`[PlaywrightRecorder] Direct name search failed:`, e.message);
+              }
+            }
+            
+            // Try getByLabel as last resort
+            if (!fillResult) {
+              const labelText = action.args?.[0] || action.label || action.text;
+              if (labelText) {
+                try {
+                  const labelLocator = this.page.getByLabel(labelText, { exact: false });
+                  const count = await labelLocator.count();
+                  if (count > 0) {
+                    fillResult = { locator: labelLocator.first(), strategy: { type: 'getByLabel' } };
+                    console.log(`[PlaywrightRecorder] ✓ Found by getByLabel: "${labelText}"`);
+                  }
+                } catch (e) {
+                  // Ignore
+                }
+              }
+            }
+          }
           
           // IFRAME FALLBACK: If not found on main page, try searching inside iframes
           if (!fillResult) {
@@ -7254,13 +7436,54 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           }
           break;
 
-        case 'hover':
-          // Hover over element
-          if (!selector) {
-            return { success: false, error: 'No selector for hover' };
+        case 'hover': {
+          // Hover over element - CRITICAL for flyout menus
+          console.log(`[PlaywrightRecorder] Executing hover action`);
+          
+          // Get target scope (iframe or main page)
+          const hoverScope = await this._getFrameScope(action);
+          
+          // Try SmartFinder first (same as click)
+          let hoverResult = null;
+          if (this.useSmartFinderForPlayback && this.smartFinder && action.recipe) {
+            try {
+              console.log(`[PlaywrightRecorder] Hover: Trying SmartFinder...`);
+              this.smartFinder.updatePage(this.page);
+              const smartLocator = await this.smartFinder.find(action.recipe);
+              if (smartLocator) {
+                hoverResult = { locator: smartLocator, strategy: { type: 'SmartFinder' } };
+              }
+            } catch (sfError) {
+              console.log(`[PlaywrightRecorder] SmartFinder hover failed:`, sfError.message);
+            }
           }
-          await this.page.hover(selector, { timeout });
+          
+          // Fallback to findElementWithRetry
+          if (!hoverResult) {
+            hoverResult = await this.findElementWithRetry(action);
+          }
+          
+          // Direct selector fallback
+          if (!hoverResult && selector) {
+            const selectorLocator = hoverScope.locator(selector);
+            const count = await selectorLocator.count().catch(() => 0);
+            if (count > 0) {
+              hoverResult = { locator: selectorLocator.first(), strategy: { type: 'selector' } };
+            }
+          }
+          
+          if (!hoverResult) {
+            return { success: false, error: `Could not find element to hover: "${label || selector}"` };
+          }
+          
+          // Perform the hover
+          await hoverResult.locator.hover({ timeout });
+          console.log(`[PlaywrightRecorder] ✓ Hover successful using ${hoverResult.strategy.type}`);
+          
+          // Wait a bit for any menu/dropdown to appear after hover
+          await this.page.waitForTimeout(300);
           break;
+        }
 
         // ============================================================
         // NEW ADVANCED ACTION TYPES
@@ -10965,6 +11188,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         args = [action.sourceSelector || '', action.targetSelector || ''];
         description = action.description || `Drag element to target`;
         break;
+      
+      case 'hover':
+        qword = 'Hover';
+        args = [cleanText || ariaLabel || 'element'];
+        description = action.description || `Hover over "${cleanText || ariaLabel || 'element'}"`;
+        break;
         
       default:
         qword = 'ClickText';
@@ -11026,7 +11255,54 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     const lastNav = this.actions.filter(a => a.qword === 'GoTo').pop();
     if (lastNav && lastNav.args[0] === url) return false;
     
+    // ============================================================
+    // SKIP NAVIGATIONS CAUSED BY LINK CLICKS
+    // If a click action to this URL was recorded in the last 3 seconds,
+    // the navigation is redundant (click implies navigation)
+    // ============================================================
+    const now = Date.now();
+    const recentClicks = this.actions.filter(a => 
+      (a.qword === 'ClickText' || a.qword === 'Click' || a.type === 'click') &&
+      (now - (a.timestamp || 0)) < 3000
+    );
+    
+    for (const click of recentClicks) {
+      // Check if click's element had href matching this URL
+      // Look in multiple places where href might be stored
+      const clickHref = click.raw?.href || click.element?.href || click.recipe?.confirm?.href || '';
+      if (clickHref && this._urlsMatch(clickHref, url)) {
+        console.log('[PlaywrightRecorder] Skipping navigation - caused by recent link click:', url.substring(0, 50));
+        return false;
+      }
+      
+      // Also check if URL is part of the click's selector/recipe
+      const clickUrl = click.selectorObj?.href || click.recipe?.which?.href || '';
+      if (clickUrl && this._urlsMatch(clickUrl, url)) {
+        console.log('[PlaywrightRecorder] Skipping navigation - click has matching URL:', url.substring(0, 50));
+        return false;
+      }
+      
+      // Check if click text is a link that might navigate
+      // (for cases where href isn't stored but element was a link)
+      const clickTag = click.raw?.tag || click.element?.tagName || '';
+      if (clickTag.toLowerCase() === 'a' || click.raw?.role === 'link') {
+        // This was a link click - navigation is expected, skip recording it
+        console.log('[PlaywrightRecorder] Skipping navigation - recent link click exists');
+        return false;
+      }
+    }
+    
     return true;
+  }
+  
+  /**
+   * Check if two URLs match (ignoring trailing slashes and minor differences)
+   */
+  _urlsMatch(url1, url2) {
+    if (!url1 || !url2) return false;
+    // Normalize: remove trailing slashes, lowercase
+    const normalize = (u) => u.replace(/\/$/, '').toLowerCase();
+    return normalize(url1) === normalize(url2);
   }
 }
 
