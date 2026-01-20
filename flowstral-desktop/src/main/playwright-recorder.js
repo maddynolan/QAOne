@@ -112,6 +112,7 @@ const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
 const ActionHandlers = require('./lib/action-handlers');
 const TabManager = require('./lib/tab-manager');
 const SalesforceHandlers = require('./lib/salesforce-handlers');
+const { executeAssertion: executeAssertionHandler } = require('./lib/assertion-handlers');
 
 // Mobile testing support (Phase 1: Emulation, Phase 2: Maestro)
 const { MOBILE_DEVICES, getDevice, getDeviceCategories, NETWORK_PRESETS, getNetworkPreset } = require('./lib/mobile-devices');
@@ -9277,6 +9278,15 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
    * @param {string} [stepSelector] - Fallback selector from the step (for value assertions)
    */
   async executeAssertion(assertion, stepSelector = null) {
+    // Delegate to shared assertion handler module
+    return executeAssertionHandler(this, assertion, stepSelector);
+  }
+  
+  /**
+   * LEGACY: Execute an assertion (kept for reference, now delegates to assertion-handlers.js)
+   * @deprecated Use executeAssertionHandler directly
+   */
+  async _executeAssertionLegacy(assertion, stepSelector = null) {
     if (!this.page || this.page.isClosed()) {
       return { success: false, error: 'No browser page for assertion' };
     }
@@ -9693,6 +9703,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       return { success: false, error: error.message };
     }
   }
+  // END OF LEGACY ASSERTION METHOD (now handled by assertion-handlers.js)
 
   // ============ PRIVATE METHODS ============
 
