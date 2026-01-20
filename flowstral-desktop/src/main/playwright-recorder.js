@@ -6550,6 +6550,24 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       const timeout = action.timeout || 30000;
       const label = getActionLabel(action); // FIXED: Use comprehensive label extraction with normalization
 
+      // ============================================================
+      // UNIFIED EXECUTION: Try ActionHandlers first for consistency
+      // This ensures same behavior as TestExecutor (builder/tests tab)
+      // ============================================================
+      const unifiedResult = await ActionHandlers.executeAction(this, action, { timeout });
+      
+      if (unifiedResult.success) {
+        // Action handled successfully by unified handler
+        console.log(`[PlaywrightRecorder] ✓ Unified handler succeeded for: ${action.type}`);
+        return { success: true, strategy: unifiedResult.strategy || 'unified' };
+      } else if (!unifiedResult.delegateToContext && !unifiedResult.error?.includes('Unknown action')) {
+        // Unified handler tried but failed - return error
+        return { success: false, error: unifiedResult.error };
+      }
+      
+      // Fall back to legacy switch for actions not in unified handler
+      console.log(`[PlaywrightRecorder] Delegating to legacy handler: ${action.type}`);
+
       switch (action.type) {
         case 'goto':
         case 'GoTo':

@@ -965,7 +965,155 @@ async function handleAssertValue(ctx, action, options = {}) {
   return { success: true };
 }
 
+// ============================================================
+// UNIFIED EXECUTION POINT
+// This is THE SINGLE entry point for all action execution.
+// Both PlaywrightRecorder and TestExecutor MUST use this.
+// ============================================================
+
+/**
+ * Execute a single action - UNIFIED EXECUTION POINT
+ * 
+ * @param {Object} ctx - Execution context (PlaywrightRecorder or TestExecutor instance)
+ *   Must provide: page, findElementWithRetry, enableAIFallback, findElementWithAI
+ * @param {Object} action - The action to execute
+ * @param {Object} options - Execution options (timeout, etc.)
+ * @returns {Promise<{success: boolean, error?: string, strategy?: string}>}
+ */
+async function executeAction(ctx, action, options = {}) {
+  const { timeout = 30000 } = options;
+  
+  // Normalize action type to handle variations
+  const actionType = normalizeActionType(action.type || action.qword || '');
+  
+  console.log(`[ActionHandlers] Executing: ${actionType}`, action.description || '');
+  
+  try {
+    switch (actionType) {
+      // Navigation
+      case 'goto':
+      case 'navigate':
+        return await handleNavigation(ctx, action, { timeout });
+        
+      case 'navigateto':
+      case 'salesforcenavigation':
+        return await handleSalesforceNavigation(ctx, action, { timeout });
+      
+      // Click actions
+      case 'click':
+      case 'clicktext':
+      case 'clickelement':
+        return await handleClick(ctx, action, { timeout });
+      
+      // Fill/Input actions
+      case 'fill':
+      case 'type':
+      case 'input':
+        return await handleFill(ctx, action, { timeout });
+      
+      // Select/Dropdown actions
+      case 'select':
+      case 'selectoption':
+        return await handleSelect(ctx, action, { timeout });
+      
+      // Hover action (critical for flyout menus)
+      case 'hover':
+        return await handleHover(ctx, action, { timeout });
+      
+      // Keyboard actions
+      case 'press':
+      case 'keypress':
+        return await handlePress(ctx, action, { timeout });
+      
+      // Wait actions
+      case 'wait':
+      case 'pause':
+        return await handleWait(ctx, action, { timeout });
+      
+      // Checkbox/Radio actions
+      case 'check':
+        return await handleCheck(ctx, action, { timeout });
+        
+      case 'uncheck':
+        return await handleUncheck(ctx, action, { timeout });
+      
+      // Scroll action
+      case 'scroll':
+        return await handleScroll(ctx, action, { timeout });
+      
+      // File upload
+      case 'upload':
+      case 'fileupload':
+        return await handleUpload(ctx, action, { timeout });
+      
+      // Drag and drop
+      case 'drag':
+      case 'dragdrop':
+        return await handleDrag(ctx, action, { timeout });
+      
+      // Download
+      case 'download':
+        return await handleDownload(ctx, action, { timeout });
+      
+      // Dialog handling
+      case 'dialog':
+      case 'handledialog':
+        return await handleDialog(ctx, action, { timeout });
+      
+      // Modal close
+      case 'closemodal':
+      case 'dismissmodal':
+        return await handleCloseModal(ctx, action, { timeout });
+      
+      // Assertions
+      case 'asserttext':
+      case 'assert':
+        return await handleAssertText(ctx, action, { timeout });
+        
+      case 'assertvisible':
+        return await handleAssertVisible(ctx, action, { timeout });
+        
+      case 'assertvalue':
+        return await handleAssertValue(ctx, action, { timeout });
+      
+      // Tab switching (handled by caller with page array)
+      case 'switchtab':
+      case 'newtab':
+      case 'closetab':
+        // These require access to the pages array, delegate back to caller
+        return { success: false, delegateToContext: true, actionType };
+      
+      // Screenshot (handled by caller for result storage)
+      case 'screenshot':
+        if (ctx.page) {
+          const screenshot = await ctx.page.screenshot({ type: 'png' });
+          return { success: true, screenshot };
+        }
+        return { success: false, error: 'No page available for screenshot' };
+      
+      default:
+        console.warn(`[ActionHandlers] Unknown action type: ${actionType}`);
+        return { success: false, error: `Unknown action type: ${actionType}` };
+    }
+  } catch (error) {
+    console.error(`[ActionHandlers] Action failed:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Normalize action type to lowercase without separators
+ */
+function normalizeActionType(type) {
+  if (!type) return '';
+  return type.toLowerCase().replace(/[_\s-]/g, '');
+}
+
 module.exports = {
+  // THE UNIFIED EXECUTION POINT - use this!
+  executeAction,
+  
+  // Individual handlers (for special cases only)
   handleNavigation,
   handleSalesforceNavigation,
   handleClick,
@@ -985,7 +1133,10 @@ module.exports = {
   handleAssertText,
   handleAssertVisible,
   handleAssertValue,
-  // Internal helpers exposed for advanced use
+  // Helpers
+  normalizeActionType,
+  getActionLabel,
+  normalizeTextForMatching,
   searchIframesForClick,
   searchIframesForFill,
   handleRadixSelect,

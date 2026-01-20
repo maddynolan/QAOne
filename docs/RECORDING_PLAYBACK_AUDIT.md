@@ -42,33 +42,69 @@ There are **3 main execution paths** for running tests. These MUST be kept in sy
 
 | Feature | PlaywrightRecorder | TestExecutor | Backend |
 |---------|-------------------|--------------|---------|
-| SmartFinder | ✅ | ✅ | ❌ (generates code) |
-| Hover support | ✅ | ✅ (via ActionHandlers) | ⚠️ (basic) |
+| **Unified executeAction** | ✅ | ✅ | ❌ (generates code) |
+| SmartFinder | ✅ | ✅ | ❌ |
+| Hover support | ✅ | ✅ | ⚠️ (basic) |
 | AI Fallback | ✅ | ✅ | ❌ |
 | Landmark scoping | ✅ | ✅ | ❌ |
 | Multi-selector fallback | ✅ | ✅ | ✅ |
 | Tab switching | ✅ | ✅ | ⚠️ |
-| **Shared ActionHandlers** | ✅ | ✅ (Jan 2026) | ❌ |
+| **Single Entry Point** | ✅ ActionHandlers.executeAction | ✅ ActionHandlers.executeAction | ❌ |
 
-### Unified Execution via ActionHandlers
+### 🎯 UNIFIED EXECUTION (SINGLE ENTRY POINT)
 
-As of January 2026, `test-executor.js` now uses the shared `lib/action-handlers.js` module for critical actions like Hover. This ensures:
+**As of January 2026**, both `PlaywrightRecorder` and `TestExecutor` now use **THE SAME unified `ActionHandlers.executeAction()`** function as their first execution attempt for ALL actions.
 
-1. **Same element finding logic** - SmartFinder with recipe-based identification
-2. **Same fallback strategies** - Selector fallbacks → AI Vision fallback
-3. **Same timing** - Wait after hover for flyout menus (300ms)
+This guarantees:
+
+1. **Single source of truth** - All action logic in `lib/action-handlers.js`
+2. **Identical behavior** - Recording page and builder/tests tab execute identically
+3. **Same element finding** - SmartFinder + AI fallback used everywhere
+4. **Same timing** - Waits, delays, retries all consistent
+5. **Easier maintenance** - Fix once, applies everywhere
 
 ```javascript
-// test-executor.js now uses:
+// BOTH executors now use this pattern:
 const ActionHandlers = require('./lib/action-handlers');
 
-// Hover action delegates to shared handler:
-case 'Hover':
-  const result = await ActionHandlers.handleHover(this, action, { timeout });
-  break;
+// In playwright-recorder.js:
+async executeAction(action) {
+  // TRY UNIFIED HANDLER FIRST
+  const unifiedResult = await ActionHandlers.executeAction(this, action, { timeout });
+  if (unifiedResult.success) {
+    return { success: true, strategy: unifiedResult.strategy };
+  }
+  // Fall back to legacy switch only for unsupported actions (e.g., Salesforce)
+}
+
+// In test-executor.js:
+async executeStep(step, variables = {}) {
+  // TRY UNIFIED HANDLER FIRST
+  const unifiedResult = await ActionHandlers.executeAction(this, resolvedStep, { timeout });
+  if (unifiedResult.success) {
+    // Action handled!
+  } else if (!unifiedResult.delegateToContext) {
+    throw new Error(unifiedResult.error);
+  }
+  // Fall back to legacy switch only for SF-specific actions
+}
 ```
 
-The shared `action-handlers.js` module implements the `findElementWithRetry` interface that both executors provide.
+**Supported in Unified Handler:**
+- click, clickText, clickElement
+- fill, type, input
+- select, selectOption
+- hover (critical for flyout menus)
+- press, keypress
+- check, uncheck
+- scroll, wait, pause
+- upload, download
+- assertions (assertText, assertVisible, assertValue)
+- dialog handling, modal close
+
+**Delegated to Legacy Handler:**
+- Salesforce-specific (sf_create_record, sf_login_as, etc.)
+- Tab management (switchTab, newTab, closeTab) - needs page array access
 
 ---
 

@@ -733,6 +733,27 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       const normalizedAction = this.normalizeActionType(rawActionType);
       console.log(`[Executor] Action: "${rawActionType}" -> normalized: "${normalizedAction}"`);
       
+      // ============================================================
+      // UNIFIED EXECUTION: Try ActionHandlers first for common actions
+      // This ensures consistent behavior with PlaywrightRecorder
+      // ============================================================
+      const unifiedResult = await ActionHandlers.executeAction(this, resolvedStep, { timeout: this.timeout });
+      
+      if (unifiedResult.success) {
+        // Action handled successfully by unified handler
+        console.log(`[Executor] ✓ Unified handler succeeded for: ${normalizedAction}`);
+        if (unifiedResult.screenshot) {
+          result.screenshot = unifiedResult.screenshot;
+        }
+        // Continue to result handling at end of try block
+      } else if (!unifiedResult.delegateToContext && !unifiedResult.error?.includes('Unknown action')) {
+        // Unified handler tried but failed - throw error
+        throw new Error(unifiedResult.error || `Action failed: ${normalizedAction}`);
+      } else {
+        // Unified handler doesn't handle this action, use legacy switch
+        // (Salesforce-specific actions, tab switching, etc.)
+        console.log(`[Executor] Delegating to legacy handler: ${normalizedAction}`);
+      
       switch (normalizedAction) {
         // Navigation
         case 'GoTo':
@@ -2598,6 +2619,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             result.error = `Unknown action type: ${actionType}`;
           }
       }
+      } // End of else block for unified handler delegation
       
     } catch (error) {
       result.status = 'failed';

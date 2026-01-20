@@ -196,6 +196,8 @@ npm run dev
 
 ### Unified Execution Architecture
 
+**SINGLE POINT OF EXECUTION: `lib/action-handlers.js → executeAction()`**
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    RECORDING                                 │
@@ -204,19 +206,33 @@ npm run dev
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              SHARED: lib/action-handlers.js                  │
-│  - handleClick()  - handleFill()  - handleHover()           │
-│  - handleSelect() - All use SmartFinder + AI fallback        │
+│       UNIFIED EXECUTION: lib/action-handlers.js             │
+│                                                              │
+│   executeAction(ctx, action, options) ← SINGLE ENTRY POINT  │
+│     ├── handleClick()    (SmartFinder + AI fallback)        │
+│     ├── handleFill()     (SmartFinder + AI fallback)        │
+│     ├── handleHover()    (SmartFinder + AI fallback)        │
+│     ├── handleSelect()   (Radix/native dropdown support)    │
+│     └── handle*()        (All other actions)                │
 └──────────────────────┬──────────────────────────────────────┘
                        │
          ┌─────────────┴─────────────┐
          ▼                           ▼
 ┌─────────────────────┐   ┌─────────────────────┐
 │ PlaywrightRecorder  │   │    TestExecutor     │
-│ (Recording page)    │   │ (Builder/Tests tab) │
-│ Uses ActionHandlers │   │ Uses ActionHandlers │
+│ executeAction() →   │   │ executeStep() →     │
+│ calls unified first │   │ calls unified first │
 └─────────────────────┘   └─────────────────────┘
+         ↓                           ↓
+    SAME BEHAVIOR              SAME BEHAVIOR
+    (recording page)           (builder/tests)
 ```
+
+**Key Points:**
+- ALL playback goes through `ActionHandlers.executeAction()` first
+- Both executors share IDENTICAL element finding logic
+- SmartFinder, AI fallback, hover support - all unified
+- Salesforce-specific actions fall back to legacy handlers
 
 ### Hover Recording (CRITICAL for flyout menus)
 ```javascript
