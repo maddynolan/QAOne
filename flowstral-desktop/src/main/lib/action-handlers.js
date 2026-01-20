@@ -1,9 +1,17 @@
 /**
  * Action Handlers Module
  * 
- * Extracted from playwright-recorder.js for better maintainability.
- * Each handler receives (context, action, options) where context is the PlaywrightRecorder instance.
+ * UNIFIED EXECUTION POINT for all action handling.
+ * Both PlaywrightRecorder and TestExecutor use this module.
+ * 
+ * Usage:
+ *   const ActionHandlers = require('./lib/action-handlers');
+ *   const result = await ActionHandlers.executeAction(ctx, action, options);
  */
+
+// Import shared modules
+const { findElementWithAI, clickAtCoordinates, fillAtCoordinates, retryWithBackoff } = require('./ai-fallback');
+const RecordingUtils = require('./recording-utils');
 
 // ============================================================
 // TEXT NORMALIZATION UTILITIES
@@ -1133,10 +1141,19 @@ module.exports = {
   handleAssertText,
   handleAssertVisible,
   handleAssertValue,
-  // Helpers
+  
+  // AI Fallback (re-exported from ai-fallback.js)
+  findElementWithAI,
+  clickAtCoordinates,
+  fillAtCoordinates,
+  retryWithBackoff,
+  
+  // Text utilities
   normalizeActionType,
   getActionLabel,
   normalizeTextForMatching,
+  
+  // Internal helpers
   searchIframesForClick,
   searchIframesForFill,
   handleRadixSelect,

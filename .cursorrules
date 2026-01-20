@@ -45,13 +45,38 @@ Web App (React/TypeScript)
 
 ## Critical Files for Recording/Playback
 
-| File | Purpose |
-|------|---------|
-| `playwright-recorder.js` | Main recorder, executeAction(), runTest(), _setupConsoleListenerForPage() |
-| `lib/smart-finder.js` | 10-phase element finding with fallbacks |
-| `lib/element-recipe.js` | Recipe model (what/where/which) |
-| `lib/recipe-recorder-integration.js` | Legacy ↔ Recipe conversion, role inference |
-| `test-executor.js` | Alternative executor with AI fallback |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `playwright-recorder.js` | 11,124 | Main recorder, orchestrates recording/playback |
+| `test-executor.js` | 3,588 | Test execution from builder/tests tab |
+| `lib/action-handlers.js` | 1,130 | **UNIFIED** action execution point |
+| `lib/smart-finder.js` | 1,181 | 10-phase element finding with fallbacks |
+| `lib/element-recipe.js` | 696 | Recipe model (what/where/which) |
+| `lib/ai-fallback.js` | 217 | AI vision element finding |
+| `lib/recording-utils.js` | 214 | Text normalization utilities |
+| `lib/mobile-config.js` | 150 | Mobile device emulation |
+
+## Modular Architecture (Jan 2026)
+
+**See**: `flowstral-desktop/docs/ARCHITECTURE.md` for full details.
+
+### Shared Modules
+```
+lib/
+├── action-handlers.js     # UNIFIED execution - ALL playback goes here
+├── ai-fallback.js         # AI vision fallback (shared)
+├── recording-utils.js     # Text normalization (shared)
+├── smart-finder.js        # 10-phase element finding
+├── element-recipe.js      # Recipe model
+└── mobile-config.js       # Mobile emulation config
+```
+
+### Import Pattern
+```javascript
+// Both executors use:
+const ActionHandlers = require('./lib/action-handlers');
+const result = await ActionHandlers.executeAction(ctx, action, { timeout });
+```
 
 ## Playback Fallback Order
 
