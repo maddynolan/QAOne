@@ -81,6 +81,8 @@ import {
   convertRecordedAction,
   calculateCoverage as calculateAutomationCoverage,
 } from "@/lib/automation-linking";
+// Element Repair Wizard - Visual element picker for fixing failed steps
+import ElementRepairWizard from "@/components/ElementRepairWizard";
 
 // Types
 interface RecordedAction {
@@ -8435,91 +8437,30 @@ Recorded Test
         }}
       />
 
-      {/* ============ EDIT SELECTOR MODAL ============ */}
-      {/* When playback fails, users can manually override how to find an element */}
-      <Dialog open={editSelectorModalOpen} onOpenChange={setEditSelectorModalOpen}>
-        <DialogContent className="max-w-lg bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <Edit className="h-5 w-5 text-blue-400" />
-              Edit Step Selector
-            </DialogTitle>
-          </DialogHeader>
+      {/* ============ ELEMENT REPAIR WIZARD ============ */}
+      {/* Enhanced wizard with element picker, debug info, and AI assist */}
+      <ElementRepairWizard
+        open={editSelectorModalOpen}
+        onOpenChange={setEditSelectorModalOpen}
+        action={editingActionIndex !== null ? actions[editingActionIndex] : null}
+        actionIndex={editingActionIndex || 0}
+        onSave={(updates) => {
+          if (editingActionIndex === null) return;
           
-          <div className="space-y-4 py-4">
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-              <p className="text-xs text-amber-400">
-                💡 <strong>When automation fails:</strong> Use this to manually specify how to find the element.
-                The playback will try your selector FIRST before other strategies.
-              </p>
-            </div>
-
-            {/* Current Step Info */}
-            {editingActionIndex !== null && actions[editingActionIndex] && (
-              <div className="bg-secondary/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Current Step</p>
-                <p className="text-sm font-medium">{getDisplayDescription(actions[editingActionIndex])}</p>
-              </div>
-            )}
-            
-            {/* Manual Text Input */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Element Text (what the user sees)
-              </label>
-              <Input
-                value={manualTextInput}
-                onChange={(e) => setManualTextInput(e.target.value)}
-                placeholder="e.g., Go To Saver's Switch"
-                className="bg-secondary border-border text-foreground"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                The visible text of the element you want to click/interact with
-              </p>
-            </div>
-
-            {/* Manual CSS Selector */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                CSS Selector Override (optional - for advanced users)
-              </label>
-              <Input
-                value={manualSelectorInput}
-                onChange={(e) => setManualSelectorInput(e.target.value)}
-                placeholder='e.g., a[href*="savers-switch"], button.submit-btn'
-                className="bg-secondary border-border text-foreground font-mono text-sm"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                CSS selector to find the element - leave empty to use text matching
-              </p>
-            </div>
-
-            {/* Helpful Tips */}
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 space-y-2">
-              <p className="text-xs text-blue-400 font-medium">🔧 Quick Fix Tips:</p>
-              <ul className="text-[11px] text-blue-400/80 space-y-1 ml-3">
-                <li>• <strong>Apostrophe issues:</strong> Try both "Saver's" and "Saver's"</li>
-                <li>• <strong>Case issues:</strong> Text matching is usually case-insensitive</li>
-                <li>• <strong>Find selector:</strong> Right-click element in browser → Inspect → Copy selector</li>
-                <li>• <strong>Use data-testid:</strong> If available, use [data-testid="value"]</li>
-              </ul>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditSelectorModalOpen(false)} className="border-white/20">
-              Cancel
-            </Button>
-            <Button 
-              onClick={saveManualSelector}
-              className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              Save Override
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          // Update the action with the new selector/text
+          setActions(prev => prev.map((action, idx) => {
+            if (idx !== editingActionIndex) return action;
+            return {
+              ...action,
+              manualSelector: updates.manualSelector || action.manualSelector,
+              manualText: updates.manualText || action.manualText,
+            };
+          }));
+          
+          setEditSelectorModalOpen(false);
+          setEditingActionIndex(null);
+        }}
+      />
     </div>
   );
 }

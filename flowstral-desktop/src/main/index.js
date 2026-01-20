@@ -950,6 +950,220 @@ ipcMain.handle('playwright-recorder-stop-test', async (event, options) => {
 });
 
 // ============================================================================
+// ELEMENT PICKER & DEBUG IPC HANDLERS
+// For fixing failed steps with visual element selection
+// ============================================================================
+
+const { ElementPicker } = require('./lib/element-picker');
+const { DebugCollector } = require('./lib/debug-collector');
+
+let elementPicker = null;
+let debugCollector = null;
+
+// Start element picker mode
+ipcMain.handle('element-picker-start', async () => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available. Start recording first.' };
+    }
+
+    // Create picker if needed
+    if (!elementPicker) {
+      elementPicker = new ElementPicker(playwrightRecorder.page);
+    }
+
+    // Set up console listener for picked elements
+    const page = playwrightRecorder.page;
+    
+    return new Promise((resolve) => {
+      const consoleHandler = async (msg) => {
+        const text = msg.text();
+        
+        if (text.startsWith('__FLOWSTRAL_ELEMENT_PICKED__:')) {
+          const jsonStr = text.replace('__FLOWSTRAL_ELEMENT_PICKED__:', '');
+          try {
+            const elementInfo = JSON.parse(jsonStr);
+            await elementPicker.stop();
+            page.off('console', consoleHandler);
+            webappView?.webContents.send('element-picker:picked', elementInfo);
+            resolve({ success: true, elementInfo });
+          } catch (e) {
+            resolve({ success: false, error: 'Failed to parse element info' });
+          }
+        } else if (text === '__FLOWSTRAL_PICKER_CANCELLED__') {
+          await elementPicker.stop();
+          page.off('console', consoleHandler);
+          webappView?.webContents.send('element-picker:cancelled');
+          resolve({ success: false, cancelled: true });
+        }
+      };
+
+      page.on('console', consoleHandler);
+      
+      elementPicker.start().then(() => {
+        webappView?.webContents.send('element-picker:started');
+      }).catch((err) => {
+        page.off('console', consoleHandler);
+        resolve({ success: false, error: err.message });
+      });
+      
+      // Timeout after 60 seconds
+      setTimeout(() => {
+        page.off('console', consoleHandler);
+        elementPicker.stop().catch(() => {});
+        resolve({ success: false, error: 'Picker timeout' });
+      }, 60000);
+    });
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop element picker mode
+ipcMain.handle('element-picker-stop', async () => {
+  try {
+    if (elementPicker) {
+      await elementPicker.stop();
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Test a selector
+ipcMain.handle('element-picker-test-selector', async (event, selector) => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available' };
+    }
+
+    if (!elementPicker) {
+      elementPicker = new ElementPicker(playwrightRecorder.page);
+    }
+
+    return await elementPicker.testSelector(selector);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Highlight an element by selector (for preview)
+ipcMain.handle('element-picker-highlight', async (event, selector) => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available' };
+    }
+
+    if (!elementPicker) {
+      elementPicker = new ElementPicker(playwrightRecorder.page);
+    }
+
+    await elementPicker.highlightElement(selector, 2000);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Capture failure debug info
+ipcMain.handle('debug-capture-failure', async (event, { action, strategiesAttempted, error }) => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available' };
+    }
+
+    if (!debugCollector) {
+      debugCollector = new DebugCollector(playwrightRecorder.page);
+    }
+
+    const result = await debugCollector.captureFailureState(action, strategiesAttempted, error);
+    if (result.success) {
+      const formatted = debugCollector.formatDebugForDisplay(result.debug);
+      return { success: true, debug: formatted };
+    }
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get last failure debug info
+ipcMain.handle('debug-get-last-failure', async () => {
+  try {
+    if (!debugCollector) {
+      return { success: false, error: 'No debug info available' };
+    }
+
+    const debug = debugCollector.getLastFailureDebug();
+    if (debug) {
+      const formatted = debugCollector.formatDebugForDisplay(debug);
+      return { success: true, debug: formatted };
+    }
+    return { success: false, error: 'No failure debug captured' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Analyze failure and get fix suggestions
+ipcMain.handle('debug-analyze-failure', async (event, { action, strategiesAttempted }) => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available' };
+    }
+
+    if (!debugCollector) {
+      debugCollector = new DebugCollector(playwrightRecorder.page);
+    }
+
+    const suggestions = await debugCollector.analyzeFaillureAndSuggest(action, strategiesAttempted);
+    return { success: true, suggestions };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// AI-assisted element finding
+ipcMain.handle('ai-find-element', async (event, description) => {
+  try {
+    if (!playwrightRecorder || !playwrightRecorder.page) {
+      return { success: false, error: 'No browser page available' };
+    }
+
+    // Use existing AI fallback
+    const AIFallback = require('./lib/ai-fallback');
+    const result = await AIFallback.findElementWithAI(playwrightRecorder, description, 'click');
+    
+    if (result && result.x !== undefined) {
+      // Get element at coordinates
+      const elementInfo = await playwrightRecorder.page.evaluate(({ x, y }) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        
+        return {
+          tag: el.tagName.toLowerCase(),
+          text: el.innerText?.substring(0, 100),
+          selector: el.id ? `#${el.id}` : (el.className ? `.${el.className.split(' ')[0]}` : el.tagName.toLowerCase()),
+          confidence: 0.85
+        };
+      }, { x: result.x, y: result.y });
+
+      return {
+        success: true,
+        coordinates: result,
+        elementInfo,
+        message: `Found element at (${result.x}, ${result.y})`
+      };
+    }
+
+    return { success: false, error: 'AI could not find the element' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
 // MOBILE TESTING IPC HANDLERS
 // Phase 1: Mobile Web Emulation (Playwright devices)
 // Phase 2: Native App Testing (Maestro integration)

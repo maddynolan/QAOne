@@ -34,6 +34,8 @@ flowstral-desktop/
 │   │       ├── recipe-recorder-integration.js
 │   │       ├── action-coalescer.js
 │   │       ├── assertion-handlers.js # Assertions (365 lines)
+│   │       ├── element-picker.js     # Visual element picker (400 lines) NEW
+│   │       ├── debug-collector.js    # Failure debug capture (300 lines) NEW
 │   │       ├── ai-fallback.js        # AI vision (217 lines)
 │   │       ├── recording-utils.js    # Text utilities (214 lines)
 │   │       ├── mobile-config.js      # Mobile emulation (150 lines)
@@ -182,6 +184,41 @@ const result = await executeAssertion(ctx, assertion, stepSelector);
 - `page_loaded`, `network_idle`
 - Toast/notification assertions
 - Salesforce/API assertions (auto-pass in UI context)
+
+### element-picker.js (NEW)
+**Purpose**: Visual element selection for fixing failed steps
+
+```javascript
+const { ElementPicker } = require('./lib/element-picker');
+const picker = new ElementPicker(page);
+await picker.start(); // Injects overlay, user clicks element
+const result = await picker.testSelector(selector); // Test if selector works
+await picker.highlightElement(selector); // Visual preview
+```
+
+**Features**:
+- Hover highlight overlay
+- Click to capture element
+- Auto-generate multiple selectors (data-testid, id, role+text, CSS)
+- Reliability scoring (1-5 stars)
+- Selector testing and preview
+
+### debug-collector.js (NEW)
+**Purpose**: Capture and analyze step failure state
+
+```javascript
+const { DebugCollector } = require('./lib/debug-collector');
+const collector = new DebugCollector(page);
+const debug = await collector.captureFailureState(action, strategies, error);
+const suggestions = await collector.analyzeFaillureAndSuggest(action, strategies);
+```
+
+**Captures**:
+- Strategies attempted and why they failed
+- Similar elements on page
+- Page state (URL, load state, element counts)
+- Screenshot at failure point
+- Fix suggestions (wait, scroll, text mismatch)
 
 ### mobile-config.js
 **Purpose**: Mobile device emulation configuration

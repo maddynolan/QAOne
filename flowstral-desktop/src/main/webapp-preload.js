@@ -232,6 +232,53 @@ contextBridge.exposeInMainWorld('flowstral', {
   },
   
   // ========================================================================
+  // ELEMENT PICKER API - Visual element selection for fixing failed steps
+  // ========================================================================
+  elementPicker: {
+    // Start element picker mode (returns picked element info)
+    start: () => ipcRenderer.invoke('element-picker-start'),
+    
+    // Stop element picker mode
+    stop: () => ipcRenderer.invoke('element-picker-stop'),
+    
+    // Test a selector to see if it finds elements
+    testSelector: (selector) => ipcRenderer.invoke('element-picker-test-selector', selector),
+    
+    // Highlight an element by selector (for preview)
+    highlight: (selector) => ipcRenderer.invoke('element-picker-highlight', selector),
+    
+    // Listen for picker events
+    onPicked: (callback) => {
+      ipcRenderer.on('element-picker:picked', (_, data) => callback(data));
+    },
+    onCancelled: (callback) => {
+      ipcRenderer.on('element-picker:cancelled', () => callback());
+    },
+    onStarted: (callback) => {
+      ipcRenderer.on('element-picker:started', () => callback());
+    },
+  },
+  
+  // ========================================================================
+  // DEBUG COLLECTOR API - Capture and analyze step failures
+  // ========================================================================
+  debug: {
+    // Capture failure state with full debug info
+    captureFailure: (action, strategiesAttempted, error) => 
+      ipcRenderer.invoke('debug-capture-failure', { action, strategiesAttempted, error }),
+    
+    // Get last failure debug info
+    getLastFailure: () => ipcRenderer.invoke('debug-get-last-failure'),
+    
+    // Analyze failure and get fix suggestions
+    analyzeFailure: (action, strategiesAttempted) => 
+      ipcRenderer.invoke('debug-analyze-failure', { action, strategiesAttempted }),
+    
+    // AI-assisted element finding
+    aiFindElement: (description) => ipcRenderer.invoke('ai-find-element', description),
+  },
+  
+  // ========================================================================
   // MOBILE TESTING API (Phase 1: Emulation, Phase 2: Native Apps)
   // ========================================================================
   mobile: {
