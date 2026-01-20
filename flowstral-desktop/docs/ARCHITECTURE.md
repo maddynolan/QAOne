@@ -33,6 +33,7 @@ flowstral-desktop/
 │   │       ├── salesforce-handlers.js# SF-specific actions (676 lines)
 │   │       ├── recipe-recorder-integration.js
 │   │       ├── action-coalescer.js
+│   │       ├── assertion-handlers.js # Assertions (365 lines)
 │   │       ├── ai-fallback.js        # AI vision (217 lines)
 │   │       ├── recording-utils.js    # Text utilities (214 lines)
 │   │       ├── mobile-config.js      # Mobile emulation (150 lines)
@@ -164,6 +165,24 @@ const { normalizeTextForMatching, getActionLabel } = require('./lib/recording-ut
 const label = normalizeTextForMatching("Submit's Form"); // "Submit's Form"
 ```
 
+### assertion-handlers.js
+**Purpose**: Unified assertion execution
+
+```javascript
+const { executeAssertion } = require('./lib/assertion-handlers');
+const result = await executeAssertion(ctx, assertion, stepSelector);
+// Returns { success: true } or { success: false, error: 'message' }
+```
+
+**Assertion Types Supported**:
+- `text_contains`, `text_equals`, `text_not_contains`
+- `element_visible`, `element_hidden`, `element_exists`
+- `value_equals`, `value_contains`
+- `url_contains`, `url_equals`
+- `page_loaded`, `network_idle`
+- Toast/notification assertions
+- Salesforce/API assertions (auto-pass in UI context)
+
 ### mobile-config.js
 **Purpose**: Mobile device emulation configuration
 
@@ -266,15 +285,17 @@ When deterministic strategies fail, AI vision provides a safety net:
 ### 4. Implicit Tab Switching
 Actions include `tabIndex` property. During playback, the executor automatically switches to the correct tab without explicit SwitchTab actions.
 
-## Line Counts (Post-Refactor)
+## Line Counts (Post-Refactor - Jan 2026)
 
 | File | Lines | Status |
 |------|-------|--------|
-| `playwright-recorder.js` | 11,124 | Core (uses shared modules) |
-| `test-executor.js` | 3,588 | Core (uses shared modules) |
+| `playwright-recorder.js` | 10,729 | Core (uses shared modules) |
+| `test-executor.js` | 3,590 | Core (uses shared modules) |
 | `index.js` | 2,920 | Entry point |
-| `action-handlers.js` | 1,130 | **UNIFIED** execution |
 | `smart-finder.js` | 1,181 | Element finding |
+| `action-handlers.js` | 1,130 | **UNIFIED** execution |
+| `salesforce-handlers.js` | 649 | SF-specific actions |
+| `assertion-handlers.js` | 365 | Assertions (~416 lines extracted) |
 | `ai-fallback.js` | 217 | AI vision |
 | `recording-utils.js` | 214 | Text utilities |
 | `mobile-config.js` | 150 | Mobile emulation |
@@ -282,30 +303,50 @@ Actions include `tabIndex` property. During playback, the executor automatically
 ### Shared Code Extraction
 
 Previously duplicated code now in shared modules:
+- **Action Handlers**: ~1000 lines → `action-handlers.js` (unified)
+- **Salesforce Handlers**: ~650 lines → `salesforce-handlers.js` (shared)
+- **Assertion Handlers**: ~416 lines → `assertion-handlers.js` (shared)
 - **AI Fallback**: ~140 lines → `ai-fallback.js` (shared by both executors)
 - **Text Utilities**: ~100 lines → `recording-utils.js` (shared)
-- **Action Handlers**: ~1000 lines → `action-handlers.js` (unified)
 - **Mobile Config**: ~150 lines → `mobile-config.js` (shared)
 
-## Future Refactoring Opportunities
+## Refactoring Status (Jan 2026)
 
-### Phase 2: Salesforce Handlers
-Move Salesforce-specific handlers from test-executor.js to salesforce-handlers.js:
-- sf_connect, sf_query, sf_assert (~400 lines)
-- sf_create_record, sf_update_record (~200 lines)
-- sf_metadata_assert (~150 lines)
+### ✅ Phase 1: Action Handlers (COMPLETE)
+Unified action execution in `action-handlers.js`:
+- Click, Fill, Hover, Select, Navigate, etc.
+- SmartFinder + AI fallback integration
+- Used by both PlaywrightRecorder and TestExecutor
 
-### Phase 3: IPC Handler Extraction
-Split index.js IPC handlers:
+### ✅ Phase 2: Salesforce Handlers (COMPLETE)
+SF-specific actions in `salesforce-handlers.js`:
+- sf_connect, sf_query, sf_assert
+- sf_create_record, sf_update_record
+- sf_metadata_assert, sf_navigate
+
+### ✅ Phase 3: Assertion Handlers (COMPLETE)
+Assertion execution in `assertion-handlers.js`:
+- ~416 lines extracted from playwright-recorder.js
+- 50+ assertion types supported
+- Shared by both executors
+
+### ⏸️ Future Phases (Not Started - Lower Priority)
+
+**Phase 4: IPC Handler Extraction**
+Split index.js IPC handlers (optional, 2,920 lines is manageable):
 - `ipc/recorder-handlers.js` - playwright-recorder-* handlers
 - `ipc/browser-handlers.js` - embedded-browser-* handlers
 - `ipc/mobile-handlers.js` - mobile-* handlers
-- `ipc/config-handlers.js` - config, license handlers
 
-### Phase 4: Page Analyzer
-Extract `analyzePage()` from playwright-recorder.js:
+**Phase 5: Page Analyzer**
+Extract `analyzePage()` from playwright-recorder.js (optional):
 - ~1800 lines of DOM analysis
 - Could be a standalone module for reuse
+
+**Phase 6: Injected Scripts**
+Extract injected scripts to `lib/injected-scripts.js` (optional):
+- ~400 lines of embedded JavaScript
+- Would improve maintainability
 
 ## Testing
 
