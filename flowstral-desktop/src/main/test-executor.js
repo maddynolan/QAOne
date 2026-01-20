@@ -14,6 +14,9 @@ const { legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
 // UNIFIED EXECUTION: Import shared ActionHandlers for consistent behavior with PlaywrightRecorder
 const ActionHandlers = require('./lib/action-handlers');
 
+// SALESFORCE: Import shared Salesforce handlers
+const SalesforceHandlers = require('./lib/salesforce-handlers');
+
 class TestExecutor {
   constructor(options = {}) {
     this.browserType = options.browserType || 'chromium';

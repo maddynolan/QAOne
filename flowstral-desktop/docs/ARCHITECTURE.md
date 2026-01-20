@@ -22,17 +22,21 @@ flowstral-desktop/
 │   │   ├── recorder.js          # Legacy recorder
 │   │   ├── preload.js           # Preload scripts
 │   │   ├── webapp-preload.js
+│   │   ├── ipc/                 # IPC handlers (extracted from index.js)
+│   │   │   ├── index.js             # Handler registration
+│   │   │   ├── recorder-handlers.js # Playwright recorder IPC
+│   │   │   └── mobile-handlers.js   # Mobile testing IPC
 │   │   └── lib/                 # Shared modules
 │   │       ├── action-handlers.js    # UNIFIED execution (1,130 lines)
 │   │       ├── smart-finder.js       # Element finding (1,181 lines)
 │   │       ├── element-recipe.js     # Recipe model (696 lines)
+│   │       ├── salesforce-handlers.js# SF-specific actions (676 lines)
 │   │       ├── recipe-recorder-integration.js
 │   │       ├── action-coalescer.js
 │   │       ├── ai-fallback.js        # AI vision (217 lines)
 │   │       ├── recording-utils.js    # Text utilities (214 lines)
 │   │       ├── mobile-config.js      # Mobile emulation (150 lines)
 │   │       ├── mobile-devices.js     # Device presets
-│   │       ├── salesforce-handlers.js
 │   │       └── ai-*.js               # AI agents
 │   └── renderer/                # React web app (loaded in BrowserView)
 └── docs/

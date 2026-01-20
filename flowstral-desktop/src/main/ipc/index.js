@@ -1,44 +1,39 @@
 /**
  * IPC Handlers Index
  * 
- * Central registration point for all IPC handlers.
- * Import this module in index.js to register all handlers at once.
+ * Centralized registration of all IPC handlers.
+ * Extracted from index.js for better maintainability.
+ * 
+ * USAGE in index.js:
+ *   const { registerAllIPCHandlers } = require('./ipc');
+ *   registerAllIPCHandlers({ getWebappView: () => webappView });
  */
 
-const { registerBrowserHandlers } = require('./browser-handlers');
-const { registerStorageHandlers } = require('./storage-handlers');
-const { registerTestHandlers } = require('./test-handlers');
-const { registerUtilityHandlers } = require('./utility-handlers');
-const { registerAIGeneratorHandlers } = require('./ai-generator-handlers');
-const { registerAIExplorerHandlers } = require('./ai-explorer-handlers');
-const { registerFlowExplorerHandlers } = require('./flow-explorer-handlers');
+const { registerRecorderHandlers } = require('./recorder-handlers');
+const { registerMobileHandlers } = require('./mobile-handlers');
 
 /**
  * Register all IPC handlers
- * @param {Object} context - Application context with getters for all modules
+ * @param {object} deps - Dependencies
+ * @param {function} deps.getWebappView - Function to get webappView
+ * @returns {object} - Handler utilities { getRecorder }
  */
-function registerAllHandlers(context) {
+function registerAllIPCHandlers(deps) {
   console.log('[IPC] Registering all handlers...');
   
-  registerBrowserHandlers(context);
-  registerStorageHandlers(context);
-  registerTestHandlers(context);
-  registerUtilityHandlers(context);
-  registerAIGeneratorHandlers(context);
-  registerAIExplorerHandlers(context);
-  registerFlowExplorerHandlers(context);
+  // Register recorder handlers (returns getRecorder function)
+  const { getRecorder } = registerRecorderHandlers(deps);
+  
+  // Register mobile handlers (needs recorder access)
+  registerMobileHandlers({ ...deps, getRecorder });
   
   console.log('[IPC] All handlers registered');
+  
+  return { getRecorder };
 }
 
 module.exports = {
-  registerAllHandlers,
-  registerBrowserHandlers,
-  registerStorageHandlers,
-  registerTestHandlers,
-  registerUtilityHandlers,
-  registerAIGeneratorHandlers,
-  registerAIExplorerHandlers,
-  registerFlowExplorerHandlers
+  registerAllIPCHandlers,
+  registerRecorderHandlers,
+  registerMobileHandlers
 };
-

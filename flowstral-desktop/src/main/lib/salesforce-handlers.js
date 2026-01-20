@@ -7,7 +7,32 @@
  * - Lightning navigation
  * - SOQL execution
  * - Shadow DOM interactions
+ * 
+ * USAGE:
+ *   const SalesforceHandlers = require('./lib/salesforce-handlers');
+ *   const result = await SalesforceHandlers.handleSalesforceAction(ctx, action, options);
+ * 
+ * Context (ctx) must provide either:
+ *   - ctx.sfApiCall(method, endpoint, body) - TestExecutor style
+ *   - getApiCaller(ctx)(method, endpoint, body) - PlaywrightRecorder style
  */
+
+// ============================================================
+// HELPER: Normalize context API access
+// Supports both TestExecutor (sfApiCall) and PlaywrightRecorder (_sfApiCall)
+// ============================================================
+function getApiCaller(ctx) {
+  return ctx.sfApiCall?.bind(ctx) || getApiCaller(ctx)?.bind(ctx) || null;
+}
+
+function hasConnection(ctx) {
+  return ctx._sfConnection || ctx.sfConnection;
+}
+
+function setConnection(ctx, connection) {
+  ctx._sfConnection = connection;
+  ctx.sfConnection = connection;
+}
 
 // ============================================================
 // TEXT NORMALIZATION UTILITIES
@@ -61,7 +86,7 @@ async function handleSFConnect(ctx, action, options = {}) {
   const accessToken = action.args?.[1] || action.accessToken;
   
   console.log(`[SalesforceHandler] SF Connect: ${instanceUrl}`);
-  ctx._sfConnection = { instanceUrl, accessToken };
+  setConnection(ctx, { instanceUrl, accessToken });
   return { success: true };
 }
 
@@ -72,12 +97,13 @@ async function handleSFQuery(ctx, action, options = {}) {
   const soql = action.args?.[0] || action.query;
   console.log(`[SalesforceHandler] SF Query: ${soql}`);
   
-  if (!ctx._sfConnection) {
-    return { success: false, error: 'No Salesforce connection. Call sf_connect first.' };
+  const apiCall = getApiCaller(ctx);
+  if (!apiCall) {
+    return { success: false, error: 'No Salesforce API caller available. Ensure sfApiCall is defined.' };
   }
   
   // Execute query via REST API
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/query?q=${encodeURIComponent(soql)}`);
+  const result = await apiCall('GET', `/query?q=${encodeURIComponent(soql)}`);
   return { success: true, result };
 }
 
@@ -119,11 +145,11 @@ async function handleSFCreateRecord(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] SF Create Record: ${objectName}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection. Call sf_connect first.' };
   }
   
-  const result = await ctx._sfApiCall('POST', `/services/data/v58.0/sobjects/${objectName}`, recordData);
+  const result = await getApiCaller(ctx)('POST', `/services/data/v58.0/sobjects/${objectName}`, recordData);
   return { success: true, result };
 }
 
@@ -166,11 +192,11 @@ async function handleSFSOQL(ctx, action, options = {}) {
   const query = action.args?.[0] || action.query || action.value;
   console.log(`[SalesforceHandler] ExecuteSOQL: ${query}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection. Call sf_connect first.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/query?q=${encodeURIComponent(query)}`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/query?q=${encodeURIComponent(query)}`);
   ctx._lastSOQLResult = result;
   return { success: true, result };
 }
@@ -185,11 +211,11 @@ async function handleAssertSOQL(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] AssertSOQL: ${query} | ${condition} | ${expected}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection. Call sf_connect first.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/query?q=${encodeURIComponent(query)}`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/query?q=${encodeURIComponent(query)}`);
   
   // Evaluate condition
   let actual;
@@ -221,11 +247,11 @@ async function handleAssertFieldExists(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] AssertFieldExists: ${objectName}.${fieldName}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
   const field = result.fields?.find(f => f.name === fieldName);
   
   if (!field) {
@@ -246,11 +272,11 @@ async function handleAssertFieldValue(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] AssertFieldValue: ${objectName}.${fieldName} = ${expected}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/${recordId}`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/${recordId}`);
   const actual = result[fieldName];
   
   if (String(actual) !== String(expected)) {
@@ -270,11 +296,11 @@ async function handleAssertPicklist(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] AssertPicklist: ${objectName}.${fieldName}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
   const field = result.fields?.find(f => f.name === fieldName);
   
   if (!field) {
@@ -333,11 +359,11 @@ async function handleAssertRecordType(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] AssertRecordType: ${objectName}.${recordTypeName}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection.' };
   }
   
-  const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
+  const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
   const recordTypes = result.recordTypeInfos || [];
   const found = recordTypes.find(rt => rt.name === recordTypeName || rt.developerName === recordTypeName);
   
@@ -358,11 +384,11 @@ async function handleRestAPI(ctx, action, options = {}) {
   
   console.log(`[SalesforceHandler] RestAPI: ${method} ${endpoint}`);
   
-  if (!ctx._sfConnection) {
+  if (!hasConnection(ctx) && !getApiCaller(ctx)) {
     return { success: false, error: 'No Salesforce connection.' };
   }
   
-  const result = await ctx._sfApiCall(method, endpoint, body);
+  const result = await getApiCaller(ctx)(method, endpoint, body);
   return { success: true, result };
 }
 
@@ -401,7 +427,7 @@ async function handleSFMetadataAssert(ctx, action, options = {}) {
       const fieldName = action.args?.[2] || action.fieldName;
       const expectedType = action.args?.[3] || action.expectedType;
       
-      const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
+      const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
       const field = result.fields?.find(f => f.name === fieldName);
       
       if (!field) {
@@ -420,7 +446,7 @@ async function handleSFMetadataAssert(ctx, action, options = {}) {
       const fieldName = action.args?.[2] || action.fieldName;
       const expectedRequired = action.args?.[3] !== false;
       
-      const result = await ctx._sfApiCall('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
+      const result = await getApiCaller(ctx)('GET', `/services/data/v58.0/sobjects/${objectName}/describe`);
       const field = result.fields?.find(f => f.name === fieldName);
       
       if (!field) {

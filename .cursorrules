@@ -64,11 +64,17 @@ Web App (React/TypeScript)
 ```
 lib/
 ├── action-handlers.js     # UNIFIED execution - ALL playback goes here
+├── salesforce-handlers.js # SF-specific actions (connect, query, etc.)
+├── smart-finder.js        # 10-phase element finding
 ├── ai-fallback.js         # AI vision fallback (shared)
 ├── recording-utils.js     # Text normalization (shared)
-├── smart-finder.js        # 10-phase element finding
 ├── element-recipe.js      # Recipe model
 └── mobile-config.js       # Mobile emulation config
+
+ipc/
+├── index.js               # IPC handler registration
+├── recorder-handlers.js   # Playwright recorder IPC
+└── mobile-handlers.js     # Mobile testing IPC
 ```
 
 ### Import Pattern
@@ -76,6 +82,10 @@ lib/
 // Both executors use:
 const ActionHandlers = require('./lib/action-handlers');
 const result = await ActionHandlers.executeAction(ctx, action, { timeout });
+
+// Salesforce actions:
+const SalesforceHandlers = require('./lib/salesforce-handlers');
+const sfResult = await SalesforceHandlers.handleSalesforceAction(ctx, action, options);
 ```
 
 ## Playback Fallback Order
