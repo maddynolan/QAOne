@@ -100,7 +100,7 @@ export default function ContactPage() {
                 <h2 className="text-2xl font-bold text-slate-900 mb-6">Contact Information</h2>
                 <div className="space-y-4">
                   {[
-                    { icon: Mail, label: 'Email', value: 'hello@flowstral.com', href: 'mailto:hello@flowstral.com' },
+                    { icon: Mail, label: 'Email', value: 'support@flowstral.com', href: 'mailto:support@flowstral.com' },
                     { icon: Phone, label: 'Phone', value: '(360) 878-3752', href: 'tel:+13608783752' },
                     { icon: MapPin, label: 'Location', value: 'Maryland, USA', href: null },
                   ].map((item, idx) => (
