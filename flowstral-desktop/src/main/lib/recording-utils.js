@@ -51,10 +51,112 @@ const cssEscape = (value) => {
 
 /**
  * Normalize text for matching
- * Handles: apostrophe variants (', ', etc.), quote variants, whitespace
+ * Handles: apostrophe variants (', ', etc.), quote variants, whitespace, AND missing 's' characters
+ * CRITICAL: This is used across recording and playback for text matching
  */
 const normalizeTextForMatching = (text) => {
   if (!text || typeof text !== 'string') return '';
+  
+  // First: Normalize ALL whitespace types to regular space (nbsp, thin space, em space, etc.)
+  text = text.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+  
+  // CRITICAL FIX: Salesforce missing 's' character issue
+  // Pattern: "Li t" should be "List", "U er" should be "User"
+  // This comprehensive list covers most Salesforce UI text patterns
+  text = text
+    // Common patterns with missing 's'
+    .replace(/Li\s+t\b/g, 'List')
+    .replace(/U\s+er\b/g, 'User')
+    .replace(/Pa\s+word\b/g, 'Password')
+    .replace(/Ca\s+e\b/g, 'Case')
+    .replace(/Ta\s+k\b/g, 'Task')
+    .replace(/A\s+et\b/g, 'Asset')
+    // Salesforce object names
+    .replace(/Campa\s+gn\b/g, 'Campaign')
+    .replace(/Acc\s+ount\b/g, 'Account')
+    .replace(/Cont\s+act\b/g, 'Contact')
+    .replace(/Opp\s+ortunity\b/g, 'Opportunity')
+    .replace(/Rec\s+ently\b/g, 'Recently')
+    .replace(/View\s+ed\b/g, 'Viewed')
+    .replace(/Act\s+ive\b/g, 'Active')
+    // Additional Salesforce patterns (January 2026 expansion)
+    .replace(/Rep\s+ort\b/g, 'Report')
+    .replace(/Da\s+hboard\b/g, 'Dashboard')
+    .replace(/Cal\s+endar\b/g, 'Calendar')
+    .replace(/Pro\s+duct\b/g, 'Product')
+    .replace(/Quot\s+e\b/g, 'Quote')
+    .replace(/Ord\s+er\b/g, 'Order')
+    .replace(/Inv\s+oice\b/g, 'Invoice')
+    .replace(/Con\s+tract\b/g, 'Contract')
+    .replace(/Serv\s+ice\b/g, 'Service')
+    .replace(/Sol\s+ution\b/g, 'Solution')
+    .replace(/Kno\s+wledge\b/g, 'Knowledge')
+    .replace(/Art\s+icle\b/g, 'Article')
+    .replace(/Pri\s+ce\b/g, 'Price')
+    .replace(/Dis\s+count\b/g, 'Discount')
+    .replace(/Cus\s+tom\b/g, 'Custom')
+    .replace(/Sta\s+ndard\b/g, 'Standard')
+    .replace(/Pub\s+lic\b/g, 'Public')
+    .replace(/Pri\s+vate\b/g, 'Private')
+    .replace(/Sha\s+red\b/g, 'Shared')
+    .replace(/Fol\s+low\b/g, 'Follow')
+    .replace(/Sub\s+mit\b/g, 'Submit')
+    .replace(/Del\s+ete\b/g, 'Delete')
+    .replace(/Cre\s+ate\b/g, 'Create')
+    .replace(/Sea\s+rch\b/g, 'Search')
+    .replace(/Fil\s+ter\b/g, 'Filter')
+    .replace(/Exp\s+ort\b/g, 'Export')
+    .replace(/Imp\s+ort\b/g, 'Import')
+    .replace(/Set\s+tings\b/g, 'Settings')
+    .replace(/Prof\s+ile\b/g, 'Profile')
+    .replace(/Det\s+ails\b/g, 'Details')
+    .replace(/His\s+tory\b/g, 'History')
+    .replace(/Not\s+es\b/g, 'Notes')
+    .replace(/Fil\s+es\b/g, 'Files')
+    .replace(/Rel\s+ated\b/g, 'Related')
+    .replace(/Prim\s+ary\b/g, 'Primary')
+    .replace(/Sec\s+ondary\b/g, 'Secondary')
+    .replace(/Mas\s+ter\b/g, 'Master')
+    .replace(/Chan\s+nel\b/g, 'Channel')
+    .replace(/Mem\s+ber\b/g, 'Member')
+    .replace(/Own\s+er\b/g, 'Owner')
+    .replace(/Sta\s+tus\b/g, 'Status')
+    .replace(/Typ\s+e\b/g, 'Type')
+    .replace(/Sta\s+ge\b/g, 'Stage')
+    .replace(/Pha\s+se\b/g, 'Phase')
+    .replace(/Clo\s+sed\b/g, 'Closed')
+    .replace(/Los\s+t\b/g, 'Lost')
+    .replace(/Pen\s+ding\b/g, 'Pending')
+    .replace(/Sel\s+ect\b/g, 'Select')
+    .replace(/Cho\s+ose\b/g, 'Choose')
+    .replace(/Bro\s+wse\b/g, 'Browse')
+    .replace(/Uplo\s+ad\b/g, 'Upload')
+    .replace(/Down\s+load\b/g, 'Download')
+    .replace(/Pre\s+view\b/g, 'Preview')
+    .replace(/Edi\s+t\b/g, 'Edit')
+    .replace(/Sav\s+e\b/g, 'Save')
+    .replace(/Can\s+cel\b/g, 'Cancel')
+    .replace(/Con\s+firm\b/g, 'Confirm')
+    .replace(/Clo\s+se\b/g, 'Close')
+    .replace(/Ref\s+resh\b/g, 'Refresh')
+    .replace(/Clea\s+r\b/g, 'Clear')
+    .replace(/Res\s+et\b/g, 'Reset')
+    .replace(/App\s+rove\b/g, 'Approve')
+    .replace(/Rej\s+ect\b/g, 'Reject')
+    .replace(/Ass\s+ign\b/g, 'Assign')
+    .replace(/Tran\s+sfer\b/g, 'Transfer')
+    .replace(/Con\s+vert\b/g, 'Convert')
+    .replace(/Mer\s+ge\b/g, 'Merge')
+    .replace(/Clo\s+ne\b/g, 'Clone')
+    .replace(/Arc\s+hive\b/g, 'Archive')
+    .replace(/Res\s+tore\b/g, 'Restore')
+    .replace(/Log\s+in\b/g, 'Login')
+    .replace(/Log\s+out\b/g, 'Logout')
+    .replace(/Sig\s+n\b/g, 'Sign')
+    .replace(/Reg\s+ister\b/g, 'Register')
+    .replace(/Ver\s+ify\b/g, 'Verify')
+    .replace(/Auth\s+enticate\b/g, 'Authenticate');
+  
   return text
     .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'") // All apostrophe variants to straight
     .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')              // All quote variants to straight

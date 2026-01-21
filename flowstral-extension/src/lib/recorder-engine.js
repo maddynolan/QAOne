@@ -756,6 +756,25 @@
     // Final cleanup
     text = text.trim();
     
+    // CRITICAL FIX: Salesforce sometimes renders text with missing 's' characters
+    // Pattern: "Li t" should be "List", "U er" should be "User"
+    // This happens when text is split across multiple spans in Shadow DOM
+    // First normalize all whitespace types (nbsp, thin space, etc.) to regular space
+    text = text.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+    text = text
+      .replace(/Li\s+t\b/g, 'List')
+      .replace(/U\s+er\b/g, 'User')
+      .replace(/Pa\s+word\b/g, 'Password')
+      .replace(/Ca\s+e\b/g, 'Case')
+      .replace(/Ta\s+k\b/g, 'Task')
+      .replace(/A\s+et\b/g, 'Asset')
+      .replace(/Campa\s+gn\b/g, 'Campaign')
+      .replace(/Rec\s+ently\b/g, 'Recently')
+      .replace(/View\s+ed\b/g, 'Viewed')
+      .replace(/Act\s+ive\b/g, 'Active')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    
     // Limit length
     if (text.length > 50) {
       text = text.substring(0, 47) + '...';

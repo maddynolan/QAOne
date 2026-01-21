@@ -342,6 +342,200 @@ const CUSTOM_ELEMENT_ROLES = {
   'cds-accordion-item': 'group',
   'cds-structured-list': 'list',
   'cds-structured-list-row': 'row',
+  
+  // PrimeNG (Angular)
+  'p-button': 'button',
+  'p-splitButton': 'button',
+  'p-inputText': 'textbox',
+  'p-inputTextarea': 'textbox',
+  'p-dropdown': 'combobox',
+  'p-multiSelect': 'listbox',
+  'p-listbox': 'listbox',
+  'p-checkbox': 'checkbox',
+  'p-radioButton': 'radio',
+  'p-inputSwitch': 'switch',
+  'p-slider': 'slider',
+  'p-calendar': 'textbox',
+  'p-tabView': 'tablist',
+  'p-tabPanel': 'tabpanel',
+  'p-menu': 'menu',
+  'p-menuitem': 'menuitem',
+  'p-menubar': 'menubar',
+  'p-contextMenu': 'menu',
+  'p-dialog': 'dialog',
+  'p-confirmDialog': 'alertdialog',
+  'p-table': 'table',
+  'p-treeTable': 'treegrid',
+  'p-tree': 'tree',
+  'p-accordion': 'group',
+  'p-accordionTab': 'group',
+  'p-panel': 'region',
+  'p-card': 'region',
+  'p-chips': 'listbox',
+  'p-autoComplete': 'combobox',
+  'p-toast': 'alert',
+  'p-messages': 'alert',
+  'p-progressBar': 'progressbar',
+  'p-progressSpinner': 'progressbar',
+  
+  // Vuetify (Vue)
+  'v-btn': 'button',
+  'v-text-field': 'textbox',
+  'v-textarea': 'textbox',
+  'v-select': 'combobox',
+  'v-combobox': 'combobox',
+  'v-autocomplete': 'combobox',
+  'v-checkbox': 'checkbox',
+  'v-radio': 'radio',
+  'v-radio-group': 'radiogroup',
+  'v-switch': 'switch',
+  'v-slider': 'slider',
+  'v-range-slider': 'slider',
+  'v-tab': 'tab',
+  'v-tabs': 'tablist',
+  'v-tab-item': 'tabpanel',
+  'v-menu': 'menu',
+  'v-list': 'list',
+  'v-list-item': 'listitem',
+  'v-dialog': 'dialog',
+  'v-card': 'region',
+  'v-expansion-panel': 'group',
+  'v-expansion-panels': 'group',
+  'v-treeview': 'tree',
+  'v-data-table': 'table',
+  'v-simple-table': 'table',
+  'v-progress-linear': 'progressbar',
+  'v-progress-circular': 'progressbar',
+  'v-snackbar': 'alert',
+  'v-alert': 'alert',
+  'v-chip': 'button',
+  'v-chip-group': 'listbox',
+  'v-date-picker': 'dialog',
+  'v-time-picker': 'dialog',
+  'v-file-input': 'button',
+  
+  // Ant Design (React) - note: uses classnames, these are for reference
+  'ant-btn': 'button',
+  'ant-input': 'textbox',
+  'ant-input-number': 'spinbutton',
+  'ant-select': 'combobox',
+  'ant-checkbox': 'checkbox',
+  'ant-radio': 'radio',
+  'ant-radio-group': 'radiogroup',
+  'ant-switch': 'switch',
+  'ant-slider': 'slider',
+  'ant-tabs': 'tablist',
+  'ant-tabs-tab': 'tab',
+  'ant-menu': 'menu',
+  'ant-menu-item': 'menuitem',
+  'ant-dropdown': 'menu',
+  'ant-modal': 'dialog',
+  'ant-drawer': 'dialog',
+  'ant-table': 'table',
+  'ant-tree': 'tree',
+  'ant-tree-treenode': 'treeitem',
+  'ant-collapse': 'group',
+  'ant-collapse-item': 'group',
+  'ant-card': 'region',
+  'ant-list': 'list',
+  'ant-list-item': 'listitem',
+  'ant-progress': 'progressbar',
+  'ant-alert': 'alert',
+  'ant-message': 'alert',
+  'ant-notification': 'alert',
+  'ant-tag': 'button',
+  'ant-date-picker': 'combobox',
+  'ant-time-picker': 'combobox',
+  'ant-upload': 'button',
+  
+  // Blueprint (React)
+  'bp4-button': 'button',
+  'bp5-button': 'button',
+  'bp4-input': 'textbox',
+  'bp5-input': 'textbox',
+  'bp4-select': 'combobox',
+  'bp5-select': 'combobox',
+  'bp4-checkbox': 'checkbox',
+  'bp5-checkbox': 'checkbox',
+  'bp4-radio': 'radio',
+  'bp5-radio': 'radio',
+  'bp4-switch': 'switch',
+  'bp5-switch': 'switch',
+  'bp4-slider': 'slider',
+  'bp5-slider': 'slider',
+  'bp4-tab': 'tab',
+  'bp5-tab': 'tab',
+  'bp4-tabs': 'tablist',
+  'bp5-tabs': 'tablist',
+  'bp4-menu': 'menu',
+  'bp5-menu': 'menu',
+  'bp4-menu-item': 'menuitem',
+  'bp5-menu-item': 'menuitem',
+  'bp4-dialog': 'dialog',
+  'bp5-dialog': 'dialog',
+  'bp4-tree': 'tree',
+  'bp5-tree': 'tree',
+  'bp4-tree-node': 'treeitem',
+  'bp5-tree-node': 'treeitem',
+  'bp4-card': 'region',
+  'bp5-card': 'region',
+  'bp4-collapse': 'group',
+  'bp5-collapse': 'group',
+  'bp4-toast': 'alert',
+  'bp5-toast': 'alert',
+  'bp4-progress-bar': 'progressbar',
+  'bp5-progress-bar': 'progressbar',
+  
+  // Chakra UI (React)
+  'chakra-button': 'button',
+  'chakra-input': 'textbox',
+  'chakra-textarea': 'textbox',
+  'chakra-select': 'combobox',
+  'chakra-checkbox': 'checkbox',
+  'chakra-radio': 'radio',
+  'chakra-switch': 'switch',
+  'chakra-slider': 'slider',
+  'chakra-tabs': 'tablist',
+  'chakra-tab': 'tab',
+  'chakra-tabpanel': 'tabpanel',
+  'chakra-menu': 'menu',
+  'chakra-menuitem': 'menuitem',
+  'chakra-modal': 'dialog',
+  'chakra-drawer': 'dialog',
+  'chakra-alert': 'alert',
+  'chakra-toast': 'alert',
+  'chakra-progress': 'progressbar',
+  'chakra-accordion': 'group',
+  'chakra-accordionitem': 'group',
+  
+  // Bootstrap (via data-bs- attributes)
+  'bs-button': 'button',
+  'bs-dropdown': 'menu',
+  'bs-modal': 'dialog',
+  'bs-offcanvas': 'dialog',
+  'bs-tab': 'tab',
+  'bs-collapse': 'group',
+  'bs-carousel': 'group',
+  'bs-toast': 'alert',
+  'bs-alert': 'alert',
+  'bs-popover': 'dialog',
+  'bs-tooltip': 'tooltip',
+  
+  // Semantic UI (React)
+  'sui-button': 'button',
+  'sui-input': 'textbox',
+  'sui-dropdown': 'combobox',
+  'sui-checkbox': 'checkbox',
+  'sui-radio': 'radio',
+  'sui-tab': 'tab',
+  'sui-menu': 'menu',
+  'sui-modal': 'dialog',
+  'sui-popup': 'dialog',
+  'sui-progress': 'progressbar',
+  'sui-accordion': 'group',
+  'sui-card': 'region',
+  'sui-list': 'list',
+  'sui-table': 'table',
 };
 
 // Framework-specific attributes that should be treated as testIds
@@ -517,17 +711,122 @@ function getElementAnalyzerScript() {
     
     /**
      * Normalize text for consistent recording and playback
-     * Handles: apostrophe variants, quote variants, whitespace
+     * Handles: apostrophe variants, quote variants, whitespace, AND missing 's' characters
+     * CRITICAL: This is called for ALL text paths (title, aria-label, textContent, etc.)
      */
     normalizeText: function(text) {
       if (!text) return text;
+      
+      // First: Normalize ALL whitespace types to regular space (nbsp, thin space, em space, etc.)
+      // This ensures our patterns will match regardless of what whitespace Salesforce used
+      text = text.replace(/[\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ');
+      
+      // CRITICAL FIX: Salesforce sometimes renders text with missing 's' characters
+      // Pattern: "Li t" should be "List", "U er" should be "User"
+      // This happens when text is split across multiple spans in Shadow DOM
+      // NOTE: Using \\s and \\b because this is inside a template literal string!
+      text = text
+        // Common patterns with missing 's'
+        .replace(/Li\\s+t\\b/g, 'List')              // "Li t" -> "List"
+        .replace(/U\\s+er\\b/g, 'User')              // "U er" -> "User"
+        .replace(/Pa\\s+word\\b/g, 'Password')       // "Pa word" -> "Password"
+        .replace(/Ca\\s+e\\b/g, 'Case')              // "Ca e" -> "Case"
+        .replace(/Ta\\s+k\\b/g, 'Task')              // "Ta k" -> "Task"
+        .replace(/A\\s+et\\b/g, 'Asset')             // "A et" -> "Asset"
+        // Salesforce object names
+        .replace(/Campa\\s+gn\\b/g, 'Campaign')      // "Campa gn" -> "Campaign"
+        .replace(/Acc\\s+ount\\b/g, 'Account')       // "Acc ount" -> "Account"
+        .replace(/Cont\\s+act\\b/g, 'Contact')       // "Cont act" -> "Contact"
+        .replace(/Opp\\s+ortunity\\b/g, 'Opportunity')
+        .replace(/Rec\\s+ently\\b/g, 'Recently')     // "Rec ently" -> "Recently"
+        .replace(/View\\s+ed\\b/g, 'Viewed')         // "View ed" -> "Viewed"
+        .replace(/Act\\s+ive\\b/g, 'Active')         // "Act ive" -> "Active"
+        // Additional Salesforce patterns (January 2026 expansion)
+        .replace(/Rep\\s+ort\\b/g, 'Report')         // "Rep ort" -> "Report"
+        .replace(/Da\\s+hboard\\b/g, 'Dashboard')    // "Da hboard" -> "Dashboard"
+        .replace(/Cal\\s+endar\\b/g, 'Calendar')     // "Cal endar" -> "Calendar"
+        .replace(/Pro\\s+duct\\b/g, 'Product')       // "Pro duct" -> "Product"
+        .replace(/Quot\\s+e\\b/g, 'Quote')           // "Quot e" -> "Quote"
+        .replace(/Ord\\s+er\\b/g, 'Order')           // "Ord er" -> "Order"
+        .replace(/Inv\\s+oice\\b/g, 'Invoice')       // "Inv oice" -> "Invoice"
+        .replace(/Con\\s+tract\\b/g, 'Contract')     // "Con tract" -> "Contract"
+        .replace(/Serv\\s+ice\\b/g, 'Service')       // "Serv ice" -> "Service"
+        .replace(/Sol\\s+ution\\b/g, 'Solution')     // "Sol ution" -> "Solution"
+        .replace(/Kno\\s+wledge\\b/g, 'Knowledge')   // "Kno wledge" -> "Knowledge"
+        .replace(/Art\\s+icle\\b/g, 'Article')       // "Art icle" -> "Article"
+        .replace(/Pri\\s+ce\\b/g, 'Price')           // "Pri ce" -> "Price"
+        .replace(/Dis\\s+count\\b/g, 'Discount')     // "Dis count" -> "Discount"
+        .replace(/Cus\\s+tom\\b/g, 'Custom')         // "Cus tom" -> "Custom"
+        .replace(/Sta\\s+ndard\\b/g, 'Standard')     // "Sta ndard" -> "Standard"
+        .replace(/Pub\\s+lic\\b/g, 'Public')         // "Pub lic" -> "Public"
+        .replace(/Pri\\s+vate\\b/g, 'Private')       // "Pri vate" -> "Private"
+        .replace(/Sha\\s+red\\b/g, 'Shared')         // "Sha red" -> "Shared"
+        .replace(/Fol\\s+low\\b/g, 'Follow')         // "Fol low" -> "Follow"
+        .replace(/Sub\\s+mit\\b/g, 'Submit')         // "Sub mit" -> "Submit"
+        .replace(/Del\\s+ete\\b/g, 'Delete')         // "Del ete" -> "Delete"
+        .replace(/Cre\\s+ate\\b/g, 'Create')         // "Cre ate" -> "Create"
+        .replace(/Sea\\s+rch\\b/g, 'Search')         // "Sea rch" -> "Search"
+        .replace(/Fil\\s+ter\\b/g, 'Filter')         // "Fil ter" -> "Filter"
+        .replace(/Exp\\s+ort\\b/g, 'Export')         // "Exp ort" -> "Export"
+        .replace(/Imp\\s+ort\\b/g, 'Import')         // "Imp ort" -> "Import"
+        .replace(/Set\\s+tings\\b/g, 'Settings')     // "Set tings" -> "Settings"
+        .replace(/Prof\\s+ile\\b/g, 'Profile')       // "Prof ile" -> "Profile"
+        .replace(/Det\\s+ails\\b/g, 'Details')       // "Det ails" -> "Details"
+        .replace(/His\\s+tory\\b/g, 'History')       // "His tory" -> "History"
+        .replace(/Not\\s+es\\b/g, 'Notes')           // "Not es" -> "Notes"
+        .replace(/Fil\\s+es\\b/g, 'Files')           // "Fil es" -> "Files"
+        .replace(/Rel\\s+ated\\b/g, 'Related')       // "Rel ated" -> "Related"
+        .replace(/Prim\\s+ary\\b/g, 'Primary')       // "Prim ary" -> "Primary"
+        .replace(/Sec\\s+ondary\\b/g, 'Secondary')   // "Sec ondary" -> "Secondary"
+        .replace(/Mas\\s+ter\\b/g, 'Master')         // "Mas ter" -> "Master"
+        .replace(/Chan\\s+nel\\b/g, 'Channel')       // "Chan nel" -> "Channel"
+        .replace(/Mem\\s+ber\\b/g, 'Member')         // "Mem ber" -> "Member"
+        .replace(/Own\\s+er\\b/g, 'Owner')           // "Own er" -> "Owner"
+        .replace(/Sta\\s+tus\\b/g, 'Status')         // "Sta tus" -> "Status"
+        .replace(/Typ\\s+e\\b/g, 'Type')             // "Typ e" -> "Type"
+        .replace(/Sta\\s+ge\\b/g, 'Stage')           // "Sta ge" -> "Stage"
+        .replace(/Pha\\s+se\\b/g, 'Phase')           // "Pha se" -> "Phase"
+        .replace(/Clo\\s+sed\\b/g, 'Closed')         // "Clo sed" -> "Closed"
+        .replace(/Won\\s+\\b/g, 'Won')               // "Won " normalization
+        .replace(/Los\\s+t\\b/g, 'Lost')             // "Los t" -> "Lost"
+        .replace(/Pen\\s+ding\\b/g, 'Pending')       // "Pen ding" -> "Pending"
+        .replace(/Sel\\s+ect\\b/g, 'Select')         // "Sel ect" -> "Select"
+        .replace(/Cho\\s+ose\\b/g, 'Choose')         // "Cho ose" -> "Choose"
+        .replace(/Bro\\s+wse\\b/g, 'Browse')         // "Bro wse" -> "Browse"
+        .replace(/Uplo\\s+ad\\b/g, 'Upload')         // "Uplo ad" -> "Upload"
+        .replace(/Down\\s+load\\b/g, 'Download')     // "Down load" -> "Download"
+        .replace(/Pre\\s+view\\b/g, 'Preview')       // "Pre view" -> "Preview"
+        .replace(/Edi\\s+t\\b/g, 'Edit')             // "Edi t" -> "Edit"
+        .replace(/Sav\\s+e\\b/g, 'Save')             // "Sav e" -> "Save"
+        .replace(/Can\\s+cel\\b/g, 'Cancel')         // "Can cel" -> "Cancel"
+        .replace(/Con\\s+firm\\b/g, 'Confirm')       // "Con firm" -> "Confirm"
+        .replace(/Clo\\s+se\\b/g, 'Close')           // "Clo se" -> "Close"
+        .replace(/Ref\\s+resh\\b/g, 'Refresh')       // "Ref resh" -> "Refresh"
+        .replace(/Clea\\s+r\\b/g, 'Clear')           // "Clea r" -> "Clear"
+        .replace(/Res\\s+et\\b/g, 'Reset')           // "Res et" -> "Reset"
+        .replace(/App\\s+rove\\b/g, 'Approve')       // "App rove" -> "Approve"
+        .replace(/Rej\\s+ect\\b/g, 'Reject')         // "Rej ect" -> "Reject"
+        .replace(/Ass\\s+ign\\b/g, 'Assign')         // "Ass ign" -> "Assign"
+        .replace(/Tran\\s+sfer\\b/g, 'Transfer')     // "Tran sfer" -> "Transfer"
+        .replace(/Con\\s+vert\\b/g, 'Convert')       // "Con vert" -> "Convert"
+        .replace(/Mer\\s+ge\\b/g, 'Merge')           // "Mer ge" -> "Merge"
+        .replace(/Clo\\s+ne\\b/g, 'Clone')           // "Clo ne" -> "Clone"
+        .replace(/Arc\\s+hive\\b/g, 'Archive')       // "Arc hive" -> "Archive"
+        .replace(/Res\\s+tore\\b/g, 'Restore')       // "Res tore" -> "Restore"
+        .replace(/Log\\s+in\\b/g, 'Login')           // "Log in" -> "Login"
+        .replace(/Log\\s+out\\b/g, 'Logout')         // "Log out" -> "Logout"
+        .replace(/Sig\\s+n\\b/g, 'Sign')             // "Sig n" -> "Sign"
+        .replace(/Reg\\s+ister\\b/g, 'Register')     // "Reg ister" -> "Register"
+        .replace(/Ver\\s+ify\\b/g, 'Verify')         // "Ver ify" -> "Verify"
+        .replace(/Auth\\s+enticate\\b/g, 'Authenticate'); // "Auth enticate" -> "Authenticate"
+      
       return text
         // Normalize all apostrophe variants to straight apostrophe
-        .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'")
+        .replace(/[\\u2018\\u2019\\u201B\\u2032\\u0060\\u00B4\\u02BC]/g, "'")
         // Normalize all quote variants to straight quotes
-        .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+        .replace(/[\\u201C\\u201D\\u201E\\u201F\\u2033]/g, '"')
         // Normalize whitespace (multiple spaces, tabs, newlines → single space)
-        .replace(/\s+/g, ' ')
+        .replace(/\\s+/g, ' ')
         .trim();
     },
     
@@ -565,10 +864,55 @@ function getElementAnalyzerScript() {
         return this.normalizeText(element.placeholder || element.name || '');
       }
       
-      // For buttons with just an icon, check aria-label first
-      var ariaLabel = element.getAttribute('aria-label');
+      // PRIORITY 1: Title attribute - most reliable for Salesforce elements
+      var titleAttr = element.getAttribute('title');
+      if (titleAttr && titleAttr.length > 1 && titleAttr.length < 80) {
+        return this.normalizeText(titleAttr);
+      }
       
-      // Get direct text content (not from children)
+      // PRIORITY 2: aria-label - reliable for buttons/links
+      var ariaLabel = element.getAttribute('aria-label');
+      if (ariaLabel && ariaLabel.length > 1 && ariaLabel.length < 80) {
+        return this.normalizeText(ariaLabel);
+      }
+      
+      // PRIORITY 3: Salesforce-specific data-label attribute
+      var dataLabel = element.getAttribute('data-label');
+      if (dataLabel && dataLabel.length > 1 && dataLabel.length < 80) {
+        return this.normalizeText(dataLabel);
+      }
+      
+      // PRIORITY 4: data-value attribute (for list items)
+      var dataValue = element.getAttribute('data-value');
+      if (dataValue && dataValue.length > 1 && dataValue.length < 80 && !/^[a-f0-9-]{20,}$/i.test(dataValue)) {
+        return this.normalizeText(dataValue);
+      }
+      
+      // PRIORITY 5: For Salesforce Lightning elements, look for specific text containers
+      if (tag.includes('lightning-') || tag.includes('one-') || tag.includes('force-')) {
+        var sfTextSelectors = [
+          '.slds-truncate',
+          '.slds-text-link',
+          '.slds-button__label',
+          '[slot="label"]',
+          '.label',
+          'span[title]'
+        ];
+        for (var s = 0; s < sfTextSelectors.length; s++) {
+          try {
+            var sfTextEl = element.querySelector(sfTextSelectors[s]);
+            if (sfTextEl) {
+              var sfText = sfTextEl.getAttribute('title') || sfTextEl.textContent || '';
+              sfText = sfText.trim();
+              if (sfText && sfText.length > 1 && sfText.length < 80) {
+                return this.normalizeText(sfText);
+              }
+            }
+          } catch(e) {}
+        }
+      }
+      
+      // PRIORITY 6: Get direct text content (not from children)
       var text = '';
       for (var i = 0; i < element.childNodes.length; i++) {
         var node = element.childNodes[i];
@@ -578,9 +922,12 @@ function getElementAnalyzerScript() {
       }
       text = text.trim();
       
-      // If no direct text, get innerText but limit length
+      // PRIORITY 7: If no direct text, get innerText but limit length
       if (!text) {
+        // CRITICAL FIX: Use innerText which respects visibility and CSS
+        // textContent includes ALL text including hidden elements
         text = (element.innerText || element.textContent || '').trim();
+        
         // Avoid huge text blocks - likely a container
         if (text.length > 100) {
           // Try to get just the first meaningful part
@@ -591,26 +938,141 @@ function getElementAnalyzerScript() {
             text = text.substring(0, 50);
           }
         }
+        
+        // CRITICAL FIX: Detect and fix common Salesforce text concatenation issues
+        // Pattern: "CampaignsRecently Viewed" → "Campaigns"
+        // Pattern: "Li t" (missing s) → check if first word looks incomplete
+        if (text) {
+          // Detect concatenated words (lowercase immediately followed by uppercase)
+          var concatMatch = text.match(/^([A-Z][a-z]+)([A-Z])/);
+          if (concatMatch) {
+            // Take just the first word if there's concatenation
+            text = concatMatch[1];
+          }
+          
+          // Detect suspicious spaces that might indicate missing characters
+          // Pattern: "Li t" should be "List", "U er" should be "User"
+          // These happen when Salesforce renders text across multiple spans
+          var suspiciousPattern = /^([A-Z][a-z]?) ([a-z]+)$/;
+          var suspMatch = text.match(suspiciousPattern);
+          if (suspMatch && suspMatch[1].length <= 2) {
+            // Likely missing a character - try to find a better text source
+            var altTitle = element.getAttribute('title') || element.closest('[title]')?.getAttribute('title');
+            if (altTitle && altTitle.length > text.length) {
+              text = altTitle;
+            }
+          }
+        }
       }
       
-      // Prefer aria-label for icon-only buttons
-      if (!text && ariaLabel) {
-        text = ariaLabel;
-      }
-      
-      // DEBUG: ALWAYS log text capture for troubleshooting missing 's' issue
-      // The issue: "List" becomes "Li t", "User" becomes "U er"
-      if (text && text.length > 0) {
-        var charCodes = [];
-        for (var c = 0; c < Math.min(text.length, 50); c++) {
-          charCodes.push(text.charCodeAt(c).toString(16));
-        }
-        // Check specifically for patterns that might indicate missing 's'
-        var hasSuspiciousSpace = / [a-z]/.test(text) && !/\b[a-z]/.test(text.replace(/ [a-z]/g, ''));
-        if (hasSuspiciousSpace || text.includes('Li t') || text.includes('U er') || text.includes('  ')) {
-          console.log('[Flowstral Recipe] ⚠️ SUSPICIOUS TEXT:', text);
-          console.log('[Flowstral Recipe] ⚠️ CharCodes:', charCodes.join(' '));
-        }
+      // CRITICAL FIX: Salesforce sometimes renders text with missing 's' characters
+      // Pattern: "Li t" should be "List", "U er" should be "User"
+      // This happens when text is split across multiple spans in Shadow DOM
+      // The missing 's' gets replaced by various whitespace characters (space, nbsp, thin space, etc.)
+      // NOTE: Using \\s and \\b because this is inside a template literal string!
+      if (text) {
+        // First: Normalize ALL whitespace types to regular space (nbsp, thin space, em space, etc.)
+        // This ensures our patterns will match regardless of what whitespace Salesforce used
+        text = text.replace(/[\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ');
+        
+        // Now apply the missing 's' fixes using \\s+ to catch any remaining whitespace variations
+        // This comprehensive list covers most Salesforce UI text patterns
+        text = text
+          // Common patterns with missing 's'
+          .replace(/Li\\s+t\\b/g, 'List')              // "Li t" -> "List"
+          .replace(/U\\s+er\\b/g, 'User')              // "U er" -> "User"
+          .replace(/Pa\\s+word\\b/g, 'Password')       // "Pa word" -> "Password"
+          .replace(/Ca\\s+e\\b/g, 'Case')              // "Ca e" -> "Case"
+          .replace(/Ta\\s+k\\b/g, 'Task')              // "Ta k" -> "Task"
+          .replace(/A\\s+et\\b/g, 'Asset')             // "A et" -> "Asset"
+          // Salesforce object names
+          .replace(/Campa\\s+gn\\b/g, 'Campaign')      // "Campa gn" -> "Campaign"
+          .replace(/Acc\\s+ount\\b/g, 'Account')       // "Acc ount" -> "Account"
+          .replace(/Cont\\s+act\\b/g, 'Contact')       // "Cont act" -> "Contact"
+          .replace(/Opp\\s+ortunity\\b/g, 'Opportunity')
+          .replace(/Lead\\s+\\b/g, 'Leads')            // Handle Salesforce object names
+          .replace(/Rec\\s+ently\\b/g, 'Recently')     // "Rec ently" -> "Recently"
+          .replace(/View\\s+ed\\b/g, 'Viewed')         // "View ed" -> "Viewed"
+          .replace(/Act\\s+ive\\b/g, 'Active')         // "Act ive" -> "Active"
+          // Additional Salesforce patterns (January 2026 expansion)
+          .replace(/Rep\\s+ort\\b/g, 'Report')         // "Rep ort" -> "Report"
+          .replace(/Da\\s+hboard\\b/g, 'Dashboard')    // "Da hboard" -> "Dashboard"
+          .replace(/Cal\\s+endar\\b/g, 'Calendar')     // "Cal endar" -> "Calendar"
+          .replace(/Pro\\s+duct\\b/g, 'Product')       // "Pro duct" -> "Product"
+          .replace(/Quot\\s+e\\b/g, 'Quote')           // "Quot e" -> "Quote"
+          .replace(/Ord\\s+er\\b/g, 'Order')           // "Ord er" -> "Order"
+          .replace(/Inv\\s+oice\\b/g, 'Invoice')       // "Inv oice" -> "Invoice"
+          .replace(/Con\\s+tract\\b/g, 'Contract')     // "Con tract" -> "Contract"
+          .replace(/Serv\\s+ice\\b/g, 'Service')       // "Serv ice" -> "Service"
+          .replace(/Sol\\s+ution\\b/g, 'Solution')     // "Sol ution" -> "Solution"
+          .replace(/Kno\\s+wledge\\b/g, 'Knowledge')   // "Kno wledge" -> "Knowledge"
+          .replace(/Art\\s+icle\\b/g, 'Article')       // "Art icle" -> "Article"
+          .replace(/Pri\\s+ce\\b/g, 'Price')           // "Pri ce" -> "Price"
+          .replace(/Dis\\s+count\\b/g, 'Discount')     // "Dis count" -> "Discount"
+          .replace(/Cus\\s+tom\\b/g, 'Custom')         // "Cus tom" -> "Custom"
+          .replace(/Sta\\s+ndard\\b/g, 'Standard')     // "Sta ndard" -> "Standard"
+          .replace(/Pub\\s+lic\\b/g, 'Public')         // "Pub lic" -> "Public"
+          .replace(/Pri\\s+vate\\b/g, 'Private')       // "Pri vate" -> "Private"
+          .replace(/Sha\\s+red\\b/g, 'Shared')         // "Sha red" -> "Shared"
+          .replace(/Fol\\s+low\\b/g, 'Follow')         // "Fol low" -> "Follow"
+          .replace(/Sub\\s+mit\\b/g, 'Submit')         // "Sub mit" -> "Submit"
+          .replace(/Del\\s+ete\\b/g, 'Delete')         // "Del ete" -> "Delete"
+          .replace(/Cre\\s+ate\\b/g, 'Create')         // "Cre ate" -> "Create"
+          .replace(/Sea\\s+rch\\b/g, 'Search')         // "Sea rch" -> "Search"
+          .replace(/Fil\\s+ter\\b/g, 'Filter')         // "Fil ter" -> "Filter"
+          .replace(/Exp\\s+ort\\b/g, 'Export')         // "Exp ort" -> "Export"
+          .replace(/Imp\\s+ort\\b/g, 'Import')         // "Imp ort" -> "Import"
+          .replace(/Set\\s+tings\\b/g, 'Settings')     // "Set tings" -> "Settings"
+          .replace(/Prof\\s+ile\\b/g, 'Profile')       // "Prof ile" -> "Profile"
+          .replace(/Det\\s+ails\\b/g, 'Details')       // "Det ails" -> "Details"
+          .replace(/His\\s+tory\\b/g, 'History')       // "His tory" -> "History"
+          .replace(/Not\\s+es\\b/g, 'Notes')           // "Not es" -> "Notes"
+          .replace(/Fil\\s+es\\b/g, 'Files')           // "Fil es" -> "Files"
+          .replace(/Rel\\s+ated\\b/g, 'Related')       // "Rel ated" -> "Related"
+          .replace(/Prim\\s+ary\\b/g, 'Primary')       // "Prim ary" -> "Primary"
+          .replace(/Sec\\s+ondary\\b/g, 'Secondary')   // "Sec ondary" -> "Secondary"
+          .replace(/Mas\\s+ter\\b/g, 'Master')         // "Mas ter" -> "Master"
+          .replace(/Chan\\s+nel\\b/g, 'Channel')       // "Chan nel" -> "Channel"
+          .replace(/Mem\\s+ber\\b/g, 'Member')         // "Mem ber" -> "Member"
+          .replace(/Own\\s+er\\b/g, 'Owner')           // "Own er" -> "Owner"
+          .replace(/Sta\\s+tus\\b/g, 'Status')         // "Sta tus" -> "Status"
+          .replace(/Typ\\s+e\\b/g, 'Type')             // "Typ e" -> "Type"
+          .replace(/Sta\\s+ge\\b/g, 'Stage')           // "Sta ge" -> "Stage"
+          .replace(/Pha\\s+se\\b/g, 'Phase')           // "Pha se" -> "Phase"
+          .replace(/Clo\\s+sed\\b/g, 'Closed')         // "Clo sed" -> "Closed"
+          .replace(/Los\\s+t\\b/g, 'Lost')             // "Los t" -> "Lost"
+          .replace(/Pen\\s+ding\\b/g, 'Pending')       // "Pen ding" -> "Pending"
+          .replace(/Sel\\s+ect\\b/g, 'Select')         // "Sel ect" -> "Select"
+          .replace(/Cho\\s+ose\\b/g, 'Choose')         // "Cho ose" -> "Choose"
+          .replace(/Bro\\s+wse\\b/g, 'Browse')         // "Bro wse" -> "Browse"
+          .replace(/Uplo\\s+ad\\b/g, 'Upload')         // "Uplo ad" -> "Upload"
+          .replace(/Down\\s+load\\b/g, 'Download')     // "Down load" -> "Download"
+          .replace(/Pre\\s+view\\b/g, 'Preview')       // "Pre view" -> "Preview"
+          .replace(/Edi\\s+t\\b/g, 'Edit')             // "Edi t" -> "Edit"
+          .replace(/Sav\\s+e\\b/g, 'Save')             // "Sav e" -> "Save"
+          .replace(/Can\\s+cel\\b/g, 'Cancel')         // "Can cel" -> "Cancel"
+          .replace(/Con\\s+firm\\b/g, 'Confirm')       // "Con firm" -> "Confirm"
+          .replace(/Clo\\s+se\\b/g, 'Close')           // "Clo se" -> "Close"
+          .replace(/Ref\\s+resh\\b/g, 'Refresh')       // "Ref resh" -> "Refresh"
+          .replace(/Clea\\s+r\\b/g, 'Clear')           // "Clea r" -> "Clear"
+          .replace(/Res\\s+et\\b/g, 'Reset')           // "Res et" -> "Reset"
+          .replace(/App\\s+rove\\b/g, 'Approve')       // "App rove" -> "Approve"
+          .replace(/Rej\\s+ect\\b/g, 'Reject')         // "Rej ect" -> "Reject"
+          .replace(/Ass\\s+ign\\b/g, 'Assign')         // "Ass ign" -> "Assign"
+          .replace(/Tran\\s+sfer\\b/g, 'Transfer')     // "Tran sfer" -> "Transfer"
+          .replace(/Con\\s+vert\\b/g, 'Convert')       // "Con vert" -> "Convert"
+          .replace(/Mer\\s+ge\\b/g, 'Merge')           // "Mer ge" -> "Merge"
+          .replace(/Clo\\s+ne\\b/g, 'Clone')           // "Clo ne" -> "Clone"
+          .replace(/Arc\\s+hive\\b/g, 'Archive')       // "Arc hive" -> "Archive"
+          .replace(/Res\\s+tore\\b/g, 'Restore')       // "Res tore" -> "Restore"
+          .replace(/Log\\s+in\\b/g, 'Login')           // "Log in" -> "Login"
+          .replace(/Log\\s+out\\b/g, 'Logout')         // "Log out" -> "Logout"
+          .replace(/Sig\\s+n\\b/g, 'Sign')             // "Sig n" -> "Sign"
+          .replace(/Reg\\s+ister\\b/g, 'Register')     // "Reg ister" -> "Register"
+          .replace(/Ver\\s+ify\\b/g, 'Verify')         // "Ver ify" -> "Verify"
+          .replace(/Auth\\s+enticate\\b/g, 'Authenticate') // "Auth enticate" -> "Authenticate"
+          .replace(/\\s{2,}/g, ' ')                   // Collapse multiple spaces to single
+          .trim();
       }
       
       // CRITICAL: Normalize text before returning

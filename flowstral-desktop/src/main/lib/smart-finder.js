@@ -109,16 +109,48 @@ class SmartFinder {
         const tag = el.tagName.toLowerCase();
         const type = el.type?.toLowerCase() || '';
         const role = el.getAttribute('role') || '';
+        const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+        const placeholder = (el.placeholder || '').toLowerCase();
+        const name = (el.name || '').toLowerCase();
+        const className = (el.className || '').toLowerCase();
+        const id = (el.id || '').toLowerCase();
+        
         const isInput = tag === 'input' || tag === 'textarea';
-        const isSearchBox = type === 'search' || role === 'searchbox' || 
-          (el.placeholder || '').toLowerCase().includes('search');
-        return { tag, type, role, isInput, isSearchBox };
+        
+        // Comprehensive search input detection (especially for Salesforce)
+        const isSearchBox = 
+          type === 'search' || 
+          role === 'searchbox' || 
+          role === 'combobox' ||  // Salesforce global search uses combobox role
+          placeholder.includes('search') ||
+          ariaLabel.includes('search') ||
+          name.includes('search') ||
+          className.includes('search') ||
+          id.includes('search') ||
+          // Salesforce-specific patterns
+          tag.includes('one-global-search') ||
+          tag.includes('forcesearch') ||
+          tag.includes('search-input') ||
+          el.closest('one-global-search') !== null ||
+          el.closest('forceSearch-searchbox') !== null ||
+          el.closest('lightning-base-combobox') !== null ||
+          // Generic combobox that looks like search
+          (role === 'combobox' && isInput);
+          
+        // Also detect if this is a text input field (for form filling, not clicking)
+        const isTextInput = isInput && ['text', 'email', 'password', 'tel', 'url', 'number', ''].includes(type);
+        
+        return { tag, type, role, isInput, isSearchBox, isTextInput, ariaLabel, placeholder };
       });
       
       // If looking for button/link/tab but found a search/text input
       if (['button', 'link', 'tab', 'menuitem', 'option'].includes(expectedRole.toLowerCase())) {
-        if (elementInfo.isInput || elementInfo.isSearchBox) {
-          this.log(`Wrong target detected: expected ${expectedRole}, found ${elementInfo.tag}[${elementInfo.type}]`);
+        if (elementInfo.isSearchBox) {
+          this.log(`Wrong target detected: expected ${expectedRole}, found search input`);
+          return true;
+        }
+        if (elementInfo.isTextInput) {
+          this.log(`Wrong target detected: expected ${expectedRole}, found text input ${elementInfo.tag}[${elementInfo.type}]`);
           return true;
         }
       }
@@ -383,6 +415,37 @@ class SmartFinder {
     return new RegExp(escaped, 'i');
   }
   
+  /**
+   * Fix Salesforce missing 's' character issue
+   * Salesforce sometimes renders text with 's' replaced by whitespace
+   * e.g., "Li t" instead of "List", "U er" instead of "User"
+   * This is a RECORDING issue but we also fix during PLAYBACK for robustness
+   */
+  _fixMissingSCharacter(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    // First normalize all whitespace types (nbsp, thin space, etc.) to regular space
+    text = text.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+    
+    // Apply the missing 's' fixes using \s+ to catch any whitespace variations
+    return text
+      .replace(/Li\s+t\b/g, 'List')              // "Li t" -> "List"
+      .replace(/U\s+er\b/g, 'User')              // "U er" -> "User"
+      .replace(/Pa\s+word\b/g, 'Password')       // "Pa word" -> "Password"
+      .replace(/Ca\s+e\b/g, 'Case')              // "Ca e" -> "Case"
+      .replace(/Ta\s+k\b/g, 'Task')              // "Ta k" -> "Task"
+      .replace(/A\s+et\b/g, 'Asset')             // "A et" -> "Asset"
+      .replace(/Campa\s+gn\b/g, 'Campaign')      // "Campa gn" -> "Campaign"
+      .replace(/Acc\s+ount\b/g, 'Account')       // "Acc ount" -> "Account"
+      .replace(/Cont\s+act\b/g, 'Contact')       // "Cont act" -> "Contact"
+      .replace(/Opp\s+ortunity\b/g, 'Opportunity')
+      .replace(/Rec\s+ently\b/g, 'Recently')     // "Rec ently" -> "Recently"
+      .replace(/View\s+ed\b/g, 'Viewed')         // "View ed" -> "Viewed"
+      .replace(/Act\s+ive\b/g, 'Active')         // "Act ive" -> "Active"
+      .replace(/\s{2,}/g, ' ')                   // Collapse multiple spaces
+      .trim();
+  }
+  
   // ==========================================================================
   // MAIN FIND METHOD
   // ==========================================================================
@@ -397,14 +460,17 @@ class SmartFinder {
     
     const { what, where, which, confirm } = recipe;
     
-    // CRITICAL: Normalize text to fix recording issues (double spaces, apostrophe variants)
+    // CRITICAL: Normalize text to fix recording issues (double spaces, apostrophe variants, missing 's')
     // This ensures playback works even if recording captured wrong characters
     if (what?.text) {
       what.text = this.normalizeText(what.text);
+      // Also fix Salesforce missing 's' issue in the recorded text
+      what.text = this._fixMissingSCharacter(what.text);
       this.log('Normalized text:', what.text);
     }
     if (which?.ariaLabel) {
       which.ariaLabel = this.normalizeText(which.ariaLabel);
+      which.ariaLabel = this._fixMissingSCharacter(which.ariaLabel);
     }
     
     // Track what we tried (for debugging/healing)
@@ -438,6 +504,110 @@ class SmartFinder {
     else if (where?.landmark) {
       const scoped = await this.tryScope(where.landmark, attempts);
       if (scoped) scope = scoped;
+    }
+    
+    // ==========================================================================
+    // PHASE 1.5: SALESFORCE LIST VIEW SELECTOR (special handling)
+    // List View selectors are buttons that open a dropdown, NOT search inputs
+    // CRITICAL: This must come BEFORE general strategies to prevent clicking search box
+    // CRITICAL: Skip this for OPTIONS - they are items IN the dropdown, not the trigger!
+    // ==========================================================================
+    
+    // Skip list view BUTTON detection if we're looking for an OPTION or MENUITEM
+    // These are items inside the dropdown, not the dropdown trigger itself
+    const isOptionRole = what?.role && ['option', 'menuitem', 'listitem', 'treeitem'].includes(what.role.toLowerCase());
+    
+    // Normalize text for comparison (handle the "Li t" -> "List" issue)
+    const normalizedText = what?.text?.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+      .replace(/Li\s+t\b/gi, 'List')
+      .replace(/Rec\s+ently\b/gi, 'Recently')
+      .replace(/View\s+ed\b/gi, 'Viewed')
+      .replace(/Act\s+ive\b/gi, 'Active') || '';
+    
+    // Only trigger list view BUTTON detection for button-like elements, NOT options
+    const isListViewTrigger = !isOptionRole && normalizedText && (
+      /list\s*view/i.test(normalizedText) ||
+      /recently\s*viewed/i.test(normalizedText) ||
+      /select\s+a\s+list/i.test(normalizedText)  // More specific - "Select a List View"
+    );
+    
+    if (isListViewTrigger) {
+      this.log(`Salesforce list view detection: "${what.text}" (normalized: "${normalizedText}")`);
+      
+      // Try Salesforce-specific list view selectors - ORDERED by specificity
+      const sfListViewSelectors = [
+        // Most specific: List view picker in page header
+        `button[title*="Select a List View"]`,
+        `button[title*="Select List View"]`,
+        `button[aria-label*="Select a List View"]`,
+        `button[aria-label*="Select List View"]`,
+        // Lightning button menu (common for list views)
+        `lightning-button-menu[data-tab-name] button`,
+        `lightning-button-menu button[title]`,
+        `lightning-button-menu button[aria-haspopup="true"]`,
+        // Page header buttons with popup behavior
+        `.slds-page-header button[aria-haspopup="true"]`,
+        `.slds-page-header button[aria-haspopup="listbox"]`,
+        `.slds-page-header button[aria-haspopup="menu"]`,
+        // Text-based matches for "Recently Viewed" dropdown
+        `button:has-text("Recently Viewed")`,
+        `[role="button"]:has-text("Recently Viewed")`,
+        // Salesforce list header components
+        `lst-list-view-manager-header button`,
+        `lst-list-view-manager-header [role="button"]`,
+        `.listViewContainer button`,
+        `[data-component-id*="listView"] button`,
+        // Generic page header button with title
+        `.slds-page-header button[title]`,
+        `.slds-page-header__title button`,
+      ];
+      
+      for (const selector of sfListViewSelectors) {
+        const sfResult = await this.tryStrategy(`sf-listview-${selector.substring(0, 25)}`, async () => {
+          const locator = this.page.locator(selector).first();
+          const count = await locator.count();
+          if (count > 0) {
+            const isVisible = await locator.isVisible().catch(() => false);
+            if (isVisible) {
+              // CRITICAL: Make sure this is NOT a search input or combobox search
+              const isSearchInput = await locator.evaluate(el => {
+                const tag = el.tagName.toLowerCase();
+                const type = (el.type || '').toLowerCase();
+                const role = (el.getAttribute('role') || '').toLowerCase();
+                const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+                const placeholder = (el.placeholder || '').toLowerCase();
+                
+                // Reject any search-related inputs
+                const isSearch = tag === 'input' || 
+                  type === 'search' || 
+                  type === 'text' ||
+                  role === 'searchbox' ||
+                  (role === 'combobox' && (ariaLabel.includes('search') || placeholder.includes('search'))) ||
+                  ariaLabel.includes('search') ||
+                  placeholder.includes('search') ||
+                  el.closest('one-global-search') !== null ||
+                  el.closest('[class*="global-search"]') !== null;
+                  
+                return isSearch;
+              }).catch(() => false);
+              
+              if (!isSearchInput) {
+                return { success: true, locator, count: 1 };
+              } else {
+                this.log(`sf-listview: Rejected search input for selector: ${selector}`);
+              }
+            }
+          }
+          return { success: false, count: 0 };
+        }, attempts);
+        
+        if (sfResult.success) {
+          this.log(`✓ Found Salesforce list view button via: ${selector}`);
+          return sfResult.locator;
+        }
+      }
+      
+      this.log(`⚠ Salesforce list view detection failed, falling back to general strategies`);
     }
     
     // ==========================================================================

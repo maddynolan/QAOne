@@ -1334,20 +1334,70 @@ class PlaywrightRecorder extends EventEmitter {
             window.__flowstralCDPCapture = true;
             window.__flowstralCDPActions = [];
             
+            // CRITICAL: Fix Salesforce text extraction issues
+            // Salesforce sometimes renders text with missing characters (e.g., "Li t" instead of "List")
+            function getCleanText(el) {
+              if (!el) return '';
+              
+              // Priority 1: title attribute (most reliable)
+              var title = el.getAttribute('title');
+              if (title && title.length > 1 && title.length < 100) return title;
+              
+              // Priority 2: aria-label
+              var ariaLabel = el.getAttribute('aria-label');
+              if (ariaLabel && ariaLabel.length > 1 && ariaLabel.length < 100) return ariaLabel;
+              
+              // Priority 3: data-label (Salesforce-specific)
+              var dataLabel = el.getAttribute('data-label');
+              if (dataLabel && dataLabel.length > 1) return dataLabel;
+              
+              // Priority 4: Look for title/aria-label in child elements
+              var childWithTitle = el.querySelector('[title]');
+              if (childWithTitle) {
+                var childTitle = childWithTitle.getAttribute('title');
+                if (childTitle && childTitle.length > 1 && childTitle.length < 100) return childTitle;
+              }
+              
+              // Priority 5: innerText (respects visibility) with cleanup
+              var text = (el.innerText || el.textContent || '').trim();
+              
+              // Fix common Salesforce text issues:
+              // Pattern: "Li t" should be "List", "U er" should be "User"
+              // This happens when text is split across spans with hidden characters
+              // First normalize all whitespace types (nbsp, thin space, etc.) to regular space
+              // NOTE: Using \\s and \\b because this is inside a template literal string!
+              text = text.replace(/[\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ');
+              text = text
+                .replace(/Li\\s+t\\b/g, 'List')
+                .replace(/U\\s+er\\b/g, 'User')
+                .replace(/Pa\\s+word\\b/g, 'Password')
+                .replace(/Ca\\s+e\\b/g, 'Case')
+                .replace(/Ta\\s+k\\b/g, 'Task')
+                .replace(/A\\s+et\\b/g, 'Asset')
+                .replace(/Campa\\s+gn\\b/g, 'Campaign')
+                .replace(/Rec\\s+ently\\b/g, 'Recently')
+                .replace(/View\\s+ed\\b/g, 'Viewed')
+                .replace(/Act\\s+ive\\b/g, 'Active')
+                .replace(/\\s{2,}/g, ' '); // Collapse multiple spaces
+              
+              return text.substring(0, 100);
+            }
+            
             document.addEventListener('click', function(e) {
               var target = e.target;
               var path = e.composedPath ? e.composedPath() : [target];
               var best = path[0];
               
-              // Get element info
+              // Get element info with clean text extraction
               var info = {
                 type: 'click',
-                text: (best.textContent || '').trim().substring(0, 100),
+                text: getCleanText(best),
                 tag: best.tagName,
                 id: best.id,
                 className: best.className,
                 href: best.href || best.getAttribute('href'),
                 ariaLabel: best.getAttribute('aria-label'),
+                title: best.getAttribute('title'),
                 timestamp: Date.now(),
                 tabIndex: ${pageIndex}
               };
@@ -1668,12 +1718,44 @@ class PlaywrightRecorder extends EventEmitter {
               }
             }
             
-            // Priority: dataLabel > dataValue > itemText > inputValue > textContent
-            let text = dataLabel || dataValue || dataName || itemText || 
-                       ((tag === 'input' && inputValue) ? inputValue : (bestElement.textContent || '').trim().substring(0, 100));
-            
+            // CRITICAL: Get title and ariaLabel first - they are more reliable than textContent
             const title = bestElement.getAttribute('title') || '';
             const ariaLabel = bestElement.getAttribute('aria-label') || '';
+            
+            // Priority: title > ariaLabel > dataLabel > dataValue > itemText > inputValue > textContent
+            // Title and aria-label are most reliable for Salesforce elements
+            let rawText = dataLabel || dataValue || dataName || itemText || 
+                       ((tag === 'input' && inputValue) ? inputValue : (bestElement.innerText || bestElement.textContent || '').trim().substring(0, 100));
+            
+            // Use title or ariaLabel if rawText looks corrupted (missing characters)
+            // Pattern: "Li t" (should be "List"), "U er" (should be "User")
+            const looksCorrupted = /\b[A-Z][a-z]?\s[a-z]+\b/.test(rawText) && rawText.length < 30;
+            let text = '';
+            if (title && title.length > 1 && title.length < 100 && (looksCorrupted || !rawText)) {
+              text = title;
+            } else if (ariaLabel && ariaLabel.length > 1 && ariaLabel.length < 100 && (looksCorrupted || !rawText)) {
+              text = ariaLabel;
+            } else {
+              text = rawText;
+            }
+            
+            // Fix common Salesforce text corruption patterns
+            // First normalize all whitespace types (nbsp, thin space, etc.) to regular space
+            // NOTE: Using \\s and \\b because this is inside a template literal string!
+            text = text.replace(/[\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ');
+            text = text
+              .replace(/Li\\s+t\\b/g, 'List')
+              .replace(/U\\s+er\\b/g, 'User')
+              .replace(/Pa\\s+word\\b/g, 'Password')
+              .replace(/Ca\\s+e\\b/g, 'Case')
+              .replace(/Ta\\s+k\\b/g, 'Task')
+              .replace(/A\\s+et\\b/g, 'Asset')
+              .replace(/Campa\\s+gn\\b/g, 'Campaign')
+              .replace(/Rec\\s+ently\\b/g, 'Recently')
+              .replace(/View\\s+ed\\b/g, 'Viewed')
+              .replace(/Act\\s+ive\\b/g, 'Active')
+              .replace(/\\s{2,}/g, ' ')
+              .trim();
             const id = bestElement.id || '';
             const name = bestElement.getAttribute('name') || '';
             const placeholder = bestElement.getAttribute('placeholder') || '';
