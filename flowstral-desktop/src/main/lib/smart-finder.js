@@ -942,6 +942,82 @@ class SmartFinder {
       }, attempts);
       
       if (result.success) return result.locator;
+      
+      // If full selector failed, try just the parent (without child selectors)
+      const parentSelector = confirm.cssSelector.split('>')[0].trim();
+      if (parentSelector !== confirm.cssSelector) {
+        const parentResult = await this.tryStrategy('css-fallback-parent', async () => {
+          const locator = this.page.locator(parentSelector);
+          return await this.validateLocator(locator, 'css-fallback-parent');
+        }, attempts);
+        
+        if (parentResult.success) return parentResult.locator;
+      }
+    }
+    
+    // ==========================================================================
+    // PHASE 8.5: Salesforce Lightning element patterns
+    // Handle lightning-button, lightning-combobox, one-app-launcher, etc.
+    // ==========================================================================
+    
+    if (what?.text) {
+      const sfElementResult = await this.tryStrategy('sf-lightning-elements', async () => {
+        const searchText = this.normalizeText(what.text);
+        
+        // Salesforce-specific selectors that commonly contain buttons/links
+        const sfSelectors = [
+          // Lightning buttons with text
+          `lightning-button:has-text("${searchText}") button`,
+          `lightning-button button:has-text("${searchText}")`,
+          `lightning-button-icon:has-text("${searchText}")`,
+          
+          // Standard buttons/links with the text
+          `button:has-text("${searchText}")`,
+          `a:has-text("${searchText}")`,
+          `[role="button"]:has-text("${searchText}")`,
+          `[role="link"]:has-text("${searchText}")`,
+          `[role="menuitem"]:has-text("${searchText}")`,
+          `[role="option"]:has-text("${searchText}")`,
+          
+          // Salesforce one-app components
+          `one-app-nav-bar-item-root a:has-text("${searchText}")`,
+          `one-app-launcher-menu-item a:has-text("${searchText}")`,
+          
+          // Lightning combobox options
+          `lightning-base-combobox-item:has-text("${searchText}")`,
+          `lightning-base-combobox-item[data-value*="${searchText}"]`,
+          
+          // SLDS components
+          `.slds-button:has-text("${searchText}")`,
+          `.slds-dropdown__item:has-text("${searchText}")`,
+          
+          // Buttons with title attribute
+          `button[title*="${searchText}"]`,
+          `a[title*="${searchText}"]`,
+          `[role="button"][title*="${searchText}"]`,
+        ];
+        
+        for (const selector of sfSelectors) {
+          try {
+            const locator = this.page.locator(selector).first();
+            const count = await locator.count().catch(() => 0);
+            if (count > 0) {
+              // Validate it's visible
+              const isVisible = await locator.isVisible().catch(() => false);
+              if (isVisible) {
+                this.log(`Found Salesforce element via: ${selector.substring(0, 50)}...`);
+                return { success: true, locator, count };
+              }
+            }
+          } catch (e) {
+            // Skip invalid selectors
+          }
+        }
+        
+        return { success: false, count: 0 };
+      }, attempts);
+      
+      if (sfElementResult.success) return sfElementResult.locator;
     }
     
     // ==========================================================================
@@ -1252,39 +1328,135 @@ class SmartFinder {
     this.log('Searching in Shadow DOM...');
     
     try {
-      // Use Playwright's pierce selector for Shadow DOM
-      // This automatically pierces through open Shadow DOMs
+      // NOTE: Playwright's pierce/ selector ONLY works with pure CSS selectors
+      // It does NOT support :has-text() or :text() pseudo-selectors!
+      // Use evaluate() for text-based searches in Shadow DOM
       
-      // Strategy 1: TestId with pierce
+      // Strategy 1: TestId with CSS (works without pierce for open Shadow DOM)
       if (which?.testId) {
-        const locator = this.page.locator(`pierce/[data-testid="${which.testId}"]`);
-        const count = await locator.count();
+        // First try normal locator (Playwright auto-pierces open Shadow DOM by default)
+        let locator = this.page.locator(`[data-testid="${which.testId}"]`);
+        let count = await locator.count().catch(() => 0);
         if (count > 0) {
           this.log(`Found in Shadow DOM by testId: ${which.testId}`);
           return { success: true, locator: locator.first(), count };
         }
-      }
-      
-      // Strategy 2: Role + Text with pierce
-      if (what?.role && what?.text) {
-        const normalizedText = this.normalizeText(what.text);
-        // Playwright's pierce locator
-        const locator = this.page.locator(`pierce/${what.role}:has-text("${normalizedText}")`);
-        const count = await locator.count();
-        if (count > 0) {
-          this.log(`Found in Shadow DOM by role+text: ${what.role} "${normalizedText}"`);
-          return { success: true, locator: locator.first(), count };
+        
+        // Try with explicit shadow DOM piercing via evaluate
+        const shadowTestId = await this.page.evaluate((testId) => {
+          function findInShadows(root, selector) {
+            const result = root.querySelector(selector);
+            if (result) return true;
+            
+            const elements = root.querySelectorAll('*');
+            for (const el of elements) {
+              if (el.shadowRoot) {
+                if (findInShadows(el.shadowRoot, selector)) return true;
+              }
+            }
+            return false;
+          }
+          return findInShadows(document, `[data-testid="${testId}"]`);
+        }, which.testId);
+        
+        if (shadowTestId) {
+          // Found it - now get it with a locator
+          locator = this.page.locator(`[data-testid="${which.testId}"]`);
+          count = await locator.count().catch(() => 0);
+          if (count > 0) {
+            return { success: true, locator: locator.first(), count };
+          }
         }
       }
       
-      // Strategy 3: Text-only with pierce
+      // Strategy 2: Role + Text via evaluate (pierce doesn't support :has-text)
+      if (what?.role && what?.text) {
+        const normalizedText = this.normalizeText(what.text);
+        const role = what.role.toLowerCase();
+        
+        // Find element via evaluate in Shadow DOM
+        const elementHandle = await this.page.evaluateHandle(({ role, text }) => {
+          function findInShadows(root) {
+            // Check current level
+            const candidates = root.querySelectorAll(`[role="${role}"], ${role}`);
+            for (const el of candidates) {
+              const elText = el.textContent?.trim() || el.getAttribute('aria-label') || '';
+              if (elText.includes(text) || text.includes(elText)) {
+                return el;
+              }
+            }
+            
+            // Check shadow roots
+            const elements = root.querySelectorAll('*');
+            for (const el of elements) {
+              if (el.shadowRoot) {
+                const found = findInShadows(el.shadowRoot);
+                if (found) return found;
+              }
+            }
+            return null;
+          }
+          return findInShadows(document);
+        }, { role, text: normalizedText });
+        
+        if (elementHandle) {
+          const isValid = await elementHandle.evaluate(el => el !== null).catch(() => false);
+          if (isValid) {
+            this.log(`Found in Shadow DOM by role+text: ${role} "${normalizedText}"`);
+            // Get locator by using the element's accessible name
+            const locator = this.page.getByRole(role, { name: normalizedText }).first();
+            const count = await locator.count().catch(() => 0);
+            if (count > 0) {
+              return { success: true, locator, count };
+            }
+          }
+        }
+      }
+      
+      // Strategy 3: Text-only via evaluate
       if (what?.text) {
         const normalizedText = this.normalizeText(what.text);
-        const locator = this.page.locator(`pierce/:text("${normalizedText}")`);
-        const count = await locator.count();
+        
+        // Try getByText first (works for most cases)
+        let locator = this.page.getByText(normalizedText, { exact: false }).first();
+        let count = await locator.count().catch(() => 0);
         if (count > 0) {
-          this.log(`Found in Shadow DOM by text: "${normalizedText}"`);
-          return { success: true, locator: locator.first(), count };
+          this.log(`Found by text (auto-pierce): "${normalizedText}"`);
+          return { success: true, locator, count };
+        }
+        
+        // Deep shadow DOM search via evaluate
+        const elementHandle = await this.page.evaluateHandle((text) => {
+          function findInShadows(root) {
+            // Use TreeWalker for text nodes
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+              if (walker.currentNode.textContent?.includes(text)) {
+                // Return the parent element
+                return walker.currentNode.parentElement;
+              }
+            }
+            
+            // Check shadow roots
+            const elements = root.querySelectorAll('*');
+            for (const el of elements) {
+              if (el.shadowRoot) {
+                const found = findInShadows(el.shadowRoot);
+                if (found) return found;
+              }
+            }
+            return null;
+          }
+          return findInShadows(document);
+        }, normalizedText);
+        
+        if (elementHandle) {
+          const isValid = await elementHandle.evaluate(el => el !== null).catch(() => false);
+          if (isValid) {
+            this.log(`Found in Shadow DOM by text: "${normalizedText}"`);
+            // Return getByText which should now find it
+            return { success: true, locator: this.page.getByText(normalizedText).first(), count: 1 };
+          }
         }
       }
       
