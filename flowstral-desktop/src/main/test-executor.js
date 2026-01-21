@@ -1037,10 +1037,17 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const clickSelectorObj = resolvedStep.selectorObj || {};
           const clickText = clickSelectorObj.text || resolvedStep.args?.[0] || '';
           
-          // Normalize text: strip trailing numbers, emojis (badge counts, etc.)
+          // Normalize text: strip trailing numbers and emojis (badge counts, etc.)
+          // CRITICAL: Don't strip ALL non-ASCII - preserve apostrophes, accented chars, quotes
           const normalizedClickText = clickText
             .replace(/\s*\d+\s*$/, '')    // Strip trailing numbers
-            .replace(/[^\x00-\x7F]/g, '') // Strip emojis/non-ASCII
+            // Only strip actual emojis, not quotes/apostrophes
+            .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // Emojis in Misc Symbols and Pictographs
+            .replace(/[\u{2600}-\u{26FF}]/gu, '')    // Misc symbols
+            .replace(/[\u{2700}-\u{27BF}]/gu, '')    // Dingbats
+            .replace(/[\u{1F600}-\u{1F64F}]/gu, '')  // Emoticons
+            // Normalize apostrophe variants to straight apostrophe
+            .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4]/g, "'")
             .trim();
           
           // Build list of selectors to try (in PRIORITY order)

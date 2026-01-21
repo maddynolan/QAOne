@@ -598,6 +598,16 @@ function getElementAnalyzerScript() {
         text = ariaLabel;
       }
       
+      // DEBUG: Log character codes if text looks suspicious (double spaces, missing chars)
+      // This helps diagnose issues like missing 's' characters in Salesforce
+      if (text && (text.includes('  ') || /[^\x00-\x7F]/.test(text))) {
+        var charCodes = [];
+        for (var c = 0; c < Math.min(text.length, 50); c++) {
+          charCodes.push(text.charCodeAt(c).toString(16));
+        }
+        console.log('[Flowstral Recipe] DEBUG text charCodes:', text, charCodes.join(' '));
+      }
+      
       // CRITICAL: Normalize text before returning
       // This ensures consistent apostrophe characters for recording AND playback matching
       return this.normalizeText(text);

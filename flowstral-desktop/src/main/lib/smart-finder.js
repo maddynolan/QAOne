@@ -545,7 +545,18 @@ class SmartFinder {
       // Try exact text match
       const result = await this.tryStrategy('text-exact', async () => {
         const locator = scope.getByText(what.text, { exact: true });
-        return await this.resolveMultiple(locator, which, 'text-exact');
+        const validated = await this.resolveMultiple(locator, which, 'text-exact');
+        
+        // CRITICAL: If role is specified (e.g., button/link), validate element matches
+        // This prevents clicking on search inputs when looking for buttons with matching text
+        if (validated.success && what.role) {
+          if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+            this.log(`text-exact: rejected ${what.text} - wrong target type for ${what.role}`);
+            return { success: false, count: 0 };
+          }
+        }
+        
+        return validated;
       }, attempts);
       
       if (result.success) return result.locator;
@@ -555,7 +566,17 @@ class SmartFinder {
       if (flexibleTextRegex) {
         const apostropheResult = await this.tryStrategy('text-apostrophe-flex', async () => {
           const locator = scope.getByText(flexibleTextRegex);
-          return await this.resolveMultiple(locator, which, 'text-apostrophe-flex');
+          const validated = await this.resolveMultiple(locator, which, 'text-apostrophe-flex');
+          
+          // Validate for role mismatch
+          if (validated.success && what.role) {
+            if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+              this.log(`text-apostrophe-flex: rejected - wrong target type for ${what.role}`);
+              return { success: false, count: 0 };
+            }
+          }
+          
+          return validated;
         }, attempts);
         
         if (apostropheResult.success) return apostropheResult.locator;
@@ -599,7 +620,17 @@ class SmartFinder {
       // Strategy 1: Exact match
       const result = await this.tryStrategy('aria-label', async () => {
         const locator = scope.locator(`[aria-label="${which.ariaLabel}"]`);
-        return await this.validateLocator(locator, 'aria-label');
+        const validated = await this.validateLocator(locator, 'aria-label');
+        
+        // Validate for role mismatch (prevent clicking search inputs when expecting buttons)
+        if (validated.success && what?.role) {
+          if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+            this.log(`aria-label: rejected - wrong target type for ${what.role}`);
+            return { success: false, count: 0 };
+          }
+        }
+        
+        return validated;
       }, attempts);
       
       if (result.success) return result.locator;
@@ -610,7 +641,17 @@ class SmartFinder {
         const searchPart = which.ariaLabel.split(',')[0].trim();
         const normalizedSearch = this.normalizeText(searchPart);
         const locator = scope.locator(`[aria-label*="${normalizedSearch}"]`);
-        return await this.validateLocator(locator, 'aria-label-contains');
+        const validated = await this.validateLocator(locator, 'aria-label-contains');
+        
+        // Validate for role mismatch
+        if (validated.success && what?.role) {
+          if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+            this.log(`aria-label-contains: rejected - wrong target type for ${what.role}`);
+            return { success: false, count: 0 };
+          }
+        }
+        
+        return validated;
       }, attempts);
       
       if (partialResult.success) return partialResult.locator;
@@ -621,7 +662,17 @@ class SmartFinder {
         const flexRegex = this.createFlexibleTextRegex(searchPart);
         // Use XPath for regex matching on aria-label
         const locator = scope.getByRole('link', { name: flexRegex });
-        return await this.validateLocator(locator, 'aria-label-flex');
+        const validated = await this.validateLocator(locator, 'aria-label-flex');
+        
+        // Validate for role mismatch
+        if (validated.success && what?.role) {
+          if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+            this.log(`aria-label-flex: rejected - wrong target type for ${what.role}`);
+            return { success: false, count: 0 };
+          }
+        }
+        
+        return validated;
       }, attempts);
       
       if (flexResult.success) return flexResult.locator;
