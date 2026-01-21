@@ -6583,6 +6583,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               locator = await this.smartFinder.find(recipe);
               console.log('[PlaywrightRecorder] SmartFinder result:', locator ? 'FOUND' : 'NOT FOUND');
               if (locator) {
+                // Check if SmartFinder already clicked the element directly
+                // This happens for Salesforce "New" buttons where we use direct element access
+                if (locator.__directClickComplete) {
+                  console.log('[PlaywrightRecorder] SmartFinder already performed the click directly');
+                  return { 
+                    locator: null, 
+                    strategy: { type: 'SmartFinder-DirectClick' },
+                    alreadyClicked: true  // Signal that no further click is needed
+                  };
+                }
                 // Check if SmartFinder returned a direct click signal (coordinate-based fallback)
                 if (locator.__useDirectClick && locator.coords) {
                   console.log(`[PlaywrightRecorder] SmartFinder requesting direct coordinate click at (${locator.coords.x}, ${locator.coords.y})`);
@@ -6910,6 +6920,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           }
           
           console.log(`[PlaywrightRecorder] Clicking element: "${label}" using ${clickResult.strategy.type}`);
+          
+          // Check if SmartFinder already clicked the element (Salesforce "New" buttons)
+          if (clickResult.alreadyClicked) {
+            console.log('[PlaywrightRecorder] ✓ Click already performed by SmartFinder');
+            break; // Done with click action
+          }
           
           // Debug: Log element details
           try {

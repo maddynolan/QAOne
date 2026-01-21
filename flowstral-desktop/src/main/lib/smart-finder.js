@@ -579,18 +579,66 @@ class SmartFinder {
         // Find the related list container by its header text
         const relatedListText = where.relatedList;
         
-        // Try multiple Salesforce related list selectors
+        // APPROACH 1: Use page.evaluate to find container with matching header
+        // This is more reliable than complex CSS selectors
+        const containerHandle = await this.page.evaluateHandle((headerText) => {
+          // Look for any card/container with a header containing this text
+          const allContainers = document.querySelectorAll(
+            'lst-related-list-single-container, lst-related-list-container, ' +
+            'article.slds-card, lightning-card, flexipage-component2, ' +
+            '[data-component-id*="Related"], .forceRelatedListContainer'
+          );
+          
+          for (const container of allContainers) {
+            const header = container.querySelector(
+              '.slds-card__header-title, .slds-text-heading--small, ' +
+              '[slot="title"], h2, .header-title, .forceRelatedListCardHeader'
+            );
+            if (header) {
+              const text = (header.textContent || '').trim().replace(/\s*\(\d+\)\s*$/, '');
+              // Check if header contains or matches our target
+              if (text.toLowerCase().includes(headerText.toLowerCase()) ||
+                  headerText.toLowerCase().includes(text.toLowerCase())) {
+                return container;
+              }
+            }
+          }
+          return null;
+        }, relatedListText);
+        
+        if (containerHandle) {
+          const element = containerHandle.asElement();
+          if (element) {
+            // Convert ElementHandle to Locator using a unique selector
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            const dataComponentId = await element.evaluate(el => el.getAttribute('data-component-id'));
+            
+            if (dataComponentId) {
+              const locator = this.page.locator(`[data-component-id="${dataComponentId}"]`);
+              const count = await locator.count().catch(() => 0);
+              if (count > 0) {
+                this.log(`✓ Scoped to Salesforce related list: "${relatedListText}" via data-component-id`);
+                return { success: true, scope: locator.first() };
+              }
+            }
+            
+            // Fallback: use the element handle directly as scope
+            this.log(`✓ Scoped to Salesforce related list: "${relatedListText}" via evaluateHandle`);
+            // Create a locator that matches this specific container
+            const locator = this.page.locator(`${tagName}:has-text("${relatedListText}")`).first();
+            return { success: true, scope: locator };
+          }
+        }
+        
+        // APPROACH 2: Try CSS selectors as fallback
         const relatedListSelectors = [
-          // Card with matching header
-          `lst-related-list-single-container:has(.slds-card__header-title:text-is("${relatedListText}"))`,
-          `article.slds-card:has(.slds-card__header-title:text-is("${relatedListText}"))`,
-          `lightning-card:has([slot="title"]:text-is("${relatedListText}"))`,
-          // Try with partial text match
-          `lst-related-list-single-container:has(:text("${relatedListText}"))`,
-          `article.slds-card:has(h2:text("${relatedListText}"))`,
-          `[data-component-id*="Related"]:has(:text("${relatedListText}"))`,
-          // Flexipage component with matching title
-          `flexipage-component2:has(.slds-card__header-title:text("${relatedListText}"))`,
+          // Card with matching header - use :has-text instead of :text-is
+          `lst-related-list-single-container:has-text("${relatedListText}")`,
+          `article.slds-card:has-text("${relatedListText}")`,
+          `lightning-card:has-text("${relatedListText}")`,
+          `[data-component-id*="Related"]:has-text("${relatedListText}")`,
+          `flexipage-component2:has-text("${relatedListText}")`,
+          `.forceRelatedListContainer:has-text("${relatedListText}")`,
         ];
         
         for (const selector of relatedListSelectors) {
@@ -602,10 +650,11 @@ class SmartFinder {
               return { success: true, scope: locator.first() };
             }
           } catch (e) {
-            // Selector syntax error, skip
+            this.log(`Related list selector failed: ${selector.substring(0, 50)}... - ${e.message}`);
           }
         }
         
+        this.log(`✗ Could not scope to related list "${relatedListText}" - will use position fallback`);
         return { success: false };
       }, attempts);
       
@@ -851,6 +900,108 @@ class SmartFinder {
       }, attempts);
       
       if (result.success) return this._recordLearningAndReturn(result.locator);
+    }
+    
+    // ==========================================================================
+    // PHASE 2.5: SALESFORCE "NEW" BUTTON DISAMBIGUATION
+    // When related list scoping failed and we have multiple "New" buttons,
+    // use the parent container's object type to find the right one
+    // ==========================================================================
+    if (what?.text?.toLowerCase() === 'new' && where?.relatedList && scope === this.page) {
+      this.log(`Salesforce "New" button disambiguation for related list: "${where.relatedList}"`);
+      const sfNewResult = await this.tryStrategy('sf-new-button', async () => {
+        // Find all "New" buttons/links on the page
+        const newButtons = await this.page.evaluateHandle((targetList) => {
+          const buttons = Array.from(document.querySelectorAll('a, button'));
+          const newButtonsInList = [];
+          
+          for (const btn of buttons) {
+            const text = (btn.textContent || '').trim();
+            if (text.toLowerCase() !== 'new') continue;
+            
+            // Walk up to find the related list container
+            let container = btn.closest(
+              'lst-related-list-single-container, lst-related-list-container, ' +
+              'article.slds-card, lightning-card, flexipage-component2, ' +
+              '[data-component-id*="Related"], .forceRelatedListContainer'
+            );
+            
+            if (container) {
+              const header = container.querySelector(
+                '.slds-card__header-title, .slds-text-heading--small, ' +
+                '[slot="title"], h2, .header-title, .forceRelatedListCardHeader'
+              );
+              if (header) {
+                const headerText = (header.textContent || '').trim().replace(/\s*\(\d+\)\s*$/, '');
+                // Check if this matches our target related list
+                if (headerText.toLowerCase().includes(targetList.toLowerCase()) ||
+                    targetList.toLowerCase().includes(headerText.toLowerCase())) {
+                  return btn;
+                }
+              }
+            }
+            
+            // Also check the href for object type hints
+            const href = btn.getAttribute('href') || '';
+            const targetLower = targetList.toLowerCase();
+            // e.g., href contains "/Opportunity/new" for Opportunities list
+            if (href.toLowerCase().includes(`/${targetLower.replace(/ies$/, 'y').replace(/s$/, '')}/new`) ||
+                href.toLowerCase().includes(`/${targetLower}/new`)) {
+              return btn;
+            }
+          }
+          
+          return null;
+        }, where.relatedList);
+        
+        if (sfNewResult) {
+          const element = sfNewResult.asElement();
+          if (element) {
+            // Get identifying attributes to create a locator
+            const attrs = await element.evaluate(el => ({
+              tagName: el.tagName.toLowerCase(),
+              href: el.getAttribute('href'),
+              title: el.getAttribute('title'),
+              ariaLabel: el.getAttribute('aria-label'),
+              dataRefid: el.getAttribute('data-refid'),
+            }));
+            
+            // Try to create a specific locator
+            if (attrs.href) {
+              const locator = this.page.locator(`${attrs.tagName}[href="${attrs.href}"]:has-text("New")`);
+              if (await locator.count() === 1) {
+                this.log(`✓ Found "New" button for "${where.relatedList}" via href`);
+                return { success: true, locator: locator.first() };
+              }
+            }
+            if (attrs.dataRefid) {
+              const locator = this.page.locator(`[data-refid="${attrs.dataRefid}"]`);
+              if (await locator.count() === 1) {
+                this.log(`✓ Found "New" button for "${where.relatedList}" via data-refid`);
+                return { success: true, locator: locator.first() };
+              }
+            }
+            
+            // Fallback: click the element directly
+            this.log(`✓ Found "New" button for "${where.relatedList}" via evaluateHandle (direct click)`);
+            await element.click();
+            return { success: true, locator: null, directClick: true };
+          }
+        }
+        
+        return { success: false };
+      }, attempts);
+      
+      if (sfNewResult.success) {
+        if (sfNewResult.directClick) {
+          // Already clicked in the strategy - return a marker object
+          // The caller (playwright-recorder.js) will see this and skip the click
+          this.log('✓ Salesforce "New" button already clicked via direct element access');
+          const marker = { __directClickComplete: true };
+          return marker;
+        }
+        return this._recordLearningAndReturn(sfNewResult.locator);
+      }
     }
     
     // ==========================================================================

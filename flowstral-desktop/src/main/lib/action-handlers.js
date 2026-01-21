@@ -154,6 +154,12 @@ async function handleClick(ctx, action, options = {}) {
   
   console.log(`[ActionHandler] Clicking element: "${label}" using ${clickResult.strategy.type}`);
   
+  // Handle case where SmartFinder already clicked the element (Salesforce "New" buttons)
+  if (clickResult.alreadyClicked) {
+    console.log('[ActionHandler] ✓ Click already performed by SmartFinder');
+    return { success: true, strategy: 'SmartFinder-DirectClick' };
+  }
+  
   // Handle direct coordinate click (when SmartFinder couldn't build a valid locator)
   if (clickResult.useDirectClick && clickResult.coords) {
     console.log(`[ActionHandler] Using direct coordinate click at (${clickResult.coords.x}, ${clickResult.coords.y})`);
