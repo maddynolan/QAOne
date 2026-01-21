@@ -2741,6 +2741,36 @@ class PlaywrightRecorder extends EventEmitter {
       return;
     }
     
+    // FILTER: Skip modal header/title clicks
+    // These are phantom clicks when user interacts with modal content, click bubbles to header.
+    // Common patterns: "New [ObjectType]", "Edit [ObjectType]", "Create [ObjectType]"
+    // Modal titles have role=heading in the recipe or landmark=dialog
+    const whatRole = target?.what?.role || '';
+    const whereLandmark = target?.where?.landmark || '';
+    const elementText = target?.what?.text || '';
+    
+    // Detect Salesforce modal title patterns: "New Opportunity", "Edit Contact", "Create Campaign", etc.
+    const sfModalTitlePatterns = [
+      /^New\s+[A-Z][a-zA-Z]+$/,           // "New Opportunity", "New Contact"
+      /^Edit\s+[A-Z][a-zA-Z]+$/,           // "Edit Opportunity", "Edit Contact"
+      /^Create\s+[A-Z][a-zA-Z]+$/,         // "Create Campaign"
+      /^Clone\s+[A-Z][a-zA-Z]+$/,          // "Clone Opportunity"
+      /^Log\s+a\s+Call$/i,                 // "Log a Call"
+      /^Send\s+an\s+Email$/i,              // "Send an Email"
+    ];
+    
+    const isSfModalTitle = sfModalTitlePatterns.some(p => p.test(elementText));
+    
+    // Also check: if it's a heading inside a dialog/modal, skip it
+    const isHeadingInDialog = (whatRole === 'heading' && 
+                               (whereLandmark === 'dialog' || whereLandmark === 'complementary'));
+    
+    if (type === 'click' && (isSfModalTitle || isHeadingInDialog)) {
+      console.log('[PlaywrightRecorder] Skipping modal title click (recipe):', elementText, 
+                  '| role:', whatRole, '| landmark:', whereLandmark);
+      return;
+    }
+    
     // Normalize the element text for consistent deduplication
     const elementText = target?.what?.text || '';
     const normalizedText = this._normalizeClickText(elementText);

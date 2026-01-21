@@ -451,6 +451,47 @@ function getRecipeClickCaptureScript() {
         return;
       }
       
+      // ============================================================
+      // SKIP CLICKS on modal/dialog HEADERS/TITLES
+      // These are not user-intended actions - user clicks modal body and
+      // event bubbles to title, or user accidentally clicks on the header.
+      // Modal titles are: h1/h2 in dialog, .modal-title, slds-modal__header, etc.
+      // ============================================================
+      var isModalHeader = (function() {
+        // Check if element is inside a dialog/modal
+        var parentDialog = element.closest('[role="dialog"], [role="alertdialog"], [aria-modal="true"], .slds-modal, .modal');
+        if (!parentDialog) return false;
+        
+        // Check if this is a heading element OR inside a header container
+        var tagLower = tag.toLowerCase();
+        var isHeadingElement = (tagLower === 'h1' || tagLower === 'h2' || tagLower === 'h3' || 
+                                tagLower === 'h4' || tagLower === 'h5' || tagLower === 'h6');
+        var roleValue = element.getAttribute && element.getAttribute('role');
+        var isHeadingRole = roleValue === 'heading';
+        
+        // Check if inside modal header container
+        var isInHeaderContainer = !!(
+          element.closest('.modal-header, .slds-modal__header, .modal-title, [slot="header"]') ||
+          element.closest('[class*="modalHeader"], [class*="modal-header"]') ||
+          element.closest('[data-aura-class*="panel2Header"], [class*="panelHeader"]')
+        );
+        
+        // Check for Salesforce specific modal header patterns
+        var isSalesforceModalHeader = !!(
+          element.closest('.forceModalActionContainer') ||
+          element.closest('.uiModal--medium .modal-header, .uiModal--large .modal-header') ||
+          element.closest('[class*="actionsContainer"]') ||
+          (tagLower === 'span' && element.closest('.slds-modal__title'))
+        );
+        
+        return (isHeadingElement || isHeadingRole || isInHeaderContainer || isSalesforceModalHeader);
+      })();
+      
+      if (isModalHeader) {
+        console.log('[Flowstral Recipe] Skip click - modal header/title (not user action):', recipe.what?.text || tag);
+        return;
+      }
+      
       // Debug: Check if this is a dropdown trigger
       var isTrigger = coalescer.isDropdownTrigger(element);
       var role = element.getAttribute && element.getAttribute('role');
