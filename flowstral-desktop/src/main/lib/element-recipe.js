@@ -598,14 +598,19 @@ function getElementAnalyzerScript() {
         text = ariaLabel;
       }
       
-      // DEBUG: Log character codes if text looks suspicious (double spaces, missing chars)
-      // This helps diagnose issues like missing 's' characters in Salesforce
-      if (text && (text.includes('  ') || /[^\x00-\x7F]/.test(text))) {
+      // DEBUG: ALWAYS log text capture for troubleshooting missing 's' issue
+      // The issue: "List" becomes "Li t", "User" becomes "U er"
+      if (text && text.length > 0) {
         var charCodes = [];
         for (var c = 0; c < Math.min(text.length, 50); c++) {
           charCodes.push(text.charCodeAt(c).toString(16));
         }
-        console.log('[Flowstral Recipe] DEBUG text charCodes:', text, charCodes.join(' '));
+        // Check specifically for patterns that might indicate missing 's'
+        var hasSuspiciousSpace = / [a-z]/.test(text) && !/\b[a-z]/.test(text.replace(/ [a-z]/g, ''));
+        if (hasSuspiciousSpace || text.includes('Li t') || text.includes('U er') || text.includes('  ')) {
+          console.log('[Flowstral Recipe] ⚠️ SUSPICIOUS TEXT:', text);
+          console.log('[Flowstral Recipe] ⚠️ CharCodes:', charCodes.join(' '));
+        }
       }
       
       // CRITICAL: Normalize text before returning
