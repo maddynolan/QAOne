@@ -156,6 +156,10 @@ class PlaywrightRecorder extends EventEmitter {
     this.smartFinder = null; // SmartFinder instance for playback
     this.useSmartFinderForPlayback = options.useSmartFinderForPlayback !== false; // Use SmartFinder during playback
     
+    // CRITICAL: Track when interactions happen to suppress navigation events
+    // Navigation events can fire BEFORE click is fully processed, causing duplicate actions
+    this._lastInteractionTimestamp = 0; // Timestamp of last click/select/fill START
+    
     // AI Vision Fallback - LAST RESORT when all deterministic strategies fail
     this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
     this.aiCallsThisRun = 0;
@@ -2627,11 +2631,23 @@ class PlaywrightRecorder extends EventEmitter {
   /**
    * V2: Process a recipe-based action (new format with ElementRecipe)
    * This provides better element identification for modern frameworks
+   * 
+   * DEDUPLICATION STRATEGY:
+   * 1. Recipe actions take priority over CDP actions (better element identification)
+   * 2. When Recipe records an action, mark it so CDP won't double-record
+   * 3. Use both timestamp-based and text-based deduplication
+   * 
    * @param {object} recipeAction - The recipe action to process
    * @param {number} pageIndex - The page/tab index this action was captured from
    */
   async _processRecipeAction(recipeAction, pageIndex = 0) {
     const { type, target, value, description, timestamp } = recipeAction;
+    
+    // CRITICAL: Mark that an interaction is happening RIGHT NOW
+    // This suppresses navigation events that fire before the action is fully processed
+    if (['click', 'fill', 'select', 'check', 'uncheck', 'dblclick', 'rightClick'].includes(type)) {
+      this._lastInteractionTimestamp = Date.now();
+    }
     
     // FILTER: Skip misidentified page title clicks
     // Recipe recorder sometimes misidentifies tab clicks as page title clicks
@@ -2643,14 +2659,33 @@ class PlaywrightRecorder extends EventEmitter {
       return;
     }
     
-    // Generate unique ID with rounded timestamp (50ms window) to catch near-simultaneous duplicates
+    // Normalize the element text for consistent deduplication
+    const elementText = target?.what?.text || '';
+    const normalizedText = this._normalizeClickText(elementText);
+    
+    // Generate multiple IDs to prevent BOTH Recipe and CDP from recording same action
     const roundedTimestamp = Math.floor(timestamp / 50) * 50;
-    const actionId = `recipe_${roundedTimestamp}_${type}_${target?.what?.text || 'element'}`;
+    const actionId = `recipe_${roundedTimestamp}_${type}_${normalizedText}`;
+    
+    // CRITICAL: Also add CDP-style ID to prevent CDP from recording same action
+    // This ensures cross-system deduplication works
+    const cdpStyleId = `cdp_${roundedTimestamp}_Click "${elementText}"`;
+    
     if (this.seenActionIds.has(actionId)) {
-      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (same 50ms window):', type, target?.what?.text);
+      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (same 50ms window):', type, elementText);
       return;
     }
+    
+    // Mark both IDs as seen to prevent double-recording by CDP
     this.seenActionIds.add(actionId);
+    this.seenActionIds.add(cdpStyleId);
+    
+    // Also mark nearby timestamps (±100ms) to catch timing variations
+    const nearbyTimestamps = [roundedTimestamp - 50, roundedTimestamp + 50];
+    for (const ts of nearbyTimestamps) {
+      this.seenActionIds.add(`cdp_${ts}_Click "${elementText}"`);
+      this.seenActionIds.add(`cdp_${ts}_${normalizedText}`);
+    }
     
     // Store the raw recipe action
     this.recipeActions.push(recipeAction);
@@ -2661,26 +2696,24 @@ class PlaywrightRecorder extends EventEmitter {
     legacyAction.fromRecipe = true; // Mark as v2 recipe-based
     legacyAction.tabIndex = pageIndex; // CRITICAL: Track which tab for implicit switching during playback
     
-    console.log('[PlaywrightRecorder] Recipe action:', type, description || target?.what?.text, `(tab ${pageIndex})`);
+    console.log('[PlaywrightRecorder] Recipe action:', type, description || elementText, `(tab ${pageIndex})`);
     
     // Check for duplicates in existing actions using normalized text comparison
-    const newText = legacyAction.args?.[0] || legacyAction.text || '';
-    const normalizedNewText = this._normalizeClickText(newText);
-    
+    // Extended window to 1000ms to catch more duplicates
     const isDuplicate = this.actions.some(a => {
-      // Same type and similar description within 500ms
+      // Same type and similar description within 1000ms (extended from 500ms)
       if (a.qword === legacyAction.qword && 
-          Math.abs((a.timestamp || 0) - timestamp) < 500) {
+          Math.abs((a.timestamp || 0) - timestamp) < 1000) {
         // Check if it's the same element (using normalized text)
         const aText = a.args?.[0] || a.text || '';
         const normalizedAText = this._normalizeClickText(aText);
-        return normalizedAText === normalizedNewText;
+        return normalizedAText === normalizedText;
       }
       return false;
     });
     
     if (isDuplicate) {
-      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (normalized match):', newText);
+      console.log('[PlaywrightRecorder] Skipping duplicate recipe action (normalized match):', elementText);
       return;
     }
     
@@ -2702,28 +2735,59 @@ class PlaywrightRecorder extends EventEmitter {
   }
 
   /**
-   * Process a single click action
+   * Process a single click action (CDP-based)
+   * 
+   * NOTE: Recipe recording takes priority over CDP for element identification.
+   * If Recipe already recorded this action, we skip CDP recording.
    */
   async _processClick(click) {
+    // CRITICAL: Mark that an interaction is happening RIGHT NOW
+    // This suppresses navigation events that fire before the click is fully processed
+    this._lastInteractionTimestamp = Date.now();
+    
     // Normalize description for deduplication - handles variations like "Account Number" vs "Account Number *"
     const normalizedDesc = this._normalizeClickText(click.description);
+    
+    // Extract the element text from description for cross-system matching
+    const textMatch = click.description?.match(/Click "([^"]+)"/);
+    const elementText = textMatch ? textMatch[1] : (click.text || '');
+    const normalizedElementText = this._normalizeClickText(elementText);
     
     // Deduplicate - use rounded timestamp (50ms window) AND normalized description
     const roundedTimestamp = Math.floor(click.timestamp / 50) * 50;
     const clickId = `cdp_${roundedTimestamp}_${normalizedDesc}`;
+    
+    // CRITICAL: Check if Recipe already recorded this action (cross-system deduplication)
+    // Recipe adds both recipe_ and cdp_ style IDs to prevent double-recording
     if (this.seenActionIds.has(clickId)) {
       console.log('[PlaywrightRecorder] Skipping duplicate click (same 50ms window):', click.description);
       return;
     }
+    
+    // Also check for Recipe-style IDs (different timestamp windows)
+    const nearbyTimestamps = [roundedTimestamp - 50, roundedTimestamp, roundedTimestamp + 50];
+    for (const ts of nearbyTimestamps) {
+      const recipeStyleId = `recipe_${ts}_click_${normalizedElementText}`;
+      if (this.seenActionIds.has(recipeStyleId)) {
+        console.log('[PlaywrightRecorder] Skipping CDP click - Recipe already captured:', click.description);
+        return;
+      }
+    }
+    
     this.seenActionIds.add(clickId);
     
-    // Also check recent actions for same normalized text (within 500ms) - catches variations
-    const lastActions = this.actions.slice(-3);
+    // Also check recent actions for same normalized text (within 1000ms) - extended from 500ms
+    const lastActions = this.actions.slice(-5); // Check more recent actions
     for (const lastAction of lastActions) {
       const lastNormalizedDesc = this._normalizeClickText(lastAction.description);
+      const lastText = this._normalizeClickText(lastAction.args?.[0] || lastAction.text || '');
       const timeDiff = Math.abs((lastAction.timestamp || 0) - click.timestamp);
-      if (lastNormalizedDesc === normalizedDesc && timeDiff < 500 && lastAction.qword === 'ClickText') {
-        console.log('[PlaywrightRecorder] Skipping variant duplicate click:', click.description, 'matches', lastAction.description);
+      
+      // Check both description and element text matches
+      const textMatches = lastNormalizedDesc === normalizedDesc || lastText === normalizedElementText;
+      
+      if (textMatches && timeDiff < 1000 && (lastAction.qword === 'ClickText' || lastAction.type === 'click')) {
+        console.log('[PlaywrightRecorder] Skipping variant duplicate click:', click.description, 'matches', lastAction.description || lastAction.text);
         return;
       }
     }
@@ -10838,6 +10902,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
 
   /**
    * Check if navigation should be recorded
+   * 
+   * CRITICAL FIX (Jan 2026): Most navigations are CAUSED by clicks/selects/fills.
+   * We should NOT record navigations as separate steps because:
+   * 1. The click/select action already represents the user's intent
+   * 2. Recording navigation separately causes playback to navigate THEN try to click
+   * 3. This breaks Salesforce Lightning where buttons trigger JS navigation (not <a> tags)
    */
   _shouldRecordNavigation(url) {
     if (!url) return false;
@@ -10853,52 +10923,95 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       /callback/i,
       /\/sso\//i,
       /aura\?/i,
-      /\/apexpages\//i
+      /\/apexpages\//i,
+      // Salesforce Lightning internal routes
+      /\/lightning\/r\//i,        // Record pages
+      /\/lightning\/o\//i,        // Object list pages
+      /\/lightning\/page\//i,     // Custom pages
+      /\/lightning\/n\//i,        // Named pages
+      /filterName=/i,             // List view filter changes
+      /\?.*ws=/i,                 // Workspace routing
     ];
     
-    if (skipPatterns.some(p => p.test(url))) return false;
+    if (skipPatterns.some(p => p.test(url))) {
+      console.log('[PlaywrightRecorder] Skipping navigation - matches skip pattern:', url.substring(0, 60));
+      return false;
+    }
     
     // Skip if same as last recorded navigation
     const lastNav = this.actions.filter(a => a.qword === 'GoTo').pop();
     if (lastNav && lastNav.args[0] === url) return false;
     
     // ============================================================
-    // SKIP NAVIGATIONS CAUSED BY LINK CLICKS
-    // If a click action to this URL was recorded in the last 3 seconds,
-    // the navigation is redundant (click implies navigation)
+    // CRITICAL FIX: SKIP ALL NAVIGATIONS AFTER ANY INTERACTIVE ACTION
+    // If ANY click, select, or fill happened in the last 5 seconds,
+    // the navigation is likely a RESULT of that action, not a new action.
+    // 
+    // In SPAs like Salesforce Lightning, React, Vue, Angular:
+    // - Buttons trigger JS navigation (not <a> tags)
+    // - Selecting dropdown options can navigate
+    // - Form submissions navigate
+    // All of these should be represented by the ACTION, not the navigation.
     // ============================================================
     const now = Date.now();
-    const recentClicks = this.actions.filter(a => 
-      (a.qword === 'ClickText' || a.qword === 'Click' || a.type === 'click') &&
-      (now - (a.timestamp || 0)) < 3000
-    );
+    const NAVIGATION_SUPPRESSION_WINDOW = 5000; // 5 seconds
     
-    for (const click of recentClicks) {
-      // Check if click's element had href matching this URL
-      // Look in multiple places where href might be stored
-      const clickHref = click.raw?.href || click.element?.href || click.recipe?.confirm?.href || '';
-      if (clickHref && this._urlsMatch(clickHref, url)) {
-        console.log('[PlaywrightRecorder] Skipping navigation - caused by recent link click:', url.substring(0, 50));
-        return false;
-      }
-      
-      // Also check if URL is part of the click's selector/recipe
-      const clickUrl = click.selectorObj?.href || click.recipe?.which?.href || '';
-      if (clickUrl && this._urlsMatch(clickUrl, url)) {
-        console.log('[PlaywrightRecorder] Skipping navigation - click has matching URL:', url.substring(0, 50));
-        return false;
-      }
-      
-      // Check if click text is a link that might navigate
-      // (for cases where href isn't stored but element was a link)
-      const clickTag = click.raw?.tag || click.element?.tagName || '';
-      if (clickTag.toLowerCase() === 'a' || click.raw?.role === 'link') {
-        // This was a link click - navigation is expected, skip recording it
-        console.log('[PlaywrightRecorder] Skipping navigation - recent link click exists');
-        return false;
-      }
+    // CHECK 1: Is an interaction currently being processed?
+    // Navigation events can fire BEFORE the click is added to this.actions
+    if (this._lastInteractionTimestamp && (now - this._lastInteractionTimestamp) < NAVIGATION_SUPPRESSION_WINDOW) {
+      console.log(`[PlaywrightRecorder] Skipping navigation - interaction in progress (${now - this._lastInteractionTimestamp}ms ago):`, url.substring(0, 60));
+      return false;
     }
     
+    // CHECK 2: Are there recent interactive actions already in the array?
+    const recentInteractiveActions = this.actions.filter(a => {
+      const isInteractive = 
+        a.qword === 'ClickText' || 
+        a.qword === 'Click' || 
+        a.qword === 'ClickElement' ||
+        a.qword === 'Select' ||
+        a.qword === 'Fill' ||
+        a.type === 'click' ||
+        a.type === 'select' ||
+        a.type === 'fill';
+      
+      const isRecent = (now - (a.timestamp || 0)) < NAVIGATION_SUPPRESSION_WINDOW;
+      
+      return isInteractive && isRecent;
+    });
+    
+    if (recentInteractiveActions.length > 0) {
+      const lastAction = recentInteractiveActions[recentInteractiveActions.length - 1];
+      const timeSinceAction = now - (lastAction.timestamp || 0);
+      console.log(`[PlaywrightRecorder] Skipping navigation - caused by recent ${lastAction.qword || lastAction.type} (${timeSinceAction}ms ago):`, url.substring(0, 60));
+      return false;
+    }
+    
+    // ============================================================
+    // ALSO SKIP: Same-domain navigations within Salesforce
+    // These are always caused by user interactions, not direct navigation
+    // ============================================================
+    try {
+      const navUrl = new URL(url);
+      const currentUrl = this.page ? new URL(this.page.url()) : null;
+      
+      // If navigating within same Salesforce org, skip
+      if (currentUrl && navUrl.hostname === currentUrl.hostname) {
+        // Check if this is a Lightning page change
+        if (url.includes('lightning.force.com') || url.includes('/lightning/')) {
+          console.log('[PlaywrightRecorder] Skipping same-org Lightning navigation:', url.substring(0, 60));
+          return false;
+        }
+      }
+    } catch (e) {
+      // URL parsing failed, continue with other checks
+    }
+    
+    // Only record navigation if it's:
+    // 1. A completely new domain
+    // 2. More than 5 seconds after any interactive action
+    // 3. Not a Salesforce internal route
+    console.log('[PlaywrightRecorder] Recording navigation (no recent interactions):', url.substring(0, 60));
     return true;
   }
   

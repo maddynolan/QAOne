@@ -24,6 +24,109 @@ class SmartFinder {
     // Telemetry for debugging failed attempts
     this.lastFailedAttempts = null;
     this.lastFailedRecipe = null;
+    
+    // Role equivalences for flexible matching
+    // Format: expected role -> [acceptable actual roles]
+    this.roleEquivalences = {
+      'button': ['button', 'BUTTON', 'input', 'INPUT'],  // input[type=button/submit]
+      'link': ['link', 'LINK', 'a', 'A'],
+      'textbox': ['textbox', 'TEXTBOX', 'input', 'INPUT', 'textarea', 'TEXTAREA'],
+      'checkbox': ['checkbox', 'CHECKBOX', 'input', 'INPUT'],
+      'radio': ['radio', 'RADIO', 'input', 'INPUT'],
+      'combobox': ['combobox', 'COMBOBOX', 'listbox', 'LISTBOX', 'select', 'SELECT'],
+      'option': ['option', 'OPTION', 'menuitem', 'MENUITEM', 'li', 'LI'],
+      'menuitem': ['menuitem', 'MENUITEM', 'option', 'OPTION', 'li', 'LI'],
+      'tab': ['tab', 'TAB', 'button', 'BUTTON', 'a', 'A'],
+      'slider': ['slider', 'SLIDER', 'input', 'INPUT'],
+      'switch': ['switch', 'SWITCH', 'checkbox', 'CHECKBOX', 'input', 'INPUT'],
+      'searchbox': ['searchbox', 'SEARCHBOX', 'textbox', 'TEXTBOX', 'input', 'INPUT'],
+      'spinbutton': ['spinbutton', 'SPINBUTTON', 'input', 'INPUT'],
+      'cell': ['cell', 'CELL', 'td', 'TD', 'gridcell', 'GRIDCELL'],
+      'row': ['row', 'ROW', 'tr', 'TR'],
+      'columnheader': ['columnheader', 'COLUMNHEADER', 'th', 'TH'],
+      'img': ['img', 'IMG', 'image', 'IMAGE'],
+      'treeitem': ['treeitem', 'TREEITEM', 'li', 'LI', 'option', 'OPTION'],
+      'heading': ['heading', 'HEADING', 'h1', 'H1', 'h2', 'H2', 'h3', 'H3', 'h4', 'H4', 'h5', 'H5', 'h6', 'H6'],
+    };
+    
+    // Element types that should NOT be clickable targets (likely wrong match)
+    this.nonClickableRoles = ['textbox', 'searchbox', 'spinbutton', 'slider'];
+    this.nonClickableTags = ['input', 'textarea'];
+  }
+  
+  /**
+   * Check if actual role matches expected role
+   * Uses role equivalences for flexibility while preventing clearly wrong matches
+   * @param {string} expectedRole - Role from recipe
+   * @param {string} actualRole - Role/tag found on element
+   * @param {string} actionType - 'click', 'fill', etc. to apply action-specific validation
+   * @returns {boolean}
+   */
+  _roleMatches(expectedRole, actualRole, actionType = 'click') {
+    if (!expectedRole) return true; // No expected role means accept anything
+    if (!actualRole) return false;
+    
+    const normalizedExpected = expectedRole.toLowerCase();
+    const normalizedActual = actualRole.toLowerCase();
+    
+    // Exact match
+    if (normalizedExpected === normalizedActual) return true;
+    
+    // Check equivalences
+    const acceptableRoles = this.roleEquivalences[normalizedExpected];
+    if (acceptableRoles && acceptableRoles.map(r => r.toLowerCase()).includes(normalizedActual)) {
+      return true;
+    }
+    
+    // For click actions, reject elements that are clearly not clickable targets
+    // (e.g., clicking should NOT match input fields)
+    if (actionType === 'click') {
+      // If expected is a clickable role (button, link, tab, etc.)
+      // but actual is a form input, reject
+      if (['button', 'link', 'tab', 'menuitem', 'option'].includes(normalizedExpected)) {
+        if (['input', 'textarea', 'textbox', 'searchbox'].includes(normalizedActual)) {
+          this.log(`Role mismatch: expected clickable ${expectedRole}, got input-type ${actualRole}`);
+          return false;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check if element is likely a wrong match for click actions
+   * (e.g., matched a search input when looking for a button)
+   * @param {Locator} locator - The found element
+   * @param {string} expectedRole - What we expected
+   * @returns {Promise<boolean>} - true if element seems wrong
+   */
+  async _isLikelyWrongClickTarget(locator, expectedRole) {
+    if (!expectedRole) return false;
+    
+    try {
+      const elementInfo = await locator.evaluate(el => {
+        const tag = el.tagName.toLowerCase();
+        const type = el.type?.toLowerCase() || '';
+        const role = el.getAttribute('role') || '';
+        const isInput = tag === 'input' || tag === 'textarea';
+        const isSearchBox = type === 'search' || role === 'searchbox' || 
+          (el.placeholder || '').toLowerCase().includes('search');
+        return { tag, type, role, isInput, isSearchBox };
+      });
+      
+      // If looking for button/link/tab but found a search/text input
+      if (['button', 'link', 'tab', 'menuitem', 'option'].includes(expectedRole.toLowerCase())) {
+        if (elementInfo.isInput || elementInfo.isSearchBox) {
+          this.log(`Wrong target detected: expected ${expectedRole}, found ${elementInfo.tag}[${elementInfo.type}]`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
   
   /**
@@ -208,6 +311,64 @@ class SmartFinder {
       // Normalize whitespace
       .replace(/\s+/g, ' ')
       .trim();
+  }
+  
+  /**
+   * Strip dynamic content from text for more flexible matching
+   * Handles counters, badges, timestamps that change between record/playback
+   * Examples:
+   *   "Cart (5)" → "Cart"
+   *   "Messages [3]" → "Messages"
+   *   "Updated - 2 min ago" → "Updated"
+   *   "New Contact" → "Contact" (if "New" is a badge)
+   */
+  stripDynamicContent(text) {
+    if (!text || typeof text !== 'string') return '';
+    
+    return text
+      // Remove parenthetical counters: "(5)", "( 12 )"
+      .replace(/\s*\(\s*\d+\s*\)\s*$/, '')
+      // Remove bracketed counters: "[5]", "[ 12 ]"
+      .replace(/\s*\[\s*\d+\s*\]\s*$/, '')
+      // Remove dash counters: "- 5", " - 12"
+      .replace(/\s*-\s*\d+\s*$/, '')
+      // Remove common badges at start: "New ", "Updated ", "Active "
+      .replace(/^(new|updated|active|draft|pending)\s+/i, '')
+      // Remove time-ago suffixes: "2 min ago", "5 hours ago"
+      .replace(/\s*-?\s*\d+\s*(min|hour|day|week|month|sec|second|minute)s?\s*(ago)?\s*$/i, '')
+      // Remove "unread" or "read" suffixes
+      .replace(/\s*\(?(un)?read\)?\s*$/i, '')
+      .trim();
+  }
+  
+  /**
+   * Get multiple text variations for flexible matching
+   * Returns array of texts to try, from most specific to most general
+   */
+  getTextVariations(text) {
+    if (!text) return [];
+    
+    const variations = [];
+    const normalized = this.normalizeText(text);
+    const stripped = this.stripDynamicContent(normalized);
+    
+    // 1. Original normalized text
+    variations.push(normalized);
+    
+    // 2. With dynamic content stripped (if different)
+    if (stripped && stripped !== normalized && stripped.length >= 3) {
+      variations.push(stripped);
+    }
+    
+    // 3. First significant words (for long text)
+    if (normalized.length > 30) {
+      const firstPart = normalized.split(/\s+/).slice(0, 4).join(' ');
+      if (firstPart.length >= 5) {
+        variations.push(firstPart);
+      }
+    }
+    
+    return [...new Set(variations)]; // Remove duplicates
   }
   
   /**
@@ -493,7 +654,36 @@ class SmartFinder {
     }
     
     // ==========================================================================
-    // PHASE 7: Fallback to CSS selector
+    // PHASE 7: Try href matching for links
+    // ==========================================================================
+    
+    if (confirm?.href || which?.href) {
+      const href = confirm?.href || which?.href;
+      const result = await this.tryStrategy('href', async () => {
+        // Try exact href match first
+        let locator = scope.locator(`a[href="${href}"]`);
+        let count = await locator.count();
+        
+        if (count === 0) {
+          // Try partial href match (last path segment)
+          const hrefPath = href.split('/').pop()?.split('?')[0];
+          if (hrefPath && hrefPath.length > 2) {
+            locator = scope.locator(`a[href*="${hrefPath}"]`);
+            count = await locator.count();
+          }
+        }
+        
+        if (count > 0) {
+          return await this.resolveMultiple(locator, which, 'href');
+        }
+        return { success: false, count: 0 };
+      }, attempts);
+      
+      if (result.success) return result.locator;
+    }
+    
+    // ==========================================================================
+    // PHASE 8: Fallback to CSS selector
     // ==========================================================================
     
     if (confirm?.cssSelector) {
@@ -506,46 +696,75 @@ class SmartFinder {
     }
     
     // ==========================================================================
-    // PHASE 8: Relaxed search (last resort)
+    // PHASE 9: Relaxed search with text variations (last resort before Shadow DOM)
     // CRITICAL FIX: Use 'scope' instead of 'this.page' to respect landmark
+    // Also tries stripped/partial text for dynamic content
     // ==========================================================================
     
     if (what?.text) {
-      // First try scoped search (respects landmark from Phase 1)
-      const result = await this.tryStrategy('text-contains-scoped', async () => {
-        // CRITICAL: Search within scope (may be narrowed by landmark), not entire page
-        const locator = scope.getByText(what.text).first();
-        const validated = await this.validateLocator(locator, 'text-contains-scoped');
-        
-        // EXTRA VALIDATION: If we have a role, verify the found element's role matches
-        if (validated.success && what?.role) {
-          const actualRole = await validated.locator.evaluate(el => {
-            return el.getAttribute('role') || el.tagName.toLowerCase();
-          }).catch(() => null);
+      // Get text variations for flexible matching
+      const textVariations = this.getTextVariations(what.text);
+      
+      for (const textVariant of textVariations) {
+        // Try scoped search (respects landmark from Phase 1)
+        const result = await this.tryStrategy(`text-variation-${textVariant === what.text ? 'original' : 'stripped'}`, async () => {
+          // CRITICAL: Search within scope (may be narrowed by landmark), not entire page
+          const locator = scope.getByText(textVariant).first();
+          const validated = await this.validateLocator(locator, 'text-variation');
           
-          // Check if role matches (allow some flexibility)
-          const roleMatches = actualRole === what.role ||
-            (what.role === 'button' && (actualRole === 'button' || actualRole === 'BUTTON')) ||
-            (what.role === 'link' && (actualRole === 'link' || actualRole === 'a' || actualRole === 'A'));
-          
-          if (!roleMatches) {
-            this.log(`text-contains-scoped found element but role mismatch: expected ${what.role}, got ${actualRole}`);
-            return { success: false, count: 0 };
+          // EXTRA VALIDATION: If we have a role, verify the found element's role matches
+          if (validated.success && what?.role) {
+            const actualRole = await validated.locator.evaluate(el => {
+              return el.getAttribute('role') || el.tagName.toLowerCase();
+            }).catch(() => null);
+            
+            if (!this._roleMatches(what.role, actualRole, 'click')) {
+              this.log(`text-variation found element but role mismatch: expected ${what.role}, got ${actualRole}`);
+              return { success: false, count: 0 };
+            }
+            
+            // Additional check: is this a clearly wrong target (like a search input)?
+            if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+              return { success: false, count: 0 };
+            }
           }
-        }
+          
+          return validated;
+        }, attempts);
         
-        return validated;
-      }, attempts);
+        if (result.success) {
+          if (textVariant !== what.text) {
+            this.log(`Found element using stripped text: "${textVariant}" (original: "${what.text}")`);
+          }
+          return result.locator;
+        }
+      }
       
-      if (result.success) return result.locator;
-      
-      // APOSTROPHE FIX: Last resort - try with flexible apostrophe matching
-      // Also use scope, not page
+      // Also try original flexible apostrophe matching
       const flexibleTextRegex = this.createFlexibleTextRegex(what.text);
       if (flexibleTextRegex) {
         const apostropheResult = await this.tryStrategy('text-contains-apostrophe-flex', async () => {
           const locator = scope.getByText(flexibleTextRegex).first();
-          return await this.validateLocator(locator, 'text-contains-apostrophe-flex');
+          const validated = await this.validateLocator(locator, 'text-contains-apostrophe-flex');
+          
+          // Role validation using helper method
+          if (validated.success && what?.role) {
+            const actualRole = await validated.locator.evaluate(el => {
+              return el.getAttribute('role') || el.tagName.toLowerCase();
+            }).catch(() => null);
+            
+            if (!this._roleMatches(what.role, actualRole, 'click')) {
+              this.log(`text-contains-apostrophe-flex found element but role mismatch: expected ${what.role}, got ${actualRole}`);
+              return { success: false, count: 0 };
+            }
+            
+            // Additional check for wrong targets
+            if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+              return { success: false, count: 0 };
+            }
+          }
+          
+          return validated;
         }, attempts);
         
         if (apostropheResult.success) return apostropheResult.locator;
@@ -554,26 +773,54 @@ class SmartFinder {
       // KEYWORD EXTRACTION: Try key phrases from the text
       // e.g., "Go To Saver's Switch" → try "Saver's Switch"
       // Still use scope for scoped search
+      // CRITICAL: Include role validation AND require a role to be specified
+      // If no role is specified, keyword extraction is too risky
       const keyPhrases = what.text
         .split(/\s+(?:to|the|a|an|with|for|on|in|and|or|of)\s+/i)
         .filter(phrase => phrase.length > 3)
         .map(phrase => phrase.trim());
       
-      for (const keyPhrase of keyPhrases) {
-        if (keyPhrase.length >= 5 && keyPhrase !== what.text) {
-          const keywordRegex = this.createFlexibleTextRegex(keyPhrase);
-          if (keywordRegex) {
-            const keywordResult = await this.tryStrategy('keyword-extract', async () => {
-              const locator = scope.getByText(keywordRegex).first();
-              return await this.validateLocator(locator, 'keyword-extract');
-            }, attempts);
-            
-            if (keywordResult.success) {
-              this.log(`Found by keyword extraction: "${keyPhrase}" from "${what.text}"`);
-              return keywordResult.locator;
+      // Only try keyword extraction if we have a specific role to validate against
+      // This prevents matching random elements with similar text
+      if (what?.role) {
+        for (const keyPhrase of keyPhrases) {
+          if (keyPhrase.length >= 5 && keyPhrase !== what.text) {
+            const keywordRegex = this.createFlexibleTextRegex(keyPhrase);
+            if (keywordRegex) {
+              const keywordResult = await this.tryStrategy('keyword-extract', async () => {
+                // Use role+name instead of just text for more accurate matching
+                const locator = scope.getByRole(what.role, { name: keywordRegex }).first();
+                const validated = await this.validateLocator(locator, 'keyword-extract');
+                
+                // Validate role matches (extra safety)
+                if (validated.success) {
+                  const actualRole = await validated.locator.evaluate(el => {
+                    return el.getAttribute('role') || el.tagName.toLowerCase();
+                  }).catch(() => null);
+                  
+                  if (!this._roleMatches(what.role, actualRole, 'click')) {
+                    this.log(`keyword-extract found element but role mismatch: expected ${what.role}, got ${actualRole}`);
+                    return { success: false, count: 0 };
+                  }
+                  
+                  // Additional check for wrong targets
+                  if (await this._isLikelyWrongClickTarget(validated.locator, what.role)) {
+                    return { success: false, count: 0 };
+                  }
+                }
+                
+                return validated;
+              }, attempts);
+              
+              if (keywordResult.success) {
+                this.log(`Found by keyword extraction: "${keyPhrase}" from "${what.text}"`);
+                return keywordResult.locator;
+              }
             }
           }
         }
+      } else {
+        this.log('Skipping keyword-extract strategy: no role specified for validation');
       }
     }
     

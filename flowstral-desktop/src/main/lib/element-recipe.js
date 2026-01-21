@@ -18,17 +18,16 @@
 // ============================================================================
 
 const TAG_TO_ROLE = {
-  // Standard HTML
+  // Standard HTML - Interactive
   button: 'button',
   a: 'link',
   input: null, // Depends on type
   select: 'combobox',
   option: 'option',
+  optgroup: 'group',
   textarea: 'textbox',
-  table: 'table',
-  tr: 'row',
-  th: 'columnheader',
-  td: 'cell',
+  
+  // Semantic Structure
   nav: 'navigation',
   main: 'main',
   header: 'banner',
@@ -38,16 +37,61 @@ const TAG_TO_ROLE = {
   article: 'article',
   aside: 'complementary',
   section: 'region',
+  
+  // Tables
+  table: 'table',
+  thead: 'rowgroup',
+  tbody: 'rowgroup',
+  tfoot: 'rowgroup',
+  tr: 'row',
+  th: 'columnheader',
+  td: 'cell',
+  
+  // Lists
   ul: 'list',
   ol: 'list',
   li: 'listitem',
+  dl: 'list',
+  dt: 'term',
+  dd: 'definition',
+  menu: 'menu',
+  menuitem: 'menuitem',
+  
+  // Media & Graphics
   img: 'img',
   figure: 'figure',
   figcaption: 'caption',
+  canvas: null,     // Can be interactive but needs explicit role
+  svg: 'img',       // When meaningful, has implicit img role
+  video: null,      // Has native controls
+  audio: null,      // Has native controls
+  picture: null,    // Container for img
+  
+  // Interactive
   details: 'group',
   summary: 'button',
-  menu: 'menu',
-  menuitem: 'menuitem',
+  
+  // Form Display
+  output: 'status',
+  meter: 'meter',
+  progress: 'progressbar',
+  datalist: 'listbox',
+  fieldset: 'group',
+  legend: null,
+  
+  // Headings
+  h1: 'heading',
+  h2: 'heading',
+  h3: 'heading',
+  h4: 'heading',
+  h5: 'heading',
+  h6: 'heading',
+  
+  // Embedded
+  iframe: null,
+  embed: null,
+  object: null,
+  area: 'link',     // Image map areas are links
 };
 
 const INPUT_TYPE_TO_ROLE = {
@@ -65,17 +109,35 @@ const INPUT_TYPE_TO_ROLE = {
   reset: 'button',
   range: 'slider',
   file: 'button',
+  color: 'button',         // Color picker trigger
+  date: 'textbox',         // Date input
+  time: 'textbox',         // Time input
+  'datetime-local': 'textbox',
+  month: 'textbox',
+  week: 'textbox',
+  hidden: null,            // Not interactive
+};
+
+// Elements that might be contenteditable
+const CONTENTEDITABLE_ROLES = {
+  'contenteditable': 'textbox',
+  'true': 'textbox',
+  '': 'textbox',  // Empty string means editable
 };
 
 // Custom element prefixes and their role mappings
 const CUSTOM_ELEMENT_ROLES = {
   // Salesforce Lightning
   'lightning-button': 'button',
+  'lightning-button-icon': 'button',
+  'lightning-button-menu': 'button',
   'lightning-input': 'textbox',
   'lightning-combobox': 'combobox',
   'lightning-textarea': 'textbox',
   'lightning-checkbox': 'checkbox',
+  'lightning-checkbox-group': 'group',
   'lightning-radio': 'radio',
+  'lightning-radio-group': 'radiogroup',
   'lightning-select': 'combobox',
   'lightning-tab': 'tab',
   'lightning-tabset': 'tablist',
@@ -86,6 +148,11 @@ const CUSTOM_ELEMENT_ROLES = {
   'lightning-tree-item': 'treeitem',
   'lightning-modal': 'dialog',
   'lightning-card': 'region',
+  'lightning-icon': 'img',
+  'lightning-spinner': 'status',
+  'lightning-badge': 'status',
+  'lightning-progress-bar': 'progressbar',
+  'lightning-slider': 'slider',
   
   // SAP UI5
   'ui5-button': 'button',
@@ -94,26 +161,187 @@ const CUSTOM_ELEMENT_ROLES = {
   'ui5-option': 'option',
   'ui5-checkbox': 'checkbox',
   'ui5-radio': 'radio',
+  'ui5-radio-button': 'radio',
   'ui5-textarea': 'textbox',
   'ui5-table': 'table',
   'ui5-table-row': 'row',
+  'ui5-table-cell': 'cell',
   'ui5-tab': 'tab',
   'ui5-tabcontainer': 'tablist',
   'ui5-dialog': 'dialog',
   'ui5-menu': 'menu',
   'ui5-menu-item': 'menuitem',
+  'ui5-link': 'link',
+  'ui5-icon': 'img',
+  'ui5-switch': 'switch',
+  'ui5-slider': 'slider',
+  'ui5-progress-indicator': 'progressbar',
+  'ui5-tree': 'tree',
+  'ui5-tree-item': 'treeitem',
   
-  // Generic web components
+  // Shoelace (sl-)
   'sl-button': 'button',
   'sl-input': 'textbox',
   'sl-select': 'combobox',
+  'sl-option': 'option',
   'sl-checkbox': 'checkbox',
   'sl-radio': 'radio',
+  'sl-radio-group': 'radiogroup',
   'sl-tab': 'tab',
   'sl-tab-group': 'tablist',
+  'sl-tab-panel': 'tabpanel',
   'sl-dialog': 'dialog',
+  'sl-drawer': 'dialog',
   'sl-menu': 'menu',
   'sl-menu-item': 'menuitem',
+  'sl-switch': 'switch',
+  'sl-textarea': 'textbox',
+  'sl-tree': 'tree',
+  'sl-tree-item': 'treeitem',
+  
+  // Ionic (ion-)
+  'ion-button': 'button',
+  'ion-input': 'textbox',
+  'ion-textarea': 'textbox',
+  'ion-select': 'combobox',
+  'ion-select-option': 'option',
+  'ion-checkbox': 'checkbox',
+  'ion-radio': 'radio',
+  'ion-radio-group': 'radiogroup',
+  'ion-toggle': 'switch',
+  'ion-range': 'slider',
+  'ion-tab': 'tab',
+  'ion-tabs': 'tablist',
+  'ion-tab-button': 'tab',
+  'ion-menu': 'menu',
+  'ion-item': 'listitem',
+  'ion-list': 'list',
+  'ion-modal': 'dialog',
+  'ion-alert': 'alertdialog',
+  'ion-action-sheet': 'dialog',
+  'ion-fab': 'button',
+  'ion-fab-button': 'button',
+  'ion-searchbar': 'searchbox',
+  'ion-segment': 'tablist',
+  'ion-segment-button': 'tab',
+  'ion-card': 'region',
+  'ion-accordion': 'group',
+  'ion-accordion-group': 'group',
+  
+  // Angular Material (mat-)
+  'mat-button': 'button',
+  'mat-raised-button': 'button',
+  'mat-icon-button': 'button',
+  'mat-fab': 'button',
+  'mat-mini-fab': 'button',
+  'mat-form-field': 'group',
+  'mat-input': 'textbox',
+  'mat-select': 'combobox',
+  'mat-option': 'option',
+  'mat-checkbox': 'checkbox',
+  'mat-radio-button': 'radio',
+  'mat-radio-group': 'radiogroup',
+  'mat-slide-toggle': 'switch',
+  'mat-slider': 'slider',
+  'mat-tab': 'tab',
+  'mat-tab-group': 'tablist',
+  'mat-menu': 'menu',
+  'mat-menu-item': 'menuitem',
+  'mat-dialog-container': 'dialog',
+  'mat-list': 'list',
+  'mat-list-item': 'listitem',
+  'mat-nav-list': 'navigation',
+  'mat-tree': 'tree',
+  'mat-tree-node': 'treeitem',
+  'mat-expansion-panel': 'group',
+  'mat-accordion': 'group',
+  'mat-stepper': 'group',
+  'mat-step': 'listitem',
+  'mat-chip': 'button',
+  'mat-chip-list': 'list',
+  'mat-autocomplete': 'listbox',
+  'mat-datepicker': 'dialog',
+  'mat-progress-bar': 'progressbar',
+  'mat-progress-spinner': 'progressbar',
+  'mat-snack-bar-container': 'alert',
+  'mat-tooltip': 'tooltip',
+  
+  // Material Design Components (mdc-)
+  'mdc-button': 'button',
+  'mdc-fab': 'button',
+  'mdc-icon-button': 'button',
+  'mdc-textfield': 'textbox',
+  'mdc-select': 'combobox',
+  'mdc-checkbox': 'checkbox',
+  'mdc-radio': 'radio',
+  'mdc-switch': 'switch',
+  'mdc-slider': 'slider',
+  'mdc-tab': 'tab',
+  'mdc-tab-bar': 'tablist',
+  'mdc-menu': 'menu',
+  'mdc-list': 'list',
+  'mdc-list-item': 'listitem',
+  'mdc-dialog': 'dialog',
+  'mdc-snackbar': 'alert',
+  
+  // Vaadin
+  'vaadin-button': 'button',
+  'vaadin-text-field': 'textbox',
+  'vaadin-text-area': 'textbox',
+  'vaadin-select': 'combobox',
+  'vaadin-combo-box': 'combobox',
+  'vaadin-checkbox': 'checkbox',
+  'vaadin-radio-button': 'radio',
+  'vaadin-radio-group': 'radiogroup',
+  'vaadin-tab': 'tab',
+  'vaadin-tabs': 'tablist',
+  'vaadin-menu-bar': 'menubar',
+  'vaadin-grid': 'grid',
+  'vaadin-grid-column': 'columnheader',
+  'vaadin-dialog': 'dialog',
+  'vaadin-notification': 'alert',
+  'vaadin-date-picker': 'textbox',
+  'vaadin-time-picker': 'textbox',
+  
+  // Microsoft FAST
+  'fast-button': 'button',
+  'fast-text-field': 'textbox',
+  'fast-text-area': 'textbox',
+  'fast-select': 'combobox',
+  'fast-option': 'option',
+  'fast-checkbox': 'checkbox',
+  'fast-radio': 'radio',
+  'fast-radio-group': 'radiogroup',
+  'fast-switch': 'switch',
+  'fast-slider': 'slider',
+  'fast-tab': 'tab',
+  'fast-tabs': 'tablist',
+  'fast-tab-panel': 'tabpanel',
+  'fast-menu': 'menu',
+  'fast-menu-item': 'menuitem',
+  'fast-dialog': 'dialog',
+  'fast-accordion': 'group',
+  'fast-accordion-item': 'group',
+  'fast-tree-view': 'tree',
+  'fast-tree-item': 'treeitem',
+  
+  // Carbon Design (IBM)
+  'cds-button': 'button',
+  'cds-text-input': 'textbox',
+  'cds-textarea': 'textbox',
+  'cds-select': 'combobox',
+  'cds-checkbox': 'checkbox',
+  'cds-radio-button': 'radio',
+  'cds-toggle': 'switch',
+  'cds-slider': 'slider',
+  'cds-tabs': 'tablist',
+  'cds-tab': 'tab',
+  'cds-modal': 'dialog',
+  'cds-notification': 'alert',
+  'cds-accordion': 'group',
+  'cds-accordion-item': 'group',
+  'cds-structured-list': 'list',
+  'cds-structured-list-row': 'row',
 };
 
 // Framework-specific attributes that should be treated as testIds
@@ -236,6 +464,12 @@ function getElementAnalyzerScript() {
       
       var tag = element.tagName.toLowerCase();
       
+      // Check contenteditable (rich text editors)
+      var contentEditable = element.getAttribute('contenteditable');
+      if (contentEditable === 'true' || contentEditable === '' || element.isContentEditable) {
+        return 'textbox';
+      }
+      
       // Check custom elements first
       if (this.customElementRoles[tag]) {
         return this.customElementRoles[tag];
@@ -245,6 +479,35 @@ function getElementAnalyzerScript() {
       if (tag === 'input') {
         var type = (element.type || 'text').toLowerCase();
         return this.inputTypeToRole[type] || 'textbox';
+      }
+      
+      // SVG elements
+      if (tag === 'svg' || tag === 'path' || tag === 'circle' || tag === 'rect' || tag === 'g') {
+        // If SVG has aria-label or is in a button, treat as img role
+        if (element.getAttribute('aria-label') || element.closest('button, a, [role="button"]')) {
+          return 'img';
+        }
+        return null; // Not semantically significant on its own
+      }
+      
+      // Summary element (for details/summary accordion)
+      if (tag === 'summary') {
+        return 'button';
+      }
+      
+      // Progress element
+      if (tag === 'progress') {
+        return 'progressbar';
+      }
+      
+      // Meter element
+      if (tag === 'meter') {
+        return 'meter';
+      }
+      
+      // Output element
+      if (tag === 'output') {
+        return 'status';
       }
       
       return this.tagToRole[tag] || null;
@@ -271,10 +534,35 @@ function getElementAnalyzerScript() {
     // ========== TEXT EXTRACTION ==========
     
     getVisibleText: function(element) {
-      // For inputs, use value or placeholder
+      // For inputs, use label/placeholder/aria-label - NOT the value!
+      // The value is what the user typed, not the field identifier
       var tag = element.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea') {
-        return this.normalizeText(element.value || element.placeholder || '');
+        // Priority: aria-label > associated label > placeholder > name attribute
+        var ariaLabel = element.getAttribute('aria-label');
+        if (ariaLabel) return this.normalizeText(ariaLabel);
+        
+        // Check for associated label via 'for' attribute
+        if (element.id) {
+          var label = document.querySelector('label[for="' + element.id + '"]');
+          if (label && label.textContent) {
+            return this.normalizeText(label.textContent.trim());
+          }
+        }
+        
+        // Check parent label (input inside label)
+        var parentLabel = element.closest('label');
+        if (parentLabel) {
+          var labelText = (parentLabel.textContent || '').trim();
+          // Don't include the value in the label
+          if (element.value) {
+            labelText = labelText.replace(element.value, '').trim();
+          }
+          if (labelText) return this.normalizeText(labelText);
+        }
+        
+        // Fallback to placeholder or name (NOT value!)
+        return this.normalizeText(element.placeholder || element.name || '');
       }
       
       // For buttons with just an icon, check aria-label first

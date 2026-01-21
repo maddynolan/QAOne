@@ -68,6 +68,40 @@ function getRecipeClickCaptureScript() {
     return false;
   }
   
+  // ========== HELPER: Check if element is contenteditable ==========
+  function isContentEditable(element) {
+    if (!element) return false;
+    return element.isContentEditable || 
+           element.getAttribute('contenteditable') === 'true' ||
+           element.getAttribute('contenteditable') === '';
+  }
+  
+  // ========== HELPER: Check if element is an SVG clickable ==========
+  function isSvgClickable(element) {
+    if (!element) return false;
+    var tagName = element.tagName.toLowerCase();
+    // SVG elements that might be clickable
+    if (tagName === 'svg' || tagName === 'path' || tagName === 'circle' || 
+        tagName === 'rect' || tagName === 'g' || tagName === 'use') {
+      // Check if it has click-related attributes or is inside a button/link
+      return element.closest('button, a, [role="button"], [role="link"], [onclick]') ||
+             element.hasAttribute('onclick') ||
+             element.hasAttribute('tabindex') ||
+             element.style.cursor === 'pointer';
+    }
+    return false;
+  }
+  
+  // ========== HELPER: Find best interactive element including SVG ==========
+  function findBestInteractiveElement(element) {
+    // If SVG element, find the containing interactive element
+    if (isSvgClickable(element)) {
+      var interactiveParent = element.closest('button, a, [role="button"], [role="link"]');
+      if (interactiveParent) return interactiveParent;
+    }
+    return element;
+  }
+  
   // Filter for overlay elements
   function isOverlayElement(element) {
     if (!element || !element.closest) return false;
@@ -92,6 +126,19 @@ function getRecipeClickCaptureScript() {
       // Skip framework internals
       if (isFrameworkInternal(el)) continue;
       
+      // Priority 0: Handle SVG elements - find containing interactive element
+      if (isSvgClickable(el)) {
+        var svgParent = findBestInteractiveElement(el);
+        if (svgParent && svgParent !== el) {
+          return svgParent;
+        }
+        // If no interactive parent, treat SVG as clickable if it has role/aria
+        if (el.getAttribute('role') || el.getAttribute('aria-label')) {
+          return el;
+        }
+        continue; // Skip standalone SVG without semantic markup
+      }
+      
       // Priority 1: Form submit elements
       if (tag === 'input' && (el.type === 'submit' || el.type === 'button')) {
         return el;
@@ -106,7 +153,8 @@ function getRecipeClickCaptureScript() {
       var role = el.getAttribute('role');
       var interactiveRoles = ['button', 'link', 'tab', 'menuitem', 'option', 
                               'checkbox', 'radio', 'switch', 'slider', 'treeitem',
-                              'combobox', 'listbox'];  // Added for Radix Select support
+                              'combobox', 'listbox', 'row', 'cell', 'gridcell',
+                              'columnheader', 'rowheader', 'img', 'progressbar'];
       if (role && interactiveRoles.indexOf(role) !== -1) {
         return el;
       }
@@ -128,18 +176,34 @@ function getRecipeClickCaptureScript() {
         return el;
       }
       
-      // Priority 6: Elements with testId (developers marked it for testing)
+      // Priority 6: Contenteditable elements (for rich text editors)
+      if (isContentEditable(el)) {
+        return el;
+      }
+      
+      // Priority 7: Elements with testId (developers marked it for testing)
       if (el.getAttribute('data-testid') || el.getAttribute('data-test')) {
         return el;
       }
       
-      // Priority 7: Elements with aria-label (intentionally labeled)
+      // Priority 8: Elements with aria-label (intentionally labeled)
       if (el.getAttribute('aria-label')) {
         return el;
       }
       
-      // Priority 8: Elements with tabindex (intentionally interactive)
+      // Priority 9: Elements with tabindex (intentionally interactive)
       if (el.getAttribute('tabindex') === '0') {
+        return el;
+      }
+      
+      // Priority 10: Summary element (for <details>/<summary> accordion)
+      if (tag === 'summary') {
+        return el;
+      }
+      
+      // Priority 11: Table cells that might be clickable (sorting headers)
+      if ((tag === 'th' || tag === 'td') && (el.onclick || el.hasAttribute('onclick') || 
+          el.style.cursor === 'pointer' || el.closest('[role="grid"]'))) {
         return el;
       }
     }
@@ -171,7 +235,8 @@ function getRecipeClickCaptureScript() {
       var frameInfo = {
         isIframe: true,
         name: window.name || null,
-        src: window.location.href
+        src: window.location.href,
+        origin: window.location.origin
       };
       
       // Try to identify by frame name or src
@@ -180,7 +245,21 @@ function getRecipeClickCaptureScript() {
         frameInfo.id = frame.id || null;
         frameInfo.name = frame.name || frameInfo.name;
         frameInfo.testId = frame.getAttribute('data-testid') || null;
+        frameInfo.title = frame.getAttribute('title') || null;
+        frameInfo.ariaLabel = frame.getAttribute('aria-label') || null;
+        frameInfo.className = frame.className || null;
         frameInfo.selector = buildFrameSelector(frame);
+        
+        // Get frame position among all iframes (0-based index)
+        try {
+          var iframes = frame.ownerDocument.querySelectorAll('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            if (iframes[i] === frame) {
+              frameInfo.index = i;
+              break;
+            }
+          }
+        } catch (e) {}
       }
       
       return frameInfo;
@@ -192,12 +271,31 @@ function getRecipeClickCaptureScript() {
   
   // Build a selector for the iframe element
   function buildFrameSelector(frame) {
+    // Priority 1: ID (most reliable)
     if (frame.id) return '#' + frame.id;
-    if (frame.name) return 'iframe[name="' + frame.name + '"]';
-    var testId = frame.getAttribute('data-testid');
-    if (testId) return '[data-testid="' + testId + '"]';
     
-    // Count position among iframes
+    // Priority 2: data-testid
+    var testId = frame.getAttribute('data-testid');
+    if (testId) return 'iframe[data-testid="' + testId + '"]';
+    
+    // Priority 3: name attribute
+    if (frame.name) return 'iframe[name="' + frame.name + '"]';
+    
+    // Priority 4: title attribute
+    var title = frame.getAttribute('title');
+    if (title) return 'iframe[title="' + title + '"]';
+    
+    // Priority 5: src (if not dynamic)
+    var src = frame.src || frame.getAttribute('src');
+    if (src && !src.includes('?') && !src.includes('#')) {
+      // Use partial match on src path
+      var srcPath = src.split('/').pop();
+      if (srcPath && srcPath.length > 3) {
+        return 'iframe[src*="' + srcPath + '"]';
+      }
+    }
+    
+    // Priority 6: Position among iframes (least reliable)
     var iframes = document.querySelectorAll('iframe');
     for (var i = 0; i < iframes.length; i++) {
       if (iframes[i] === frame) {
@@ -370,6 +468,60 @@ function getRecipeClickCaptureScript() {
     }
   }, true);
   
+  // ========== DOUBLE-CLICK HANDLER ==========
+  // Records double-click actions (useful for editing in place, selecting words, etc.)
+  
+  document.addEventListener('dblclick', function(e) {
+    try {
+      var path = e.composedPath ? e.composedPath() : [e.target];
+      var element = findBestElement(path);
+      if (!element) return;
+      if (isOverlayElement(element)) return;
+      if (isFrameworkInternal(element)) return;
+      
+      var recipe = analyzer.analyze(element);
+      if (!recipe) return;
+      
+      console.log('[Flowstral Recipe] ★ DOUBLE-CLICK:', element.tagName, recipe.what.text || recipe.where.nearText);
+      
+      recordAction({
+        type: 'dblclick',
+        target: recipe,
+        description: 'Double-click "' + (recipe.what.text || recipe.where.nearText || element.tagName) + '"'
+      });
+      
+    } catch (err) {
+      console.error('[Flowstral Recipe] Double-click capture error:', err);
+    }
+  }, true);
+  
+  // ========== RIGHT-CLICK (CONTEXT MENU) HANDLER ==========
+  // Records right-click actions for context menu operations
+  
+  document.addEventListener('contextmenu', function(e) {
+    try {
+      var path = e.composedPath ? e.composedPath() : [e.target];
+      var element = findBestElement(path);
+      if (!element) return;
+      if (isOverlayElement(element)) return;
+      if (isFrameworkInternal(element)) return;
+      
+      var recipe = analyzer.analyze(element);
+      if (!recipe) return;
+      
+      console.log('[Flowstral Recipe] ★ RIGHT-CLICK:', element.tagName, recipe.what.text || recipe.where.nearText);
+      
+      recordAction({
+        type: 'rightClick',
+        target: recipe,
+        description: 'Right-click "' + (recipe.what.text || recipe.where.nearText || element.tagName) + '"'
+      });
+      
+    } catch (err) {
+      console.error('[Flowstral Recipe] Right-click capture error:', err);
+    }
+  }, true);
+  
   // ========== POINTERDOWN HANDLER (for custom dropdowns like Radix) ==========
   // Radix uses pointerdown for BOTH triggers and options, not click!
   
@@ -521,14 +673,33 @@ function getRecipeClickCaptureScript() {
     
     if (value) {
       var isPassword = (el.type || '').toLowerCase() === 'password';
+      
+      // Get the best field label - prioritize nearText (label), then ariaLabel, then placeholder
+      // CRITICAL: DO NOT use recipe.what.text for inputs since getVisibleText now excludes value
+      var fieldLabel = recipe.where.nearText || 
+                       recipe.which.ariaLabel || 
+                       recipe.which.placeholder ||
+                       recipe.which.name ||
+                       recipe.what.text ||  // Now safe since we fixed getVisibleText for inputs
+                       'input';
+      
+      // Safety check: if fieldLabel looks like an email/value, use 'input' instead
+      if (fieldLabel.includes('@') || fieldLabel.length > 40) {
+        fieldLabel = recipe.which.placeholder || recipe.which.name || 'input';
+      }
+      
+      var displayValue = isPassword ? '********' : value.substring(0, 20);
+      
       recordAction({
         type: 'fill',
         target: recipe,
-        value: isPassword ? '' : value,
+        // CRITICAL: Store actual password value - needed for playback!
+        // Display is masked but value must be preserved for automation
+        value: value,
         displayValue: isPassword ? '********' : value,
         isPassword: isPassword,
-        description: 'Fill "' + (recipe.what.text || recipe.where.nearText || 'input') + '"' + 
-                     (isPassword ? '' : ' with "' + value.substring(0, 20) + '"')
+        fieldLabel: fieldLabel,  // Store for later use
+        description: 'Fill "' + fieldLabel + '": "' + displayValue + '"'
       });
     }
     
@@ -722,10 +893,84 @@ function getRecipeClickCaptureScript() {
     dragState = null;
   }, true);
   
+  // ========== SCROLL HANDLER (for infinite scroll and lazy loading apps) ==========
+  // Records significant scrolls that load new content
+  
+  var lastScrollY = window.scrollY;
+  var scrollTimeout = null;
+  var scrollStartY = null;
+  var isScrolling = false;
+  
+  window.addEventListener('scroll', function(e) {
+    // Track scroll start position
+    if (!isScrolling) {
+      isScrolling = true;
+      scrollStartY = window.scrollY;
+    }
+    
+    // Debounce - wait for scroll to stop
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(function() {
+      isScrolling = false;
+      
+      var scrollDelta = window.scrollY - scrollStartY;
+      var absScroll = Math.abs(scrollDelta);
+      
+      // Only record significant scrolls (more than 300px)
+      // This filters out micro-scrolls and focuses on meaningful navigation
+      if (absScroll > 300) {
+        var direction = scrollDelta > 0 ? 'down' : 'up';
+        var scrollTarget = null;
+        
+        // Try to identify what we scrolled to
+        // Look for newly visible elements at scroll position
+        var viewportHeight = window.innerHeight;
+        var elementsAtCenter = document.elementsFromPoint(
+          window.innerWidth / 2, 
+          viewportHeight / 2
+        );
+        
+        // Find the most meaningful element (heading, section, landmark)
+        for (var i = 0; i < elementsAtCenter.length; i++) {
+          var el = elementsAtCenter[i];
+          var tag = el.tagName.toLowerCase();
+          
+          // Prioritize headings and landmarks
+          if (['h1', 'h2', 'h3', 'h4', 'section', 'article', 'main'].indexOf(tag) !== -1 ||
+              el.getAttribute('role') === 'region' ||
+              el.getAttribute('id')) {
+            scrollTarget = analyzer.analyze(el);
+            break;
+          }
+        }
+        
+        console.log('[Flowstral Recipe] ★ SCROLL:', direction, absScroll + 'px', 
+          scrollTarget ? 'to ' + (scrollTarget.what.text || scrollTarget.where.landmark) : '');
+        
+        recordAction({
+          type: 'scroll',
+          direction: direction,
+          value: {
+            deltaY: scrollDelta,
+            fromY: scrollStartY,
+            toY: window.scrollY,
+            viewportHeight: viewportHeight,
+            documentHeight: document.documentElement.scrollHeight
+          },
+          target: scrollTarget,
+          description: 'Scroll ' + direction + ' ' + absScroll + 'px' + 
+            (scrollTarget?.what?.text ? ' to "' + scrollTarget.what.text + '"' : '')
+        });
+      }
+      
+      lastScrollY = window.scrollY;
+    }, 200); // Wait 200ms after scroll stops
+  }, { passive: true });
+  
   // Expose flush function
   window.__flowstralFlushRecipeInput = flushPendingInput;
   
-  console.log('[Flowstral] Recipe Recorder v2 loaded');
+  console.log('[Flowstral] Recipe Recorder v2.1 loaded (with scroll support)');
 })();
 `;
 }
@@ -739,7 +984,7 @@ function getRecipeClickCaptureScript() {
  * This allows the new recorder to work with existing test builder
  */
 function recipeActionToLegacy(recipeAction) {
-  const { type, target, value, description, timestamp, frameContext, dropTarget } = recipeAction;
+  const { type, target, value, description, timestamp, frameContext, dropTarget, modalTitle, direction } = recipeAction;
   
   // Convert recipe to legacy selectorObj
   const selectorObj = recipeToLegacySelector(target);
@@ -747,13 +992,24 @@ function recipeActionToLegacy(recipeAction) {
   // CRITICAL: Extract element text for args array (for playback compatibility)
   const elementText = target?.what?.text || '';
   
+  // Extract position for duplicate element disambiguation
+  const position = target?.which?.position;
+  const totalMatching = target?.which?.totalMatching;
+  
+  // Build args array with text and optional element index
+  const args = elementText ? [elementText] : [];
+  if (position && totalMatching && totalMatching > 1) {
+    // Position is 1-based, elementIndex for CDP is 0-based
+    args.push(position - 1); // Convert to 0-based index
+  }
+  
   return {
     type: type,
-    qword: getQWord(type, target),
+    qword: getQWord(type, target, recipeAction),
     description: description,
     timestamp: timestamp,
     // CRITICAL: Add args array for playback compatibility with CDP-recorded actions
-    args: elementText ? [elementText] : [],
+    args: args,
     // Legacy fields
     text: elementText,
     label: target?.where?.nearText || elementText,
@@ -765,12 +1021,17 @@ function recipeActionToLegacy(recipeAction) {
     // Without these, SmartFinder can find elements in wrong page regions
     landmark: target?.where?.landmark || null,
     region: target?.where?.region || null,
+    // Preserve within (container role like tablist, menu, listbox)
+    within: target?.where?.within || null,
+    // Scroll-specific fields
+    direction: direction || null,
     // Value for fill/select (handle complex values for new types)
     value: typeof value === 'object' ? (value.text || value.files || value) : value,
     displayValue: typeof value === 'object' ? (value.text || value.files?.join(', ') || JSON.stringify(value)) : value,
-    // Element info
+    // Element info - comprehensive for fallback finding
     element: {
       tagName: target?.what?.tag || '',
+      type: target?.what?.type || '',          // Input type
       id: target?.which?.id || '',
       name: target?.which?.name || '',
       text: target?.what?.text || '',
@@ -778,23 +1039,42 @@ function recipeActionToLegacy(recipeAction) {
       testId: target?.which?.testId || '',
       ariaLabel: target?.which?.ariaLabel || '',
       placeholder: target?.which?.placeholder || '',
+      href: target?.confirm?.href || '',        // For links
+      title: target?.which?.title || '',        // Title attribute
+      // Position for disambiguation
+      position: position || null,
+      totalMatching: totalMatching || null,
       // Also preserve landmark in element for redundancy
       landmark: target?.where?.landmark || '',
+      within: target?.where?.within || '',
     },
     // Frame context for iframe support
     frameContext: frameContext || null,
     // Drag-drop target
-    dropTarget: dropTarget || null
+    dropTarget: dropTarget || null,
+    // Modal title for close actions
+    modalTitle: modalTitle || null,
+    // Bounding box for coordinate fallback
+    boundingBox: target?.confirm?.boundingBox || null,
+    // Element index for multiple matches (0-based)
+    elementIndex: position ? position - 1 : null,
+    totalMatching: totalMatching || null,
   };
 }
 
 /**
  * Get QWord (action keyword) from action type
  */
-function getQWord(type, target) {
+function getQWord(type, target, action = {}) {
   switch (type) {
     case 'click':
       return target?.what?.text ? 'ClickText' : 'ClickElement';
+    case 'dblclick':
+    case 'doubleClick':
+      return 'DoubleClick';
+    case 'rightClick':
+    case 'contextmenu':
+      return 'RightClick';
     case 'fill':
       return 'Fill';
     case 'select':
@@ -827,6 +1107,14 @@ function getQWord(type, target) {
       return 'Hover';
     case 'closeModal':
       return 'CloseModal';
+    case 'scroll':
+      // Include direction in QWord for better UI display
+      const direction = action.direction || 'down';
+      return `Scroll${direction.charAt(0).toUpperCase() + direction.slice(1)}`;
+    case 'focus':
+      return 'Focus';
+    case 'blur':
+      return 'Blur';
     default:
       return type.charAt(0).toUpperCase() + type.slice(1);
   }
@@ -866,9 +1154,30 @@ function extractTextFromLabel(label) {
  * This allows existing tests to work with new finder
  */
 function legacyActionToRecipe(legacyAction) {
-  // If already has recipe, return it
+  // If already has recipe, return it (but merge with legacy fields for robustness)
   if (legacyAction.recipe) {
-    return legacyAction.recipe;
+    // Merge any additional fields from legacy action that might be missing
+    const recipe = { ...legacyAction.recipe };
+    
+    // Ensure position is preserved
+    if (!recipe.which?.position && legacyAction.elementIndex !== undefined) {
+      recipe.which = recipe.which || {};
+      recipe.which.position = legacyAction.elementIndex + 1;
+    }
+    
+    // Ensure landmark is preserved
+    if (!recipe.where?.landmark && legacyAction.landmark) {
+      recipe.where = recipe.where || {};
+      recipe.where.landmark = legacyAction.landmark;
+    }
+    
+    // Ensure within is preserved
+    if (!recipe.where?.within && legacyAction.within) {
+      recipe.where = recipe.where || {};
+      recipe.where.within = legacyAction.within;
+    }
+    
+    return recipe;
   }
   
   // Build recipe from legacy fields
@@ -879,6 +1188,7 @@ function legacyActionToRecipe(legacyAction) {
   // 1. action.elementIndex (direct property)
   // 2. action.args[1] (for ClickText actions)
   // 3. action.selectorObj?.elementIndex
+  // 4. action.element?.position (recipe-converted)
   let elementIndex = null;
   if (typeof legacyAction.elementIndex === 'number') {
     elementIndex = legacyAction.elementIndex;
@@ -886,12 +1196,14 @@ function legacyActionToRecipe(legacyAction) {
     elementIndex = legacyAction.args[1];
   } else if (typeof selectorObj.elementIndex === 'number') {
     elementIndex = selectorObj.elementIndex;
+  } else if (typeof element.position === 'number') {
+    elementIndex = element.position - 1; // Convert 1-based to 0-based
   }
   
   // CRITICAL: Normalize text for consistent matching
   // Handles apostrophe variants (', ', etc.), quote variants, and whitespace
   const normalizeText = (text) => {
-    if (!text) return text;
+    if (!text || typeof text !== 'string') return text;
     return text
       .replace(/[\u2018\u2019\u201B\u2032\u0060\u00B4\u02BC]/g, "'") // Apostrophe variants
       .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')              // Quote variants
@@ -921,25 +1233,47 @@ function legacyActionToRecipe(legacyAction) {
       if (tag === 'a') inferredRole = 'link';
       else if (tag === 'button') inferredRole = 'button';
       else if (tag === 'input' && element.type === 'submit') inferredRole = 'button';
-      // Default to trying both link and button if unknown
-      else if (!inferredRole) inferredRole = 'link'; // Most click failures are on links
+      else if (tag === 'summary') inferredRole = 'button';
+      else if (tag === 'th') inferredRole = 'columnheader';
+      // If text looks like a link (has "go to", URL-like), assume link
+      else if (elementText && /^(go to|navigate|visit|open|view)/i.test(elementText)) {
+        inferredRole = 'link';
+      }
+      // Default to null - let SmartFinder try multiple roles
+      else if (!inferredRole) inferredRole = null;
     } else if (actionType.includes('fill') || actionType.includes('type')) {
       inferredRole = 'textbox';
     } else if (actionType.includes('check')) {
       inferredRole = 'checkbox';
     } else if (actionType.includes('select')) {
       inferredRole = 'combobox';
+    } else if (actionType.includes('dblclick') || actionType.includes('doubleclick')) {
+      // Double-click often on text or editable elements
+      inferredRole = null;
+    } else if (actionType.includes('rightclick') || actionType.includes('contextmenu')) {
+      // Right-click can be on any element
+      inferredRole = null;
+    } else if (actionType.includes('hover')) {
+      // Hover often on buttons with menus
+      inferredRole = 'button';
     }
   }
+  
+  // Extract landmark/within from multiple sources
+  const landmark = legacyAction.landmark || element.landmark || null;
+  const within = legacyAction.within || element.within || null;
   
   return {
     what: {
       role: inferredRole || null,
       text: elementText || '',
       tag: element.tagName || selectorObj.tag || null,
+      type: element.type || selectorObj.type || null, // Input type
     },
     where: {
-      nearText: elementText || selectorObj.ariaLabel || null,
+      landmark: landmark,
+      within: within,
+      nearText: element.ariaLabel || selectorObj.ariaLabel || elementText || null,
     },
     which: {
       testId: element.testId || selectorObj.testId || selectorObj.dataTestId || null,
@@ -947,11 +1281,15 @@ function legacyActionToRecipe(legacyAction) {
       name: element.name || selectorObj.name || null,
       ariaLabel: element.ariaLabel || selectorObj.ariaLabel || null,
       placeholder: element.placeholder || selectorObj.placeholder || null,
+      title: element.title || selectorObj.title || null,
       // Position is 1-based (elementIndex 0 → position 1)
       position: elementIndex !== null ? elementIndex + 1 : null,
+      totalMatching: legacyAction.totalMatching || element.totalMatching || null,
     },
     confirm: {
       cssSelector: typeof selectorObj === 'string' ? selectorObj : selectorObj.selector,
+      boundingBox: legacyAction.boundingBox || null,
+      href: element.href || selectorObj.href || null,
     }
   };
 }

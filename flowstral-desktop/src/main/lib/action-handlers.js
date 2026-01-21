@@ -283,6 +283,7 @@ async function searchIframesForClick(ctx, action, label) {
 
 /**
  * Handle fill/type actions with iframe fallback
+ * Supports: input, textarea, contenteditable, and rich text editors
  */
 async function handleFill(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
@@ -294,10 +295,45 @@ async function handleFill(ctx, action, options = {}) {
   if (ctx.useSmartFinderForPlayback && ctx.smartFinder && action.recipe) {
     try {
       console.log(`[ActionHandler] Trying SmartFinder for fill: "${label}"`);
-      const smartResult = await ctx.smartFinder.findElement(action.recipe);
-      if (smartResult) {
-        await smartResult.locator.clear().catch(() => {});
-        await smartResult.locator.fill(value || '', { timeout });
+      // SmartFinder.find() returns a locator directly (not an object with locator property)
+      const smartLocator = await ctx.smartFinder.find(action.recipe);
+      if (smartLocator) {
+        // Check if element is contenteditable (rich text editor)
+        const elementType = await smartLocator.evaluate(el => {
+          if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') return 'contenteditable';
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return 'input';
+          // Check for common rich text editor containers
+          if (el.classList.contains('ql-editor') || // Quill
+              el.classList.contains('ProseMirror') || // ProseMirror
+              el.classList.contains('tox-edit-area') || // TinyMCE
+              el.classList.contains('ck-editor__editable') || // CKEditor
+              el.closest('.ql-container, .ProseMirror, .tox-tinymce, .ck-editor')) {
+            return 'richtext';
+          }
+          return 'unknown';
+        }).catch(() => 'unknown');
+        
+        if (elementType === 'contenteditable' || elementType === 'richtext') {
+          // Handle contenteditable/rich text editors
+          await smartLocator.click({ timeout: 3000 }); // Focus the editor
+          await ctx.page.waitForTimeout(100);
+          
+          // Clear existing content
+          await smartLocator.evaluate(el => {
+            el.innerHTML = '';
+            el.textContent = '';
+          }).catch(() => {});
+          
+          // Type the value (for better compatibility with editors)
+          await ctx.page.keyboard.type(value || '', { delay: 10 });
+          
+          console.log(`[ActionHandler] ✓ SmartFinder contenteditable fill succeeded for "${label}"`);
+          return { success: true, strategy: 'SmartFinder-contenteditable' };
+        }
+        
+        // Standard input/textarea fill
+        await smartLocator.clear().catch(() => {});
+        await smartLocator.fill(value || '', { timeout });
         console.log(`[ActionHandler] ✓ SmartFinder fill succeeded for "${label}"`);
         return { success: true, strategy: 'SmartFinder' };
       }
@@ -309,6 +345,20 @@ async function handleFill(ctx, action, options = {}) {
   // Try legacy element finder
   const fillResult = await ctx._findElement(action);
   if (fillResult) {
+    // Check for contenteditable on legacy result too
+    const isContentEditable = await fillResult.locator.evaluate(el => {
+      return el.isContentEditable || el.getAttribute('contenteditable') === 'true';
+    }).catch(() => false);
+    
+    if (isContentEditable) {
+      await fillResult.locator.click({ timeout: 3000 });
+      await ctx.page.waitForTimeout(100);
+      await fillResult.locator.evaluate(el => { el.innerHTML = ''; el.textContent = ''; }).catch(() => {});
+      await ctx.page.keyboard.type(value || '', { delay: 10 });
+      console.log(`[ActionHandler] ✓ Legacy contenteditable fill succeeded for "${label}"`);
+      return { success: true, strategy: 'legacy-contenteditable' };
+    }
+    
     await fillResult.locator.clear().catch(() => {});
     await fillResult.locator.fill(value || '', { timeout });
     console.log(`[ActionHandler] ✓ Legacy fill succeeded for "${label}"`);
@@ -320,6 +370,20 @@ async function handleFill(ctx, action, options = {}) {
   const iframeFillResult = await searchIframesForFill(ctx, action, value, label, timeout);
   if (iframeFillResult.success) {
     return iframeFillResult;
+  }
+  
+  // CONTENTEDITABLE FALLBACK - Try finding any focused contenteditable
+  try {
+    const activeContentEditable = ctx.page.locator('[contenteditable="true"]:focus, .ql-editor:focus, .ProseMirror:focus');
+    if (await activeContentEditable.count() > 0) {
+      const editor = activeContentEditable.first();
+      await editor.evaluate(el => { el.innerHTML = ''; el.textContent = ''; }).catch(() => {});
+      await ctx.page.keyboard.type(value || '', { delay: 10 });
+      console.log(`[ActionHandler] ✓ Focused contenteditable fill succeeded`);
+      return { success: true, strategy: 'focused-contenteditable' };
+    }
+  } catch (e) {
+    console.log(`[ActionHandler] Focused contenteditable check failed:`, e.message);
   }
   
   // AI FALLBACK
@@ -577,6 +641,93 @@ async function findDropdownOption(ctx, value) {
 }
 
 /**
+ * Handle double-click action
+ */
+async function handleDoubleClick(ctx, action, options = {}) {
+  const { timeout = 30000 } = options;
+  const label = getActionLabel(action);
+  const selector = action.selector;
+  
+  // Try finding element with automatic retry
+  let dblClickResult = await ctx.findElementWithRetry(action);
+  
+  // Iframe fallback
+  if (!dblClickResult) {
+    console.log('[ActionHandler] DoubleClick: Element not on main page, checking iframes...');
+    dblClickResult = await searchIframesForClick(ctx, action, label);
+  }
+  
+  // AI fallback
+  if (!dblClickResult && ctx.enableAIFallback) {
+    const aiResult = await ctx.findElementWithAI(label || selector || action.description, 'dblclick');
+    if (aiResult) {
+      try {
+        await ctx.page.mouse.dblclick(aiResult.x, aiResult.y);
+        console.log(`[ActionHandler] ✓ AI Fallback double-click succeeded at (${aiResult.x}, ${aiResult.y})`);
+        return { success: true, strategy: 'AI Vision Fallback' };
+      } catch (e) {
+        console.log(`[ActionHandler] AI Fallback double-click failed:`, e.message);
+      }
+    }
+  }
+  
+  if (!dblClickResult) {
+    return { success: false, error: `Could not find element to double-click: "${label || selector}"` };
+  }
+  
+  await dblClickResult.locator.scrollIntoViewIfNeeded().catch(() => {});
+  await dblClickResult.locator.dblclick({ timeout: 5000 });
+  console.log(`[ActionHandler] ✓ Double-click succeeded using ${dblClickResult.strategy?.type || 'SmartFinder'}`);
+  
+  return { success: true, strategy: dblClickResult.strategy?.type || 'SmartFinder' };
+}
+
+/**
+ * Handle right-click (context menu) action
+ */
+async function handleRightClick(ctx, action, options = {}) {
+  const { timeout = 30000 } = options;
+  const label = getActionLabel(action);
+  const selector = action.selector;
+  
+  // Try finding element with automatic retry
+  let rightClickResult = await ctx.findElementWithRetry(action);
+  
+  // Iframe fallback
+  if (!rightClickResult) {
+    console.log('[ActionHandler] RightClick: Element not on main page, checking iframes...');
+    rightClickResult = await searchIframesForClick(ctx, action, label);
+  }
+  
+  // AI fallback
+  if (!rightClickResult && ctx.enableAIFallback) {
+    const aiResult = await ctx.findElementWithAI(label || selector || action.description, 'rightClick');
+    if (aiResult) {
+      try {
+        await ctx.page.mouse.click(aiResult.x, aiResult.y, { button: 'right' });
+        console.log(`[ActionHandler] ✓ AI Fallback right-click succeeded at (${aiResult.x}, ${aiResult.y})`);
+        return { success: true, strategy: 'AI Vision Fallback' };
+      } catch (e) {
+        console.log(`[ActionHandler] AI Fallback right-click failed:`, e.message);
+      }
+    }
+  }
+  
+  if (!rightClickResult) {
+    return { success: false, error: `Could not find element to right-click: "${label || selector}"` };
+  }
+  
+  await rightClickResult.locator.scrollIntoViewIfNeeded().catch(() => {});
+  await rightClickResult.locator.click({ button: 'right', timeout: 5000 });
+  console.log(`[ActionHandler] ✓ Right-click succeeded using ${rightClickResult.strategy?.type || 'SmartFinder'}`);
+  
+  // Wait briefly for context menu to appear
+  await ctx.page.waitForTimeout(200);
+  
+  return { success: true, strategy: rightClickResult.strategy?.type || 'SmartFinder' };
+}
+
+/**
  * Handle hover action
  */
 async function handleHover(ctx, action, options = {}) {
@@ -696,10 +847,65 @@ async function handleUncheck(ctx, action, options = {}) {
 
 /**
  * Handle scroll action
+ * Supports multiple scroll strategies:
+ * 1. Scroll to element (if target provided)
+ * 2. Scroll by delta (from recorded scroll)
+ * 3. Scroll by direction and amount (legacy)
  */
 async function handleScroll(ctx, action, options = {}) {
-  const direction = action.direction || action.value || 'down';
-  const amount = action.amount || 300;
+  const { timeout = 10000 } = options;
+  const direction = action.direction || 'down';
+  const scrollValue = action.value || {};
+  
+  // Strategy 1: If we have a target element, scroll to it
+  if (action.recipe || action.target) {
+    try {
+      let targetLocator = null;
+      
+      if (ctx.smartFinder && action.recipe) {
+        targetLocator = await ctx.smartFinder.find(action.recipe);
+      } else if (ctx._findElement) {
+        const result = await ctx._findElement(action);
+        if (result) targetLocator = result.locator;
+      }
+      
+      if (targetLocator) {
+        await targetLocator.scrollIntoViewIfNeeded({ timeout: 5000 });
+        console.log(`[ActionHandler] ✓ Scrolled to element`);
+        return { success: true, strategy: 'scroll-to-element' };
+      }
+    } catch (e) {
+      console.log(`[ActionHandler] Scroll to element failed, falling back to delta: ${e.message}`);
+    }
+  }
+  
+  // Strategy 2: Scroll by recorded delta
+  if (scrollValue.deltaY !== undefined) {
+    await ctx.page.evaluate(({ deltaY }) => {
+      window.scrollBy(0, deltaY);
+    }, { deltaY: scrollValue.deltaY });
+    
+    // Wait for lazy content to load
+    await ctx.page.waitForTimeout(300);
+    
+    console.log(`[ActionHandler] ✓ Scrolled by delta: ${scrollValue.deltaY}px`);
+    return { success: true, strategy: 'scroll-delta' };
+  }
+  
+  // Strategy 3: Scroll to absolute position
+  if (scrollValue.toY !== undefined) {
+    await ctx.page.evaluate(({ toY }) => {
+      window.scrollTo(0, toY);
+    }, { toY: scrollValue.toY });
+    
+    await ctx.page.waitForTimeout(300);
+    
+    console.log(`[ActionHandler] ✓ Scrolled to Y: ${scrollValue.toY}`);
+    return { success: true, strategy: 'scroll-absolute' };
+  }
+  
+  // Strategy 4: Legacy direction-based scroll
+  const amount = action.amount || 500; // Increased default for more visible scroll
   
   if (direction === 'down') {
     await ctx.page.mouse.wheel(0, amount);
@@ -709,9 +915,19 @@ async function handleScroll(ctx, action, options = {}) {
     await ctx.page.mouse.wheel(-amount, 0);
   } else if (direction === 'right') {
     await ctx.page.mouse.wheel(amount, 0);
+  } else if (direction === 'bottom') {
+    // Scroll to bottom of page
+    await ctx.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  } else if (direction === 'top') {
+    // Scroll to top of page
+    await ctx.page.evaluate(() => window.scrollTo(0, 0));
   }
   
-  return { success: true };
+  // Wait for lazy content
+  await ctx.page.waitForTimeout(300);
+  
+  console.log(`[ActionHandler] ✓ Scrolled ${direction} ${amount}px`);
+  return { success: true, strategy: 'scroll-direction' };
 }
 
 /**
@@ -1013,6 +1229,16 @@ async function executeAction(ctx, action, options = {}) {
       case 'clickelement':
         return await handleClick(ctx, action, { timeout });
       
+      // Double-click actions
+      case 'dblclick':
+      case 'doubleclick':
+        return await handleDoubleClick(ctx, action, { timeout });
+      
+      // Right-click (context menu) actions
+      case 'rightclick':
+      case 'contextmenu':
+        return await handleRightClick(ctx, action, { timeout });
+      
       // Fill/Input actions
       case 'fill':
       case 'type':
@@ -1125,6 +1351,8 @@ module.exports = {
   handleNavigation,
   handleSalesforceNavigation,
   handleClick,
+  handleDoubleClick,
+  handleRightClick,
   handleFill,
   handleSelect,
   handleHover,

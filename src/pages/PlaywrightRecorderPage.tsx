@@ -372,30 +372,59 @@ const getFieldIdentity = (action: RecordedAction): string | null => {
 };
 
 /**
+ * Check if an action is a fill action (CDP or Recipe)
+ */
+const isFillAction = (action: RecordedAction): boolean => {
+  const qword = (action.qword || '').toLowerCase();
+  const type = (action.type || '').toLowerCase();
+  return qword === 'fill' || type === 'fill' || type === 'input';
+};
+
+/**
  * Check if two Fill actions are for the same field
  */
 const areSameFillField = (action1: RecordedAction, action2: RecordedAction): boolean => {
   if (!action1 || !action2) return false;
-  if (action1.qword !== 'Fill' || action2.qword !== 'Fill') return false;
+  if (!isFillAction(action1) || !isFillAction(action2)) return false;
   
+  // Get field identifiers from multiple sources
   const id1 = getFieldIdentity(action1);
   const id2 = getFieldIdentity(action2);
-  if (id1 && id2 && id1 === id2) return true;
+  if (id1 && id2 && id1.toLowerCase() === id2.toLowerCase()) return true;
   
-  const val1 = action1.args?.[1] || '';
-  const val2 = action2.args?.[1] || '';
-  const label1 = action1.args?.[0]?.toString() || '';
-  const label2 = action2.args?.[0]?.toString() || '';
+  // Get labels from args[0] OR fieldLabel (Recipe fills)
+  const label1 = (action1.args?.[0]?.toString() || (action1 as any).fieldLabel || '').toLowerCase().trim();
+  const label2 = (action2.args?.[0]?.toString() || (action2 as any).fieldLabel || '').toLowerCase().trim();
+  
+  // Get values
+  const val1 = (action1.args?.[1] || (action1 as any).value || '').toString();
+  const val2 = (action2.args?.[1] || (action2 as any).value || '').toString();
+  
+  // Normalize common field names (pw -> password, user -> username)
+  const normalizeFieldName = (name: string): string => {
+    const n = name.toLowerCase().trim();
+    if (['pw', 'pwd', 'passwd', 'pass'].includes(n)) return 'password';
+    if (['user', 'uname', 'usr'].includes(n)) return 'username';
+    if (['mail', 'e-mail'].includes(n)) return 'email';
+    return n;
+  };
+  
+  const norm1 = normalizeFieldName(label1);
+  const norm2 = normalizeFieldName(label2);
+  
+  // Same normalized label
+  if (norm1 && norm2 && norm1 === norm2) return true;
+  
   const timeDiff = Math.abs((action1.timestamp || 0) - (action2.timestamp || 0));
   
   if (timeDiff < 5000) {
     // Same value
     if (val1 && val2 && val1 === val2) return true;
-    // One contains other
+    // One contains other (partial typing)
     if (val1 && val2 && (val1.includes(val2) || val2.includes(val1))) return true;
-    // Label equals value (Recipe bug)
-    if (label1 && val2 && label1 === val2) return true;
-    if (label2 && val1 && label2 === val1) return true;
+    // Label equals value (Recipe bug where label was the typed value)
+    if (label1 && val2 && label1 === val2.toLowerCase()) return true;
+    if (label2 && val1 && label2 === val1.toLowerCase()) return true;
     // One label is a value-like string
     if (looksLikeFieldValue(label1) && (id2 || !looksLikeFieldValue(label2))) return true;
     if (looksLikeFieldValue(label2) && (id1 || !looksLikeFieldValue(label1))) return true;
@@ -416,21 +445,25 @@ const getDisplayActions = (actions: RecordedAction[]): RecordedAction[] => {
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
     
-    if (action.qword === 'Fill') {
+    // Check for fills from BOTH CDP (qword='Fill') AND Recipe (type='fill')
+    if (isFillAction(action)) {
       const existingIndex = result.findIndex(item => areSameFillField(item.action, action));
       
       if (existingIndex !== -1) {
         const existing = result[existingIndex];
         const existingId = getFieldIdentity(existing.action);
         const newId = getFieldIdentity(action);
-        const existingVal = (existing.action.args?.[1] || '').toString();
-        const newVal = (action.args?.[1] || '').toString();
+        // Check BOTH args[1] (CDP) AND value property (Recipe)
+        const existingVal = (existing.action.args?.[1] || (existing.action as any).value || '').toString();
+        const newVal = (action.args?.[1] || (action as any).value || '').toString();
         
         // Keep better one: has identity, longer value, or later timestamp
+        // CRITICAL: Always prefer the one with actual value (for passwords)
         const shouldReplace = 
+          (newVal.length > 0 && existingVal.length === 0) ||  // New has value, existing empty
           (!existingId && newId) ||
           (newVal.length > existingVal.length) ||
-          (action.timestamp > existing.action.timestamp);
+          (action.timestamp > existing.action.timestamp && newVal.length >= existingVal.length);
         
         if (shouldReplace) {
           result[existingIndex] = { action, originalIndex: i };
@@ -2113,7 +2146,6 @@ export default function PlaywrightRecorderPage() {
       // Merge recorded actions with manually added ones (SF Tools, Test Helpers, etc.)
       setActions(prev => {
         // Keep manually added actions - these have known prefixes from our Test Helpers panel
-        // Recorded actions from playwright typically start with 'act_' or have different format
         const manualPrefixes = [
           'action_', 'assert_', 'nav_', 'create_', 'soqlnav_', 'gsearch_', 
           'search_', 'util_', 'rec_', 'tab_', 'flow_', 'test_helper_', 'sf_'
@@ -2125,21 +2157,24 @@ export default function PlaywrightRecorderPage() {
         
         const manualActions = prev.filter(a => {
           const id = a.id || '';
-          // Also check for sf-* types which are our Salesforce helpers
           const isSfType = (a.type || '').startsWith('sf-');
           return isManualAction(id) || isSfType;
         });
         
-        // Get recorded actions, removing any that match manual ones by description
+        // Get recorded actions, removing duplicates
         const manualDescriptions = new Set(manualActions.map(a => a.description));
         const recordedOnly = (finalActions || []).filter(a => !manualDescriptions.has(a.description));
         
-        // Combine: recorded actions first, then manually added actions (preserve insertion order)
-        if (recordedOnly.length > 0 || manualActions.length > 0) {
-          // Sort combined list by timestamp to maintain proper order
-          const combined = [...recordedOnly, ...manualActions].sort((a, b) => 
+        // CRITICAL: Use getDisplayActions to deduplicate fills BEFORE storing
+        // This ensures the array itself has no duplicates, not just the display
+        const deduplicatedRecorded = getDisplayActions(recordedOnly);
+        
+        // Combine: recorded actions first, then manually added actions
+        if (deduplicatedRecorded.length > 0 || manualActions.length > 0) {
+          const combined = [...deduplicatedRecorded, ...manualActions].sort((a, b) => 
             (a.timestamp || 0) - (b.timestamp || 0)
           );
+          console.log(`[Recorder] Stopped: ${finalActions?.length} -> ${deduplicatedRecorded.length} deduplicated + ${manualActions.length} manual`);
           return combined;
         }
         return prev;
@@ -2674,26 +2709,29 @@ export default function PlaywrightRecorderPage() {
           
           const manualActions = prev.filter(a => {
             const id = a.id || '';
-            // Also check for sf-* types which are our Salesforce helpers
             const isSfType = (a.type || '').startsWith('sf-');
             return isManualAction(id) || isSfType;
           });
           
+          // CRITICAL: Deduplicate recorded actions FIRST using getDisplayActions
+          const deduplicatedRecorded = getDisplayActions(recordedActions);
+          
           if (manualActions.length === 0) {
-            // No manual actions to preserve, just use recorded
-            return recordedActions.length > 0 ? recordedActions : prev;
+            // No manual actions, just use deduplicated recorded
+            console.log(`[Recorder] Stop: ${recordedActions.length} -> ${deduplicatedRecorded.length} deduplicated`);
+            return deduplicatedRecorded.length > 0 ? deduplicatedRecorded : prev;
           }
           
-          // Remove duplicates from recorded (by description)
+          // Remove any recorded that duplicate manual actions
           const manualDescriptions = new Set(manualActions.map(a => a.description));
-          const recordedOnly = recordedActions.filter(a => !manualDescriptions.has(a.description));
+          const recordedOnly = deduplicatedRecorded.filter(a => !manualDescriptions.has(a.description));
           
-          // Combine and sort by timestamp to maintain proper insertion order
+          // Combine and sort by timestamp
           const combined = [...recordedOnly, ...manualActions].sort((a, b) => 
             (a.timestamp || 0) - (b.timestamp || 0)
           );
           
-          console.log(`[Recorder] Merging ${recordedOnly.length} recorded + ${manualActions.length} manual actions`);
+          console.log(`[Recorder] Stop: ${recordedActions.length} -> ${recordedOnly.length} deduplicated + ${manualActions.length} manual`);
           return combined;
         });
       }
@@ -2923,12 +2961,73 @@ const handleExportToBuilder = async () => {
       const electronAPI = (window as any).electronAPI;
       const flowstral = (window as any).flowstral;
       
-      // Build a proper test case object with ALL actions
+      // ============================================================
+      // DEDUPLICATE FILLS - Keep only the LAST fill for each field
+      // This handles cases where both Recipe and CDP recorders capture
+      // the same input, or partial typing creates multiple fills
+      // ============================================================
+      const seenFillFields = new Map<string, number>(); // fieldKey -> index
+      const deduplicatedActions: RecordedAction[] = [];
+      
+      for (let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        const qword = (action.qword || '').toLowerCase();
+        const actionType = (action.type || '').toLowerCase();
+        const isFill = qword === 'fill' || qword.includes('fill') || actionType === 'fill' || actionType === 'input';
+        
+        if (isFill) {
+          // Get field name from MULTIPLE sources:
+          // - CDP fills: args[0] contains the label
+          // - Recipe fills: fieldLabel property
+          // - Also try raw.name, raw.placeholder, selectorObj
+          let fieldName = (
+            action.args?.[0] || 
+            (action as any).fieldLabel || 
+            action.raw?.name ||
+            action.raw?.placeholder ||
+            action.selectorObj?.name ||
+            action.selectorObj?.placeholder ||
+            ''
+          ).toLowerCase().trim();
+          
+          // Normalize common field name variations (match playwright-recorder.js)
+          const fieldNormalizations: Record<string, string> = {
+            'pw': 'password', 'pwd': 'password', 'passwd': 'password', 'pass': 'password',
+            'user': 'username', 'uname': 'username', 'usr': 'username',
+            'mail': 'email', 'e-mail': 'email',
+            'phone': 'phone', 'tel': 'phone', 'mobile': 'phone', 'cell': 'phone',
+          };
+          if (fieldNormalizations[fieldName]) {
+            fieldName = fieldNormalizations[fieldName];
+          }
+          
+          console.log(`[Recorder Export] Fill ${i}: fieldName="${fieldName}" from args[0]="${action.args?.[0]}" fieldLabel="${(action as any).fieldLabel}"`);
+          
+          if (fieldName && fieldName !== 'input') {
+            // Check if we've seen this field before
+            const existingIdx = seenFillFields.get(fieldName);
+            if (existingIdx !== undefined) {
+              // Replace with this one (later fill has more complete value)
+              console.log(`[Recorder Export] ★ DEDUPING fill for "${fieldName}" - replacing index ${existingIdx}`);
+              deduplicatedActions[existingIdx] = action;
+              continue; // Don't add again
+            }
+            seenFillFields.set(fieldName, deduplicatedActions.length);
+            console.log(`[Recorder Export] First fill for "${fieldName}" at index ${deduplicatedActions.length}`);
+          }
+        }
+        
+        deduplicatedActions.push(action);
+      }
+      
+      console.log(`[Recorder Export] Deduplicated: ${actions.length} -> ${deduplicatedActions.length} actions`);
+      
+      // Build a proper test case object with deduplicated actions
       const testCase = {
         id: `tc_${Date.now()}`,
         name: 'Recorded Test',
         description: `Recorded on ${new Date().toISOString()}`,
-        steps: actions.map((action, idx) => {
+        steps: deduplicatedActions.map((action, idx) => {
           // Determine step type - preserve sf-* types for Salesforce helpers
           let stepType = action.type || 'click';
           const actionType = (action.type || '').toLowerCase();
@@ -2956,6 +3055,7 @@ const handleExportToBuilder = async () => {
           
           return {
             id: action.id || `step_${Date.now()}_${idx}`,
+            order: idx + 1,  // Sequential step number
             type: stepType,
             name: action.description || `${action.qword || 'Action'} ${action.args?.[0] || ''}`,
             url: stepType === 'navigate' ? (action.args?.[0] || action.url || '') : '',
@@ -3003,7 +3103,7 @@ const handleExportToBuilder = async () => {
       }
       
       const tagMsg = testCase.tags.length > 1 ? ` [${testCase.tags.join(', ')}]` : '';
-      toast.success(`Exported ${actions.length} steps to Builder!${tagMsg}`);
+      toast.success(`Exported ${deduplicatedActions.length} steps to Builder!${tagMsg}`);
     } catch (error) {
       console.error('[Recorder] Export failed:', error);
       toast.error("Failed to export");
@@ -4686,28 +4786,8 @@ Recorded Test
             ) : (
               <div className="px-2 pb-20 space-y-1"> {/* pb-20 for fixed footer space */}
                 {actions.map((action, index) => {
-                  // DISPLAY-ONLY: Skip duplicate fills (keeps original array intact for export)
-                  if (action.qword === 'Fill') {
-                    const myLabel = action.args?.[0]?.toString() || '';
-                    const myId = getFieldIdentity(action);
-                    
-                    // Check if there's a BETTER fill for the same field (earlier with proper label, or later with better data)
-                    const hasBetterFill = actions.some((other, otherIdx) => {
-                      if (otherIdx === index || other.qword !== 'Fill') return false;
-                      if (!areSameFillField(action, other)) return false;
-                      
-                      const otherId = getFieldIdentity(other);
-                      const otherLabel = other.args?.[0]?.toString() || '';
-                      
-                      // Keep the one with: 1) field identity, 2) non-value label, 3) earlier index
-                      if (otherId && !myId) return true; // Other has identity, we don't
-                      if (!looksLikeFieldValue(otherLabel) && looksLikeFieldValue(myLabel)) return true; // Other has proper label
-                      if (otherIdx < index && !looksLikeFieldValue(otherLabel)) return true; // Earlier with good label wins
-                      return false;
-                    });
-                    
-                    if (hasBetterFill) return null; // Skip - a better version exists
-                  }
+                  // NOTE: Duplicate fills are now removed from the array itself (in setActions),
+                  // so we no longer need display-only filtering here.
                   
                   // Apply masking for sensitive fields (passwords)
                   const displayAction = maskSensitiveAction(action);

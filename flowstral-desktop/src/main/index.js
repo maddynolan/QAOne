@@ -2726,7 +2726,97 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
     // Check if we received a full test case object (from PlaywrightRecorderPage)
     if (typeof testNameOrData === 'object' && testNameOrData.steps) {
       console.log('[Export] Received test case object with', testNameOrData.steps.length, 'steps');
-      testCase = testNameOrData;
+      
+      // ============================================================
+      // DEDUPLICATE FILLS - Keep only the LAST fill for each field
+      // This handles Recipe + CDP recorder duplicates
+      // ============================================================
+      const seenFillFields = new Map(); // fieldKey -> index
+      const deduplicatedSteps = [];
+      
+      for (let i = 0; i < testNameOrData.steps.length; i++) {
+        const step = testNameOrData.steps[i];
+        const stepType = (step.type || '').toLowerCase();
+        const isFill = stepType === 'input' || stepType === 'fill';
+        
+        if (isFill) {
+          // Extract field name from step.name like 'Fill "Username": "value"'
+          // Also try args[0] as fallback
+          let fieldName = '';
+          const nameMatch = (step.name || '').match(/Fill\s*"([^"]+)"/i);
+          if (nameMatch) {
+            fieldName = nameMatch[1].toLowerCase().trim();
+          } else {
+            fieldName = (step.args?.[0] || '').toLowerCase().trim();
+          }
+          
+          // Normalize common field name variations
+          // pw, pwd, passwd → password
+          // user, uname → username
+          // email, mail → email
+          const normalizeFieldName = (name) => {
+            const n = name.toLowerCase().trim();
+            if (['pw', 'pwd', 'passwd', 'pass'].includes(n)) return 'password';
+            if (['user', 'uname', 'usr'].includes(n)) return 'username';
+            if (['mail', 'e-mail'].includes(n)) return 'email';
+            return n;
+          };
+          
+          const normalizedFieldName = normalizeFieldName(fieldName);
+          console.log(`[Export Dedupe] Fill step ${i}: "${fieldName}" -> normalized: "${normalizedFieldName}"`);
+          
+          if (normalizedFieldName && normalizedFieldName !== 'input') {
+            const existingIdx = seenFillFields.get(normalizedFieldName);
+            if (existingIdx !== undefined) {
+              // Replace with this one (later fill has more complete value)
+              console.log(`[Export Dedupe] ★ Replacing fill for "${normalizedFieldName}" at index ${existingIdx}`);
+              deduplicatedSteps[existingIdx] = step;
+              continue; // Don't add again
+            }
+            seenFillFields.set(normalizedFieldName, deduplicatedSteps.length);
+          }
+        }
+        
+        deduplicatedSteps.push(step);
+      }
+      
+      // ============================================================
+      // ADDITIONAL FILTERING - Remove phantom/unwanted actions
+      // ============================================================
+      const filteredSteps = deduplicatedSteps.filter((step, idx) => {
+        const name = (step.name || '').toLowerCase();
+        const type = (step.type || '').toLowerCase();
+        
+        // Filter 1: Remove generic "click div" or empty clicks
+        if (type === 'click' && (name.includes('click "div"') || name.includes('click "span"') || name.includes('click ""'))) {
+          console.log('[Export Filter] Removing generic click:', name);
+          return false;
+        }
+        
+        // Filter 2: Remove consecutive duplicate hovers
+        if (type === 'hover') {
+          const nextStep = deduplicatedSteps[idx + 1];
+          if (nextStep && (nextStep.type || '').toLowerCase() === 'hover') {
+            console.log('[Export Filter] Removing consecutive hover:', name);
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      // Renumber steps sequentially
+      const renumberedSteps = filteredSteps.map((step, idx) => ({
+        ...step,
+        order: idx + 1
+      }));
+      
+      console.log(`[Export Dedupe] Final: ${testNameOrData.steps.length} -> ${renumberedSteps.length} steps`);
+      
+      testCase = {
+        ...testNameOrData,
+        steps: renumberedSteps
+      };
     } else {
       // Legacy: Get data from embeddedBrowser using testName
       const testName = testNameOrData;
