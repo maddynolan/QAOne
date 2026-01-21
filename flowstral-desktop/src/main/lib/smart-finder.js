@@ -769,13 +769,33 @@ class SmartFinder {
       }
     }
     
-    // Try role-only if text didn't work
+    // Try role-only with position if text didn't work
+    // CRITICAL: Must validate element text matches to avoid clicking wrong element!
     if (what?.role && which?.position) {
       const result = await this.tryStrategy('role+position', async () => {
         const locator = scope.getByRole(what.role);
         const count = await locator.count();
         if (count > 0 && which.position <= count) {
-          return { success: true, locator: locator.nth(which.position - 1) };
+          const candidate = locator.nth(which.position - 1);
+          
+          // CRITICAL FIX: Validate the element's text contains our expected text
+          // This prevents clicking "New Event" when we want "New" button for Opportunity
+          if (what.text) {
+            const elementText = await candidate.textContent().catch(() => '');
+            const normalizedElementText = this.normalizeText(elementText || '');
+            const normalizedExpectedText = this.normalizeText(what.text);
+            
+            // Check if the element text matches (contains or matches)
+            const textMatches = normalizedElementText.toLowerCase().includes(normalizedExpectedText.toLowerCase()) ||
+                               normalizedExpectedText.toLowerCase().includes(normalizedElementText.toLowerCase());
+            
+            if (!textMatches) {
+              this.log(`role+position: Element at position ${which.position} has text "${normalizedElementText}", expected "${normalizedExpectedText}" - SKIPPING`);
+              return { success: false, reason: 'text mismatch' };
+            }
+          }
+          
+          return { success: true, locator: candidate };
         }
         return { success: false };
       }, attempts);
