@@ -893,84 +893,22 @@ function getRecipeClickCaptureScript() {
     dragState = null;
   }, true);
   
-  // ========== SCROLL HANDLER (for infinite scroll and lazy loading apps) ==========
-  // Records significant scrolls that load new content
-  
-  var lastScrollY = window.scrollY;
-  var scrollTimeout = null;
-  var scrollStartY = null;
-  var isScrolling = false;
-  
-  window.addEventListener('scroll', function(e) {
-    // Track scroll start position
-    if (!isScrolling) {
-      isScrolling = true;
-      scrollStartY = window.scrollY;
-    }
-    
-    // Debounce - wait for scroll to stop
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(function() {
-      isScrolling = false;
-      
-      var scrollDelta = window.scrollY - scrollStartY;
-      var absScroll = Math.abs(scrollDelta);
-      
-      // Only record significant scrolls (more than 300px)
-      // This filters out micro-scrolls and focuses on meaningful navigation
-      if (absScroll > 300) {
-        var direction = scrollDelta > 0 ? 'down' : 'up';
-        var scrollTarget = null;
-        
-        // Try to identify what we scrolled to
-        // Look for newly visible elements at scroll position
-        var viewportHeight = window.innerHeight;
-        var elementsAtCenter = document.elementsFromPoint(
-          window.innerWidth / 2, 
-          viewportHeight / 2
-        );
-        
-        // Find the most meaningful element (heading, section, landmark)
-        for (var i = 0; i < elementsAtCenter.length; i++) {
-          var el = elementsAtCenter[i];
-          var tag = el.tagName.toLowerCase();
-          
-          // Prioritize headings and landmarks
-          if (['h1', 'h2', 'h3', 'h4', 'section', 'article', 'main'].indexOf(tag) !== -1 ||
-              el.getAttribute('role') === 'region' ||
-              el.getAttribute('id')) {
-            scrollTarget = analyzer.analyze(el);
-            break;
-          }
-        }
-        
-        console.log('[Flowstral Recipe] ★ SCROLL:', direction, absScroll + 'px', 
-          scrollTarget ? 'to ' + (scrollTarget.what.text || scrollTarget.where.landmark) : '');
-        
-        recordAction({
-          type: 'scroll',
-          direction: direction,
-          value: {
-            deltaY: scrollDelta,
-            fromY: scrollStartY,
-            toY: window.scrollY,
-            viewportHeight: viewportHeight,
-            documentHeight: document.documentElement.scrollHeight
-          },
-          target: scrollTarget,
-          description: 'Scroll ' + direction + ' ' + absScroll + 'px' + 
-            (scrollTarget?.what?.text ? ' to "' + scrollTarget.what.text + '"' : '')
-        });
-      }
-      
-      lastScrollY = window.scrollY;
-    }, 200); // Wait 200ms after scroll stops
-  }, { passive: true });
+  // ========== SCROLL RECORDING DISABLED ==========
+  // Scroll events are NOT recorded as separate steps because:
+  // 1. Playwright automatically handles scrollIntoViewIfNeeded() before clicks
+  // 2. Manual scroll steps clutter the test case
+  // 3. Exact scroll amounts are not reliably reproducible across environments
+  // 4. The user is scrolling to GET TO an element, then clicking it - 
+  //    the click is the actual intent, not the scroll
+  //
+  // If infinite scroll / lazy loading is needed, it should be handled
+  // by a dedicated "waitForContent" or "scrollToLoadMore" action.
+  // ================================================
   
   // Expose flush function
   window.__flowstralFlushRecipeInput = flushPendingInput;
   
-  console.log('[Flowstral] Recipe Recorder v2.1 loaded (with scroll support)');
+  console.log('[Flowstral] Recipe Recorder v2.2 loaded (scroll recording disabled - handled by Playwright)');
 })();
 `;
 }
