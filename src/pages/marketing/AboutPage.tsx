@@ -5,8 +5,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  ArrowRight, Users, Target, Heart, Globe, Award, Rocket,
-  ChevronRight, Linkedin, Twitter, Building2, Sparkles
+  ArrowRight, Users, Target, Heart, Rocket, Building2, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,24 +56,17 @@ function MarketingHeader() {
 }
 
 const values = [
-  { icon: Target, title: 'Quality First', desc: 'We believe every user deserves software that works flawlessly.' },
-  { icon: Users, title: 'Empower Teams', desc: 'Testing shouldn\'t require coding expertise. We make it accessible to everyone.' },
-  { icon: Sparkles, title: 'Continuous Innovation', desc: 'We\'re always pushing the boundaries of what\'s possible in test automation.' },
-  { icon: Heart, title: 'Customer Obsessed', desc: 'Your success is our success. We listen, learn, and build for you.' },
+  { icon: Target, title: 'Quality First', desc: 'Every bug that reaches production is a user experience we failed to protect. We obsess over quality.' },
+  { icon: Users, title: 'Empower Everyone', desc: 'Great testing shouldn\'t require a CS degree. We make enterprise-grade QA accessible to all team members.' },
+  { icon: Sparkles, title: 'Innovation Driven', desc: 'From AI-powered self-healing tests to visual regression detection, we\'re redefining what\'s possible.' },
+  { icon: Heart, title: 'Built with Empathy', desc: 'We\'ve lived the QA pain. Every feature we build comes from real testing challenges we\'ve faced.' },
 ];
 
-const stats = [
-  { value: '10k+', label: 'Tests Run Daily' },
-  { value: '500+', label: 'Happy Teams' },
-  { value: '50+', label: 'Countries' },
-  { value: '99.9%', label: 'Uptime' },
-];
-
-const team = [
-  { name: 'Sarah Chen', role: 'CEO & Co-Founder', image: '👩‍💼' },
-  { name: 'Marcus Johnson', role: 'CTO & Co-Founder', image: '👨‍💻' },
-  { name: 'Emily Rodriguez', role: 'VP Engineering', image: '👩‍🔬' },
-  { name: 'David Kim', role: 'VP Product', image: '👨‍🎨' },
+const painPoints = [
+  { icon: '😤', title: 'Flaky Tests', desc: 'Tests that pass sometimes and fail randomly, eating up hours of debugging time.' },
+  { icon: '⏰', title: 'Maintenance Hell', desc: 'Spending more time fixing tests than writing new ones after every UI change.' },
+  { icon: '🔧', title: 'Complex Setup', desc: 'Needing a development team just to maintain your test automation framework.' },
+  { icon: '🎯', title: 'Lack of Coverage', desc: 'Never quite testing everything because automation is too slow or complicated.' },
 ];
 
 export default function AboutPage() {
@@ -91,24 +83,49 @@ export default function AboutPage() {
             Our Story
           </Badge>
           <h1 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6">
-            Making Quality Assurance
-            <span className="block text-violet-600">Accessible to Everyone</span>
+            Born from Real
+            <span className="block text-violet-600">QA Pain</span>
           </h1>
           <p className="text-xl text-slate-600 leading-relaxed max-w-3xl mx-auto">
-            We started Flowstral with a simple belief: testing software shouldn't require 
-            writing code. Our mission is to empower every team to ship quality software faster.
+            Flowstral was created by a passionate QA architect who spent over a decade 
+            in the trenches—debugging flaky tests at 2 AM, maintaining thousands of brittle 
+            scripts, and watching teams struggle with test automation complexity.
           </p>
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Origin Story */}
+      <section className="py-16 px-6 bg-white">
+        <div className="max-w-4xl mx-auto">
+          <div className="prose prose-lg mx-auto text-center">
+            <p className="text-slate-600 leading-relaxed">
+              After years of watching talented QA professionals spend more time fighting 
+              their tools than testing their applications, we asked a simple question: 
+              <span className="font-semibold text-slate-800"> Why is test automation still so hard?</span>
+            </p>
+            <p className="text-slate-600 leading-relaxed mt-4">
+              The answer led us to build Flowstral—a platform that combines the power of 
+              enterprise-grade test automation with the simplicity of recording your actions. 
+              No coding required. No complex frameworks to learn. Just record, enhance with AI, 
+              and run reliable tests across web, mobile, and API.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Pain Points We Solve */}
       <section className="py-16 px-6 bg-slate-900">
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, idx) => (
-              <div key={idx} className="text-center">
-                <div className="text-4xl font-bold text-white mb-2">{stat.value}</div>
-                <div className="text-slate-400">{stat.label}</div>
+          <h2 className="text-2xl font-bold text-white text-center mb-4">We've Felt Every QA Pain</h2>
+          <p className="text-slate-400 text-center mb-10 max-w-2xl mx-auto">
+            These weren't just problems we observed—we lived them. That's why we built Flowstral.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {painPoints.map((point, idx) => (
+              <div key={idx} className="text-center p-4">
+                <div className="text-4xl mb-3">{point.icon}</div>
+                <div className="text-lg font-semibold text-white mb-1">{point.title}</div>
+                <div className="text-sm text-slate-400">{point.desc}</div>
               </div>
             ))}
           </div>
@@ -137,32 +154,46 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Team */}
+      {/* Our Mission */}
       <section className="py-20 px-6 bg-slate-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <Badge className="mb-4 bg-violet-100 text-violet-700 border-0">Leadership</Badge>
-            <h2 className="text-3xl font-bold text-slate-900">Meet the Team</h2>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <Badge className="mb-4 bg-violet-100 text-violet-700 border-0">Our Mission</Badge>
+            <h2 className="text-3xl font-bold text-slate-900 mb-6">Democratizing Quality Assurance</h2>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-8">
-            {team.map((member, idx) => (
-              <div key={idx} className="text-center">
-                <div className="w-24 h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-100 to-violet-100 flex items-center justify-center text-5xl">
-                  {member.image}
-                </div>
-                <h3 className="text-lg font-bold text-slate-800">{member.name}</h3>
-                <p className="text-sm text-slate-500 mb-3">{member.role}</p>
-                <div className="flex justify-center gap-2">
-                  <a href="#" className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 hover:bg-blue-500 hover:text-white transition-all">
-                    <Linkedin className="w-4 h-4" />
-                  </a>
-                  <a href="#" className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 hover:bg-blue-400 hover:text-white transition-all">
-                    <Twitter className="w-4 h-4" />
-                  </a>
-                </div>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-500 to-violet-500 flex items-center justify-center mb-4">
+                <Target className="w-6 h-6 text-white" />
               </div>
-            ))}
+              <h3 className="text-xl font-bold text-slate-800 mb-3">What We Believe</h3>
+              <p className="text-slate-600">
+                Every software team deserves access to powerful test automation—not just those 
+                with dedicated SDET teams and big budgets. Quality shouldn't be a privilege; 
+                it should be a standard.
+              </p>
+            </div>
+
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center mb-4">
+                <Rocket className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-3">Where We're Headed</h3>
+              <p className="text-slate-600">
+                We're building the future where AI handles the tedious parts of testing—maintenance, 
+                healing broken selectors, generating edge cases—so QA professionals can focus on 
+                what matters: ensuring great user experiences.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 p-8 bg-gradient-to-br from-blue-50 to-violet-50 rounded-2xl border border-blue-100 text-center">
+            <p className="text-lg text-slate-700 italic">
+              "We're not just building a testing tool. We're giving QA professionals 
+              their nights and weekends back."
+            </p>
+            <p className="text-sm text-slate-500 mt-2">— The Flowstral Team</p>
           </div>
         </div>
       </section>
@@ -183,6 +214,7 @@ export default function AboutPage() {
             <Button 
               size="lg"
               variant="outline"
+              onClick={() => navigate('/resources/careers')}
               className="h-12 px-8 border-white/30 text-white hover:bg-white/10 rounded-xl"
             >
               <Building2 className="w-5 h-5 mr-2" /> View Careers
@@ -193,7 +225,7 @@ export default function AboutPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">© 2024 Flowstral. All rights reserved.</p>
+        <p className="text-slate-400 text-sm">© 2026 Flowstral. All rights reserved.</p>
       </footer>
     </div>
   );

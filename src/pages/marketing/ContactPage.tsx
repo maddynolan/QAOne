@@ -101,8 +101,8 @@ export default function ContactPage() {
                 <div className="space-y-4">
                   {[
                     { icon: Mail, label: 'Email', value: 'hello@flowstral.com', href: 'mailto:hello@flowstral.com' },
-                    { icon: Phone, label: 'Phone', value: '+1 (555) 012-3456', href: 'tel:+15550123456' },
-                    { icon: MapPin, label: 'Address', value: 'San Francisco, CA', href: null },
+                    { icon: Phone, label: 'Phone', value: '(360) 878-3752', href: 'tel:+13608783752' },
+                    { icon: MapPin, label: 'Location', value: 'Maryland, USA', href: null },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-start gap-4">
                       <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -232,7 +232,7 @@ export default function ContactPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">© 2024 Flowstral. All rights reserved.</p>
+        <p className="text-slate-400 text-sm">© 2026 Flowstral. All rights reserved.</p>
       </footer>
     </div>
   );

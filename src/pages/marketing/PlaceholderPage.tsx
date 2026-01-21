@@ -102,11 +102,11 @@ const pageConfigs: Record<string, {
   },
   'careers': {
     title: 'Careers',
-    subtitle: 'Join Our Team',
-    description: 'We\'re building the future of QA automation. Join our passionate team and help transform how teams test software.',
+    subtitle: 'Coming Soon',
+    description: 'We\'re growing! Our careers page is currently under construction. Check back soon for exciting opportunities to join our team and help revolutionize QA automation.',
     icon: Building2,
     gradient: 'from-indigo-500 to-violet-500',
-    cta: { label: 'View Openings', action: '/contact' }
+    cta: { label: 'Contact Us Instead', action: '/contact' }
   },
   'partners': {
     title: 'Partners',
@@ -236,7 +236,7 @@ export default function PlaceholderPage() {
 
       {/* Footer */}
       <footer className="py-8 px-6 bg-slate-900 text-center">
-        <p className="text-slate-400 text-sm">© 2024 Flowstral. All rights reserved.</p>
+        <p className="text-slate-400 text-sm">© 2026 Flowstral. All rights reserved.</p>
       </footer>
     </div>
   );
