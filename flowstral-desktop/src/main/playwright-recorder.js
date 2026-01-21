@@ -6553,6 +6553,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               locator = await this.smartFinder.find(recipe);
               console.log('[PlaywrightRecorder] SmartFinder result:', locator ? 'FOUND' : 'NOT FOUND');
               if (locator) {
+                // Check if SmartFinder returned a direct click signal (coordinate-based fallback)
+                if (locator.__useDirectClick && locator.coords) {
+                  console.log(`[PlaywrightRecorder] SmartFinder requesting direct coordinate click at (${locator.coords.x}, ${locator.coords.y})`);
+                  return { 
+                    locator: null, 
+                    strategy: { type: 'SmartFinder-DirectCoordinates' },
+                    useDirectClick: true,
+                    coords: locator.coords
+                  };
+                }
                 return { locator, strategy: { type: 'SmartFinder' } };
               }
             } catch (sfError) {

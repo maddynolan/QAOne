@@ -490,6 +490,34 @@ class SmartFinder {
     }
     
     // ==========================================================================
+    // PHASE 0.5: Extract and try data-testid from CSS selector (Salesforce pattern)
+    // Salesforce often puts testIds in the confirm.cssSelector like:
+    // [data-testid="sfdc:StandardButton.Opportunity.New"] > a
+    // ==========================================================================
+    
+    if (confirm?.cssSelector) {
+      // Extract data-testid from CSS selector
+      const testIdMatch = confirm.cssSelector.match(/\[data-testid=["']([^"']+)["']\]/);
+      if (testIdMatch) {
+        const extractedTestId = testIdMatch[1];
+        this.log(`Extracted Salesforce testId from CSS: ${extractedTestId}`);
+        
+        const sfTestIdResult = await this.tryStrategy('sf-testid-extracted', async () => {
+          // Try the full attribute selector first
+          const locator = this.page.locator(`[data-testid="${extractedTestId}"]`);
+          const validated = await this.validateLocator(locator, 'sf-testid-extracted');
+          if (validated.success) return validated;
+          
+          // Try finding the child element (e.g., the <a> inside)
+          const childLocator = this.page.locator(`[data-testid="${extractedTestId}"] a, [data-testid="${extractedTestId}"] button`).first();
+          return await this.validateLocator(childLocator, 'sf-testid-extracted-child');
+        }, attempts);
+        
+        if (sfTestIdResult.success) return sfTestIdResult.locator;
+      }
+    }
+    
+    // ==========================================================================
     // PHASE 1: SCOPE - Narrow down the search area
     // ==========================================================================
     
@@ -1077,6 +1105,7 @@ class SmartFinder {
     }
     
     // Try using confirm.boundingBox (center point)
+    // CRITICAL: Must validate the element found is actually clickable and not a loading overlay
     if (confirm?.boundingBox) {
       const bboxResult = await this.tryStrategy('boundingBox-center', async () => {
         const { x, y, width, height } = confirm.boundingBox;
@@ -1085,34 +1114,115 @@ class SmartFinder {
         const centerY = y + height / 2;
         this.log(`Trying bounding box center: (${centerX}, ${centerY})`);
         
-        const element = await this.page.evaluateHandle(
-          ([cx, cy]) => {
+        // Find element at coordinates and validate it's a valid click target
+        const elementInfo = await this.page.evaluate(
+          ([cx, cy, expectedText, expectedRole]) => {
             const el = document.elementFromPoint(cx, cy);
-            return el;
+            if (!el) return null;
+            
+            // Check if it's a loading overlay, invisible element, or body
+            const isLoadingOverlay = el.id?.toLowerCase().includes('loading') || 
+                                     el.className?.toLowerCase().includes('loading') ||
+                                     el.className?.toLowerCase().includes('msgbox') ||
+                                     el.closest('[class*="loading"]') ||
+                                     el.closest('[class*="spinner"]') ||
+                                     el.closest('[class*="overlay"]');
+            
+            if (isLoadingOverlay) return null;
+            
+            // Check if element is visible
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+              return null;
+            }
+            
+            // Check if it's a generic container that we shouldn't click
+            const tag = el.tagName.toLowerCase();
+            const role = el.getAttribute('role');
+            if ((tag === 'div' || tag === 'span') && !role && !el.onclick && !el.closest('a, button, [role="button"]')) {
+              // This is likely not the clickable target, find the actual interactive element
+              const clickableChild = el.querySelector('a, button, [role="button"], input, [onclick]');
+              if (clickableChild) {
+                return {
+                  tag: clickableChild.tagName.toLowerCase(),
+                  id: clickableChild.id,
+                  className: clickableChild.className,
+                  text: clickableChild.textContent?.trim().substring(0, 50),
+                  testId: clickableChild.getAttribute('data-testid'),
+                  isValid: true
+                };
+              }
+              return null;
+            }
+            
+            // Get identifying info for building a locator
+            return {
+              tag: tag,
+              id: el.id,
+              className: el.className,
+              text: el.textContent?.trim().substring(0, 50),
+              testId: el.getAttribute('data-testid'),
+              ariaLabel: el.getAttribute('aria-label'),
+              role: role,
+              isValid: true
+            };
           },
-          [centerX, centerY]
+          [centerX, centerY, what?.text || '', what?.role || '']
         );
         
-        if (element) {
-          const isValid = await element.evaluate(el => el !== null && el !== undefined);
-          if (isValid) {
-            // Convert ElementHandle to Locator by getting a selector
-            const tagName = await element.evaluate(el => el.tagName?.toLowerCase() || 'div');
-            // Return a locator that clicks at these coordinates
-            return { 
-              success: true, 
-              locator: this.page.locator(`${tagName}`).first(), 
-              count: 1,
-              useCoordinates: { x: centerX, y: centerY } 
-            };
-          }
+        if (!elementInfo || !elementInfo.isValid) {
+          this.log(`Bounding box found invalid element (loading overlay or invisible)`);
+          return { success: false, count: 0 };
         }
-        return { success: false, count: 0 };
+        
+        this.log(`Bounding box found: tag=${elementInfo.tag}, id=${elementInfo.id}, text=${elementInfo.text}`);
+        
+        // Build the best possible locator for this element
+        let locator;
+        if (elementInfo.testId) {
+          locator = this.page.locator(`[data-testid="${elementInfo.testId}"]`).first();
+        } else if (elementInfo.id && !elementInfo.id.match(/^(aura|lwc-|:r\d)/i)) {
+          locator = this.page.locator(`#${elementInfo.id}`).first();
+        } else if (elementInfo.ariaLabel) {
+          locator = this.page.locator(`[aria-label="${elementInfo.ariaLabel}"]`).first();
+        } else if (elementInfo.role && elementInfo.text) {
+          locator = this.page.getByRole(elementInfo.role, { name: elementInfo.text }).first();
+        } else {
+          // Last resort: use mouse click at coordinates directly
+          // Store coordinates for direct click, don't use a locator
+          return { 
+            success: true, 
+            locator: null,  // Signal to use direct coordinates
+            count: 1,
+            useCoordinates: { x: centerX, y: centerY },
+            useDirectClick: true
+          };
+        }
+        
+        // Validate the locator actually resolves
+        const count = await locator.count().catch(() => 0);
+        if (count > 0) {
+          return { success: true, locator, count: 1 };
+        }
+        
+        // Fall back to direct coordinate click
+        return { 
+          success: true, 
+          locator: null,
+          count: 1,
+          useCoordinates: { x: centerX, y: centerY },
+          useDirectClick: true
+        };
       }, attempts);
       
       if (bboxResult.success) {
-        // Store coordinates for click handler to use
-        this._lastBoundingBoxCoords = bboxResult.useCoordinates;
+        if (bboxResult.useDirectClick) {
+          // Store coordinates for click handler to use direct mouse click
+          this._lastBoundingBoxCoords = bboxResult.useCoordinates;
+          this._useDirectClick = true;
+          // Return a dummy locator, the click handler will use coordinates
+          return { __useDirectClick: true, coords: bboxResult.useCoordinates };
+        }
         return bboxResult.locator;
       }
     }

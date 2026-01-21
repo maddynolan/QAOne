@@ -154,6 +154,19 @@ async function handleClick(ctx, action, options = {}) {
   
   console.log(`[ActionHandler] Clicking element: "${label}" using ${clickResult.strategy.type}`);
   
+  // Handle direct coordinate click (when SmartFinder couldn't build a valid locator)
+  if (clickResult.useDirectClick && clickResult.coords) {
+    console.log(`[ActionHandler] Using direct coordinate click at (${clickResult.coords.x}, ${clickResult.coords.y})`);
+    try {
+      await ctx.page.mouse.click(clickResult.coords.x, clickResult.coords.y);
+      console.log('[ActionHandler] ✓ Direct coordinate click succeeded');
+      return { success: true, strategy: 'DirectCoordinates' };
+    } catch (e) {
+      console.log('[ActionHandler] Direct coordinate click failed:', e.message);
+      return { success: false, error: `Direct coordinate click failed: ${e.message}` };
+    }
+  }
+  
   // Debug: Log element details
   try {
     const elementInfo = await clickResult.locator.evaluate(el => ({
