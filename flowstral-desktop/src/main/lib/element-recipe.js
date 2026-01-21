@@ -1113,6 +1113,86 @@ function getElementAnalyzerScript() {
       return null;
     },
     
+    // SALESFORCE-SPECIFIC: Find the related list or component context
+    // This helps distinguish between multiple "New" buttons on a record page
+    findSalesforceContext: function(element) {
+      var context = {};
+      var current = element;
+      
+      // Walk up the DOM looking for Salesforce-specific containers
+      while (current && current !== document.body) {
+        // Check for related list container
+        var relatedListCard = current.closest('lst-related-list-single-container, lst-related-list-container, [data-component-id*="Related"]');
+        if (relatedListCard) {
+          // Find the related list header/title
+          var header = relatedListCard.querySelector('.slds-card__header-title, .slds-text-heading--small, [slot="title"], h2, .header-title');
+          if (header) {
+            var headerText = (header.textContent || header.innerText || '').trim();
+            // Clean up the header text (remove counts like "(5)")
+            headerText = headerText.replace(/\\s*\\(\\d+\\)\\s*$/, '').trim();
+            if (headerText) {
+              context.relatedList = headerText;
+            }
+          }
+          
+          // Also get component ID if available
+          var componentId = relatedListCard.getAttribute('data-component-id') || 
+                           relatedListCard.closest('[data-component-id]')?.getAttribute('data-component-id');
+          if (componentId) {
+            context.componentName = componentId;
+          }
+          
+          break;
+        }
+        
+        // Check for activity timeline (common location for New Event/New Task)
+        var activityTimeline = current.closest('lst-activity-timeline, [data-component-id*="Activity"], .activity-timeline, runtime_sales_activities-activity-timeline');
+        if (activityTimeline) {
+          context.isActivityTimeline = true;
+          
+          var timelineHeader = activityTimeline.querySelector('.slds-card__header-title, h2, [slot="title"]');
+          if (timelineHeader) {
+            context.relatedList = (timelineHeader.textContent || '').trim();
+          }
+          break;
+        }
+        
+        // Check for flexipage component (generic Salesforce container)
+        var flexipageComponent = current.closest('flexipage-component2, [data-component-id]');
+        if (flexipageComponent && !context.componentName) {
+          var compId = flexipageComponent.getAttribute('data-component-id');
+          if (compId) {
+            context.componentName = compId;
+            
+            // Try to get a readable name from the component
+            var compHeader = flexipageComponent.querySelector('.slds-card__header-title, h2, .header-title, [slot="title"]');
+            if (compHeader && !context.relatedList) {
+              var headerText = (compHeader.textContent || '').trim().replace(/\\s*\\(\\d+\\)\\s*$/, '');
+              if (headerText) {
+                context.relatedList = headerText;
+              }
+            }
+          }
+        }
+        
+        // Check for lightning card (another common container)
+        var lightningCard = current.closest('lightning-card, article.slds-card');
+        if (lightningCard && !context.relatedList) {
+          var cardTitle = lightningCard.querySelector('.slds-card__header-title, [slot="title"]');
+          if (cardTitle) {
+            var titleText = (cardTitle.textContent || '').trim().replace(/\\s*\\(\\d+\\)\\s*$/, '');
+            if (titleText) {
+              context.relatedList = titleText;
+            }
+          }
+        }
+        
+        current = current.parentElement;
+      }
+      
+      return Object.keys(context).length > 0 ? context : null;
+    },
+    
     findNearbyLabel: function(element) {
       // Check for associated label via 'for' attribute
       var id = element.id;
@@ -1292,6 +1372,15 @@ function getElementAnalyzerScript() {
       
       var nearText = this.findNearbyLabel(element);
       if (nearText) recipe.where.nearText = nearText;
+      
+      // SALESFORCE-SPECIFIC: Detect related list context
+      // This is CRITICAL for distinguishing "New" buttons in different related lists
+      var sfContext = this.findSalesforceContext(element);
+      if (sfContext) {
+        if (sfContext.relatedList) recipe.where.relatedList = sfContext.relatedList;
+        if (sfContext.componentName) recipe.where.componentName = sfContext.componentName;
+        if (sfContext.isActivityTimeline) recipe.where.isActivityTimeline = true;
+      }
       
       // WHICH ONE is it?
       // First try testId (most stable)

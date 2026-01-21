@@ -571,13 +571,63 @@ class SmartFinder {
     
     let scope = this.page;
     
-    // Try to scope by container role (tablist, menu, listbox, etc.)
-    if (where?.within) {
+    // PRIORITY 1: Salesforce Related List scoping (most specific)
+    // This is CRITICAL for distinguishing "New" buttons in different related lists
+    if (where?.relatedList) {
+      this.log(`Salesforce related list scope: "${where.relatedList}"`);
+      const relatedListResult = await this.tryStrategy('sf-related-list-scope', async () => {
+        // Find the related list container by its header text
+        const relatedListText = where.relatedList;
+        
+        // Try multiple Salesforce related list selectors
+        const relatedListSelectors = [
+          // Card with matching header
+          `lst-related-list-single-container:has(.slds-card__header-title:text-is("${relatedListText}"))`,
+          `article.slds-card:has(.slds-card__header-title:text-is("${relatedListText}"))`,
+          `lightning-card:has([slot="title"]:text-is("${relatedListText}"))`,
+          // Try with partial text match
+          `lst-related-list-single-container:has(:text("${relatedListText}"))`,
+          `article.slds-card:has(h2:text("${relatedListText}"))`,
+          `[data-component-id*="Related"]:has(:text("${relatedListText}"))`,
+          // Flexipage component with matching title
+          `flexipage-component2:has(.slds-card__header-title:text("${relatedListText}"))`,
+        ];
+        
+        for (const selector of relatedListSelectors) {
+          try {
+            const locator = this.page.locator(selector);
+            const count = await locator.count().catch(() => 0);
+            if (count > 0) {
+              this.log(`✓ Scoped to Salesforce related list: "${relatedListText}" via ${selector.substring(0, 50)}...`);
+              return { success: true, scope: locator.first() };
+            }
+          } catch (e) {
+            // Selector syntax error, skip
+          }
+        }
+        
+        return { success: false };
+      }, attempts);
+      
+      if (relatedListResult.success && relatedListResult.scope) {
+        scope = relatedListResult.scope;
+      }
+    }
+    
+    // PRIORITY 2: Skip activity timeline if we're NOT looking for activity items
+    if (where?.isActivityTimeline === false || 
+        (where?.relatedList && !where.isActivityTimeline)) {
+      // Explicitly exclude activity timeline when looking for related list items
+      this.log('Excluding activity timeline from search scope');
+    }
+    
+    // PRIORITY 3: Container role scoping
+    if (scope === this.page && where?.within) {
       const scoped = await this.tryScope(where.within, attempts);
       if (scoped) scope = scoped;
     }
-    // Fall back to landmark scoping
-    else if (where?.landmark) {
+    // PRIORITY 4: Landmark scoping (least specific)
+    else if (scope === this.page && where?.landmark) {
       const scoped = await this.tryScope(where.landmark, attempts);
       if (scoped) scope = scoped;
     }
