@@ -1,0 +1,389 @@
+/**
+ * Strategy Memory - Learn and remember which strategies work for elements
+ * 
+ * This implements a "learning" system that:
+ * 1. Remembers which strategy succeeded for each element
+ * 2. Uses that strategy FIRST on subsequent playbacks (fast path)
+ * 3. Tracks success rates to optimize strategy ordering
+ * 4. Can auto-heal recipes with better selectors
+ * 
+ * @author Flowstral
+ * @version 1.0.0
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+// ============================================================================
+// STRATEGY MEMORY CLASS
+// ============================================================================
+
+class StrategyMemory {
+  constructor(options = {}) {
+    // Memory storage: fingerprint -> strategy info
+    this.memory = new Map();
+    
+    // Strategy success counters (global)
+    this.strategyStats = {};
+    
+    // Options
+    this.persistPath = options.persistPath || null;  // Path to save memory between sessions
+    this.maxMemorySize = options.maxMemorySize || 10000;  // Max entries to prevent memory bloat
+    this.enableAutoHeal = options.enableAutoHeal !== false;  // Auto-update recipes
+    
+    // Load persisted memory if available
+    if (this.persistPath) {
+      this._loadFromDisk();
+    }
+  }
+  
+  // ==========================================================================
+  // FINGERPRINTING - Create unique identifier for elements
+  // ==========================================================================
+  
+  /**
+   * Create a fingerprint for an element based on its recipe
+   * The fingerprint should be stable across minor DOM changes
+   */
+  createFingerprint(recipe, action = {}) {
+    const parts = [];
+    
+    // Include action type (click, fill, etc.)
+    if (action.type) {
+      parts.push(`type:${action.type}`);
+    }
+    
+    // What: role + text (primary identifiers)
+    if (recipe?.what?.role) {
+      parts.push(`role:${recipe.what.role}`);
+    }
+    if (recipe?.what?.text) {
+      // Normalize text for fingerprint (remove dynamic parts)
+      const normalizedText = this._normalizeTextForFingerprint(recipe.what.text);
+      if (normalizedText) {
+        parts.push(`text:${normalizedText}`);
+      }
+    }
+    
+    // Where: landmark context
+    if (recipe?.where?.landmark) {
+      parts.push(`landmark:${recipe.where.landmark}`);
+    }
+    if (recipe?.where?.within) {
+      parts.push(`within:${recipe.where.within}`);
+    }
+    
+    // Which: stable identifiers only
+    if (recipe?.which?.testId) {
+      parts.push(`testId:${recipe.which.testId}`);
+    }
+    if (recipe?.which?.name) {
+      parts.push(`name:${recipe.which.name}`);
+    }
+    if (recipe?.which?.ariaLabel) {
+      const normalizedLabel = this._normalizeTextForFingerprint(recipe.which.ariaLabel);
+      if (normalizedLabel) {
+        parts.push(`ariaLabel:${normalizedLabel}`);
+      }
+    }
+    
+    // Position as tiebreaker (less stable but useful)
+    if (recipe?.which?.position) {
+      parts.push(`pos:${recipe.which.position}`);
+    }
+    
+    // Create hash of combined parts
+    const fingerprintString = parts.join('|');
+    return this._hash(fingerprintString);
+  }
+  
+  /**
+   * Normalize text for fingerprinting (remove dynamic content)
+   */
+  _normalizeTextForFingerprint(text) {
+    if (!text || typeof text !== 'string') return '';
+    
+    return text
+      .toLowerCase()
+      .replace(/\d+/g, '#')  // Replace numbers with # (handles dynamic IDs, counts)
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/[^\w\s#]/g, '')  // Remove special chars except # placeholder
+      .trim()
+      .substring(0, 50);  // Limit length
+  }
+  
+  /**
+   * Simple hash function for fingerprints
+   */
+  _hash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;  // Convert to 32bit integer
+    }
+    return `fp_${Math.abs(hash).toString(36)}`;
+  }
+  
+  // ==========================================================================
+  // MEMORY OPERATIONS
+  // ==========================================================================
+  
+  /**
+   * Get the best strategy to try first for this element
+   * Returns null if no memory exists
+   */
+  getBestStrategy(fingerprint) {
+    const entry = this.memory.get(fingerprint);
+    if (!entry) return null;
+    
+    // Check if memory is still "fresh" (success rate > 80%)
+    if (entry.successCount > 0) {
+      const successRate = entry.successCount / (entry.successCount + entry.failCount);
+      if (successRate >= 0.8) {
+        console.log(`[StrategyMemory] Fast path: Using remembered strategy "${entry.strategy}" (${Math.round(successRate * 100)}% success rate)`);
+        return {
+          strategy: entry.strategy,
+          selector: entry.selector,
+          confidence: successRate,
+          timesUsed: entry.successCount + entry.failCount
+        };
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Record a successful strategy for future use
+   */
+  recordSuccess(fingerprint, strategy, selector = null, executionTimeMs = null) {
+    let entry = this.memory.get(fingerprint);
+    
+    if (!entry) {
+      entry = {
+        strategy: strategy,
+        selector: selector,
+        successCount: 0,
+        failCount: 0,
+        lastSuccess: null,
+        avgExecutionTime: null,
+        createdAt: Date.now()
+      };
+    }
+    
+    // Update entry
+    entry.strategy = strategy;  // Always update to latest successful strategy
+    if (selector) entry.selector = selector;
+    entry.successCount++;
+    entry.lastSuccess = Date.now();
+    
+    // Update average execution time
+    if (executionTimeMs !== null) {
+      if (entry.avgExecutionTime === null) {
+        entry.avgExecutionTime = executionTimeMs;
+      } else {
+        // Rolling average
+        entry.avgExecutionTime = (entry.avgExecutionTime * 0.8) + (executionTimeMs * 0.2);
+      }
+    }
+    
+    this.memory.set(fingerprint, entry);
+    
+    // Update global strategy stats
+    this._updateStrategyStats(strategy, true);
+    
+    // Persist if configured
+    this._maybePersist();
+    
+    console.log(`[StrategyMemory] Recorded success: "${strategy}" for ${fingerprint} (${entry.successCount} successes)`);
+  }
+  
+  /**
+   * Record a failed attempt (the remembered strategy didn't work)
+   */
+  recordFailure(fingerprint, strategy) {
+    const entry = this.memory.get(fingerprint);
+    if (!entry) return;
+    
+    entry.failCount++;
+    this.memory.set(fingerprint, entry);
+    
+    // Update global strategy stats
+    this._updateStrategyStats(strategy, false);
+    
+    console.log(`[StrategyMemory] Recorded failure: "${strategy}" for ${fingerprint}`);
+  }
+  
+  /**
+   * Update global strategy statistics
+   */
+  _updateStrategyStats(strategy, success) {
+    if (!this.strategyStats[strategy]) {
+      this.strategyStats[strategy] = { successes: 0, failures: 0 };
+    }
+    
+    if (success) {
+      this.strategyStats[strategy].successes++;
+    } else {
+      this.strategyStats[strategy].failures++;
+    }
+  }
+  
+  /**
+   * Get strategies ordered by success rate (most successful first)
+   */
+  getStrategyOrdering() {
+    const strategies = Object.entries(this.strategyStats)
+      .map(([strategy, stats]) => ({
+        strategy,
+        successRate: stats.successes / (stats.successes + stats.failures + 1),
+        totalUses: stats.successes + stats.failures
+      }))
+      .filter(s => s.totalUses >= 5)  // Only include strategies with enough data
+      .sort((a, b) => b.successRate - a.successRate);
+    
+    return strategies;
+  }
+  
+  // ==========================================================================
+  // RECIPE AUTO-HEALING
+  // ==========================================================================
+  
+  /**
+   * Generate healed recipe with additional/better selectors
+   * Called when a different strategy than recorded succeeds
+   */
+  generateHealedRecipe(originalRecipe, successfulStrategy, selector) {
+    if (!this.enableAutoHeal) return null;
+    
+    const healed = JSON.parse(JSON.stringify(originalRecipe));  // Deep clone
+    
+    // Add the successful selector to the recipe
+    if (!healed.healedSelectors) {
+      healed.healedSelectors = [];
+    }
+    
+    healed.healedSelectors.push({
+      strategy: successfulStrategy,
+      selector: selector,
+      addedAt: Date.now()
+    });
+    
+    // Mark as healed
+    healed._healed = true;
+    healed._healedAt = Date.now();
+    
+    return healed;
+  }
+  
+  // ==========================================================================
+  // PERSISTENCE
+  // ==========================================================================
+  
+  /**
+   * Save memory to disk (if configured)
+   */
+  _maybePersist() {
+    if (!this.persistPath) return;
+    
+    // Throttle writes (max once per 5 seconds)
+    if (this._lastPersist && Date.now() - this._lastPersist < 5000) {
+      return;
+    }
+    
+    this._persistToDisk();
+  }
+  
+  _persistToDisk() {
+    if (!this.persistPath) return;
+    
+    try {
+      const data = {
+        memory: Array.from(this.memory.entries()),
+        strategyStats: this.strategyStats,
+        savedAt: Date.now()
+      };
+      
+      fs.writeFileSync(this.persistPath, JSON.stringify(data, null, 2));
+      this._lastPersist = Date.now();
+      console.log(`[StrategyMemory] Persisted ${this.memory.size} entries to disk`);
+    } catch (e) {
+      console.error('[StrategyMemory] Failed to persist:', e.message);
+    }
+  }
+  
+  _loadFromDisk() {
+    if (!this.persistPath || !fs.existsSync(this.persistPath)) return;
+    
+    try {
+      const data = JSON.parse(fs.readFileSync(this.persistPath, 'utf-8'));
+      this.memory = new Map(data.memory || []);
+      this.strategyStats = data.strategyStats || {};
+      console.log(`[StrategyMemory] Loaded ${this.memory.size} entries from disk`);
+    } catch (e) {
+      console.error('[StrategyMemory] Failed to load:', e.message);
+    }
+  }
+  
+  // ==========================================================================
+  // STATS & DEBUGGING
+  // ==========================================================================
+  
+  /**
+   * Get memory statistics
+   */
+  getStats() {
+    const entries = Array.from(this.memory.values());
+    const totalSuccesses = entries.reduce((sum, e) => sum + e.successCount, 0);
+    const totalFailures = entries.reduce((sum, e) => sum + e.failCount, 0);
+    
+    return {
+      totalEntries: this.memory.size,
+      totalSuccesses,
+      totalFailures,
+      overallSuccessRate: totalSuccesses / (totalSuccesses + totalFailures + 1),
+      topStrategies: this.getStrategyOrdering().slice(0, 5),
+      avgExecutionTime: entries
+        .filter(e => e.avgExecutionTime)
+        .reduce((sum, e, _, arr) => sum + e.avgExecutionTime / arr.length, 0)
+    };
+  }
+  
+  /**
+   * Clear all memory (for testing)
+   */
+  clear() {
+    this.memory.clear();
+    this.strategyStats = {};
+    console.log('[StrategyMemory] Memory cleared');
+  }
+}
+
+// ============================================================================
+// SINGLETON INSTANCE
+// ============================================================================
+
+// Create singleton with default persistence path
+let instance = null;
+
+function getStrategyMemory(options = {}) {
+  if (!instance) {
+    // Default persist path: in the app's data directory
+    const defaultPath = options.persistPath || 
+      (process.env.APPDATA ? 
+        path.join(process.env.APPDATA, 'flowstral', 'strategy-memory.json') :
+        path.join(__dirname, '..', '..', '..', 'data', 'strategy-memory.json'));
+    
+    instance = new StrategyMemory({
+      persistPath: defaultPath,
+      ...options
+    });
+  }
+  return instance;
+}
+
+module.exports = {
+  StrategyMemory,
+  getStrategyMemory
+};

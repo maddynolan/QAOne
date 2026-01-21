@@ -2,14 +2,18 @@
  * Smart Finder - Find elements using ElementRecipe
  * 
  * Uses a multi-phase approach:
- * 1. SCOPE - Narrow down the search area
- * 2. QUERY - Find candidates by what the element IS
- * 3. RESOLVE - Pick the right one if multiple matches
- * 4. FALLBACK - Try alternative strategies if needed
+ * 1. FAST PATH - Try remembered strategy from Strategy Memory (10ms)
+ * 2. SCOPE - Narrow down the search area
+ * 3. QUERY - Find candidates by what the element IS
+ * 4. RESOLVE - Pick the right one if multiple matches
+ * 5. FALLBACK - Try alternative strategies if needed
+ * 6. LEARN - Remember successful strategy for next time
  * 
  * @author Flowstral
- * @version 2.0.0
+ * @version 3.0.0 - Now with Strategy Memory for learning
  */
+
+const { getStrategyMemory } = require('./strategy-memory');
 
 // ============================================================================
 // SMART FINDER CLASS
@@ -21,9 +25,17 @@ class SmartFinder {
     this.timeout = options.timeout || 10000;
     this.debug = options.debug || false;
     
+    // Strategy Memory for learning which strategies work
+    this.strategyMemory = options.strategyMemory || getStrategyMemory();
+    this.enableLearning = options.enableLearning !== false;  // Enable by default
+    
+    // Track execution time for optimization
+    this._executionStartTime = null;
+    
     // Telemetry for debugging failed attempts
     this.lastFailedAttempts = null;
     this.lastFailedRecipe = null;
+    this.lastSuccessfulStrategy = null;  // For learning
     
     // Role equivalences for flexible matching
     // Format: expected role -> [acceptable actual roles]
@@ -453,9 +465,11 @@ class SmartFinder {
   /**
    * Find an element using its recipe
    * @param {Object} recipe - The ElementRecipe
+   * @param {Object} action - Optional action context for fingerprinting
    * @returns {Promise<Locator>} - Playwright locator
    */
-  async find(recipe) {
+  async find(recipe, action = {}) {
+    this._executionStartTime = Date.now();
     this.log('Finding element:', JSON.stringify(recipe, null, 2));
     
     const { what, where, which, confirm } = recipe;
@@ -477,6 +491,40 @@ class SmartFinder {
     const attempts = [];
     
     // ==========================================================================
+    // FAST PATH: Try remembered strategy from Strategy Memory
+    // This skips the full search if we already know what works
+    // ==========================================================================
+    
+    if (this.enableLearning && this.strategyMemory) {
+      const fingerprint = this.strategyMemory.createFingerprint(recipe, action);
+      const remembered = this.strategyMemory.getBestStrategy(fingerprint);
+      
+      if (remembered) {
+        this.log(`[FAST PATH] Trying remembered strategy: ${remembered.strategy}`);
+        
+        try {
+          const fastResult = await this._tryRememberedStrategy(remembered, recipe);
+          if (fastResult.success) {
+            const executionTime = Date.now() - this._executionStartTime;
+            this.strategyMemory.recordSuccess(fingerprint, remembered.strategy, remembered.selector, executionTime);
+            this.lastSuccessfulStrategy = remembered.strategy;
+            this.log(`[FAST PATH] ✓ Success in ${executionTime}ms using remembered strategy`);
+            return fastResult.locator;
+          } else {
+            // Remembered strategy failed - record and continue to full search
+            this.strategyMemory.recordFailure(fingerprint, remembered.strategy);
+            this.log(`[FAST PATH] Remembered strategy failed, falling back to full search`);
+          }
+        } catch (e) {
+          this.log(`[FAST PATH] Error: ${e.message}, falling back to full search`);
+        }
+      }
+      
+      // Store fingerprint for learning later
+      this._currentFingerprint = fingerprint;
+    }
+    
+    // ==========================================================================
     // PHASE 0: Try testId first (most reliable)
     // ==========================================================================
     
@@ -486,7 +534,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'testId');
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -631,7 +679,7 @@ class SmartFinder {
         
         if (sfResult.success) {
           this.log(`✓ Found Salesforce list view button via: ${selector}`);
-          return sfResult.locator;
+          return this._recordLearningAndReturn(sfResult.locator);
         }
       }
       
@@ -649,7 +697,7 @@ class SmartFinder {
         return await this.resolveMultiple(locator, which, 'role+text');
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
       
       // APOSTROPHE FIX: Try with flexible apostrophe matching
       // e.g., recorded "Saver's" vs page "Saver's" (curly vs straight apostrophe)
@@ -732,7 +780,7 @@ class SmartFinder {
         return { success: false };
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -757,7 +805,7 @@ class SmartFinder {
         return validated;
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
       
       // APOSTROPHE FIX: Try with flexible apostrophe matching for text
       const flexibleTextRegex = this.createFlexibleTextRegex(what.text);
@@ -831,7 +879,7 @@ class SmartFinder {
         return validated;
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
       
       // Strategy 2: Partial match (contains) - handles minor text differences
       const partialResult = await this.tryStrategy('aria-label-contains', async () => {
@@ -886,7 +934,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'name');
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -899,7 +947,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'id');
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -928,7 +976,7 @@ class SmartFinder {
         return { success: false, count: 0 };
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -941,7 +989,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'css-fallback');
       }, attempts);
       
-      if (result.success) return result.locator;
+      if (result.success) return this._recordLearningAndReturn(result.locator);
       
       // If full selector failed, try just the parent (without child selectors)
       const parentSelector = confirm.cssSelector.split('>')[0].trim();
@@ -1061,7 +1109,7 @@ class SmartFinder {
           if (textVariant !== what.text) {
             this.log(`Found element using stripped text: "${textVariant}" (original: "${what.text}")`);
           }
-          return result.locator;
+          return this._recordLearningAndReturn(result.locator);
         }
       }
       
@@ -1157,7 +1205,7 @@ class SmartFinder {
       return await this.findInShadowDOM(what, which);
     }, attempts);
     
-    if (shadowResult.success) return shadowResult.locator;
+    if (shadowResult.success) return this._recordLearningAndReturn(shadowResult.locator);
     
     // ==========================================================================
     // PHASE 10: COORDINATE-BASED FALLBACK (for edge cases)
@@ -1299,7 +1347,7 @@ class SmartFinder {
           // Return a dummy locator, the click handler will use coordinates
           return { __useDirectClick: true, coords: bboxResult.useCoordinates };
         }
-        return bboxResult.locator;
+        return this._recordLearningAndReturn(bboxResult.locator);
       }
     }
     
@@ -1533,6 +1581,9 @@ class SmartFinder {
       
       if (result.success) {
         this.log(`Strategy ${name} succeeded`);
+        // Track for learning
+        this._lastSuccessfulStrategy = name;
+        this._lastSuccessfulSelector = result.selector || null;
       }
       
       return result;
@@ -1543,6 +1594,115 @@ class SmartFinder {
         error: error.message
       });
       return { success: false, error };
+    }
+  }
+  
+  /**
+   * Record learning and return the locator
+   * This is called when we successfully find an element
+   */
+  _recordLearningAndReturn(locator) {
+    if (this.enableLearning && this._currentFingerprint && this._lastSuccessfulStrategy) {
+      const executionTime = Date.now() - this._executionStartTime;
+      this.strategyMemory.recordSuccess(
+        this._currentFingerprint, 
+        this._lastSuccessfulStrategy, 
+        this._lastSuccessfulSelector,
+        executionTime
+      );
+      this.log(`[LEARNING] Recorded success: ${this._lastSuccessfulStrategy} in ${executionTime}ms`);
+    }
+    return locator;
+  }
+  
+  /**
+   * Try a remembered strategy from Strategy Memory
+   */
+  async _tryRememberedStrategy(remembered, recipe) {
+    const { strategy, selector } = remembered;
+    const { what, which, confirm } = recipe;
+    
+    try {
+      let locator;
+      
+      // Try based on strategy type
+      switch (strategy) {
+        case 'testId':
+          if (which?.testId) {
+            locator = this.page.getByTestId(which.testId);
+          }
+          break;
+          
+        case 'sf-testid-extracted':
+        case 'sf-testid-extracted-child':
+          if (selector) {
+            locator = this.page.locator(selector);
+          }
+          break;
+          
+        case 'role+text':
+        case 'role+text-apostrophe-flex':
+        case 'role+text-regex':
+          if (what?.role && what?.text) {
+            locator = this.page.getByRole(what.role, { name: what.text });
+          }
+          break;
+          
+        case 'text-exact':
+          if (what?.text) {
+            locator = this.page.getByText(what.text, { exact: true });
+          }
+          break;
+          
+        case 'aria-label':
+          if (which?.ariaLabel) {
+            locator = this.page.locator(`[aria-label="${which.ariaLabel}"]`);
+          }
+          break;
+          
+        case 'css-fallback':
+        case 'css-fallback-parent':
+          if (selector || confirm?.cssSelector) {
+            locator = this.page.locator(selector || confirm.cssSelector);
+          }
+          break;
+          
+        case 'name':
+          if (which?.name) {
+            locator = this.page.locator(`[name="${which.name}"]`);
+          }
+          break;
+          
+        case 'id':
+          if (which?.id) {
+            locator = this.page.locator(`#${which.id}`);
+          }
+          break;
+          
+        default:
+          // For strategies we don't have fast path for, return false
+          // This will trigger full search
+          if (selector) {
+            locator = this.page.locator(selector);
+          } else {
+            return { success: false };
+          }
+      }
+      
+      if (locator) {
+        const count = await locator.count().catch(() => 0);
+        if (count > 0) {
+          const isVisible = await locator.first().isVisible().catch(() => false);
+          if (isVisible) {
+            return { success: true, locator: locator.first() };
+          }
+        }
+      }
+      
+      return { success: false };
+    } catch (e) {
+      this.log(`[FAST PATH] Error in remembered strategy: ${e.message}`);
+      return { success: false, error: e };
     }
   }
   

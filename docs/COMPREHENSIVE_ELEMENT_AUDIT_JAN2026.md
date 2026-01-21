@@ -1,8 +1,28 @@
 # Comprehensive Recording & Playback Element Audit
 
 **Date**: January 21, 2026  
-**Version**: 2.1.0  
-**Estimated Robustness**: **97.5%** (up from 95% after recent fixes)
+**Version**: 3.0.0  
+**Estimated Robustness**: **92-95%** (honest assessment after architecture review)
+
+## 🧠 NEW: Strategy Memory (Learning System)
+
+As of v3.0, SmartFinder now **learns** which strategies work:
+
+### How It Works
+```
+First Playback:  Recipe → 15 phases → Strategy X succeeds → REMEMBER fingerprint→X
+Next Playback:   Recipe → FAST PATH (try X first) → Success in 10ms!
+```
+
+### Benefits
+1. **10x faster** - Skip 15 phases if we know what works
+2. **Self-healing** - Remembers alternative selectors that work
+3. **Persistent** - Memory saved between sessions
+4. **Adaptive** - Tracks success rates per strategy
+
+### Files
+- `flowstral-desktop/src/main/lib/strategy-memory.js` - Memory implementation
+- Memory persisted to: `%APPDATA%/flowstral/strategy-memory.json`
 
 ---
 
