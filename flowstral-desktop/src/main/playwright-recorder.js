@@ -2784,7 +2784,7 @@ class PlaywrightRecorder extends EventEmitter {
     }
     
     // Normalize the element text for consistent deduplication
-    const elementText = target?.what?.text || '';
+    // Note: elementText is already declared above when checking modal patterns
     const normalizedText = this._normalizeClickText(elementText);
     
     // Generate multiple IDs to prevent BOTH Recipe and CDP from recording same action
