@@ -579,6 +579,92 @@ class SmartFinder {
     
     let scope = this.page;
     
+    // PRIORITY 0: Salesforce Component ID scoping (most specific)
+    // Use data-component-id to scope to specific Salesforce component containers
+    // This is critical for distinguishing "New" buttons in different related lists
+    if (where?.componentName && !where?.relatedList) {
+      this.log(`Salesforce component scope: "${where.componentName}"`);
+      const componentResult = await this.tryStrategy('sf-component-scope', async () => {
+        // Match component name patterns like "force_relatedListContainer" to data-component-id
+        // Salesforce uses formats like: force_relatedListContainer, forceRelatedListContainer, etc.
+        const componentName = where.componentName;
+        
+        // Build selectors for the component
+        const componentSelectors = [
+          // Exact match
+          `[data-component-id="${componentName}"]`,
+          // Partial match (component ID may have additional suffixes)
+          `[data-component-id*="${componentName}"]`,
+          // Class-based (some components use classes instead)
+          `.${componentName}`,
+          // Try with different case variations
+          `[data-component-id*="${componentName.toLowerCase()}"]`,
+          `[data-component-id*="${componentName.replace(/_/g, '')}"]`,
+        ];
+        
+        for (const selector of componentSelectors) {
+          try {
+            const locator = this.page.locator(selector);
+            const count = await locator.count().catch(() => 0);
+            if (count > 0) {
+              this.log(`✓ Scoped to Salesforce component: "${componentName}" via ${selector}`);
+              return { success: true, scope: locator.first() };
+            }
+          } catch (e) {
+            this.log(`Component selector failed: ${selector} - ${e.message}`);
+          }
+        }
+        
+        // FALLBACK: For related list containers, try to find by position using bounding box
+        // The recorded bounding box tells us the Y position of the target "New" button
+        if (confirm?.boundingBox && what?.text?.toLowerCase() === 'new') {
+          const targetY = confirm.boundingBox.y;
+          this.log(`Trying bounding box fallback: target Y = ${targetY}`);
+          
+          // Find all "New" buttons and pick the one closest to the recorded Y position
+          const newButtons = await this.page.locator('button:has-text("New"), a:has-text("New")').all();
+          this.log(`Found ${newButtons.length} "New" buttons on page`);
+          
+          let closestButton = null;
+          let closestDistance = Infinity;
+          
+          for (const btn of newButtons) {
+            try {
+              const box = await btn.boundingBox();
+              if (box) {
+                const distance = Math.abs(box.y - targetY);
+                this.log(`  Button at Y=${box.y}, distance=${distance}`);
+                if (distance < closestDistance) {
+                  closestDistance = distance;
+                  closestButton = btn;
+                }
+              }
+            } catch (e) {
+              // Button not visible
+            }
+          }
+          
+          // Accept if within 100px of recorded position
+          if (closestButton && closestDistance < 100) {
+            this.log(`✓ Found "New" button by bounding box proximity (distance: ${closestDistance}px)`);
+            return { success: true, locator: closestButton };
+          }
+        }
+        
+        this.log(`✗ Could not scope to component "${componentName}"`);
+        return { success: false };
+      }, attempts);
+      
+      if (componentResult.success) {
+        if (componentResult.scope) {
+          scope = componentResult.scope;
+        } else if (componentResult.locator) {
+          // Direct locator match from bounding box - return immediately
+          return this._recordLearningAndReturn(componentResult.locator);
+        }
+      }
+    }
+    
     // PRIORITY 1: Salesforce Related List scoping (most specific)
     // This is CRITICAL for distinguishing "New" buttons in different related lists
     if (where?.relatedList) {
