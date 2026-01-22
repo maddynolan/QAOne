@@ -114,6 +114,11 @@ const TabManager = require('./lib/tab-manager');
 const SalesforceHandlers = require('./lib/salesforce-handlers');
 const { executeAssertion: executeAssertionHandler } = require('./lib/assertion-handlers');
 
+// Confidence System - Calculate and report step reliability
+const { ConfidenceCalculator } = require('./lib/confidence');
+const { MetadataCollector } = require('./lib/step-metadata');
+const { ScreenshotManager } = require('./lib/screenshots');
+
 // Mobile testing support (Phase 1: Emulation, Phase 2: Maestro)
 const { MOBILE_DEVICES, getDevice, getDeviceCategories, NETWORK_PRESETS, getNetworkPreset } = require('./lib/mobile-devices');
 
@@ -173,6 +178,13 @@ class PlaywrightRecorder extends EventEmitter {
     } catch (e) {
       console.error('[PlaywrightRecorder] Failed to load recorder-engine.js:', e.message);
     }
+    
+    // ========== CONFIDENCE SYSTEM ==========
+    // Track reliability of element identification for each step
+    this.confidenceCalculator = new ConfidenceCalculator({ debug: options.debugConfidence });
+    this.metadataCollector = new MetadataCollector({ debug: options.debugConfidence });
+    this.screenshotManager = new ScreenshotManager({ debug: options.debugConfidence });
+    this._stepMetadata = new Map(); // stepIndex -> metadata
   }
 
   // ===========================================================================
@@ -2827,6 +2839,33 @@ class PlaywrightRecorder extends EventEmitter {
     if (isDuplicate) {
       console.log('[PlaywrightRecorder] Skipping duplicate recipe action (normalized match):', elementText);
       return;
+    }
+    
+    // ========== CONFIDENCE CALCULATION ==========
+    // Calculate confidence score for this step based on element identification quality
+    try {
+      const recipe = target || {};
+      const matchAnalysis = {
+        totalMatches: recipe.which?.totalMatching || 1,
+        usedPosition: recipe.which?.position || 1
+      };
+      
+      const confidence = this.confidenceCalculator.calculate(recipe, matchAnalysis, {});
+      
+      // Add confidence data to the action
+      legacyAction.confidence = confidence;
+      legacyAction.matchAnalysis = matchAnalysis;
+      
+      // Log warning for low confidence
+      if (confidence.level === 'LOW') {
+        console.log(`[PlaywrightRecorder] ⚠️ LOW confidence (${confidence.score}%) for: ${description || elementText}`);
+        console.log(`  Reasons: ${confidence.deductions?.join(', ') || 'Multiple matches or position-based selection'}`);
+      } else if (confidence.level === 'MEDIUM') {
+        console.log(`[PlaywrightRecorder] ℹ️ MEDIUM confidence (${confidence.score}%) for: ${description || elementText}`);
+      }
+    } catch (confError) {
+      console.log('[PlaywrightRecorder] Confidence calculation error (non-critical):', confError.message);
+      // Continue without confidence data if calculation fails
     }
     
     this.actions.push(legacyAction);
