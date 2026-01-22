@@ -1121,17 +1121,40 @@ function getElementAnalyzerScript() {
       
       // Walk up the DOM looking for Salesforce-specific containers
       while (current && current !== document.body) {
-        // Check for related list container
-        var relatedListCard = current.closest('lst-related-list-single-container, lst-related-list-container, [data-component-id*="Related"]');
+        // Check for related list container - expanded selectors
+        var relatedListCard = current.closest(
+          'lst-related-list-single-container, lst-related-list-container, ' +
+          '[data-component-id*="Related"], [data-component-id*="relatedList"], ' +
+          '.forceRelatedListContainer, .forceRelatedListSingleContainer, ' +
+          'article.slds-card, force-list-view-manager-related-list'
+        );
         if (relatedListCard) {
-          // Find the related list header/title
-          var header = relatedListCard.querySelector('.slds-card__header-title, .slds-text-heading--small, [slot="title"], h2, .header-title');
+          // Find the related list header/title - expanded selectors
+          var header = relatedListCard.querySelector(
+            '.slds-card__header-title, .slds-text-heading--small, ' +
+            '[slot="title"], h2, .header-title, ' +
+            '.forceRelatedListCardHeader a, .forceRelatedListCardHeader span, ' +
+            '.slds-card__header-link, .slds-truncate'
+          );
           if (header) {
             var headerText = (header.textContent || header.innerText || '').trim();
-            // Clean up the header text (remove counts like "(5)")
-            headerText = headerText.replace(/\\s*\\(\\d+\\)\\s*$/, '').trim();
-            if (headerText) {
+            // Clean up the header text (remove counts like "(5)" or "(0)")
+            headerText = headerText.replace(/\s*\(\d+\)\s*$/, '').trim();
+            // Also remove "View All" if it got captured
+            headerText = headerText.replace(/\s*View All\s*$/i, '').trim();
+            if (headerText && headerText.length > 0 && headerText.length < 100) {
               context.relatedList = headerText;
+            }
+          }
+          
+          // If header lookup failed, try to get relatedList from aria-label or data attributes
+          if (!context.relatedList) {
+            var ariaLabel = relatedListCard.getAttribute('aria-label');
+            if (ariaLabel) {
+              var cleanLabel = ariaLabel.replace(/\s*\(\d+\)\s*$/, '').trim();
+              if (cleanLabel && cleanLabel.length < 100) {
+                context.relatedList = cleanLabel;
+              }
             }
           }
           
@@ -1163,12 +1186,17 @@ function getElementAnalyzerScript() {
           var compId = flexipageComponent.getAttribute('data-component-id');
           if (compId) {
             context.componentName = compId;
-            
+          
             // Try to get a readable name from the component
-            var compHeader = flexipageComponent.querySelector('.slds-card__header-title, h2, .header-title, [slot="title"]');
+            var compHeader = flexipageComponent.querySelector(
+              '.slds-card__header-title, h2, .header-title, [slot="title"], ' +
+              '.forceRelatedListCardHeader a, .forceRelatedListCardHeader span, ' +
+              '.slds-card__header-link'
+            );
             if (compHeader && !context.relatedList) {
-              var headerText = (compHeader.textContent || '').trim().replace(/\\s*\\(\\d+\\)\\s*$/, '');
-              if (headerText) {
+              var headerText = (compHeader.textContent || '').trim().replace(/\s*\(\d+\)\s*$/, '');
+              headerText = headerText.replace(/\s*View All\s*$/i, '').trim();
+              if (headerText && headerText.length > 0 && headerText.length < 100) {
                 context.relatedList = headerText;
               }
             }
@@ -1178,10 +1206,14 @@ function getElementAnalyzerScript() {
         // Check for lightning card (another common container)
         var lightningCard = current.closest('lightning-card, article.slds-card');
         if (lightningCard && !context.relatedList) {
-          var cardTitle = lightningCard.querySelector('.slds-card__header-title, [slot="title"]');
+          var cardTitle = lightningCard.querySelector(
+            '.slds-card__header-title, [slot="title"], ' +
+            '.slds-card__header-link, h2'
+          );
           if (cardTitle) {
-            var titleText = (cardTitle.textContent || '').trim().replace(/\\s*\\(\\d+\\)\\s*$/, '');
-            if (titleText) {
+            var titleText = (cardTitle.textContent || '').trim().replace(/\s*\(\d+\)\s*$/, '');
+            titleText = titleText.replace(/\s*View All\s*$/i, '').trim();
+            if (titleText && titleText.length > 0 && titleText.length < 100) {
               context.relatedList = titleText;
             }
           }
