@@ -501,9 +501,18 @@ class SmartFinder {
     // ==========================================================================
     // FAST PATH: Try remembered strategy from Strategy Memory
     // This skips the full search if we already know what works
+    // SKIP fast path for generic buttons with scoping context!
     // ==========================================================================
     
-    if (this.enableLearning && this.strategyMemory) {
+    // Generic button texts that are common across multiple components
+    const GENERIC_BUTTON_TEXTS = ['new', 'edit', 'delete', 'save', 'cancel', 'close', 'submit', 'view all', 'add', 'remove'];
+    const isGenericText = what?.text && GENERIC_BUTTON_TEXTS.includes(what.text.toLowerCase().trim());
+    const hasSpecificContext = where?.relatedList || where?.componentName || confirm?.cssSelector?.includes('data-testid');
+    
+    // Skip fast path for generic buttons with specific context - need full scoping!
+    const shouldSkipFastPath = isGenericText && hasSpecificContext;
+    
+    if (this.enableLearning && this.strategyMemory && !shouldSkipFastPath) {
       const fingerprint = this.strategyMemory.createFingerprint(recipe, action);
       const remembered = this.strategyMemory.getBestStrategy(fingerprint);
       
@@ -530,6 +539,12 @@ class SmartFinder {
       
       // Store fingerprint for learning later
       this._currentFingerprint = fingerprint;
+    } else if (shouldSkipFastPath) {
+      this.log(`[FAST PATH] Skipped for generic text "${what?.text}" with specific context`);
+      // Still create fingerprint for learning
+      if (this.enableLearning && this.strategyMemory) {
+        this._currentFingerprint = this.strategyMemory.createFingerprint(recipe, action);
+      }
     }
     
     // ==========================================================================
