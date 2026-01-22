@@ -31,7 +31,8 @@ import {
   AlertCircle,
   Lightbulb,
   Image as ImageIcon,
-  RefreshCw
+  RefreshCw,
+  Type
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -113,7 +114,7 @@ interface ElementRepairWizardProps {
 }
 
 // Tab type
-type TabType = 'picker' | 'debug' | 'ai';
+type TabType = 'picker' | 'debug' | 'ai' | 'manual';
 
 export default function ElementRepairWizard({
   open,
@@ -122,13 +123,14 @@ export default function ElementRepairWizard({
   actionIndex,
   onSave
 }: ElementRepairWizardProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('picker');
+  const [activeTab, setActiveTab] = useState<TabType>('manual'); // Start with manual when browser might not be open
   const [isLoading, setIsLoading] = useState(false);
   
   // Element Picker state
   const [isPicking, setIsPicking] = useState(false);
   const [pickedElement, setPickedElement] = useState<ElementInfo | null>(null);
   const [selectedSelector, setSelectedSelector] = useState<string>('');
+  const [manualTextOverride, setManualTextOverride] = useState<string>(''); // For text-based matching
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   
   // Debug state
@@ -139,9 +141,49 @@ export default function ElementRepairWizard({
   const [aiDescription, setAiDescription] = useState('');
   const [aiResults, setAiResults] = useState<Array<{ selector: string; confidence: number; reason: string }>>([]);
   const [isAiSearching, setIsAiSearching] = useState(false);
+  
+  // Browser availability check
+  const [browserAvailable, setBrowserAvailable] = useState(false);
 
   // Get flowstral API
   const flowstral = (window as any).flowstral;
+  
+  // Check if browser is available
+  useEffect(() => {
+    const checkBrowser = async () => {
+      try {
+        if (flowstral?.elementPicker) {
+          const status = await flowstral.getRecorderStatus?.();
+          setBrowserAvailable(status?.browserReady || status?.hasPage || false);
+        } else {
+          setBrowserAvailable(false);
+        }
+      } catch {
+        setBrowserAvailable(false);
+      }
+    };
+    if (open) {
+      checkBrowser();
+    }
+  }, [open, flowstral]);
+  
+  // Pre-populate manual fields from action
+  useEffect(() => {
+    if (open && action) {
+      // Pre-populate selector if available
+      const existingSelector = action.manualSelector || 
+        action.selectorObj?.selector || 
+        action.selector || '';
+      setSelectedSelector(existingSelector);
+      
+      // Pre-populate text if available
+      const existingText = action.manualText || 
+        action.text || 
+        action.label || 
+        action.description?.replace(/^(Click|Fill|Select)\s+["']?/i, '').replace(/["']?$/, '') || '';
+      setManualTextOverride(existingText);
+    }
+  }, [open, action]);
 
   // Load debug info when opening
   useEffect(() => {
@@ -287,17 +329,18 @@ export default function ElementRepairWizard({
 
   // Save the fix
   const handleSave = () => {
-    if (!selectedSelector && !pickedElement?.text) {
-      toast.error('Please select a selector or pick an element');
+    // Allow saving if we have selector, text override, or picked element
+    if (!selectedSelector && !manualTextOverride && !pickedElement?.text) {
+      toast.error('Please enter a selector or text to match');
       return;
     }
 
     onSave({
       manualSelector: selectedSelector || undefined,
-      manualText: pickedElement?.text || undefined
+      manualText: manualTextOverride || pickedElement?.text || undefined
     });
 
-    toast.success('✅ Step updated with new selector');
+    toast.success('✅ Step updated! Changes will apply on next playback.');
     onOpenChange(false);
   };
 
@@ -317,9 +360,115 @@ export default function ElementRepairWizard({
   // Render tab content
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'manual':
+        return (
+          <div className="space-y-4">
+            {/* Instructions - always works without browser */}
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+              <p className="text-sm text-emerald-400 flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  <strong>Manual Edit</strong> - Edit selector or text directly. 
+                  Works even when browser isn't open.
+                </span>
+              </p>
+            </div>
+
+            {/* Current Step Info */}
+            {action && (
+              <div className="bg-secondary/50 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-1">Current Step</p>
+                <p className="text-sm font-medium">
+                  {action.type || action.qword}: {action.description || action.text || action.label}
+                </p>
+              </div>
+            )}
+
+            {/* Text Override */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                Text to Match
+              </label>
+              <Input
+                value={manualTextOverride}
+                onChange={(e) => setManualTextOverride(e.target.value)}
+                placeholder='e.g., "Submit", "Opportunities", "Save"'
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                The exact text of the element (button label, link text, etc.)
+              </p>
+            </div>
+
+            {/* Selector Override */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                CSS Selector (Advanced)
+              </label>
+              <Input
+                value={selectedSelector}
+                onChange={(e) => setSelectedSelector(e.target.value)}
+                placeholder='e.g., #submit-btn, [data-testid="submit"], button.primary'
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional: CSS selector for precise element matching
+              </p>
+            </div>
+
+            {/* Test Button - only if browser available */}
+            {browserAvailable && selectedSelector && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => testSelector(selectedSelector)}
+                className="w-full"
+              >
+                <Play className="h-3 w-3 mr-2" />
+                Test Selector in Browser
+              </Button>
+            )}
+
+            {/* Test Result */}
+            {testResult && (
+              <div className={cn(
+                'flex items-center gap-2 p-2 rounded-lg text-sm',
+                testResult.success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+              )}>
+                {testResult.success ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                {testResult.message}
+              </div>
+            )}
+
+            {/* Tips */}
+            <div className="bg-secondary/30 rounded-lg p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">💡 Tips:</p>
+              <ul className="text-xs text-muted-foreground space-y-1 ml-4 list-disc">
+                <li>Use exact text as it appears on the page</li>
+                <li>For buttons, use the button label text</li>
+                <li>CSS selectors like <code className="bg-secondary px-1 rounded">[data-testid="..."]</code> are most reliable</li>
+                <li>Changes apply on next playback</li>
+              </ul>
+            </div>
+          </div>
+        );
+
       case 'picker':
         return (
           <div className="space-y-4">
+            {/* Browser not available warning */}
+            {!browserAvailable && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+                <p className="text-sm text-amber-400 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    <strong>Browser not open.</strong> Start recording or open a page first, 
+                    or use the <strong>Manual Edit</strong> tab.
+                  </span>
+                </p>
+              </div>
+            )}
+            
             {/* Instructions */}
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
               <p className="text-sm text-blue-400 flex items-center gap-2">
@@ -714,16 +863,29 @@ export default function ElementRepairWizard({
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg">
           <button
+            onClick={() => setActiveTab('manual')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              activeTab === 'manual'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Type className="h-4 w-4" />
+            Manual
+          </button>
+          <button
             onClick={() => setActiveTab('picker')}
             className={cn(
               'flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               activeTab === 'picker'
                 ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+              !browserAvailable && 'opacity-50'
             )}
           >
             <MousePointer2 className="h-4 w-4" />
-            Pick Element
+            Pick
           </button>
           <button
             onClick={() => setActiveTab('debug')}
@@ -731,11 +893,12 @@ export default function ElementRepairWizard({
               'flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               activeTab === 'debug'
                 ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+              !browserAvailable && 'opacity-50'
             )}
           >
             <Bug className="h-4 w-4" />
-            Debug Info
+            Debug
           </button>
           <button
             onClick={() => setActiveTab('ai')}
@@ -743,11 +906,12 @@ export default function ElementRepairWizard({
               'flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               activeTab === 'ai'
                 ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+              !browserAvailable && 'opacity-50'
             )}
           >
             <Sparkles className="h-4 w-4" />
-            AI Assist
+            AI
           </button>
         </div>
 
@@ -761,7 +925,7 @@ export default function ElementRepairWizard({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {selectedSelector && (
+          {browserAvailable && selectedSelector && (
             <Button
               onClick={() => testSelector(selectedSelector)}
               variant="outline"
@@ -773,7 +937,7 @@ export default function ElementRepairWizard({
           )}
           <Button
             onClick={handleSave}
-            disabled={!selectedSelector && !pickedElement}
+            disabled={!selectedSelector && !manualTextOverride && !pickedElement}
             className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
           >
             <CheckCircle2 className="h-4 w-4 mr-2" />
