@@ -83,8 +83,28 @@ import {
 } from "@/lib/automation-linking";
 // Element Repair Wizard - Visual element picker for fixing failed steps
 import ElementRepairWizard from "@/components/ElementRepairWizard";
+// Confidence System - Shows reliability of element identification
+import { StepConfidenceIndicator, ConfidenceLevel } from "@/components/confidence";
 
 // Types
+interface StepConfidence {
+  score: number;
+  level: ConfidenceLevel;
+  reasons?: string[];
+  deductions?: string[];
+  recommendation?: string | null;
+}
+
+interface MatchAnalysis {
+  totalMatches: number;
+  usedPosition: number;
+  matchDetails?: Array<{
+    position: number;
+    text: string;
+    context: string | null;
+  }>;
+}
+
 interface RecordedAction {
   id: string;
   qword: string;
@@ -95,6 +115,9 @@ interface RecordedAction {
   selectorObj?: any;
   selector?: any;
   type?: string;
+  // Confidence system fields
+  confidence?: StepConfidence;
+  matchAnalysis?: MatchAnalysis;
 }
 
 interface Suggestion {
@@ -4858,13 +4881,20 @@ Recorded Test
                     </div>
                     {getActionIcon(action.qword || action.type || '')}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground truncate">
-                        {getDisplayDescription(displayAction)}
-                        {isPw && <span className="ml-1 text-primary">🔒</span>}
-                        {isCrossOriginAction(action) && (
-                          <span className="ml-1 text-yellow-500">⚠️</span>
-                        )}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-foreground truncate flex-1 min-w-0">
+                          {getDisplayDescription(displayAction)}
+                          {isPw && <span className="ml-1 text-primary">🔒</span>}
+                          {isCrossOriginAction(action) && (
+                            <span className="ml-1 text-yellow-500">⚠️</span>
+                          )}
+                        </p>
+                        {/* Confidence indicator - shows when confidence is not HIGH or multiple matches */}
+                        <StepConfidenceIndicator
+                          confidence={action.confidence}
+                          matchAnalysis={action.matchAnalysis}
+                        />
+                      </div>
                       {isCrossOriginAction(action) ? (
                         <p className="text-xs text-yellow-500/80 truncate">
                           {(action as any).userActions?.length > 0 
@@ -4912,11 +4942,11 @@ Recorded Test
                         <span className="text-[10px]">{currentStepIndex + 1}</span>
                       </Button>
                     )}
-                    {/* EDIT SELECTOR BUTTON - Manual Override */}
+                    {/* EDIT SELECTOR BUTTON - Manual Override - Always visible for discoverability */}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 shrink-0"
+                      className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         openEditSelectorModal(index);

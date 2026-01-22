@@ -37,6 +37,13 @@ class SmartFinder {
     this.lastFailedRecipe = null;
     this.lastSuccessfulStrategy = null;  // For learning
     
+    // Confidence tracking for each find operation
+    this._lastFindResult = null;
+    this._matchCount = 0;
+    this._usedPosition = 1;
+    this._exactTextMatch = null;
+    this._fallbacksUsed = [];
+    
     // Role equivalences for flexible matching
     // Format: expected role -> [acceptable actual roles]
     this.roleEquivalences = {
@@ -470,6 +477,7 @@ class SmartFinder {
    */
   async find(recipe, action = {}) {
     this._executionStartTime = Date.now();
+    this._resetTrackingState(); // Reset confidence tracking for new find
     this.log('Finding element:', JSON.stringify(recipe, null, 2));
     
     const { what, where, which, confirm } = recipe;
@@ -1823,8 +1831,9 @@ class SmartFinder {
    * This is called when we successfully find an element
    */
   _recordLearningAndReturn(locator) {
+    const executionTime = Date.now() - this._executionStartTime;
+    
     if (this.enableLearning && this._currentFingerprint && this._lastSuccessfulStrategy) {
-      const executionTime = Date.now() - this._executionStartTime;
       this.strategyMemory.recordSuccess(
         this._currentFingerprint, 
         this._lastSuccessfulStrategy, 
@@ -1833,7 +1842,48 @@ class SmartFinder {
       );
       this.log(`[LEARNING] Recorded success: ${this._lastSuccessfulStrategy} in ${executionTime}ms`);
     }
+    
+    // Record the find result for confidence tracking
+    this._lastFindResult = {
+      strategy: this._lastSuccessfulStrategy,
+      matchCount: this._matchCount || 1,
+      usedPosition: this._usedPosition || 1,
+      exactTextMatch: this._exactTextMatch,
+      fallbacksUsed: this._fallbacksUsed || [],
+      executionTime,
+      success: true
+    };
+    
     return locator;
+  }
+
+  /**
+   * Get the last find operation's result metadata
+   * Used for confidence calculation
+   * 
+   * @returns {Object} Find result with strategy, matchCount, etc.
+   */
+  getLastFindResult() {
+    return this._lastFindResult || {
+      strategy: null,
+      matchCount: 1,
+      usedPosition: 1,
+      exactTextMatch: null,
+      fallbacksUsed: [],
+      executionTime: 0,
+      success: false
+    };
+  }
+
+  /**
+   * Reset tracking state for a new find operation
+   */
+  _resetTrackingState() {
+    this._matchCount = 0;
+    this._usedPosition = 1;
+    this._exactTextMatch = null;
+    this._fallbacksUsed = [];
+    this._lastFindResult = null;
   }
   
   /**
@@ -2008,17 +2058,23 @@ class SmartFinder {
   async resolveMultiple(locator, which, strategyName) {
     const count = await locator.count();
     
+    // Track match count for confidence
+    this._matchCount = count;
+    
     if (count === 0) {
       return { success: false, count: 0 };
     }
     
     if (count === 1) {
+      this._usedPosition = 1;
       return { success: true, locator: locator.first(), count: 1 };
     }
     
     // Multiple matches - use position if available (most reliable for disambiguation)
     if (typeof which?.position === 'number' && which.position > 0 && which.position <= count) {
       this.log(`Multiple matches (${count}), using position ${which.position}`);
+      this._usedPosition = which.position;
+      this._fallbacksUsed.push('position');
       return { success: true, locator: locator.nth(which.position - 1), count };
     }
     
@@ -2038,6 +2094,8 @@ class SmartFinder {
         const idCount = await idLocator.count();
         if (idCount === 1) {
           this.log(`Multiple matches (${count}), filtered to unique ID: ${which.id}`);
+          this._usedPosition = 1;
+          this._matchCount = 1; // Filtered down to 1
           return { success: true, locator: idLocator.first(), count: 1 };
         }
       } catch (e) {
@@ -2054,6 +2112,8 @@ class SmartFinder {
           const box = await candidate.boundingBox().catch(() => null);
           if (box && box.y >= 0 && box.y < 1000) { // Visible in viewport
             this.log(`Multiple matches (${count}), using first visible in viewport (index ${i})`);
+            this._usedPosition = i + 1;
+            this._fallbacksUsed.push('visibility');
             return { success: true, locator: candidate, count };
           }
         }
@@ -2064,6 +2124,8 @@ class SmartFinder {
     
     // Default to first with warning
     this.log(`WARNING: Multiple matches (${count}) with no disambiguation, using first. Consider recording with element index.`);
+    this._usedPosition = 1;
+    this._fallbacksUsed.push('first-of-many');
     return { success: true, locator: locator.first(), count };
   }
   
