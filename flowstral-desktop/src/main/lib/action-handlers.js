@@ -384,6 +384,38 @@ async function handleFill(ctx, action, options = {}) {
     return { success: true, strategy: fillResult.strategy.type };
   }
   
+  // SALESFORCE APP LAUNCHER FALLBACK - Handle App Launcher search specifically
+  // The App Launcher modal has its own search input that may not be found by standard strategies
+  try {
+    const appLauncherSelectors = [
+      'one-app-launcher-modal input[type="search"]',
+      'one-app-launcher-modal input[placeholder*="Search"]',
+      'one-app-launcher-modal input[role="combobox"]',
+      '[class*="appLauncher"] input[type="search"]',
+      '[class*="appLauncher"] input[placeholder*="Search"]',
+      'lightning-modal input[type="search"]',
+      'lightning-modal input[placeholder*="Search"]',
+      // Generic modal search
+      '[role="dialog"] input[type="search"]',
+      '[role="dialog"] input[placeholder*="Search"]'
+    ];
+    
+    for (const selector of appLauncherSelectors) {
+      const appLauncherInput = ctx.page.locator(selector).first();
+      const count = await appLauncherInput.count().catch(() => 0);
+      if (count > 0) {
+        await appLauncherInput.click({ timeout: 3000 });
+        await ctx.page.waitForTimeout(100);
+        await appLauncherInput.clear().catch(() => {});
+        await appLauncherInput.fill(value || '', { timeout: 5000 });
+        console.log(`[ActionHandler] ✓ Salesforce App Launcher fill succeeded with: ${selector}`);
+        return { success: true, strategy: 'sf-app-launcher-search' };
+      }
+    }
+  } catch (e) {
+    console.log(`[ActionHandler] Salesforce App Launcher fill fallback failed:`, e.message);
+  }
+  
   // IFRAME FALLBACK - Search inside iframes
   console.log(`[ActionHandler] Fill: Element not on main page, checking iframes...`);
   const iframeFillResult = await searchIframesForFill(ctx, action, value, label, timeout);
