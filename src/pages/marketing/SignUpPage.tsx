@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { validateBusinessEmail, isPersonalEmail, getEmailDomain } from '@/lib/email-validator';
+import { captureSignupLead } from '@/lib/leads-service';
 
 export default function SignUpPage() {
   const navigate = useNavigate();
@@ -62,6 +63,15 @@ export default function SignUpPage() {
     setLoading(true);
 
     try {
+      // Capture lead for sales tracking (non-blocking)
+      captureSignupLead(formData.email, formData.name, formData.company)
+        .then(result => {
+          if (result.success) {
+            console.log('[Signup] Lead captured:', result.lead_id);
+          }
+        })
+        .catch(() => {}); // Silent fail - don't block signup
+      
       await signUp(formData.email, formData.password, formData.name);
       toast.success('Account created! Check your email to verify.');
       // Navigate to welcome page instead of dashboard

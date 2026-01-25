@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { captureContactLead } from '@/lib/leads-service';
 
 // Shared Header
 function MarketingHeader() {
@@ -67,8 +68,42 @@ export default function ContactPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    alert('Thank you! We\'ll get back to you soon.');
+    
+    // Capture lead for tracking (non-blocking)
+    captureContactLead(
+      formData.email,
+      formData.name,
+      formData.company,
+      formData.message,
+      formData.subject
+    ).then(result => {
+      if (result.success) {
+        console.log('[Contact] Lead captured:', result.lead_id);
+      }
+    }).catch(() => {}); // Silent fail
+    
+    // Route to correct email based on subject
+    const emailMap: Record<string, string> = {
+      'general': 'support@flowstral.com',
+      'sales': 'sales@flowstral.com',
+      'support': 'support@flowstral.com',
+      'demo': 'sales@flowstral.com',
+      'partnership': 'sales@flowstral.com',
+      'legal': 'legal@flowstral.com'
+    };
+    
+    const toEmail = emailMap[formData.subject] || 'support@flowstral.com';
+    const subjectLine = encodeURIComponent(`[Flowstral ${formData.subject}] Message from ${formData.name}`);
+    const body = encodeURIComponent(
+      `Name: ${formData.name}\n` +
+      `Email: ${formData.email}\n` +
+      `Company: ${formData.company || 'Not provided'}\n` +
+      `Subject: ${formData.subject}\n\n` +
+      `Message:\n${formData.message}`
+    );
+    
+    // Open email client with pre-filled content
+    window.location.href = `mailto:${toEmail}?subject=${subjectLine}&body=${body}`;
   };
 
   return (
@@ -100,7 +135,9 @@ export default function ContactPage() {
                 <h2 className="text-2xl font-bold text-slate-900 mb-6">Contact Information</h2>
                 <div className="space-y-4">
                   {[
-                    { icon: Mail, label: 'Email', value: 'support@flowstral.com', href: 'mailto:support@flowstral.com' },
+                    { icon: Mail, label: 'Sales', value: 'sales@flowstral.com', href: 'mailto:sales@flowstral.com' },
+                    { icon: Mail, label: 'Support', value: 'support@flowstral.com', href: 'mailto:support@flowstral.com' },
+                    { icon: Mail, label: 'Legal', value: 'legal@flowstral.com', href: 'mailto:legal@flowstral.com' },
                     { icon: Phone, label: 'Phone', value: '(360) 878-3752', href: 'tel:+13608783752' },
                     { icon: MapPin, label: 'Location', value: 'Maryland, USA', href: null },
                   ].map((item, idx) => (
@@ -202,6 +239,7 @@ export default function ContactPage() {
                       <option value="support">Technical Support</option>
                       <option value="demo">Request a Demo</option>
                       <option value="partnership">Partnership</option>
+                      <option value="legal">Legal / Compliance</option>
                     </select>
                   </div>
 

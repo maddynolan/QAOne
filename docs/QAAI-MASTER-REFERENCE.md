@@ -391,6 +391,57 @@ await runner.runTest(steps);
 
 ---
 
+## 10b. PWA Testing ⭐ NEW
+
+### Overview
+QAAI now includes comprehensive Progressive Web App (PWA) testing capabilities.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| Manifest Validation | Validate manifest.json for PWA compliance |
+| Service Worker Testing | Detect and verify SW registration/activation |
+| Offline Testing | Test app behavior when offline |
+| Cache Verification | Verify cached resources for offline use |
+| Installability Check | Verify all PWA installability criteria |
+
+### PWA Test Actions
+
+| Action Type | Description |
+|-------------|-------------|
+| `pwaAudit` | Comprehensive PWA check (score 0-100) |
+| `checkManifest` | Validate web app manifest |
+| `checkServiceWorker` | Verify SW registration |
+| `waitForServiceWorker` | Wait for SW activation |
+| `testOffline` | Test offline functionality |
+| `checkCache` | Verify cache storage |
+| `checkInstallability` | Check all installability criteria |
+
+### Quick Example
+
+```javascript
+// In test steps
+const pwaSteps = [
+  { type: 'goto', url: 'https://your-pwa.com' },
+  { type: 'waitForServiceWorker', state: 'activated' },
+  { 
+    type: 'pwaAudit',
+    expectedElements: ['body', '#app'],
+    expectedText: ['Welcome']
+  }
+];
+```
+
+### Key Files
+- `flowstral-desktop/src/main/lib/pwa-testing/` - PWA testing module
+- `flowstral-desktop/src/main/ipc/pwa-handlers.js` - IPC handlers
+
+### Documentation
+- `docs/PWA_TESTING_GUIDE.md` - Complete guide
+
+---
+
 ## 11. AI Features
 
 ### 🚀 Flowpilot - Goal-Based Agentic Testing

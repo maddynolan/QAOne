@@ -13,6 +13,15 @@
 const { findElementWithAI, clickAtCoordinates, fillAtCoordinates, retryWithBackoff } = require('./ai-fallback');
 const RecordingUtils = require('./recording-utils');
 
+// Import PWA testing module (lazy loaded to avoid startup cost if not used)
+let PWATesting = null;
+const getPWATesting = () => {
+  if (!PWATesting) {
+    PWATesting = require('./pwa-testing');
+  }
+  return PWATesting;
+};
+
 // ============================================================
 // TEXT NORMALIZATION UTILITIES
 // Critical for matching recorded text against page text
@@ -1241,6 +1250,201 @@ async function handleAssertValue(ctx, action, options = {}) {
 }
 
 // ============================================================
+// PWA TESTING HANDLERS
+// Progressive Web App testing actions
+// ============================================================
+
+/**
+ * Handle PWA Audit - comprehensive PWA check
+ */
+async function handlePWAAudit(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  try {
+    const result = await pwa.runPWAAudit(ctx, {
+      checkManifest: action.checkManifest !== false,
+      checkServiceWorker: action.checkServiceWorker !== false,
+      checkOffline: action.checkOffline !== false && ctx.cdpSession,
+      checkCache: action.checkCache !== false,
+      offlineExpectedElements: action.expectedElements || ['body'],
+      offlineExpectedText: action.expectedText || [],
+      expectedCachedUrls: action.expectedCachedUrls || []
+    });
+    
+    return {
+      success: result.passed,
+      score: result.score,
+      categories: result.categories,
+      summary: result.summary
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle PWA Manifest validation
+ */
+async function handleCheckManifest(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  try {
+    const result = await pwa.validateManifestFromPage(ctx.page);
+    
+    return {
+      success: result.valid,
+      manifestUrl: result.manifestUrl,
+      score: result.score,
+      issues: result.issues,
+      warnings: result.warnings,
+      manifest: result.manifest
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle Service Worker status check
+ */
+async function handleCheckServiceWorker(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  try {
+    const result = await pwa.checkServiceWorkerStatus(ctx.page);
+    
+    return {
+      success: result.registered,
+      supported: result.supported,
+      registered: result.registered,
+      ready: result.ready,
+      count: result.count,
+      registrations: result.registrations
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle Wait for Service Worker
+ */
+async function handleWaitForServiceWorker(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  const targetState = action.state || action.targetState || 'activated';
+  const { timeout = 30000 } = options;
+  
+  try {
+    const result = await pwa.waitForServiceWorker(ctx.page, targetState, timeout);
+    
+    return {
+      success: result.success,
+      state: result.state,
+      scope: result.scope
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle Test Offline mode
+ */
+async function handleTestOffline(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  if (!ctx.cdpSession) {
+    return { success: false, error: 'CDP session required for offline testing' };
+  }
+  
+  try {
+    const result = await pwa.testOfflineMode(ctx, {
+      expectedElements: action.expectedElements || ['body'],
+      expectedText: action.expectedText || [],
+      expectedUrls: action.expectedUrls || [],
+      skipReload: action.skipReload || false,
+      timeout: options.timeout
+    });
+    
+    return {
+      success: result.offlineCapable,
+      offlineCapable: result.offlineCapable,
+      elementChecks: result.elementChecks,
+      textChecks: result.textChecks,
+      urlChecks: result.urlChecks,
+      errors: result.errors
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle Check Cache storage
+ */
+async function handleCheckCache(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  try {
+    // Get cache info
+    const cacheInfo = await pwa.getCacheInfo(ctx.page);
+    
+    // Verify critical resources if requested
+    let resourceCheck = null;
+    if (action.checkResources !== false) {
+      resourceCheck = await pwa.verifyCriticalResources(ctx.page, {
+        checkStyles: action.checkStyles !== false,
+        checkScripts: action.checkScripts !== false,
+        checkImages: action.checkImages || false,
+        checkFonts: action.checkFonts || false
+      });
+    }
+    
+    // Verify specific URLs if provided
+    let urlCheck = null;
+    if (action.expectedUrls && action.expectedUrls.length > 0) {
+      urlCheck = await pwa.verifyCachedUrls(ctx.page, action.expectedUrls);
+    }
+    
+    const success = cacheInfo.supported && 
+                   cacheInfo.cacheCount > 0 && 
+                   (resourceCheck?.success !== false);
+    
+    return {
+      success,
+      cacheCount: cacheInfo.cacheCount,
+      totalEntries: cacheInfo.totalEntries,
+      cacheNames: cacheInfo.cacheNames,
+      resourceCheck,
+      urlCheck
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Handle Check Installability
+ */
+async function handleCheckInstallability(ctx, action, options = {}) {
+  const pwa = getPWATesting();
+  
+  try {
+    const result = await pwa.checkInstallability(ctx.page);
+    
+    return {
+      success: result.installable,
+      installable: result.installable,
+      criteria: result.criteria,
+      issues: result.issues,
+      manifestValidation: result.manifestValidation
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================================
 // UNIFIED EXECUTION POINT
 // This is THE SINGLE entry point for all action execution.
 // Both PlaywrightRecorder and TestExecutor MUST use this.
@@ -1376,6 +1580,44 @@ async function executeAction(ctx, action, options = {}) {
         }
         return { success: false, error: 'No page available for screenshot' };
       
+      // ========================================
+      // PWA TESTING ACTIONS
+      // ========================================
+      
+      // PWA Audit - comprehensive PWA check
+      case 'pwaaudit':
+      case 'validatepwa':
+        return await handlePWAAudit(ctx, action, { timeout });
+      
+      // PWA Manifest validation
+      case 'checkmanifest':
+      case 'validatemanifest':
+        return await handleCheckManifest(ctx, action, { timeout });
+      
+      // Service Worker status check
+      case 'checkserviceworker':
+      case 'serviceworkerstatus':
+        return await handleCheckServiceWorker(ctx, action, { timeout });
+      
+      // Wait for Service Worker
+      case 'waitforserviceworker':
+        return await handleWaitForServiceWorker(ctx, action, { timeout });
+      
+      // Test offline mode
+      case 'testoffline':
+      case 'offlinetest':
+        return await handleTestOffline(ctx, action, { timeout });
+      
+      // Check cache storage
+      case 'checkcache':
+      case 'verifycache':
+        return await handleCheckCache(ctx, action, { timeout });
+      
+      // Check installability
+      case 'checkinstallability':
+      case 'pwainstallable':
+        return await handleCheckInstallability(ctx, action, { timeout });
+      
       default:
         console.warn(`[ActionHandlers] Unknown action type: ${actionType}`);
         return { success: false, error: `Unknown action type: ${actionType}` };
@@ -1420,6 +1662,18 @@ module.exports = {
   handleAssertText,
   handleAssertVisible,
   handleAssertValue,
+  
+  // PWA Testing handlers
+  handlePWAAudit,
+  handleCheckManifest,
+  handleCheckServiceWorker,
+  handleWaitForServiceWorker,
+  handleTestOffline,
+  handleCheckCache,
+  handleCheckInstallability,
+  
+  // PWA Testing module (lazy loaded)
+  getPWATesting,
   
   // AI Fallback (re-exported from ai-fallback.js)
   findElementWithAI,

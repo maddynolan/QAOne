@@ -11,6 +11,7 @@
 
 const { registerRecorderHandlers } = require('./recorder-handlers');
 const { registerMobileHandlers } = require('./mobile-handlers');
+const { registerPWAHandlers } = require('./pwa-handlers');
 
 /**
  * Register all IPC handlers
@@ -27,6 +28,9 @@ function registerAllIPCHandlers(deps) {
   // Register mobile handlers (needs recorder access)
   registerMobileHandlers({ ...deps, getRecorder });
   
+  // Register PWA testing handlers (needs recorder access)
+  registerPWAHandlers({ ...deps, getRecorder });
+  
   console.log('[IPC] All handlers registered');
   
   return { getRecorder };
@@ -35,5 +39,6 @@ function registerAllIPCHandlers(deps) {
 module.exports = {
   registerAllIPCHandlers,
   registerRecorderHandlers,
-  registerMobileHandlers
+  registerMobileHandlers,
+  registerPWAHandlers
 };

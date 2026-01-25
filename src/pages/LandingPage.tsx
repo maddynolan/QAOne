@@ -1707,14 +1707,17 @@ function Footer() {
       {/* Contact Bar */}
       <div className="bg-slate-950">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-center gap-8 text-sm text-slate-500">
-          <a href="mailto:hello@flowstral.com" className="flex items-center gap-2 hover:text-white transition-colors">
-            <Mail className="w-4 h-4" /> hello@flowstral.com
+          <a href="mailto:sales@flowstral.com" className="flex items-center gap-2 hover:text-white transition-colors">
+            <Mail className="w-4 h-4" /> sales@flowstral.com
           </a>
-          <a href="tel:+1-555-0123" className="flex items-center gap-2 hover:text-white transition-colors">
-            <Phone className="w-4 h-4" /> +1 (555) 012-3456
+          <a href="mailto:support@flowstral.com" className="flex items-center gap-2 hover:text-white transition-colors">
+            <Mail className="w-4 h-4" /> support@flowstral.com
+          </a>
+          <a href="tel:+13608783752" className="flex items-center gap-2 hover:text-white transition-colors">
+            <Phone className="w-4 h-4" /> (360) 878-3752
           </a>
           <span className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> San Francisco, CA
+            <MapPin className="w-4 h-4" /> Maryland, USA
           </span>
         </div>
       </div>

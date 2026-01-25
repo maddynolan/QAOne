@@ -173,7 +173,7 @@ We process data lawfully under GDPR, including:
 - Legitimate interests for security and improvement
 
 **Exercising Your Rights:**
-To exercise any of these rights, contact us at privacy@flowstral.com or through your account settings.`
+To exercise any of these rights, contact us at legal@flowstral.com or through your account settings.`
   },
   {
     id: 'retention',
@@ -348,8 +348,8 @@ export default function PrivacyPage() {
                   <Button onClick={() => navigate('/contact')} className="bg-emerald-600 hover:bg-emerald-700">
                     Contact Us
                   </Button>
-                  <Button variant="outline" onClick={() => window.location.href = 'mailto:privacy@flowstral.com'}>
-                    privacy@flowstral.com
+                  <Button variant="outline" onClick={() => window.location.href = 'mailto:legal@flowstral.com'}>
+                    legal@flowstral.com
                   </Button>
                 </div>
               </div>

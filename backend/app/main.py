@@ -7222,6 +7222,10 @@ app.include_router(owasp_security_router)
 from app.routers.visual_testing_api import router as visual_testing_router
 app.include_router(visual_testing_router)
 
+# Leads API - Lead generation and tracking for sales
+from app.routers.leads_api import router as leads_router
+app.include_router(leads_router)
+
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
     import sys
