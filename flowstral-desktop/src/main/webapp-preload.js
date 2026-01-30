@@ -229,6 +229,27 @@ contextBridge.exposeInMainWorld('flowstral', {
     
     // Status
     getTestStatus: () => ipcRenderer.invoke('playwright-recorder-get-test-status'),
+    
+    // ============ FAILURE REPAIR API ============
+    // Help users fix failed steps with browser-assisted debugging
+    
+    // Get the last failure state (screenshot, URL, step info)
+    getFailureState: () => ipcRenderer.invoke('playwright-recorder-get-failure-state'),
+    
+    // Re-open browser to the failed state (for visual debugging)
+    reopenToFailure: () => ipcRenderer.invoke('playwright-recorder-reopen-to-failure'),
+    
+    // Retry just the failed step with an updated action
+    retryFailedStep: (updatedAction) => ipcRenderer.invoke('playwright-recorder-retry-failed-step', updatedAction),
+    
+    // Resume test execution from the failed step
+    resumeFromFailure: (options) => ipcRenderer.invoke('playwright-recorder-resume-from-failure', options),
+    
+    // Close browser manually (when done debugging)
+    closeBrowser: () => ipcRenderer.invoke('playwright-recorder-close-browser'),
+    
+    // Check if browser is currently open
+    isBrowserOpen: () => ipcRenderer.invoke('playwright-recorder-is-browser-open'),
   },
   
   // ========================================================================

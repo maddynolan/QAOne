@@ -5,6 +5,7 @@ Performance Testing API - REST endpoints for performance testing tool
 from fastapi import APIRouter, HTTPException, Request
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import json
 import logging
 
 from app.services.performance.performance_engine import PerformanceEngine
@@ -17,6 +18,48 @@ router = APIRouter(prefix="/api/performance", tags=["performance"])
 
 # Global performance engine instance
 performance_engine = PerformanceEngine()
+
+
+def _scenario_to_k6_script(compiled_scenario: dict, base_url: str = "") -> str:
+    """Generate a k6 script from a compiled scenario (for export / CI)."""
+    config = compiled_scenario.get("config", {})
+    steps = compiled_scenario.get("steps", [])
+    vus = config.get("virtual_users", 50)
+    duration = config.get("duration_seconds", 60)
+    lines = [
+        "import http from 'k6/http';",
+        "import { check } from 'k6';",
+        "",
+        "export const options = {",
+        f"  vus: {vus},",
+        f"  duration: '{duration}s',",
+        "};",
+        "",
+        "export default function () {",
+        f"  const baseUrl = __ENV.BASE_URL || '{base_url or 'https://example.com'}';\n",
+    ]
+    for step in steps:
+        if step.get("type") == "http" and step.get("url"):
+            method = (step.get("method") or "GET").upper()
+            url = step.get("url", "")
+            if url.startswith("http"):
+                url_js = json.dumps(url)
+            else:
+                path = url if url.startswith("/") else "/" + url.lstrip("/")
+                url_js = "baseUrl + " + json.dumps(path)
+            if method == "GET":
+                lines.append(f"  const res = http.get({url_js});")
+            elif method == "POST":
+                body = step.get("body") or "{}"
+                if isinstance(body, dict):
+                    body = json.dumps(body)
+                lines.append(f"  const res = http.post({url_js}, {json.dumps(body)});")
+            else:
+                lines.append(f"  const res = http.request('{method}', {url_js});")
+            lines.append("  check(res, { 'status is 2xx': (r) => r.status >= 200 && r.status < 300 });")
+            lines.append("")
+    lines.append("}")
+    return "\n".join(lines)
 
 
 @router.post("/scenarios")
@@ -351,13 +394,16 @@ async def compile_load_requests(request: Request, body: dict):
         
         compiler = get_scenario_compiler()
         scenario = compiler.compile_from_api_requests(requests_data, name, config)
-        
-        return {
+        base_url = config.target_url or (scenario.config.target_url if scenario.config else "")
+        out = {
             "status": "success",
             "scenario_id": scenario.scenario_id,
             "compiled_scenario": scenario.to_dict(),
-            "base_url": config.target_url or (scenario.config.target_url if scenario.config else ""),
+            "base_url": base_url,
         }
+        if body.get("export") == "k6":
+            out["k6_script"] = _scenario_to_k6_script(scenario.to_dict(), base_url)
+        return out
     
     except Exception as e:
         logger.error(f"Error compiling load requests: {e}", exc_info=True)
@@ -659,7 +705,8 @@ async def run_test(request: Request, body: dict):
             protocol=body.get("protocol", "http"),
             thresholds=body.get("thresholds"),
             sla_thresholds=body.get("sla_thresholds"),
-            use_distributed=body.get("use_distributed", False)
+            use_distributed=body.get("use_distributed", False),
+            webhook_url=body.get("webhook_url"),
         )
         
         return {
@@ -672,6 +719,43 @@ async def run_test(request: Request, body: dict):
         raise
     except Exception as e:
         logger.error(f"Error running test: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tests/run-mix")
+async def run_test_mix(request: Request, body: dict):
+    """
+    Run a mix of scenarios with weights in one logical test.
+    Body: scenario_mix: [{ scenario_id, weight_pct }], virtual_users, duration_seconds, ramp_up_seconds, ...
+    Returns parent test_id; GET /tests/{parent_id}/status and /report aggregate children.
+    """
+    try:
+        scenario_mix = body.get("scenario_mix")
+        if not scenario_mix or not isinstance(scenario_mix, list):
+            raise HTTPException(status_code=400, detail="scenario_mix (list of { scenario_id, weight_pct }) is required")
+        
+        parent_id = await performance_engine.run_load_test_mix(
+            scenario_mix=scenario_mix,
+            virtual_users=body.get("virtual_users", 100),
+            ramp_up_seconds=body.get("ramp_up_seconds", 60),
+            duration_seconds=body.get("duration_seconds", 300),
+            ramp_down_seconds=body.get("ramp_down_seconds", 30),
+            think_time_ms=body.get("think_time_ms", 2000),
+            base_url=body.get("base_url"),
+            protocol=body.get("protocol", "http"),
+            thresholds=body.get("thresholds"),
+            sla_thresholds=body.get("sla_thresholds"),
+        )
+        
+        return {
+            "status": "success",
+            "test_id": parent_id,
+            "message": "Load test mix started"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error running test mix: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

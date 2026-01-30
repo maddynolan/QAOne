@@ -1076,6 +1076,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         format = "postman";
       } else if (filename.endsWith(".graphql") || filename.endsWith(".gql")) {
         format = "graphql";
+      } else if (filename.endsWith(".har") || filename.endsWith(".har.json")) {
+        format = "har";
       }
       
       formData.append("spec_format", format);
@@ -1100,7 +1102,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         },
         body: JSON.stringify({
           api_spec: parseData.parsed_spec,
-          spec_format: format,
+          spec_format: format === "har" ? "openapi" : format,
           protocol: protocol,
           test_options: {}
         }),
@@ -1115,10 +1117,10 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       
       toast({
         title: "Success",
-        description: `Generated ${enhanceData.summary.total_test_cases} comprehensive test cases`,
+        description: `Generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} comprehensive test cases`,
       });
       
-      setActiveTab("results");
+      setActiveTab("execute");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -1147,6 +1149,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       let contentType = "json";
       if (specFormat === "wsdl") contentType = "xml";
       else if (specFormat === "graphql") contentType = "graphql";
+      else if (specFormat === "har") contentType = "json";
       
       const parseResponse = await fetch(`${API_BASE_URL}/api/import/spec`, {
         method: "POST",
@@ -1167,7 +1170,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
       
-      // Generate enhanced test suite
+      // Generate enhanced test suite (HAR parses to openapi-like)
       const enhanceResponse = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
         method: "POST",
         headers: {
@@ -1175,7 +1178,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         },
         body: JSON.stringify({
           api_spec: parseData.parsed_spec,
-          spec_format: specFormat,
+          spec_format: specFormat === "har" ? "openapi" : specFormat,
           protocol: protocol,
           test_options: {}
         }),
@@ -1190,10 +1193,10 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       
       toast({
         title: "Success",
-        description: `Generated ${enhanceData.summary.total_test_cases} comprehensive test cases`,
+        description: `Generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} comprehensive test cases`,
       });
       
-      setActiveTab("results");
+      setActiveTab("execute");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -1202,6 +1205,70 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const exportToPostman = async () => {
+    if (!testSuite?.test_cases?.length) {
+      toast({ title: "No test suite", description: "Import a spec or HAR first", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/import/export-postman`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test_suite: testSuite, name: "QAAI API Collection" }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const blob = new Blob([data.collection_json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "qaai-postman-collection.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Exported", description: "Postman collection downloaded" });
+    } catch (e: any) {
+      toast({ title: "Export failed", description: e?.message || "Failed to export Postman", variant: "destructive" });
+    }
+  };
+
+  const exportToHAR = async () => {
+    if (!testSuite?.test_cases?.length) {
+      toast({ title: "No test suite", description: "Import a spec or HAR first", variant: "destructive" });
+      return;
+    }
+    try {
+      const baseUrl = testSuite.base_url || "";
+      const requests = (testSuite.test_cases || []).map((tc: any, i: number) => {
+        const req = tc.request || {};
+        const url = req.url || (baseUrl + (tc.path || ""));
+        return {
+          url,
+          method: tc.method || "GET",
+          headers: req.headers || {},
+          body: req.body,
+          statusCode: tc.expected_status || 200,
+          duration: 0,
+          timestamp: Date.now() / 1000,
+        };
+      });
+      const res = await fetch(`${API_BASE_URL}/api/import/export-har`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requests, creator_name: "QAAI" }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const blob = new Blob([data.har_json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "qaai-export.har.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Exported", description: "HAR file downloaded" });
+    } catch (e: any) {
+      toast({ title: "Export failed", description: e?.message || "Failed to export HAR", variant: "destructive" });
     }
   };
 
@@ -1954,7 +2021,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <CardHeader>
               <CardTitle>Import API Specification</CardTitle>
               <CardDescription>
-                Import OpenAPI, Swagger, WSDL, Postman, or GraphQL specifications
+                Import OpenAPI, Swagger, WSDL, Postman, GraphQL, or HAR (from recorder/desktop)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1983,6 +2050,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       <SelectItem value="wsdl">WSDL/SOAP</SelectItem>
                       <SelectItem value="postman">Postman</SelectItem>
                       <SelectItem value="graphql">GraphQL</SelectItem>
+                      <SelectItem value="har">HAR (recorded traffic)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1992,7 +2060,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <Label>Upload File</Label>
                 <Input
                   type="file"
-                  accept=".json,.yaml,.yml,.xml,.wsdl,.graphql,.gql"
+                  accept=".json,.yaml,.yml,.xml,.wsdl,.graphql,.gql,.har"
                   onChange={handleFileUpload}
                   disabled={loading}
                 />
@@ -2373,6 +2441,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </>
                 )}
               </Button>
+              {testSuite?.test_cases?.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export to Postman
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export to HAR
+                  </Button>
+                </div>
+              )}
               {!selectedEnvironment && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />

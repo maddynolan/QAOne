@@ -5,8 +5,9 @@ Before working on this project, read these documents:
 
 1. **Master Reference**: `docs/QAAI-MASTER-REFERENCE.md` - Complete platform overview
 2. **Recording/Playback**: `docs/QAAI-CAPABILITIES-REFERENCE.md` - Deep dive on record/playback
-3. **Debug Session Findings**: `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed
-4. **Record/Playback Deep Dive**: `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
+3. **API Feature Audit**: `docs/API-FEATURE-AUDIT-AND-COMPARISON.md` - API vs ReadyAPI/Postman, import/export, do-not-break
+4. **Debug Session Findings**: `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed
+5. **Record/Playback Deep Dive**: `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
 
 ## Project Overview
 
@@ -14,7 +15,7 @@ QAAI is a full-suite enterprise QA automation platform with:
 
 - **Recording**: Playwright-based with Recipe system for robust element capture
 - **Playback**: 4-layer fallback (SmartFinder → Legacy → AI Vision → Error)
-- **API Testing**: Postman-like with request chaining
+- **API Testing**: Postman/ReadyAPI-level; import OpenAPI, Postman, WSDL, GraphQL, HAR; export Postman, HAR, OpenAPI
 - **Performance Testing**: Real browser + protocol-level
 - **Accessibility Testing**: WCAG 2.1 with Axe-core
 - **Visual Testing**: Screenshot comparison
@@ -287,14 +288,56 @@ const locator = scope.getByText(what.text).first();
 // Also validates role matches if specified
 ```
 
+## API Testing - Do Not Break
+
+**Reference:** `docs/API-FEATURE-AUDIT-AND-COMPARISON.md` (audit vs ReadyAPI/Postman, gaps, roadmap).
+
+- **Import:** `/api/import/spec` and `/api/import/spec/file` support `openapi`, `swagger`, `wsdl`, `postman`, `graphql`, `har`. Do not remove or rename these formats.
+- **Export:** `/api/import/export-postman`, `/api/import/export-openapi`, `/api/import/export-har` are additive; do not change existing `/api/import/generate-tests` or `/api/v2/testing/*` contracts.
+- **Recorder → API:** `capturedNetworkRequests` and sessionStorage keys `pendingApiTestRequests`, `pendingLoadTestTimestamp` are used by API/Perf tabs; do not remove.
+- **HAR:** HAR parses to openapi-like spec in `api_spec_parser._parse_har`; engine uses `spec_format="openapi"` for HAR-derived specs.
+
 ## Documentation Structure
 
 - `docs/QAAI-MASTER-REFERENCE.md` - Full platform reference
 - `docs/QAAI-CAPABILITIES-REFERENCE.md` - Recording/playback deep dive
+- `docs/API-FEATURE-AUDIT-AND-COMPARISON.md` - API vs ReadyAPI/Postman, import/export, do-not-break
 - `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
 - `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed (Jan 2026)
-- `docs/RECORDING_PLAYBACK_AUDIT.md` - **NEW** Comprehensive audit of 18 potential issues
+- `docs/RECORDING_PLAYBACK_AUDIT.md` - Comprehensive audit of 18 potential issues
 - `docs/API_TESTING_USAGE.md` - API testing guide
 - `docs/PERFORMANCE_TESTING_USAGE.md` - Perf testing guide
 - `docs/SALESFORCE_TESTING_GUIDE.md` - Salesforce guide
 - `docs/FEATURES_USAGE_GUIDE.md` - Complex verifications
+
+## Deployment and Packaging (Future Reference)
+
+**When working on deployment, packaging, or “what’s pending”:**
+
+1. **Recommendation & control plane vs client:** `docs/DEPLOYMENT-RECOMMENDATION-AND-CONTROL-PLANE.md` – Best deployment option; control plane vs client (SaaS/PaaS); ordered steps.
+2. **Read first:** `docs/DEPLOYMENT-STATUS-AND-STEPS.md` – Single source for:
+   - What’s **done** vs **pending**
+   - Deployment **steps by type** (SaaS, PaaS, on-prem, extension, desktop)
+   - **Key file locations** (Dockerfiles, compose, helm, tenant/RBAC, extension HAR)
+   - **How to update** this status doc when completing work
+
+3. **Full reference:** `docs/DEPLOYMENT-AND-PACKAGING-REFERENCE.md` – Deployment options (SaaS, PaaS, hybrid, on-prem), recorder parity, packaging tools.
+
+4. **Extension recorder sync:** `docs/RECORDER-SYNC-CHECKLIST.md` – Action-coalescer, recipe, SF context, merge test cases, playback.
+
+**Pending (summary, details in DEPLOYMENT-STATUS-AND-STEPS.md):**
+
+- OLLAMA: document “cloud API only” in compose/helm/env; OLLAMA commented or optional.
+- env.example: central list of env vars (no OLLAMA required).
+- SaaS: document multi-tenant/RBAC (X-Tenant-ID, tenants API).
+- Extension: action-coalescer + recipe; SF context tab; merge test cases to steps; “Run on server” playback.
+- Optional: strategy memory in extension; shared npm package for recorder-core.
+
+**Key deployment artifacts:**
+
+- Backend image: `backend/Dockerfile`
+- Frontend image: `Dockerfile.frontend` (repo root)
+- Worker image: `backend/Dockerfile.worker`
+- Compose: `docker-compose.full.yml`, `docker-compose.air-gapped.yml`
+- Helm: `helm/qaai/`
+- Tenant/RBAC: `backend/app/middleware/tenant_middleware.py`, `rbac_middleware.py`; `backend/app/routers/tenants_api.py`

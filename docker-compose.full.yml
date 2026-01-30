@@ -63,6 +63,7 @@ services:
       - qaai-network
 
   # Backend API
+  # Default: cloud LLM only (OPENAI_API_KEY / ANTHROPIC_API_KEY). OLLAMA not used unless enabled below.
   backend:
     build:
       context: ./backend
@@ -75,8 +76,9 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_BUCKET_NAME: qa-artifacts
       REDIS_URL: redis://redis:6379
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-local_qwen}
+      # Cloud LLM (set in .env): OPENAI_API_KEY, ANTHROPIC_API_KEY. OLLAMA optional - uncomment below if using ollama service.
+      # OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-openai}
       TRACK_LLM_USAGE: "true"
     ports:
       - "8000:8000"
@@ -94,20 +96,21 @@ services:
       - qaai-network
     restart: unless-stopped
 
-  # Ollama (for local LLM inference)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: qaai-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    networks:
-      - qaai-network
-    restart: unless-stopped
-    # Note: Models need to be pulled separately:
-    # docker exec qaai-ollama ollama pull qwen2.5-coder:14b
-    # docker exec qaai-ollama ollama pull qwen2.5-coder:30b
+  # ---------------------------------------------------------------------------
+  # OLLAMA (local LLM) - NOT USED BY DEFAULT. We use cloud API keys (OpenAI/Anthropic).
+  # Uncomment the block below and backend env OLLAMA_URL + DEFAULT_LLM_PROVIDER=local_qwen to use local LLM.
+  # ---------------------------------------------------------------------------
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: qaai-ollama
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   networks:
+  #     - qaai-network
+  #   restart: unless-stopped
+  #   # Models: docker exec qaai-ollama ollama pull qwen2.5-coder:14b
 
   # Frontend (if needed)
   frontend:
@@ -150,7 +153,7 @@ volumes:
   postgres_data:
   minio_data:
   redis_data:
-  ollama_data:
+  # ollama_data:  # Uncomment if using ollama service
   backend_logs:
 
 networks:

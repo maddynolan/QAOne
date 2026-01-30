@@ -240,6 +240,8 @@ VITE_API_URL=http://localhost:8001
 
 ## 📈 Load Testing
 
+The QA AI / Flowstral platform can run load tests against this site with integrated Server Resource Monitoring (SRM) and Lighthouse—better than k6 for integrated observability. Record flows in the Recorder, then run browser or API load tests with scenario mix, ramp-up, and distributed runs from the Performance tab.
+
 ### Using k6
 ```javascript
 import http from 'k6/http';

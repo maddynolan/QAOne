@@ -1,0 +1,13 @@
+{
+  "test_name": "homepage_checkpoint_1",
+  "created_at": "2026-01-24T01:01:53.840987",
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "perceptual_hash_ahash": "ff00ff00e700e700ff00ff00ff00c300e700ff00ff00ff00ff00ff00ff00ff00",
+  "perceptual_hash_dhash": "25900980b586b590b5804d808580738061808580318001800180018009803180",
+  "url": "https://orgfarm-bac28d1362-dev-ed.develop.my.salesforce.com/",
+  "viewport": "1920x1080",
+  "full_page": true
+}

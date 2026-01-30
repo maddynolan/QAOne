@@ -19,7 +19,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useLocation } from 'react-router-dom';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   Play, Save, Download, Plus, Trash2, Copy,
   ArrowUp, ArrowDown, Eye, EyeOff, Code, Settings,
@@ -38,7 +38,8 @@ import {
   ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
   Pencil, Flag, FileDown, Cloud, File,
   // Advanced UI icons
-  Table, Move, Sliders, Keyboard, Layout, Maximize2, CheckSquare, GripVertical
+  Table, Move, Sliders, Keyboard, Layout, Maximize2, CheckSquare, GripVertical,
+  Crosshair
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,6 +69,10 @@ import {
   getDefaultEmailVerifyConfig 
 } from '@/components/verifications';
 import type { EmailVerifyConfig, PDFVerifyConfig, FileVerifyConfig } from '@/components/verifications/types';
+// Element Repair Wizard - Visual element picker for fixing failed steps (Builder integration)
+import ElementRepairWizard from "@/components/ElementRepairWizard";
+// Quick Re-record Modal - Simple inline step re-recording without leaving builder
+import QuickRerecordModal from "@/components/QuickRerecordModal";
 
 // ============================================================================
 // UTILITY FUNCTIONS - MUST BE DEFINED BEFORE USE
@@ -1424,6 +1429,27 @@ export default function UnifiedWorkflowEditor() {
   }>>({});
   const [manualExecutionStartTime, setManualExecutionStartTime] = useState<Date | null>(null);
 
+  // ═══════════════════════════════════════════════════════════════
+  // STEP REPAIR WIZARD STATE (for fixing failed steps)
+  // ═══════════════════════════════════════════════════════════════
+  const [repairWizardOpen, setRepairWizardOpen] = useState(false);
+  const [repairStepIndex, setRepairStepIndex] = useState<number | null>(null);
+  const [keepBrowserOpenOnFailure, setKeepBrowserOpenOnFailure] = useState(true);
+  const [browserKeptOpen, setBrowserKeptOpen] = useState(false);
+  const [failureState, setFailureState] = useState<{
+    stepIndex: number;
+    step: TestStep;
+    error: string;
+    screenshot: string | null;
+    url: string | null;
+    similarElements?: Array<{ id: string; text: string; selector: string }>;
+  } | null>(null);
+  const navigate = useNavigate();
+  
+  // Quick Re-record Modal state (simpler inline re-recording)
+  const [quickRerecordOpen, setQuickRerecordOpen] = useState(false);
+  const [quickRerecordStepIndex, setQuickRerecordStepIndex] = useState<number | null>(null);
+
   // QA Validation Coverage
   const [showDomainSelector, setShowDomainSelector] = useState(false);
   const [selectedDomain, setSelectedDomain] = useState<DomainType>(testCase.domain || 'general');
@@ -1940,6 +1966,54 @@ export default function UnifiedWorkflowEditor() {
         }
       } catch (e) {
         console.error('Failed to parse standalone protocol data:', e);
+      }
+    }
+  }, []);
+  
+  // ═══════════════════════════════════════════════════════════════
+  // CHECK FOR RE-RECORD RESULT FROM RECORDER TAB
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const rerecordResult = localStorage.getItem('flowstral_rerecord_result');
+    if (rerecordResult) {
+      try {
+        const result = JSON.parse(rerecordResult);
+        // Only process if recent (within 5 minutes)
+        if (result.timestamp && Date.now() - result.timestamp < 5 * 60 * 1000) {
+          console.log('[Builder] Processing re-record result:', result);
+          
+          // Update the step with the new recorded action
+          if (result.stepIndex !== undefined && result.replacementAction) {
+            setTestCase(prev => ({
+              ...prev,
+              steps: prev.steps.map((step, idx) => {
+                if (idx !== result.stepIndex) return step;
+                
+                // Merge the replacement action data into the step
+                const replacement = result.replacementAction;
+                return {
+                  ...step,
+                  selector: replacement.selector || replacement.selectorObj?.selector || step.selector,
+                  selectorObj: replacement.selectorObj || step.selectorObj,
+                  manualSelector: replacement.selector || replacement.selectorObj?.selector,
+                  manualText: replacement.text || replacement.label || replacement.description,
+                  // Update name if it was a significant change
+                  name: replacement.description || replacement.label || step.name,
+                };
+              }),
+            }));
+            
+            toast.success(`✅ Step ${result.stepIndex + 1} updated with new recording!`, {
+              description: 'The step will use the new element selector on next run.',
+              duration: 5000,
+            });
+          }
+        }
+        // Clean up the result
+        localStorage.removeItem('flowstral_rerecord_result');
+      } catch (e) {
+        console.error('[Builder] Failed to process re-record result:', e);
+        localStorage.removeItem('flowstral_rerecord_result');
       }
     }
   }, []);
@@ -3193,8 +3267,28 @@ export default function UnifiedWorkflowEditor() {
           
           if (result.status === 'passed') {
             toast.success('Test passed!');
+            // Clear failure state on success
+            setFailureState(null);
+            setBrowserKeptOpen(false);
           } else {
             toast.error(`Test failed: ${result.error || 'See logs for details'}`);
+            
+            // Track failure state for repair wizard (Electron execution)
+            if (result.failedStep !== undefined && result.failedStep !== null) {
+              const failedStepIdx = typeof result.failedStep === 'number' ? result.failedStep : parseInt(result.failedStep);
+              const failedStepData = testCase.steps[failedStepIdx];
+              if (failedStepData) {
+                setFailureState({
+                  stepIndex: failedStepIdx,
+                  step: failedStepData,
+                  error: result.error || 'Unknown error',
+                  screenshot: result.screenshot || null,
+                  url: result.url || null,
+                  similarElements: result.similarElements || [],
+                });
+                setBrowserKeptOpen(keepBrowserOpenOnFailure && result.browserKeptOpen);
+              }
+            }
           }
           
           return;
@@ -3386,10 +3480,29 @@ export default function UnifiedWorkflowEditor() {
 
       if (passed) {
         toast.success('✅ Test passed!');
+        // Clear failure state on success
+        setFailureState(null);
+        setBrowserKeptOpen(false);
       } else {
         const stepInfo = failedStep ? `step ${failedStep}` : 'test';
         const errorInfo = errorMessage?.slice(0, 40) || 'Check logs';
         toast.error(`❌ Failed at ${stepInfo}: ${errorInfo}`);
+        
+        // Track failure state for repair wizard
+        if (failedStep !== null && failedStep > 0) {
+          const failedStepData = testCase.steps[failedStep - 1]; // Convert 1-indexed to 0-indexed
+          if (failedStepData) {
+            setFailureState({
+              stepIndex: failedStep - 1,
+              step: failedStepData,
+              error: errorMessage || 'Unknown error',
+              screenshot: screenshotPath,
+              url: result.url || null,
+            });
+            // Check if browser was kept open
+            setBrowserKeptOpen(keepBrowserOpenOnFailure && result.browserKeptOpen);
+          }
+        }
       }
     } catch (error: any) {
       console.error('[Test Run] Execution error:', error);
@@ -3483,6 +3596,196 @@ export default function UnifiedWorkflowEditor() {
   };
 
   const getCurrentManualStep = () => testCase.steps[manualCurrentStep];
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP REPAIR FUNCTIONS (for fixing failed steps)
+  // ═══════════════════════════════════════════════════════════════
+  
+  /**
+   * Open repair wizard for a failed step
+   */
+  const openRepairWizard = useCallback((stepIndex: number) => {
+    setRepairStepIndex(stepIndex);
+    setRepairWizardOpen(true);
+  }, []);
+
+  /**
+   * Save repair updates to the step
+   */
+  const handleRepairSave = useCallback((updates: { manualSelector?: string; manualText?: string }) => {
+    if (repairStepIndex === null) return;
+    
+    setTestCase(prev => ({
+      ...prev,
+      steps: prev.steps.map((step, idx) => {
+        if (idx !== repairStepIndex) return step;
+        return {
+          ...step,
+          // Update selector with manual override
+          selector: updates.manualSelector || step.selector,
+          // Store manual overrides for fallback during playback
+          manualSelector: updates.manualSelector,
+          manualText: updates.manualText,
+          // Update name/value if text changed
+          ...(updates.manualText && step.type === 'click' ? { name: updates.manualText } : {}),
+          ...(updates.manualText && step.type === 'input' ? { value: updates.manualText } : {}),
+        };
+      }),
+    }));
+    
+    setRepairWizardOpen(false);
+    setRepairStepIndex(null);
+    toast.success('✅ Step updated! Changes will apply on next run.');
+  }, [repairStepIndex]);
+
+  /**
+   * Open Quick Re-record modal for inline step re-recording
+   * This is the simple flow - opens browser and lets user pick element without leaving builder
+   */
+  const openQuickRerecord = useCallback((stepIndex: number) => {
+    setQuickRerecordStepIndex(stepIndex);
+    setQuickRerecordOpen(true);
+  }, []);
+  
+  /**
+   * Handle save from Quick Re-record modal
+   */
+  const handleQuickRerecordSave = useCallback((updates: { manualSelector?: string; manualText?: string; selectorObj?: any }) => {
+    if (quickRerecordStepIndex === null) return;
+    
+    setTestCase(prev => ({
+      ...prev,
+      steps: prev.steps.map((step, idx) => {
+        if (idx !== quickRerecordStepIndex) return step;
+        return {
+          ...step,
+          selector: updates.manualSelector || step.selector,
+          manualSelector: updates.manualSelector,
+          manualText: updates.manualText,
+          selectorObj: updates.selectorObj || step.selectorObj,
+          // Update name/value if text changed
+          ...(updates.manualText && step.type === 'click' ? { name: updates.manualText } : {}),
+          ...(updates.manualText && step.type === 'input' ? {} : {}),
+        };
+      }),
+    }));
+    
+    // Clear failure state since step was fixed
+    setFailureState(null);
+    
+    setQuickRerecordOpen(false);
+    setQuickRerecordStepIndex(null);
+  }, [quickRerecordStepIndex]);
+
+  /**
+   * Navigate to Recorder tab to re-record this step (full recording experience)
+   * Passes step context via localStorage so recorder can pre-populate
+   */
+  const handleRerecordInRecorder = useCallback((stepIndex: number) => {
+    const step = testCase.steps[stepIndex];
+    if (!step) return;
+
+    // Store context for recorder to pick up
+    const rerecordContext = {
+      source: 'unified-builder',
+      testCaseId: savedTestCaseId || testCase.id,
+      testCaseName: testCase.name,
+      stepIndex,
+      step: {
+        ...step,
+        // Include full step data for context
+      },
+      returnTo: `/builder${savedTestCaseId ? `?id=${savedTestCaseId}` : ''}`,
+      timestamp: Date.now(),
+    };
+    
+    // Save to localStorage for the recorder to pick up
+    localStorage.setItem('flowstral_rerecord_context', JSON.stringify(rerecordContext));
+    
+    // Navigate to recorder tab
+    navigate('/playwright-recorder?mode=rerecord');
+    
+    toast.info('📹 Opening Recorder... Re-record the step and save to update the test case.');
+  }, [testCase, savedTestCaseId, navigate]);
+
+  /**
+   * Re-open browser to the failure state for manual inspection/repair
+   */
+  const handleReopenBrowser = useCallback(async () => {
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.reopenToFailure) {
+      try {
+        const result = await flowstral.playwrightRecorder.reopenToFailure();
+        if (result?.success) {
+          setBrowserKeptOpen(true);
+          toast.success('✅ Browser re-opened to failure state');
+          return { success: true };
+        }
+        return { success: false, error: result?.error || 'Failed to re-open browser' };
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Failed to re-open browser' };
+      }
+    }
+    return { success: false, error: 'Browser re-open not available' };
+  }, []);
+
+  /**
+   * Retry the failed step with updated selector/text
+   */
+  const handleRetryStep = useCallback(async (updates: { manualSelector?: string; manualText?: string }) => {
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.retryFailedStep) {
+      try {
+        const result = await flowstral.playwrightRecorder.retryFailedStep(updates);
+        return result;
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Retry failed' };
+      }
+    }
+    return { success: false, error: 'Retry function not available' };
+  }, []);
+
+  /**
+   * Resume test from the failed step (optionally skip it)
+   */
+  const handleResumeFromHere = useCallback(async (options?: { skipFailedStep?: boolean }) => {
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.resumeFromFailure) {
+      try {
+        const result = await flowstral.playwrightRecorder.resumeFromFailure(options);
+        if (result?.success) {
+          // Clear failure state on successful resume
+          setFailureState(null);
+          setBrowserKeptOpen(false);
+          toast.success('✅ Test resumed successfully!');
+        }
+        return result;
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Resume failed' };
+      }
+    }
+    return { success: false, error: 'Resume function not available' };
+  }, []);
+
+  /**
+   * Close the browser that was kept open after failure
+   */
+  const handleCloseBrowser = useCallback(async () => {
+    const flowstral = (window as any).flowstral;
+    if (flowstral?.playwrightRecorder?.closeBrowser) {
+      try {
+        const result = await flowstral.playwrightRecorder.closeBrowser();
+        if (result?.success) {
+          setBrowserKeptOpen(false);
+          return { success: true };
+        }
+        return result;
+      } catch (e: any) {
+        return { success: false, error: e.message };
+      }
+    }
+    return { success: false };
+  }, []);
 
   // Build test case data for API
   const buildTestCaseData = (name?: string) => ({
@@ -3932,25 +4235,58 @@ export default function UnifiedWorkflowEditor() {
                 {savedTestCaseId ? 'Save' : 'Save New'}
               </Button>
               
-              {/* Automated Run Button - Prominent green with clear text */}
-              <Button 
-                size="sm" 
-                onClick={runTest}
-                disabled={isRunning || testCase.steps.length === 0}
-                className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-500/25 disabled:opacity-50 px-5"
-              >
-                {isRunning ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
-                    <span>Running...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-1.5" />
-                    <span>Run Test</span>
-                  </>
-                )}
-              </Button>
+              {/* Automated Run Button with Options */}
+              <div className="flex items-center">
+                <Button 
+                  size="sm" 
+                  onClick={runTest}
+                  disabled={isRunning || testCase.steps.length === 0}
+                  className="bg-green-600 hover:bg-green-500 text-white font-medium shadow-lg shadow-green-500/25 disabled:opacity-50 px-4 rounded-r-none border-r border-green-700"
+                >
+                  {isRunning ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-1.5 animate-spin" />
+                      <span>Running...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-1.5" />
+                      <span>Run Test</span>
+                    </>
+                  )}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      size="sm" 
+                      disabled={isRunning}
+                      className="bg-green-600 hover:bg-green-500 text-white rounded-l-none px-2"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Run Options</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => setKeepBrowserOpenOnFailure(!keepBrowserOpenOnFailure)}
+                      className="flex items-center gap-2"
+                    >
+                      {keepBrowserOpenOnFailure ? (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Circle className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <div className="flex flex-col">
+                        <span className="text-sm">Keep Browser Open on Failure</span>
+                        <span className="text-xs text-muted-foreground">
+                          Allows fixing failed steps with the repair wizard
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
         </header>
@@ -4092,8 +4428,42 @@ export default function UnifiedWorkflowEditor() {
                     </span>
                   </div>
                   {executionResult.status === 'failed' && executionResult.currentStep && (
-                    <div className="text-xs text-red-600 mb-2">
-                      Failed at step {executionResult.currentStep}
+                    <div className="space-y-2 mb-3">
+                      <div className="text-xs text-red-600">
+                        Failed at step {executionResult.currentStep}: {testCase.steps[executionResult.currentStep - 1]?.name || 'Unknown'}
+                      </div>
+                      {/* Repair Actions for Failed Step */}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-purple-300 text-purple-600 hover:bg-purple-50"
+                          onClick={() => openRepairWizard(executionResult.currentStep - 1)}
+                        >
+                          <Wand2 className="h-3 w-3 mr-1" />
+                          Fix Step
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-blue-300 text-blue-600 hover:bg-blue-50"
+                          onClick={() => openQuickRerecord(executionResult.currentStep - 1)}
+                        >
+                          <Crosshair className="h-3 w-3 mr-1" />
+                          Quick Re-record
+                        </Button>
+                        {browserKeptOpen && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-green-300 text-green-600 hover:bg-green-50"
+                            onClick={() => handleResumeFromHere({ skipFailedStep: true })}
+                          >
+                            <SkipForward className="h-3 w-3 mr-1" />
+                            Skip & Continue
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   )}
                   {executionResult.logs.length > 0 && (
@@ -5282,6 +5652,56 @@ export default function UnifiedWorkflowEditor() {
             </div>
           </div>
         )}
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* ELEMENT REPAIR WIZARD - Fix failed steps */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        <ElementRepairWizard
+          open={repairWizardOpen}
+          onOpenChange={(open) => {
+            setRepairWizardOpen(open);
+            if (!open) {
+              setRepairStepIndex(null);
+            }
+          }}
+          action={repairStepIndex !== null ? {
+            type: testCase.steps[repairStepIndex]?.type,
+            qword: testCase.steps[repairStepIndex]?.type,
+            text: testCase.steps[repairStepIndex]?.name,
+            label: testCase.steps[repairStepIndex]?.target,
+            description: testCase.steps[repairStepIndex]?.name,
+            selector: testCase.steps[repairStepIndex]?.selector,
+            selectorObj: testCase.steps[repairStepIndex]?.selectorObj,
+            manualSelector: testCase.steps[repairStepIndex]?.manualSelector,
+            manualText: testCase.steps[repairStepIndex]?.manualText,
+          } : null}
+          actionIndex={repairStepIndex || 0}
+          onSave={handleRepairSave}
+          failureState={failureState ? {
+            stepIndex: failureState.stepIndex,
+            step: failureState.step as any,
+            error: failureState.error,
+            screenshot: failureState.screenshot,
+            url: failureState.url,
+          } : null}
+          browserKeptOpen={browserKeptOpen}
+          onReopenBrowser={handleReopenBrowser}
+          onRetryStep={handleRetryStep}
+          onResumeFromHere={handleResumeFromHere}
+          onCloseBrowser={handleCloseBrowser}
+        />
+
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        {/* QUICK RE-RECORD MODAL - Simple inline step re-recording */}
+        {/* ═══════════════════════════════════════════════════════════════ */}
+        <QuickRerecordModal
+          open={quickRerecordOpen}
+          onOpenChange={setQuickRerecordOpen}
+          step={quickRerecordStepIndex !== null ? testCase.steps[quickRerecordStepIndex] : null}
+          stepIndex={quickRerecordStepIndex || 0}
+          lastKnownUrl={failureState?.url || null}
+          onSave={handleQuickRerecordSave}
+        />
       </div>
   );
 }

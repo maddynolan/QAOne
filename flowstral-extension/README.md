@@ -34,6 +34,14 @@ Generated scripts include fallback selectors, so if the primary selector fails, 
 - Uses Playwright's recommended locator methods
 - Follows Playwright best practices
 
+### 🌐 HAR Capture for Load Testing & API Testing
+During recording you can enable **Protocol Capture** to capture HTTP/WebSocket traffic as **HAR (HTTP Archive)**:
+
+- **Load testing:** Export HAR and import into k6, Gatling, JMeter, or NeoLoad to replay traffic at scale.
+- **API testing:** Use the same HAR in Postman, Insomnia, or your API test suite; request/response headers and timing are preserved.
+- **Format:** HAR 1.2 (standard). Captures XHR, Fetch, document, and WebSocket; optional correlation detection for session/auth tokens.
+- **Where:** Record tab → toggle "Protocol Capture" before Start → after Stop, use **Export HAR** or **Load Test** to download `.har` or send to the backend.
+
 ## Installation
 
 ### From Source (Development)

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Flowstral Recorder",
   "version": "1.0.0",
-  "description": "Flowstral: Record browser actions and generate reliable Playwright test scripts with smart selectors for 20+ enterprise apps",
+  "description": "Flowstral: Record browser actions and generate Playwright test scripts. Smart selectors for 20+ enterprise apps. Optional HAR capture for load testing and API testing.",
   "permissions": [
     "activeTab",
     "storage",
@@ -32,7 +32,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["src/lib/recorder-engine.js", "src/content/content.js"],
+      "js": ["src/lib/recorder-engine.js", "src/lib/action-coalescer-browser.js", "src/content/content.js"],
       "css": ["src/content/content.css"],
       "run_at": "document_start",
       "all_frames": true

@@ -212,7 +212,59 @@ class StrategyMemory {
     // Update global strategy stats
     this._updateStrategyStats(strategy, false);
     
+    // If strategy has failed too many times, clear it entirely
+    const failRate = entry.failCount / (entry.successCount + entry.failCount);
+    if (failRate > 0.5 && entry.failCount >= 2) {
+      console.log(`[StrategyMemory] Clearing entry for ${fingerprint} - too many failures (${failRate * 100}% fail rate)`);
+      this.memory.delete(fingerprint);
+      this._maybePersist();
+    }
+    
     console.log(`[StrategyMemory] Recorded failure: "${strategy}" for ${fingerprint}`);
+  }
+  
+  /**
+   * Clear a specific entry by fingerprint
+   */
+  clearEntry(fingerprint) {
+    if (this.memory.has(fingerprint)) {
+      this.memory.delete(fingerprint);
+      this._maybePersist();
+      console.log(`[StrategyMemory] Cleared entry: ${fingerprint}`);
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * Clear all entries (reset the memory)
+   */
+  clearAll() {
+    const count = this.memory.size;
+    this.memory.clear();
+    this.strategyStats = {};
+    this._maybePersist();
+    console.log(`[StrategyMemory] Cleared all ${count} entries`);
+    return count;
+  }
+  
+  /**
+   * Clear entries matching a pattern (useful for clearing bad patterns)
+   */
+  clearByPattern(pattern) {
+    let cleared = 0;
+    const regex = new RegExp(pattern);
+    for (const [fingerprint, entry] of this.memory.entries()) {
+      if (regex.test(fingerprint) || (entry.selector && regex.test(entry.selector))) {
+        this.memory.delete(fingerprint);
+        cleared++;
+      }
+    }
+    if (cleared > 0) {
+      this._maybePersist();
+      console.log(`[StrategyMemory] Cleared ${cleared} entries matching pattern: ${pattern}`);
+    }
+    return cleared;
   }
   
   /**

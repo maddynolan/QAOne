@@ -1626,19 +1626,72 @@ export default function Performance() {
                 </div>
               </div>
 
-              <Button onClick={() => runLoadTest()} disabled={isRunning} className="w-full">
-                {isRunning ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    Run Custom Test
-                  </>
-                )}
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => runLoadTest()} disabled={isRunning} className="w-full">
+                  {isRunning ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Run Custom Test
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (isRunning) return;
+                    try {
+                      if (lighthouseUrl.trim()) {
+                        setLighthouseLoading(true);
+                        const res = await fetch(`${API_BASE_URL}/api/performance/lighthouse/run`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ url: lighthouseUrl.trim(), form_factor: lighthouseFormFactor, timeout_seconds: 120 }),
+                        });
+                        const data = await res.json();
+                        if (res.ok) setLighthouseResult(data);
+                        setLighthouseLoading(false);
+                      }
+                      if (!serverMonitoringEnabled && targetServerConfig.host) await startServerMonitoring();
+                      runLoadTest();
+                      const durationMs = (customConfig.duration + 15) * 1000;
+                      setTimeout(async () => {
+                        await stopServerMonitoring();
+                        try {
+                          const corr = await fetch(`${API_BASE_URL}/api/srm/correlation`);
+                          if (corr.ok) {
+                            const corrData = await corr.json();
+                            toast.success("Full load test complete. SRM correlation available.");
+                          }
+                        } catch {
+                          toast.success("Full load test complete.");
+                        }
+                        if (lighthouseUrl.trim()) {
+                          setLighthouseLoading(true);
+                          const res2 = await fetch(`${API_BASE_URL}/api/performance/lighthouse/run`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ url: lighthouseUrl.trim(), form_factor: lighthouseFormFactor, timeout_seconds: 120 }),
+                          });
+                          const data2 = await res2.json();
+                          if (res2.ok) setLighthouseResult(data2);
+                          setLighthouseLoading(false);
+                        }
+                      }, durationMs);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : "Full load test failed");
+                    }
+                  }}
+                  disabled={isRunning}
+                  className="w-full"
+                >
+                  Full load test (Lighthouse → SRM → Run → Correlation → Lighthouse)
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -125,7 +125,8 @@ class PerformanceEngine:
         protocol: str = "http",
         thresholds: Optional[Dict[str, Any]] = None,
         sla_thresholds: Optional[Dict[str, Any]] = None,
-        use_distributed: bool = False
+        use_distributed: bool = False,
+        webhook_url: Optional[str] = None,
     ) -> str:
         """
         Run a load test
@@ -220,6 +221,18 @@ class PerformanceEngine:
                     self.active_tests[test_id]["status"] = "completed"
                     self.active_tests[test_id]["end_time"] = datetime.utcnow()
                     logger.info(f"Load test completed: {test_id}")
+                    if webhook_url:
+                        try:
+                            report = await self.get_test_report(test_id)
+                            import aiohttp
+                            async with aiohttp.ClientSession() as session:
+                                await session.post(
+                                    webhook_url,
+                                    json={"verdict": report.get("verdict", "pass"), "test_id": test_id, "summary": report},
+                                    timeout=aiohttp.ClientTimeout(total=10),
+                                )
+                        except Exception as wh:
+                            logger.warning(f"Webhook POST failed: {wh}")
                 except Exception as e:
                     logger.error(f"Load test error: {test_id} - {e}", exc_info=True)
                     self.active_tests[test_id]["status"] = "error"
@@ -230,6 +243,50 @@ class PerformanceEngine:
         
         # Return test_id immediately so frontend can start polling
         return test_id
+    
+    async def run_load_test_mix(
+        self,
+        scenario_mix: List[Dict[str, Any]],  # [{ scenario_id, weight_pct }]
+        virtual_users: int = 100,
+        ramp_up_seconds: int = 60,
+        duration_seconds: int = 300,
+        ramp_down_seconds: int = 30,
+        think_time_ms: int = 2000,
+        base_url: Optional[str] = None,
+        protocol: str = "http",
+        thresholds: Optional[Dict[str, Any]] = None,
+        sla_thresholds: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Run a mix of scenarios with weights in one logical test. Returns parent test_id."""
+        parent_id = f"test_mix_{uuid.uuid4()}"
+        self.active_tests[parent_id] = {
+            "scenario_id": "mix",
+            "child_test_ids": [],
+            "status": "running",
+            "start_time": datetime.utcnow(),
+        }
+        total_pct = sum(m.get("weight_pct", 0) for m in scenario_mix)
+        for m in scenario_mix:
+            scenario_id = m.get("scenario_id")
+            weight_pct = m.get("weight_pct", 0) or 0
+            if not scenario_id or weight_pct <= 0:
+                continue
+            vus = max(1, round(virtual_users * weight_pct / (total_pct or 100)))
+            child_id = await self.run_load_test(
+                scenario_id=scenario_id,
+                virtual_users=vus,
+                ramp_up_seconds=ramp_up_seconds,
+                duration_seconds=duration_seconds,
+                ramp_down_seconds=ramp_down_seconds,
+                think_time_ms=think_time_ms,
+                base_url=base_url,
+                protocol=protocol,
+                thresholds=thresholds,
+                sla_thresholds=sla_thresholds,
+                use_distributed=False,
+            )
+            self.active_tests[parent_id]["child_test_ids"].append(child_id)
+        return parent_id
     
     async def stop_test(self, test_id: str) -> Dict[str, Any]:
         """Stop a running test"""
@@ -258,6 +315,25 @@ class PerformanceEngine:
             raise ValueError(f"Test {test_id} not found")
         
         test_info = self.active_tests[test_id]
+        child_ids = test_info.get("child_test_ids")
+        if child_ids:
+            statuses = []
+            for cid in child_ids:
+                try:
+                    st = await self.get_test_status(cid)
+                    statuses.append(st)
+                except Exception:
+                    statuses.append({"status": "unknown"})
+            any_running = any(s.get("status") == "running" for s in statuses)
+            all_done = all(s.get("status") in ("completed", "stopped", "error") for s in statuses)
+            if all_done:
+                test_info["status"] = "completed"
+            return {
+                "test_id": test_id,
+                "status": "running" if any_running else "completed",
+                "start_time": test_info["start_time"].isoformat(),
+                "child_statuses": statuses,
+            }
         
         if test_info["status"] == "running":
             # Get current metrics
@@ -289,7 +365,29 @@ class PerformanceEngine:
                 }
     
     async def get_test_report(self, test_id: str) -> Dict[str, Any]:
-        """Get final test report"""
+        """Get final test report (includes verdict when thresholds provided)."""
+        child_ids = (self.active_tests.get(test_id) or {}).get("child_test_ids")
+        if child_ids:
+            reports = []
+            for cid in child_ids:
+                try:
+                    r = await self.get_test_report(cid)
+                    reports.append(r)
+                except Exception:
+                    reports.append({})
+            total_requests = sum(r.get("total_requests", 0) for r in reports)
+            total_errors = sum(r.get("failed_requests", r.get("total_errors", 0)) for r in reports)
+            latencies = [r.get("avg_response_time_ms") for r in reports if r.get("avg_response_time_ms") is not None]
+            aggregated = {
+                "test_id": test_id,
+                "total_requests": total_requests,
+                "failed_requests": total_errors,
+                "avg_response_time_ms": sum(latencies) / len(latencies) if latencies else None,
+                "child_reports": reports,
+                "verdict": "pass" if (total_requests and total_errors / max(1, total_requests) < 0.05) else "fail",
+            }
+            self.test_results[test_id] = aggregated
+            return aggregated
         if test_id not in self.test_results:
             # Try to generate from current state
             if test_id in self.active_tests:
@@ -297,7 +395,9 @@ class PerformanceEngine:
                 self.test_results[test_id] = report
             else:
                 raise ValueError(f"Test {test_id} not found")
-        
+        report = self.test_results[test_id]
+        if isinstance(report, dict) and "verdict" not in report:
+            report["verdict"] = "pass" if report.get("failed_requests", 0) / max(1, report.get("total_requests", 1)) < 0.05 else "fail"
         return self.test_results[test_id]
     
     async def get_real_time_metrics(self) -> Dict[str, Any]:

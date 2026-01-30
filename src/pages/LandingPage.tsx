@@ -5,7 +5,7 @@
  * - Smart Recording with element recognition
  * - Visual Test Builder with 53 generators
  * - Test Management (6 modules)
- * - Performance Testing (10k+ VUs, auto-correlation)
+ * - Performance Testing (record→load, SRM, Lighthouse, scenario mix; better than k6 for integrated observability)
  * - API Testing (multi-protocol, security scanning)
  * - Visual Testing (6 modes)
  * - Accessibility (WCAG 2.1)
@@ -54,7 +54,7 @@ function HeroSection() {
     { id: 'analyze' as const, label: 'Analyze', color: 'violet' },
   ];
 
-  // Auto-cycle through tabs
+  // Auto-cycle through tabs (4.5s for readability)
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveTab(prev => {
@@ -62,7 +62,7 @@ function HeroSection() {
         const currentIdx = order.indexOf(prev);
         return order[(currentIdx + 1) % 4];
       });
-    }, 4000);
+    }, 4500);
     return () => clearInterval(interval);
   }, []);
 
@@ -153,7 +153,7 @@ function HeroSection() {
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-bold text-fuchsia-800 flex items-center gap-1">
-                    Flowpilot <span className="text-[10px] bg-fuchsia-500 text-white px-1.5 py-0.5 rounded-full">NEW</span>
+                    Flowpilot
                   </div>
                   <div className="text-xs text-fuchsia-600">Goal-based AI agents that test for you</div>
                 </div>
@@ -523,8 +523,8 @@ function FlowstralSection() {
     {
       letters: 'L',
       title: 'Load Testing',
-      subtitle: '10,000+ Virtual Users',
-      description: 'Enterprise-grade performance testing with auto-correlation, multiple load patterns, and real-time metrics.',
+      subtitle: 'Record → Load, SRM & Lighthouse',
+      description: 'Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse in one place—better than k6 for integrated observability. Scenario mix, ramp-up, and distributed runs.',
       icon: Activity,
       color: 'from-emerald-500 to-teal-500',
       bgColor: 'from-emerald-100 to-teal-100',
@@ -534,11 +534,11 @@ function FlowstralSection() {
     },
   ];
 
-  // Auto-cycle through parts
+  // Auto-cycle through parts (smooth 4s interval)
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveIndex(prev => (prev + 1) % flowstralParts.length);
-    }, 3500);
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -799,8 +799,7 @@ const features = [
     gradient: 'from-fuchsia-500 to-pink-500',
     bgGradient: 'from-fuchsia-50 to-pink-50',
     highlights: ['Goal-Driven', 'Flowmap', 'Explorer', 'Self-Healing'],
-    href: '/products/flowpilot',
-    isNew: true
+    href: '/products/flowpilot'
   },
   {
     icon: Smartphone,
@@ -809,8 +808,7 @@ const features = [
     gradient: 'from-sky-500 to-indigo-500',
     bgGradient: 'from-sky-50 to-indigo-50',
     highlights: ['50+ Devices', 'Network Throttling', 'Native Apps'],
-    href: '/products/mobile-testing',
-    isNew: true
+    href: '/products/mobile-testing'
   },
   {
     icon: ClipboardCheck,
@@ -886,15 +884,6 @@ function FeaturesSection() {
               onClick={() => navigate(feature.href)}
               className="group relative p-6 rounded-2xl bg-white border border-slate-200 hover:border-transparent hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
             >
-              {/* NEW Badge */}
-              {(feature as any).isNew && (
-                <div className="absolute -top-2 -right-2 z-10">
-                  <Badge className="bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 text-[10px] font-bold px-2 py-0.5 animate-pulse shadow-lg">
-                    ✨ NEW
-                  </Badge>
-                </div>
-              )}
-              
               {/* Gradient Border on Hover */}
               <div className={cn(
                 "absolute inset-0 rounded-2xl bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-sm",
@@ -939,16 +928,17 @@ function PerformanceAPISection() {
   
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveMetric(prev => (prev + 1) % 4);
-    }, 2000);
+      setActiveMetric(prev => (prev + 1) % 5);
+    }, 2500);
     return () => clearInterval(interval);
   }, []);
 
   const metrics = [
-    { label: 'Virtual Users', value: '10,247', color: 'emerald' },
-    { label: 'Requests/sec', value: '2,487', color: 'blue' },
+    { label: 'Virtual Users', value: '10k+', color: 'emerald' },
+    { label: 'Requests/sec', value: '2.4k+', color: 'blue' },
     { label: 'Avg Latency', value: '45ms', color: 'amber' },
     { label: 'Error Rate', value: '0.02%', color: 'violet' },
+    { label: 'SRM + Lighthouse', value: 'Built-in', color: 'emerald' },
   ];
 
   return (
@@ -959,11 +949,11 @@ function PerformanceAPISection() {
           <div className="space-y-6">
             <Badge className="bg-emerald-100 text-emerald-700 border-0">Performance Testing</Badge>
             <h3 className="text-3xl font-bold text-slate-900">
-              Scale to <span className="text-emerald-600">10,000+</span> Virtual Users
+              Integrated load + SRM + Lighthouse — <span className="text-emerald-600">better than k6</span>
             </h3>
             <p className="text-slate-600 leading-relaxed">
-              Enterprise-grade load testing with intelligent auto-correlation. Detect and parameterize 
-              dynamic values automatically. Real-time metrics and threshold-based validation.
+              Record once, load test at scale. Server Resource Monitoring (SRM) and Lighthouse in one place—no scripting.
+              Scenario mix, ramp-up, distributed runs. Real-time metrics and threshold-based validation.
             </p>
 
             {/* Metrics Display */}
@@ -972,17 +962,17 @@ function PerformanceAPISection() {
                 <div 
                   key={idx}
                   className={cn(
-                    "p-4 rounded-xl border-2 transition-all duration-500",
+                    "p-4 rounded-xl border-2 transition-all duration-500 ease-out",
                     activeMetric === idx 
-                      ? metric.color === 'emerald' ? "bg-emerald-50 border-emerald-300" :
-                        metric.color === 'blue' ? "bg-blue-50 border-blue-300" :
-                        metric.color === 'amber' ? "bg-amber-50 border-amber-300" :
-                        "bg-violet-50 border-violet-300"
+                      ? metric.color === 'emerald' ? "bg-emerald-50 border-emerald-300 scale-[1.02]" :
+                        metric.color === 'blue' ? "bg-blue-50 border-blue-300 scale-[1.02]" :
+                        metric.color === 'amber' ? "bg-amber-50 border-amber-300 scale-[1.02]" :
+                        "bg-violet-50 border-violet-300 scale-[1.02]"
                       : "bg-white border-slate-200"
                   )}
                 >
                   <div className={cn(
-                    "text-2xl font-bold transition-colors",
+                    "text-2xl font-bold transition-colors duration-300",
                     activeMetric === idx
                       ? metric.color === 'emerald' ? "text-emerald-600" :
                         metric.color === 'blue' ? "text-blue-600" :
@@ -995,12 +985,12 @@ function PerformanceAPISection() {
               ))}
             </div>
 
-            {/* Load Patterns */}
+            {/* Load Patterns + SRM/Lighthouse */}
             <div className="p-4 bg-slate-50 rounded-xl">
-              <div className="text-sm font-medium text-slate-700 mb-3">Load Patterns</div>
+              <div className="text-sm font-medium text-slate-700 mb-3">Load patterns & observability</div>
               <div className="flex flex-wrap gap-2">
-                {['⚡ Spike', '🔥 Stress', '⏱️ Endurance', '🎯 Breakpoint'].map((p, i) => (
-                  <Badge key={i} className="bg-white border border-slate-200 text-slate-600">{p}</Badge>
+                {['⚡ Spike', '🔥 Stress', '⏱️ Endurance', '🎯 Breakpoint', '📊 SRM', '🔦 Lighthouse'].map((p, i) => (
+                  <Badge key={i} className="bg-white border border-slate-200 text-slate-600 transition-transform hover:scale-105">{p}</Badge>
                 ))}
               </div>
             </div>
@@ -1222,7 +1212,7 @@ function FlowpilotSection() {
         {/* Section Header */}
         <div className="text-center mb-16">
           <Badge className="mb-4 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white border-0 px-4 py-1.5 shadow-lg">
-            <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> NEW: Flowpilot
+            <BrainCircuit className="w-4 h-4 mr-1.5 inline" /> Flowpilot
           </Badge>
           <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6">
             Goal-Based{' '}
@@ -1382,7 +1372,7 @@ function MobileTestingSection() {
           {/* Left - Content */}
           <div>
             <Badge className="mb-4 bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-0 px-4 py-1.5 shadow-md">
-              <Smartphone className="w-4 h-4 mr-1.5 inline" /> NEW: Mobile Testing
+              <Smartphone className="w-4 h-4 mr-1.5 inline" /> Mobile Testing
             </Badge>
             <h2 className="text-4xl font-bold text-slate-900 mb-6">
               Test on{' '}

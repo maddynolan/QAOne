@@ -2773,6 +2773,8 @@
     constructor() {
       this.smartSelector = new EnhancedSmartSelector();
       this.pageAnalyzer = new PageAnalyzer(this.smartSelector);
+      this.actionCoalescer = (typeof ActionCoalescerBrowser !== 'undefined') ? new ActionCoalescerBrowser({ debug: false }) : null;
+      if (this.actionCoalescer) this.actionCoalescer.onFlush = (action) => this.addAction(action);
       this.recording = false;
       this.paused = false;
       this.actions = [];
@@ -2812,6 +2814,10 @@
               break;
             case 'STOP_RECORDING':
               console.log('[Recorder] STOP_RECORDING received, stopping recording...');
+              if (this.actionCoalescer) {
+                var flushed = this.actionCoalescer.flush();
+                if (flushed) this.actions.push(flushed);
+              }
               this.stopRecording();
               sendResponse({ success: true, actions: this.actions });
               break;
@@ -4249,7 +4255,7 @@
         console.warn('[Recorder] WARNING: No selector generated for element!', element);
       }
       
-      this.addAction({
+      var clickAction = {
         type: 'click',
         selector: selector,
         timestamp: Date.now(),
@@ -4264,7 +4270,17 @@
         mightTriggerChange: true,
         // Include element attributes for backend selector building
         ...elementAttrs,
-      });
+      };
+      
+      if (this.actionCoalescer) {
+        var result = this.actionCoalescer.process(clickAction, element);
+        if (result.pending) return;
+        if (result.single) { this.addAction(result.single); return; }
+        if (result.flushed) this.addAction(result.flushed);
+        if (result.current) this.addAction(result.current);
+        return;
+      }
+      this.addAction(clickAction);
     };
 
     handleDblClick = (event) => {

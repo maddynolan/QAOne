@@ -894,6 +894,39 @@ class PlaywrightRecorder extends EventEmitter {
       console.log(`[PlaywrightRecorder] Viewport: ${mobileOptions.viewport.width}x${mobileOptions.viewport.height}`);
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // STEALTH MODE: Anti-bot detection measures
+    // Many retail sites (Walmart, Kohl's, Target) use Akamai/Cloudflare
+    // bot protection that detects Playwright. These args help evade detection.
+    // ═══════════════════════════════════════════════════════════════════
+    const stealthArgs = [
+      '--start-maximized',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-site-isolation-trials',
+      '--disable-web-security',
+      '--disable-features=BlockInsecurePrivateNetworkRequests',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu',
+      '--window-size=1920,1080',
+      '--hide-scrollbars',
+      '--mute-audio',
+      // Critical for bot detection evasion
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
+      '--disable-ipc-flooding-protection',
+      '--password-store=basic',
+      '--use-mock-keychain',
+      '--force-color-profile=srgb',
+      // Prevent WebDriver detection
+      '--disable-infobars',
+      '--enable-features=NetworkService,NetworkServiceInProcess',
+    ];
+    
     // Launch browser with PERSISTENT context (keeps cookies, localStorage, auth)
     // MOBILE SUPPORT: Merges mobile options when configured, otherwise uses desktop defaults
     this.context = await chromium.launchPersistentContext(userDataDir, {
@@ -901,11 +934,8 @@ class PlaywrightRecorder extends EventEmitter {
       // Mobile: use device viewport, Desktop: full window
       viewport: isMobile ? mobileOptions.viewport : null,
       // Mobile: use device user agent, Desktop: Chrome UA
-      userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      args: [
-        '--start-maximized',
-        '--disable-blink-features=AutomationControlled'
-      ],
+      userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      args: stealthArgs,
       // Mobile-specific options
       ...(isMobile && {
         deviceScaleFactor: mobileOptions.deviceScaleFactor,
@@ -916,6 +946,57 @@ class PlaywrightRecorder extends EventEmitter {
       }),
       // Ignore HTTPS errors for dev environments
       ignoreHTTPSErrors: true,
+    });
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // STEALTH SCRIPT: Patch navigator.webdriver and other detection vectors
+    // This runs BEFORE any page scripts, making detection much harder
+    // ═══════════════════════════════════════════════════════════════════
+    await this.context.addInitScript(() => {
+      // Remove webdriver property
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      
+      // Overwrite the 'plugins' property to use a custom getter
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+        ],
+      });
+      
+      // Overwrite the 'languages' property
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+      
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+      
+      // Mask Chrome-specific properties
+      window.chrome = {
+        runtime: {},
+        loadTimes: function() {},
+        csi: function() {},
+        app: {},
+      };
+      
+      // Pass WebGL vendor/renderer check
+      const getParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) return 'Intel Inc.';
+        if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+        return getParameter.call(this, parameter);
+      };
+      
+      console.log('[Flowstral Stealth] Anti-detection patches applied');
     });
     
     // With persistent context, use pages() or newPage()
@@ -1595,6 +1676,7 @@ class PlaywrightRecorder extends EventEmitter {
               const isInteractive = 
                 tag === 'input' ||
                 tag === 'li' ||
+                tag === 'label' || // Labels are interactive (often wrap radio buttons in segmented controls)
                 elRole === 'button' ||
                 elRole === 'link' ||
                 elRole === 'tab' ||
@@ -1602,7 +1684,14 @@ class PlaywrightRecorder extends EventEmitter {
                 elRole === 'option' ||
                 elRole === 'listitem' ||
                 elRole === 'treeitem' ||
+                elRole === 'radio' || // Segmented controls / styled radio buttons
+                elRole === 'checkbox' || // Styled checkboxes
+                elRole === 'switch' || // Toggle switches
                 el.getAttribute('tabindex') === '0' ||
+                el.getAttribute('aria-pressed') !== null || // Toggle buttons
+                el.getAttribute('aria-selected') !== null || // Selectable items
+                el.classList?.contains('btn') || // Bootstrap-style buttons
+                el.classList?.contains('button') || // Generic button class
                 el.onclick;
               
               // Check for Salesforce-specific menu item indicators
@@ -1644,14 +1733,26 @@ class PlaywrightRecorder extends EventEmitter {
               // These are form step headers like "Start your registrationIt's easy and takes 10..."
               const isContainerDiv = tag === 'div' || tag === 'span';
               if (isContainerDiv && !hasTitle && !hasAriaLabel) {
-                // Check if text looks like concatenated headers (no whitespace between sentences)
-                const rawText = (el.textContent || '').trim();
-                const hasLowerUpperJunction = /[a-z][A-Z]/.test(rawText); // "registrationIt's"
-                const hasManyChildren = el.children && el.children.length > 2;
-                const hasMultipleSections = el.querySelectorAll('h1,h2,h3,h4,h5,h6,p,.slds-text-heading').length > 0;
+                // BUT DON'T skip if it's part of a segmented control / button group
+                const isSegmentedButton = 
+                  el.closest('[role="radiogroup"], [role="group"], .btn-group, .button-group, .segmented-control, .toggle-group') ||
+                  el.querySelector('input[type="radio"], input[type="checkbox"]') ||
+                  el.getAttribute('aria-pressed') !== null ||
+                  el.getAttribute('aria-selected') !== null ||
+                  el.classList?.contains('active') ||
+                  el.classList?.contains('selected') ||
+                  el.classList?.contains('checked');
                 
-                if (hasLowerUpperJunction || hasManyChildren || hasMultipleSections) {
-                  continue; // Skip this container, look for actual interactive element
+                if (!isSegmentedButton) {
+                  // Check if text looks like concatenated headers (no whitespace between sentences)
+                  const rawText = (el.textContent || '').trim();
+                  const hasLowerUpperJunction = /[a-z][A-Z]/.test(rawText); // "registrationIt's"
+                  const hasManyChildren = el.children && el.children.length > 2;
+                  const hasMultipleSections = el.querySelectorAll('h1,h2,h3,h4,h5,h6,p,.slds-text-heading').length > 0;
+                  
+                  if (hasLowerUpperJunction || hasManyChildren || hasMultipleSections) {
+                    continue; // Skip this container, look for actual interactive element
+                  }
                 }
               }
               
@@ -1867,6 +1968,36 @@ class PlaywrightRecorder extends EventEmitter {
               }
             }
             
+            // SPECIAL HANDLING FOR SEGMENTED CONTROLS / STYLED BUTTON GROUPS
+            // These are often labels or divs that visually look like buttons but wrap hidden radio inputs
+            // Common patterns: Bootstrap btn-group, Xcel Energy service type selector, etc.
+            if (tag === 'label' || tag === 'div' || tag === 'span') {
+              // Check if this element contains or is associated with a radio/checkbox
+              var containedInput = bestElement.querySelector('input[type="radio"], input[type="checkbox"]');
+              var isInRadioGroup = bestElement.closest('[role="radiogroup"], [role="group"], .btn-group, .button-group, .segmented-control, fieldset');
+              var hasSelectedIndicator = bestElement.getAttribute('aria-pressed') || bestElement.getAttribute('aria-selected') || bestElement.getAttribute('aria-checked');
+              var hasSelectedClass = bestElement.classList && (
+                bestElement.classList.contains('active') ||
+                bestElement.classList.contains('selected') ||
+                bestElement.classList.contains('checked') ||
+                bestElement.classList.contains('is-selected')
+              );
+              
+              // If this looks like a segmented control option, treat it specially
+              if (containedInput || isInRadioGroup || hasSelectedIndicator || hasSelectedClass) {
+                // Get the visible text as the description (this is what the user sees)
+                var visibleText = (bestElement.textContent || '').trim();
+                // Filter out hidden input value text if present
+                if (containedInput && containedInput.value) {
+                  visibleText = visibleText.replace(containedInput.value, '').trim();
+                }
+                if (visibleText && visibleText.length > 1 && visibleText.length < 50) {
+                  text = visibleText;
+                }
+                console.log('[Flowstral] Detected segmented control click:', visibleText);
+              }
+            }
+            
             // Generate description - avoid auto-generated IDs
             var useId = id;
             // Skip auto-generated IDs (patterns like "radio-123", "input-456", "lwc-xxx", "aura-xxx")
@@ -1876,16 +2007,23 @@ class PlaywrightRecorder extends EventEmitter {
             let desc = title || ariaLabel || text || name || useId || placeholder || tag;
             desc = desc.replace(/\\s+/g, ' ').trim().substring(0, 50);
             
-            // Check if this is a submit/login button that will cause immediate navigation
+            // Check if this is a submit/login/navigation button that will cause immediate action
+            var textLower = text.toLowerCase();
             var isSubmitButton = 
               type === 'submit' || 
-              tag === 'button' && (bestElement.closest('form') || text.toLowerCase().includes('log in') || text.toLowerCase().includes('login') || text.toLowerCase().includes('sign in')) ||
+              tag === 'button' && (bestElement.closest('form') || textLower.includes('log in') || textLower.includes('login') || textLower.includes('sign in')) ||
               id.toLowerCase().includes('login') ||
               name.toLowerCase().includes('login') ||
-              text.toLowerCase().includes('log in') ||
-              text.toLowerCase().includes('login') ||
-              text.toLowerCase().includes('sign in') ||
-              text.toLowerCase().includes('submit');
+              textLower.includes('log in') ||
+              textLower.includes('login') ||
+              textLower.includes('sign in') ||
+              textLower.includes('submit') ||
+              textLower.includes('next') ||
+              textLower.includes('continue') ||
+              textLower.includes('proceed') ||
+              textLower === 'cancel' ||
+              textLower === 'ok' ||
+              textLower === 'confirm';
             
             // Detect element index when there are multiple matching elements
             var elementIndex = 0;
@@ -2270,6 +2408,65 @@ class PlaywrightRecorder extends EventEmitter {
           const type = (input.type || '').toLowerCase();
           if (['checkbox','radio','submit','button','file','hidden'].includes(type)) return;
           
+          // ═══════════════════════════════════════════════════════════════
+          // HONEYPOT DETECTION: Skip spam trap/bot detection fields
+          // These are hidden fields designed to catch bots
+          // ═══════════════════════════════════════════════════════════════
+          const inputName = (input.name || '').toLowerCase();
+          const inputId = (input.id || '').toLowerCase();
+          const inputClass = (input.className || '').toLowerCase();
+          
+          // Common honeypot field names
+          const honeypotPatterns = [
+            'honeypot', 'honey-pot', 'honey_pot',
+            'spamfilter', 'spam-filter', 'spam_filter', 'spam',
+            'bot', 'botcheck', 'bot-check', 'bot_check', 'botfield',
+            'trap', 'spamtrap', 'spam-trap',
+            'website', 'url', 'homepage',  // Often used as honeypots
+            'fax', 'faxnumber',  // Rarely used by humans
+            'hp', 'hpfield', 'hp_field',
+            'captcha_text', 'nocaptcha',
+            'leave-blank', 'leave_blank', 'leaveblank'
+          ];
+          
+          for (const pattern of honeypotPatterns) {
+            if (inputName.includes(pattern) || inputId.includes(pattern)) {
+              console.log('[Flowstral] 🍯 Skipping honeypot field:', inputName || inputId);
+              return;
+            }
+          }
+          
+          // Check if element is hidden via CSS (common honeypot technique)
+          try {
+            const style = window.getComputedStyle(input);
+            const rect = input.getBoundingClientRect();
+            
+            // Skip if not visible
+            if (style.display === 'none' || 
+                style.visibility === 'hidden' || 
+                style.opacity === '0' ||
+                rect.width === 0 || 
+                rect.height === 0 ||
+                rect.left < -1000 || rect.top < -1000) {
+              console.log('[Flowstral] 🍯 Skipping hidden/off-screen field:', inputName || inputId);
+              return;
+            }
+            
+            // Skip fields with very small dimensions (likely hidden)
+            if (rect.width < 5 || rect.height < 5) {
+              console.log('[Flowstral] 🍯 Skipping tiny field (likely hidden):', inputName || inputId);
+              return;
+            }
+          } catch (e) {
+            // If we can't check visibility, continue cautiously
+          }
+          
+          // Check for honeypot via tabindex=-1 and autocomplete="off" combo
+          if (input.tabIndex === -1 && input.autocomplete === 'off') {
+            console.log('[Flowstral] 🍯 Skipping likely honeypot (tabindex=-1, autocomplete=off):', inputName || inputId);
+            return;
+          }
+          
           const key = (input.id || '') + '|' + (input.name || '') + '|' + (input.placeholder || '') + '|' + (input.getAttribute('aria-label') || '');
           
           // Mark this input for immediate flush
@@ -2623,12 +2820,43 @@ class PlaywrightRecorder extends EventEmitter {
   }
 
   /**
+   * Check if an input looks like a honeypot/spam trap field
+   */
+  _isHoneypotField(inp) {
+    const name = (inp.name || '').toLowerCase();
+    const id = (inp.id || '').toLowerCase();
+    
+    // Common honeypot field name patterns
+    const honeypotPatterns = [
+      'honeypot', 'honey-pot', 'honey_pot',
+      'spamfilter', 'spam-filter', 'spam_filter', 'spam',
+      'bot', 'botcheck', 'bot-check', 'bot_check', 'botfield',
+      'trap', 'spamtrap', 'spam-trap',
+      'hp', 'hpfield', 'hp_field',
+      'captcha_text', 'nocaptcha',
+      'leave-blank', 'leave_blank', 'leaveblank'
+    ];
+    
+    for (const pattern of honeypotPatterns) {
+      if (name.includes(pattern) || id.includes(pattern)) {
+        console.log('[PlaywrightRecorder] 🍯 Filtering honeypot field:', name || id);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * Process input (fill) actions from captured data
    * Called BEFORE click processing to ensure correct order
    */
   async _processInputs(inputs) {
     for (const inp of inputs) {
       if (!inp.value || inp.value.length === 0) continue;
+      
+      // HONEYPOT FILTER: Skip spam trap fields
+      if (this._isHoneypotField(inp)) continue;
       
       // Find existing action for this field (by field key, NOT by value)
       const fieldKey = inp.key || `${inp.name || ''}|${inp.id || ''}|${inp.placeholder || ''}`;
@@ -3091,7 +3319,11 @@ class PlaywrightRecorder extends EventEmitter {
       // NEW: Fresh browser mode - completely clean state, no cookies/storage
       // Use for: Test Playground, e-commerce, functional tests
       // Don't use for: Salesforce, SSO apps (need login persistence)
-      freshBrowser = false 
+      freshBrowser = false,
+      // NEW: Keep browser open on failure - allows visual debugging
+      // When true: browser stays open, user can use Element Picker/Debug/AI
+      // When false (default): browser closes, only Manual edit works
+      keepBrowserOpenOnFailure = false
     } = options;
     
     console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps', 
@@ -3125,12 +3357,19 @@ class PlaywrightRecorder extends EventEmitter {
           // CRITICAL: Reset SmartFinder so it gets recreated with the new page
           this.smartFinder = null;
           
+          // STEALTH MODE ARGS
+          const stealthArgs = [
+            '--start-maximized',
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--disable-infobars',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+          ];
+          
           this.browser = await chromium.launch({
             headless,
-            args: [
-              '--start-maximized',
-              '--disable-blink-features=AutomationControlled'
-            ]
+            args: stealthArgs
           });
           
           // Get mobile emulation options (backward compatible)
@@ -3145,7 +3384,7 @@ class PlaywrightRecorder extends EventEmitter {
           this.context = await this.browser.newContext({
             // Mobile: use device viewport, Desktop: full window
             viewport: isMobile ? mobileOptions.viewport : null,
-            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             // Mobile-specific options
             ...(isMobile && {
               deviceScaleFactor: mobileOptions.deviceScaleFactor,
@@ -3155,8 +3394,14 @@ class PlaywrightRecorder extends EventEmitter {
             ignoreHTTPSErrors: true,
           });
           
+          // STEALTH: Add anti-detection script
+          await this.context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+          });
+          
           this.page = await this.context.newPage();
-          console.log('[PlaywrightRecorder] Fresh browser ready - no stored state');
+          console.log('[PlaywrightRecorder] Fresh browser ready - no stored state (stealth mode)');
           
         } else {
           // PERSISTENT MODE: Keep login sessions, cookies, etc.
@@ -3179,16 +3424,22 @@ class PlaywrightRecorder extends EventEmitter {
             console.log(`[PlaywrightRecorder] Test running in mobile mode: ${this.mobileDevice.name}`);
           }
           
+          // STEALTH MODE ARGS for persistent context
+          const persistentStealthArgs = [
+            '--start-maximized', 
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--disable-infobars',
+            '--no-sandbox',
+          ];
+          
           this.context = await chromium.launchPersistentContext(userDataDir, {
             headless,
             // Mobile: use device viewport, Desktop: full window
             viewport: isMobile ? mobileOptions.viewport : null,
-            args: [
-              '--start-maximized', 
-              '--disable-blink-features=AutomationControlled'
-            ],
+            args: persistentStealthArgs,
             // Mobile: use device user agent, Desktop: Chrome UA  
-            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             // Mobile-specific options
             ...(isMobile && {
               deviceScaleFactor: mobileOptions.deviceScaleFactor,
@@ -3198,10 +3449,17 @@ class PlaywrightRecorder extends EventEmitter {
             ignoreHTTPSErrors: true,
           });
           
+          // STEALTH: Add anti-detection script
+          await this.context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+          });
+          
           // With persistent context, get existing page or create new one
           const pages = this.context.pages();
           this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
           this.browser = null; // Not needed with persistent context
+          console.log('[PlaywrightRecorder] Persistent browser ready (stealth mode)');
         }
       } else {
         console.log('[PlaywrightRecorder] Using existing browser for test');
@@ -3374,7 +3632,185 @@ class PlaywrightRecorder extends EventEmitter {
           console.error(`[PlaywrightRecorder] Step ${i + 1} failed:`, stepError.message);
           failedStep = i;
           failError = stepError.message;
-          this.emit('test-step-complete', { stepIndex: i, success: false, error: stepError.message });
+          
+          // Capture failure state for debugging with ENHANCED scroll-to-element
+          let failureScreenshot = null;
+          let failureUrl = null;
+          let elementLocation = null; // Track where we scrolled to
+          try {
+            if (this.page && !this.page.isClosed()) {
+              const failedStepData = steps[i];
+              let scrolledToElement = false;
+              
+              // ═══════════════════════════════════════════════════════════════════════
+              // ENHANCED SCROLL-TO-ELEMENT: Multiple strategies to find the target area
+              // ═══════════════════════════════════════════════════════════════════════
+              
+              try {
+                // STRATEGY 1: Use CSS selector if available
+                const selector = failedStepData?.selector || 
+                                failedStepData?.selectorObj?.selector ||
+                                failedStepData?.manualSelector;
+                if (selector && !scrolledToElement) {
+                  try {
+                    const element = this.page.locator(selector).first();
+                    if (await element.count() > 0) {
+                      await element.scrollIntoViewIfNeeded();
+                      const box = await element.boundingBox();
+                      if (box) {
+                        elementLocation = { x: box.x, y: box.y, width: box.width, height: box.height };
+                        scrolledToElement = true;
+                        console.log('[PlaywrightRecorder] ✓ Scrolled to element via selector');
+                      }
+                    }
+                  } catch (e) { /* Try next strategy */ }
+                }
+                
+                // STRATEGY 2: Use bounding box from recording
+                if (!scrolledToElement && failedStepData?.recipe?.confirm?.boundingBox) {
+                  const box = failedStepData.recipe.confirm.boundingBox;
+                  await this.page.evaluate(({ x, y }) => {
+                    window.scrollTo({ 
+                      top: Math.max(0, y - 200),
+                      left: Math.max(0, x - 100),
+                      behavior: 'instant' 
+                    });
+                  }, { x: box.x, y: box.y });
+                  elementLocation = box;
+                  scrolledToElement = true;
+                  console.log('[PlaywrightRecorder] ✓ Scrolled to bounding box from recording');
+                  await this.page.waitForTimeout(100);
+                }
+                
+                // STRATEGY 3: Search for text and scroll to it
+                const searchText = failedStepData?.text || 
+                                  failedStepData?.label ||
+                                  failedStepData?.recipe?.what?.text ||
+                                  failedStepData?.recipe?.where?.nearText;
+                if (!scrolledToElement && searchText) {
+                  const result = await this.page.evaluate((text) => {
+                    // Try exact match first
+                    const exactXPath = `//*[contains(text(), "${text.replace(/"/g, '\\"')}")]`;
+                    try {
+                      const result = document.evaluate(exactXPath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                      if (result.singleNodeValue) {
+                        const el = result.singleNodeValue;
+                        el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                        const rect = el.getBoundingClientRect();
+                        return { found: true, x: rect.x + window.scrollX, y: rect.y + window.scrollY, width: rect.width, height: rect.height };
+                      }
+                    } catch (e) {}
+                    
+                    // Fallback: TreeWalker for partial match
+                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while (node = walker.nextNode()) {
+                      if (node.textContent?.toLowerCase().includes(text.toLowerCase())) {
+                        const el = node.parentElement;
+                        if (el && el.offsetParent !== null) { // visible element
+                          el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                          const rect = el.getBoundingClientRect();
+                          return { found: true, x: rect.x + window.scrollX, y: rect.y + window.scrollY, width: rect.width, height: rect.height };
+                        }
+                      }
+                    }
+                    return { found: false };
+                  }, searchText);
+                  
+                  if (result.found) {
+                    elementLocation = { x: result.x, y: result.y, width: result.width, height: result.height };
+                    scrolledToElement = true;
+                    console.log('[PlaywrightRecorder] ✓ Scrolled to text match:', searchText.substring(0, 30));
+                    await this.page.waitForTimeout(100);
+                  }
+                }
+                
+                // STRATEGY 4: Try aria-label
+                const ariaLabel = failedStepData?.selectorObj?.ariaLabel ||
+                                 failedStepData?.recipe?.which?.ariaLabel;
+                if (!scrolledToElement && ariaLabel) {
+                  try {
+                    const element = this.page.locator(`[aria-label*="${ariaLabel}" i]`).first();
+                    if (await element.count() > 0) {
+                      await element.scrollIntoViewIfNeeded();
+                      const box = await element.boundingBox();
+                      if (box) {
+                        elementLocation = { x: box.x, y: box.y, width: box.width, height: box.height };
+                        scrolledToElement = true;
+                        console.log('[PlaywrightRecorder] ✓ Scrolled to aria-label match');
+                      }
+                    }
+                  } catch (e) { /* Try next */ }
+                }
+                
+                // STRATEGY 5: Try data-testid
+                const testId = failedStepData?.selectorObj?.testId ||
+                              failedStepData?.recipe?.which?.testId;
+                if (!scrolledToElement && testId) {
+                  try {
+                    const element = this.page.locator(`[data-testid="${testId}"], [data-test="${testId}"]`).first();
+                    if (await element.count() > 0) {
+                      await element.scrollIntoViewIfNeeded();
+                      const box = await element.boundingBox();
+                      if (box) {
+                        elementLocation = { x: box.x, y: box.y, width: box.width, height: box.height };
+                        scrolledToElement = true;
+                        console.log('[PlaywrightRecorder] ✓ Scrolled to testId match');
+                      }
+                    }
+                  } catch (e) { /* Ignore */ }
+                }
+                
+                if (!scrolledToElement) {
+                  console.log('[PlaywrightRecorder] Could not scroll to element, using current viewport');
+                }
+                
+              } catch (scrollError) {
+                console.log('[PlaywrightRecorder] Scroll error:', scrollError.message);
+              }
+              
+              // Take screenshot
+              const buf = await this.page.screenshot();
+              failureScreenshot = `data:image/png;base64,${buf.toString('base64')}`;
+              failureUrl = this.page.url();
+            }
+          } catch (e) {
+            console.error('[PlaywrightRecorder] Failed to capture failure screenshot:', e.message);
+          }
+          
+          // OPTION C: Find similar elements for Visual Selector Cards
+          let similarElements = [];
+          try {
+            if (this.page && !this.page.isClosed()) {
+              similarElements = await this._findSimilarElements(failedStepData);
+              console.log(`[PlaywrightRecorder] Found ${similarElements.length} similar elements for Option C`);
+            }
+          } catch (e) {
+            console.log('[PlaywrightRecorder] Could not find similar elements:', e.message);
+          }
+          
+          // Store failure state for B+C Hybrid Editor
+          this._lastFailureState = {
+            stepIndex: failedStep,
+            step: steps[failedStep],
+            error: failError,
+            screenshot: failureScreenshot,
+            url: failureUrl,
+            timestamp: Date.now(),
+            allSteps: steps,
+            passedSteps: passedSteps,
+            similarElements: similarElements, // For Option C cards
+            elementLocation: elementLocation, // Where we scrolled to (if found)
+            scrolledToElement: !!elementLocation // Whether we successfully scrolled
+          };
+          
+          this.emit('test-step-complete', { 
+            stepIndex: i, 
+            success: false, 
+            error: stepError.message,
+            screenshot: failureScreenshot,
+            url: failureUrl
+          });
           break;
         }
       }
@@ -3383,14 +3819,26 @@ class PlaywrightRecorder extends EventEmitter {
       const success = failedStep === -1;
       console.log(`[PlaywrightRecorder] Test ${success ? 'PASSED' : 'FAILED'}: ${passedSteps}/${steps.length} steps`);
       
-      this.emit('test-complete', { success, passedSteps, failedStep, error: failError, totalSteps: steps.length });
+      // Store whether we should keep browser open
+      this._keepBrowserOpenOnFailure = keepBrowserOpenOnFailure && !success;
+      
+      this.emit('test-complete', { 
+        success, 
+        passedSteps, 
+        failedStep, 
+        error: failError, 
+        totalSteps: steps.length,
+        browserKeptOpen: this._keepBrowserOpenOnFailure,
+        failureScreenshot: this._lastFailureState?.screenshot
+      });
       
       // Collect step results for UI
       const stepResults = steps.map((step, idx) => ({
         step: idx + 1,
         description: step.description || step.qword,
         status: idx < passedSteps ? 'passed' : idx === failedStep ? 'failed' : 'skipped',
-        error: idx === failedStep ? failError : undefined
+        error: idx === failedStep ? failError : undefined,
+        screenshot: idx === failedStep ? this._lastFailureState?.screenshot : undefined
       }));
       
       return {
@@ -3399,7 +3847,9 @@ class PlaywrightRecorder extends EventEmitter {
         failedStep,
         totalSteps: steps.length,
         error: failError || undefined,
-        stepResults
+        stepResults,
+        browserKeptOpen: this._keepBrowserOpenOnFailure,
+        failureState: !success ? this._lastFailureState : undefined
       };
       
     } catch (error) {
@@ -3416,22 +3866,410 @@ class PlaywrightRecorder extends EventEmitter {
       // CRITICAL: Always reset the flag when test run completes
       this._isRunningTest = false;
       
-      // Close browser after test completes (success or failure)
-      // With persistent context, session data (cookies, localStorage) is preserved
-      console.log('[PlaywrightRecorder] Closing browser after test (session data preserved)...');
-      try {
-        // With persistent context, closing context closes all pages
-        // Session data is automatically saved to userDataDir
-        if (this.context) {
-          await this.context.close().catch(() => {});
+      // Check if we should keep browser open for debugging
+      if (this._keepBrowserOpenOnFailure) {
+        console.log('[PlaywrightRecorder] ⚠️ KEEPING BROWSER OPEN - Test failed and keepBrowserOpenOnFailure=true');
+        console.log('[PlaywrightRecorder] Browser will stay open for visual debugging. Call closeBrowser() when done.');
+        // Don't close - let user use Element Picker, Debug, AI features
+        // Browser will be closed when user explicitly closes it or starts a new test
+      } else {
+        // Close browser after test completes (success or failure)
+        // With persistent context, session data (cookies, localStorage) is preserved
+        console.log('[PlaywrightRecorder] Closing browser after test (session data preserved)...');
+        try {
+          // With persistent context, closing context closes all pages
+          // Session data is automatically saved to userDataDir
+          if (this.context) {
+            await this.context.close().catch(() => {});
+          }
+          this.page = null;
+          this.context = null;
+          this.browser = null;
+          console.log('[PlaywrightRecorder] Browser closed successfully, login session preserved for next run');
+        } catch (e) {
+          console.error('[PlaywrightRecorder] Error closing browser:', e.message);
         }
-        this.page = null;
-        this.context = null;
-        this.browser = null;
-        console.log('[PlaywrightRecorder] Browser closed successfully, login session preserved for next run');
-      } catch (e) {
-        console.error('[PlaywrightRecorder] Error closing browser:', e.message);
       }
+    }
+  }
+  
+  // ============================================================================
+  // FAILURE REPAIR METHODS - Help users fix failed steps
+  // ============================================================================
+  
+  /**
+   * Get the last failure state for the B+C Hybrid Editor
+   */
+  getLastFailureState() {
+    return this._lastFailureState || null;
+  }
+  
+  /**
+   * OPTION C: Find similar elements on the page for Visual Selector Cards
+   * When a step fails, find elements that might be what the user wanted
+   * @param {Object} failedStep - The step that failed
+   * @returns {Array} Array of similar elements with id, text, selector, type
+   */
+  async _findSimilarElements(failedStep) {
+    if (!this.page || this.page.isClosed()) return [];
+    
+    try {
+      const stepType = failedStep?.type || failedStep?.qword || 'click';
+      const targetText = failedStep?.text || failedStep?.label || '';
+      const recipe = failedStep?.recipe;
+      
+      // Determine what type of elements to look for
+      let elementType = 'any';
+      if (recipe?.what?.role) {
+        elementType = recipe.what.role;
+      } else if (stepType.toLowerCase().includes('check')) {
+        elementType = 'checkbox';
+      } else if (stepType.toLowerCase().includes('fill') || stepType.toLowerCase().includes('type')) {
+        elementType = 'textbox';
+      } else if (stepType.toLowerCase().includes('select')) {
+        elementType = 'combobox';
+      }
+      
+      console.log(`[PlaywrightRecorder] Finding similar elements: type=${elementType}, text="${targetText}"`);
+      
+      // Find similar elements in the page
+      const similarElements = await this.page.evaluate(({ elementType, targetText }) => {
+        const results = [];
+        const seenTexts = new Set();
+        
+        // Helper to get clean text
+        const getCleanText = (el) => {
+          // For inputs/checkboxes, try to find associated label
+          if (el.type === 'checkbox' || el.type === 'radio') {
+            // Check for label wrapping the input
+            const parentLabel = el.closest('label');
+            if (parentLabel) {
+              return parentLabel.textContent?.trim() || '';
+            }
+            // Check for label with for attribute
+            if (el.id) {
+              const label = document.querySelector(`label[for="${el.id}"]`);
+              if (label) return label.textContent?.trim() || '';
+            }
+            // Check for aria-label
+            if (el.getAttribute('aria-label')) {
+              return el.getAttribute('aria-label');
+            }
+            // Check for nearby text
+            const nextText = el.nextSibling?.textContent?.trim() || 
+                            el.nextElementSibling?.textContent?.trim() || '';
+            if (nextText) return nextText;
+          }
+          return el.textContent?.trim() || el.getAttribute('aria-label') || '';
+        };
+        
+        // Helper to build a selector
+        const buildSelector = (el) => {
+          if (el.id) return `#${el.id}`;
+          if (el.getAttribute('data-testid')) return `[data-testid="${el.getAttribute('data-testid')}"]`;
+          if (el.name) return `[name="${el.name}"]`;
+          // Fall back to a more specific selector
+          const tag = el.tagName.toLowerCase();
+          const type = el.type ? `[type="${el.type}"]` : '';
+          return `${tag}${type}`;
+        };
+        
+        // Find elements based on type
+        let elements = [];
+        switch (elementType) {
+          case 'checkbox':
+            elements = document.querySelectorAll('input[type="checkbox"]');
+            break;
+          case 'radio':
+            elements = document.querySelectorAll('input[type="radio"]');
+            break;
+          case 'textbox':
+            elements = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"], textarea');
+            break;
+          case 'combobox':
+            elements = document.querySelectorAll('select, [role="combobox"], [role="listbox"]');
+            break;
+          case 'button':
+            elements = document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]');
+            break;
+          case 'link':
+            elements = document.querySelectorAll('a[href]');
+            break;
+          default:
+            // For 'any' or unknown, look for interactive elements near the viewport
+            elements = document.querySelectorAll('button, a, input, select, [role="button"], [role="checkbox"], [role="link"], [onclick]');
+        }
+        
+        // Convert to array and filter visible elements
+        Array.from(elements).forEach((el, index) => {
+          if (results.length >= 8) return; // Max 8 suggestions
+          
+          // Skip hidden elements
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+          
+          const text = getCleanText(el);
+          if (!text || text.length > 50) return; // Skip empty or very long text
+          if (seenTexts.has(text.toLowerCase())) return; // Skip duplicates
+          seenTexts.add(text.toLowerCase());
+          
+          results.push({
+            id: `similar-${index}`,
+            text: text,
+            selector: buildSelector(el),
+            type: elementType !== 'any' ? elementType : (el.tagName.toLowerCase() === 'input' ? el.type : el.tagName.toLowerCase()),
+            // Score by text similarity to target
+            score: targetText ? (text.toLowerCase().includes(targetText.toLowerCase()) ? 2 : 0) : 1
+          });
+        });
+        
+        // Sort by score (most relevant first)
+        results.sort((a, b) => b.score - a.score);
+        
+        return results.slice(0, 6); // Return top 6
+      }, { elementType, targetText });
+      
+      return similarElements;
+    } catch (e) {
+      console.error('[PlaywrightRecorder] Error finding similar elements:', e.message);
+      return [];
+    }
+  }
+  
+  /**
+   * Re-open browser to the failed state (navigates to the URL where failure occurred)
+   * Used when browser was closed but user wants to debug
+   */
+  async reopenToFailedState() {
+    const failureState = this._lastFailureState;
+    if (!failureState) {
+      return { success: false, error: 'No failure state saved' };
+    }
+    
+    console.log('[PlaywrightRecorder] Re-opening browser to failed state...');
+    console.log('[PlaywrightRecorder] Failure URL:', failureState.url);
+    
+    try {
+      // Launch browser if needed
+      if (!this.page || this.page.isClosed()) {
+        const { chromium } = require('playwright');
+        const { app } = require('electron');
+        const path = require('path');
+        const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
+        
+        this.context = await chromium.launchPersistentContext(userDataDir, {
+          headless: false,
+          args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
+          ignoreHTTPSErrors: true,
+        });
+        
+        const pages = this.context.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+      }
+      
+      // Navigate to the failure URL
+      if (failureState.url) {
+        await this.page.goto(failureState.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      }
+      
+      // Re-play steps up to (but not including) the failed step to restore state
+      if (failureState.passedSteps > 0 && failureState.allSteps) {
+        console.log(`[PlaywrightRecorder] Re-playing ${failureState.passedSteps} passed steps to restore state...`);
+        for (let i = 0; i < failureState.passedSteps; i++) {
+          const step = failureState.allSteps[i];
+          try {
+            // Convert and execute step (simplified - navigate/click/fill)
+            await this._executeStepInternal(step, 15000);
+            console.log(`[PlaywrightRecorder] Restored step ${i + 1}/${failureState.passedSteps}`);
+          } catch (e) {
+            console.warn(`[PlaywrightRecorder] Could not restore step ${i + 1}: ${e.message}`);
+            // Continue anyway - best effort restoration
+          }
+        }
+      }
+      
+      this._keepBrowserOpenOnFailure = true; // Keep it open for debugging
+      
+      return { 
+        success: true, 
+        url: this.page.url(),
+        failedStep: failureState.stepIndex,
+        step: failureState.step
+      };
+    } catch (error) {
+      console.error('[PlaywrightRecorder] Failed to reopen to failed state:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Retry just the failed step with an updated action
+   * Used after user edits the step in ElementRepairWizard
+   */
+  async retryFailedStep(updatedAction) {
+    const failureState = this._lastFailureState;
+    if (!failureState) {
+      return { success: false, error: 'No failure state saved' };
+    }
+    
+    if (!this.page || this.page.isClosed()) {
+      return { success: false, error: 'Browser not open. Use "Re-open Browser" first.' };
+    }
+    
+    console.log('[PlaywrightRecorder] Retrying failed step with updated action...');
+    console.log('[PlaywrightRecorder] Updated action:', JSON.stringify(updatedAction));
+    
+    try {
+      // Merge updated action with original step
+      const mergedAction = {
+        ...failureState.step,
+        ...updatedAction,
+        // Override specific fields if provided
+        manualSelector: updatedAction.manualSelector || failureState.step.manualSelector,
+        manualText: updatedAction.manualText || failureState.step.manualText,
+      };
+      
+      const result = await this.executeAction(mergedAction);
+      
+      if (result.success) {
+        console.log('[PlaywrightRecorder] ✅ Step retry SUCCEEDED!');
+        // Clear failure state on success
+        this._lastFailureState = null;
+        return { success: true, message: 'Step executed successfully!' };
+      } else {
+        console.log('[PlaywrightRecorder] ❌ Step retry FAILED:', result.error);
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('[PlaywrightRecorder] Step retry error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Record a replacement action for the failed step
+   * Starts element picker mode and returns when user picks an element
+   */
+  async recordReplacementAction() {
+    const failureState = this._lastFailureState;
+    if (!failureState) {
+      return { success: false, error: 'No failure state saved' };
+    }
+    
+    if (!this.page || this.page.isClosed()) {
+      return { success: false, error: 'Browser not open. Use "Re-open Browser" first.' };
+    }
+    
+    console.log('[PlaywrightRecorder] Starting element picker for replacement action...');
+    console.log('[PlaywrightRecorder] Original action type:', failureState.step.type || failureState.step.qword);
+    
+    // Return info about what we need - the actual picking is handled by elementPicker
+    return {
+      success: true,
+      message: 'Click on the correct element in the browser',
+      originalAction: failureState.step,
+      stepIndex: failureState.stepIndex
+    };
+  }
+  
+  /**
+   * Resume test execution from the failed step (after fixing)
+   */
+  async resumeFromFailedStep(options = {}) {
+    const failureState = this._lastFailureState;
+    if (!failureState) {
+      return { success: false, error: 'No failure state saved' };
+    }
+    
+    if (!this.page || this.page.isClosed()) {
+      return { success: false, error: 'Browser not open. Use "Re-open Browser" first.' };
+    }
+    
+    const { updatedSteps, skipFailedStep = false } = options;
+    const steps = updatedSteps || failureState.allSteps;
+    const startIndex = skipFailedStep ? failureState.stepIndex + 1 : failureState.stepIndex;
+    
+    console.log(`[PlaywrightRecorder] Resuming from step ${startIndex + 1}/${steps.length}`);
+    
+    let passedSteps = failureState.passedSteps;
+    let failedStep = -1;
+    let failError = '';
+    
+    try {
+      for (let i = startIndex; i < steps.length; i++) {
+        const step = steps[i];
+        console.log(`[PlaywrightRecorder] Resume: Step ${i + 1}: ${step.description || step.qword}`);
+        
+        this.emit('test-step-start', { stepIndex: i, step });
+        
+        try {
+          await this._executeStepInternal(step, 30000);
+          passedSteps++;
+          this.emit('test-step-complete', { stepIndex: i, success: true });
+          await this.page.waitForTimeout(500);
+        } catch (stepError) {
+          console.error(`[PlaywrightRecorder] Resume: Step ${i + 1} failed:`, stepError.message);
+          failedStep = i;
+          failError = stepError.message;
+          
+          // Capture new failure state
+          let screenshot = null;
+          try {
+            const buf = await this.page.screenshot();
+            screenshot = `data:image/png;base64,${buf.toString('base64')}`;
+          } catch (e) {}
+          
+          this._lastFailureState = {
+            stepIndex: failedStep,
+            step: steps[failedStep],
+            error: failError,
+            screenshot,
+            url: this.page.url(),
+            timestamp: Date.now(),
+            allSteps: steps,
+            passedSteps
+          };
+          
+          this.emit('test-step-complete', { stepIndex: i, success: false, error: failError, screenshot });
+          break;
+        }
+      }
+      
+      const success = failedStep === -1;
+      console.log(`[PlaywrightRecorder] Resume complete: ${success ? 'PASSED' : 'FAILED'}`);
+      
+      return {
+        success,
+        passedSteps,
+        failedStep,
+        totalSteps: steps.length,
+        error: failError || undefined
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Close browser manually (when user is done debugging)
+   */
+  async closeBrowser() {
+    console.log('[PlaywrightRecorder] Manually closing browser...');
+    try {
+      if (this.context) {
+        await this.context.close().catch(() => {});
+      }
+      this.page = null;
+      this.context = null;
+      this.browser = null;
+      this._keepBrowserOpenOnFailure = false;
+      console.log('[PlaywrightRecorder] Browser closed manually');
+      return { success: true };
+    } catch (e) {
+      console.error('[PlaywrightRecorder] Error closing browser:', e.message);
+      return { success: false, error: e.message };
     }
   }
 
@@ -10133,10 +10971,31 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                           buttonText.indexOf('sign in') >= 0 ||
                           buttonText.indexOf('submit') >= 0 ||
                           buttonText.indexOf('verify') >= 0 ||
-                          buttonText.indexOf('continue') >= 0;
+                          buttonText.indexOf('continue') >= 0 ||
+                          buttonText.indexOf('next') >= 0; // Added "Next" button support
         
         if (isSubmitLike) {
-          return; // Already handled
+          return; // Already handled in capture phase
+        }
+        
+        // DON'T skip labels that are part of segmented controls / styled radio buttons
+        // These are interactive elements that look like buttons but wrap hidden inputs
+        if (tagName === 'label') {
+          var hasRadioOrCheckbox = element.querySelector('input[type="radio"], input[type="checkbox"]');
+          var isInButtonGroup = element.closest('[role="radiogroup"], [role="group"], .btn-group, .button-group, .segmented-control');
+          var hasSelectedState = element.classList && (
+            element.classList.contains('active') || 
+            element.classList.contains('selected') || 
+            element.classList.contains('checked')
+          );
+          
+          // If it's a label in a button-like context, it SHOULD be recorded
+          if (hasRadioOrCheckbox || isInButtonGroup || hasSelectedState) {
+            // Don't skip - let it be recorded
+            console.log('[Flowstral] Recording label click for segmented control:', buttonText.substring(0, 30));
+          } else {
+            return; // Skip normal labels
+          }
         }
         
         // ENHANCED: Always record Lightning components (hyphenated tags)

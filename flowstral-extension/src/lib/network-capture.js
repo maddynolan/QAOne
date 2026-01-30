@@ -1,13 +1,18 @@
 /**
  * Network Capture Module - Browser-native HTTP/WebSocket Recording
- * 
- * Better than LoadRunner/NeoLoad because:
+ *
+ * HAR (HTTP Archive) capture for:
+ * - Load testing: Export HAR and import into k6, JMeter, Gatling, NeoLoad, etc.
+ * - API testing: Use HAR in Postman, Insomnia, or API test suites (request/response + timing).
+ *
+ * Advantages vs proxy-based tools:
  * 1. No proxy configuration needed
  * 2. No SSL certificate installation
  * 3. Works with ANY site (including strict CSP)
  * 4. True browser timing (not proxy-delayed)
  * 5. Full WebSocket support
- * 6. Automatic correlation detection
+ * 6. Automatic correlation detection (session/auth tokens)
+ * 7. HAR 1.2 standard format
  */
 
 class NetworkCapture {

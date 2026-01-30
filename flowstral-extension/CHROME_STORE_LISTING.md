@@ -18,7 +18,7 @@ Flowstral Recorder captures your browser interactions and generates production-r
 - One-click recording of clicks, inputs, and navigation
 - Intelligent selector generation that survives UI changes
 - Multi-tab and popup window support
-- Network request capture for performance testing
+- **HAR capture for load testing & API testing:** Optional Protocol Capture records HTTP/WebSocket as HAR; export for k6, JMeter, Postman, Insomnia
 
 **Enterprise Application Support**
 Built-in optimizations for 20+ enterprise platforms:

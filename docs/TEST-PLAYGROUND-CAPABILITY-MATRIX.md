@@ -319,6 +319,90 @@
 
 ---
 
+---
+
+## 12. Comprehensive Element Support (NEW - January 2026)
+
+### NEW Action Types Added
+
+| Action | Aliases | Description | Site Support |
+|--------|---------|-------------|--------------|
+| `clear` | `clearfield` | Clear input field | All |
+| `focus` | - | Focus element | All |
+| `blur` | - | Blur/unfocus element | All |
+| `toggle` | `toggleswitch` | Toggle switch on/off | All |
+| `slider` | `setslider`, `range` | Set slider value | All |
+| `expand`/`collapse` | `accordion` | Accordion toggle | All |
+| `autocomplete` | `typeahead`, `selectsuggestion` | Type and select suggestion | All |
+| `otp` | `otpinput`, `pin` | Multi-field OTP entry | All |
+| `increment`/`decrement` | `setquantity` | Quantity spinner +/- | E-commerce |
+| `rate` | `rating`, `setrating` | Star rating selection | All |
+| `sortcolumn` | `tablesort` | Sort table by column | Enterprise |
+| `gotopage` | `pagination` | Navigate to page | All |
+| `acceptcookies` | `dismissbanner`, `cookieconsent` | Cookie consent handling | All |
+| `loadmore` | `scrolltoload`, `infinitescroll` | Infinite scroll | All |
+| `multiselect` | `selectmultiple` | Select multiple options | All |
+| `selectdate` | `datepicker` | Date picker selection | All |
+| `selecttime` | `timepicker` | Time picker selection | All |
+| `selectcalendardate` | `calendar` | Calendar navigation | All |
+
+### Site-Specific Patterns (270+ Selectors)
+
+#### E-Commerce Sites
+| Site | Container Selectors | Title Selectors |
+|------|-------------------|----------------|
+| Amazon | `[data-asin]`, `[data-component-type="s-search-result"]` | `h2 a span`, `.a-text-normal` |
+| Walmart | `[data-item-id]`, `[data-automation-id*="product"]` | `[data-automation-id="product-title"]` |
+| Target | `[data-test="@web/ProductCard"]` | `[data-test="product-title"]` |
+| Best Buy | `.sku-item`, `[data-sku-id]` | `.sku-title a` |
+| eBay | `.s-item` | `.s-item__title` |
+| Etsy | `.v2-listing-card` | `.v2-listing-card__title` |
+| Shopify | `.product-card`, `[data-product-id]` | `.product-card__title` |
+| Home Depot | `.browse-search__pod` | `.product-title` |
+| Wayfair | `.ProductCard` | `.ProductCard__title` |
+| Costco | `.product-tile` | `.product-title` |
+| Macy's | `.productThumbnail` | `.productDescription a` |
+| Nordstrom | `[data-element-id="product-module"]` | `h3` |
+| Kohl's | `[data-tracking="product-pod"]` | `.prod-title` |
+| Newegg | `.item-cell` | `.item-title` |
+| Nike | `.product-card` | `.product-card__title` |
+| Adidas | `.plp-glass-product-card` | `.glass-product-card__title` |
+| Apple | `.as-purchaseinfo` | `.as-titleinfo` |
+| IKEA | `.pip-product-compact` | `[data-product-number]` |
+| H&M | `.product-item` | `.product-item-details` |
+
+#### Travel Sites
+| Site | Container Selectors | Title Selectors |
+|------|-------------------|----------------|
+| Expedia | `.uitk-card`, `[data-stid*="property-card"]` | `[data-stid="content-hotel-title"]` |
+| Booking.com | `[data-testid="property-card"]`, `.sr_item` | `.sr-hotel__name` |
+| Airbnb | `[data-testid="card-container"]` | `[data-testid="listing-card-title"]` |
+| Hotels.com | `.uitk-layout-flex-item` | `[data-stid*="property-name"]` |
+| Kayak | `.Flights-Results-FlightResultItem` | `.resultInfo .name` |
+| Tripadvisor | `.listing`, `[data-locationid]` | `.listing_title` |
+| Priceline | `[data-test-id="hotel-listing"]` | `[data-test-id="hotel-name"]` |
+| Southwest | `.air-booking-select-detail` | `.airline-name` |
+| Delta | `.flight-search-result` | `.carrier-info` |
+
+#### Food Delivery
+| Site | Container Selectors | Title Selectors |
+|------|-------------------|----------------|
+| DoorDash | `[data-anchor-id*="MenuItem"]` | `[class*="ItemName"]` |
+| Uber Eats | `[data-testid="rich-items-card"]` | `[data-testid="rich-text"]` |
+| Grubhub | `.menuItem` | `.menuItem-name` |
+| Instacart | `[data-testid="product-card"]` | `[data-testid="item-card-title"]` |
+
+#### Enterprise Apps
+| Platform | Container Selectors | Title Selectors |
+|----------|-------------------|----------------|
+| Salesforce | `lightning-datatable tr`, `[data-row-key-value]` | `.slds-truncate a` |
+| ServiceNow | `[data-list-id]`, `.list_row` | `[data-label]` |
+| Workday | `[data-automation-id*="row"]` | `[data-automation-id]` |
+| Jira | `[data-testid="board.card"]` | `.issue-key` |
+| AG-Grid | `.ag-row` | `[col-id]:first-child` |
+
+---
+
 ## Conclusion
 
 **All major features are now supported!**
@@ -333,5 +417,12 @@ The implementation covers:
 - ✅ Drag and drop
 - ✅ File uploads (code ready)
 - ✅ Duplicate element handling (position detection)
+- ✅ **NEW: 18 additional action types** (sliders, toggles, accordions, OTP, ratings, etc.)
+- ✅ **NEW: 270+ site-specific selectors** (Amazon, Walmart, Target, Expedia, etc.)
+- ✅ **NEW: Context-aware product clicks** (finds product first, then button)
+- ✅ **NEW: Cookie consent handling**
+- ✅ **NEW: Infinite scroll support**
+- ✅ **NEW: Date/Time picker support**
+- ✅ **NEW: Table sorting and pagination**
 
-**Ready for user testing!**
+**Ready for production testing!**

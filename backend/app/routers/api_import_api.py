@@ -102,28 +102,35 @@ async def import_api_specification_file(
         content = await file.read()
         content_str = content.decode('utf-8')
         
-        # Determine content type from file extension
+        # Determine content type and format from file extension
         filename = file.filename.lower()
-        if filename.endswith(('.yaml', '.yml')):
+        if filename.endswith(('.har', '.har.json')) or ('har' in filename and filename.endswith('.json')):
+            content_type = "json"
+            spec_format = "har"
+        elif filename.endswith(('.yaml', '.yml')):
             content_type = "yaml"
         elif filename.endswith(('.xml', '.wsdl')):
             content_type = "xml"
         else:
             content_type = "json"
-        
+
         # Parse the specification
         parsed_spec = parser.parse(
             spec_content=content_str,
             spec_format=spec_format,
             content_type=content_type
         )
-        
+        # HAR normalizes to openapi-like; engine expects openapi for that
+        out_format = parsed_spec.get("format", spec_format)
+        if out_format == "har":
+            out_format = "openapi"
+
         # Generate test suite
         test_suite = engine.generate_test_suite(
             api_spec=parsed_spec,
-            spec_format=parsed_spec.get("format", spec_format)
+            spec_format=out_format
         )
-        
+
         return {
             "status": "success",
             "filename": file.filename,
@@ -440,6 +447,237 @@ def _detect_auth_type(api_spec: Dict[str, Any]) -> str:
     return "JWT"  # Default assumption
 
 
+@router.post("/har")
+async def import_har(body: dict):
+    """
+    Import HAR (HTTP Archive) into API test suite.
+    Use from: desktop/extension network capture, HAR file upload, or recorded tab → API.
+    Returns same shape as /spec: parsed_spec, test_suite, summary.
+    """
+    har_data = body.get("har") or body.get("har_content") or body.get("harContent")
+    if not har_data:
+        raise HTTPException(status_code=400, detail="Request body must include 'har' or 'har_content'")
+    try:
+        content_str = json.dumps(har_data) if isinstance(har_data, dict) else har_data
+        parsed_spec = parser.parse(
+            spec_content=content_str,
+            spec_format="har",
+            content_type="json"
+        )
+        test_suite = engine.generate_test_suite(
+            api_spec=parsed_spec,
+            spec_format="openapi"
+        )
+        return {
+            "status": "success",
+            "parsed_spec": parsed_spec,
+            "test_suite": test_suite,
+            "summary": {
+                "format": "har",
+                "total_endpoints": test_suite.get("total_endpoints", 0),
+                "total_tests": test_suite.get("total_tests", 0),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error importing HAR: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Failed to import HAR: {str(e)}")
+
+
+class ExportPostmanRequest(BaseModel):
+    """Export current suite or raw requests to Postman Collection v2.1"""
+    test_suite: Optional[Dict[str, Any]] = None
+    requests: Optional[List[Dict[str, Any]]] = None
+    name: str = "QAAI API Collection"
+
+
+class ExportOpenAPIRequest(BaseModel):
+    """Export current suite or raw requests to OpenAPI 3.x skeleton"""
+    test_suite: Optional[Dict[str, Any]] = None
+    requests: Optional[List[Dict[str, Any]]] = None
+    name: str = "QAAI API"
+    version: str = "1.0.0"
+
+
+class ExportHARRequest(BaseModel):
+    """Export raw requests to HAR (e.g. from recorder)"""
+    requests: List[Dict[str, Any]]
+    creator_name: str = "QAAI"
+
+
+@router.post("/export-postman")
+async def export_postman(request: ExportPostmanRequest):
+    """
+    Export test suite or recorded requests to Postman Collection v2.1.
+    Use from: API tab (current suite) or recorder (captured requests).
+    """
+    try:
+        from app.services.engines.api_test_engine_enhancements import generate_postman_collection
+        test_suite = request.test_suite
+        if not test_suite and request.requests:
+            base_url = ""
+            test_cases = []
+            for i, req in enumerate(request.requests):
+                url_str = req.get("url", "")
+                try:
+                    from urllib.parse import urlparse, urlunparse
+                    p = urlparse(url_str)
+                    path = p.path or "/"
+                    if not base_url:
+                        base_url = urlunparse((p.scheme, p.netloc, "", "", "", ""))
+                except Exception:
+                    path = "/"
+                test_cases.append({
+                    "test_case_id": f"rec_{i}",
+                    "title": f"{req.get('method', 'GET')} {path}",
+                    "method": req.get("method", "GET"),
+                    "path": path,
+                    "request": {
+                        "method": req.get("method", "GET"),
+                        "url": url_str,
+                        "headers": req.get("headers", {}),
+                        "body": req.get("body"),
+                    },
+                    "expected_status": 200,
+                })
+            test_suite = {
+                "base_url": base_url or "{{base_url}}",
+                "test_cases": test_cases,
+            }
+        if not test_suite:
+            raise HTTPException(status_code=400, detail="Provide 'test_suite' or 'requests'")
+        collection_json = generate_postman_collection(test_suite)
+        if request.name != "QAAI API Collection":
+            coll = json.loads(collection_json)
+            coll["info"]["name"] = request.name
+            collection_json = json.dumps(coll, indent=2)
+        return {
+            "status": "success",
+            "format": "postman",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+            "collection": json.loads(collection_json),
+            "collection_json": collection_json,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting Postman: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/export-openapi")
+async def export_openapi_skeleton(request: ExportOpenAPIRequest):
+    """
+    Export test suite or recorded requests to OpenAPI 3.x skeleton.
+    """
+    try:
+        paths = {}
+        base_url = "https://api.example.com"
+        test_cases = []
+        if request.test_suite:
+            test_cases = request.test_suite.get("test_cases", [])
+            base_url = request.test_suite.get("base_url", base_url)
+        elif request.requests:
+            for i, req in enumerate(request.requests):
+                url_str = req.get("url", "")
+                try:
+                    from urllib.parse import urlparse, urlunparse
+                    p = urlparse(url_str)
+                    path = p.path or "/"
+                except Exception:
+                    path = "/"
+                test_cases.append({
+                    "method": req.get("method", "GET"),
+                    "path": path,
+                    "title": f"{req.get('method', 'GET')} {path}",
+                })
+        for tc in test_cases:
+            path = tc.get("path", "/")
+            method = (tc.get("method") or "GET").lower()
+            if path not in paths:
+                paths[path] = {}
+            paths[path][method] = {
+                "summary": tc.get("title", f"{method.upper()} {path}"),
+                "operationId": (tc.get("operation_id") or path.replace("/", "_").strip("_") + "_" + method),
+                "responses": {"200": {"description": "OK"}},
+            }
+        openapi = {
+            "openapi": "3.0.0",
+            "info": {"title": request.name, "version": request.version},
+            "servers": [{"url": base_url}],
+            "paths": paths,
+        }
+        return {
+            "status": "success",
+            "format": "openapi",
+            "openapi": openapi,
+            "openapi_json": json.dumps(openapi, indent=2),
+        }
+    except Exception as e:
+        logger.error(f"Error exporting OpenAPI: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/export-har")
+async def export_har_from_requests(request: ExportHARRequest):
+    """
+    Export raw requests (e.g. from recorder) to HAR 1.2.
+    Use from: Record tab after capture, or API tab when showing recorded requests.
+    """
+    try:
+        import time
+        from datetime import datetime
+        entries = []
+        for i, req in enumerate(request.requests):
+            url_str = req.get("url", "")
+            method = req.get("method", "GET")
+            headers = req.get("headers", {})
+            body = req.get("body", "")
+            status = req.get("statusCode") or req.get("status") or 200
+            duration = req.get("duration") or req.get("responseTime") or 0
+            if isinstance(headers, list):
+                headers = {h.get("name", ""): h.get("value", "") for h in headers if isinstance(h, dict)}
+            req_headers = [{"name": k, "value": str(v)} for k, v in headers.items()]
+            ts = req.get("timestamp")
+            if ts is None:
+                ts = time.time()
+            started = datetime.utcfromtimestamp(ts).isoformat() + "Z" if isinstance(ts, (int, float)) else str(ts)
+            entries.append({
+                "startedDateTime": started,
+                "time": duration,
+                "request": {
+                    "method": method,
+                    "url": url_str,
+                    "httpVersion": "HTTP/1.1",
+                    "headers": req_headers,
+                    "postData": {"mimeType": "application/json", "text": (body if isinstance(body, str) else json.dumps(body or {}))} if body else None,
+                },
+                "response": {
+                    "status": status,
+                    "statusText": "",
+                    "httpVersion": "HTTP/1.1",
+                    "headers": [],
+                    "content": {"size": 0, "mimeType": ""},
+                },
+                "timings": {"send": 0, "wait": duration, "receive": 0},
+            })
+        har = {
+            "log": {
+                "version": "1.2",
+                "creator": {"name": request.creator_name, "version": "1.0.0"},
+                "entries": entries,
+            }
+        }
+        return {
+            "status": "success",
+            "format": "har",
+            "har": har,
+            "har_json": json.dumps(har, indent=2),
+        }
+    except Exception as e:
+        logger.error(f"Error exporting HAR: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/formats")
 async def get_supported_formats():
     """Get list of supported API specification formats"""
@@ -451,7 +689,9 @@ async def get_supported_formats():
             "swagger": [".json", ".yaml", ".yml"],
             "wsdl": [".wsdl", ".xml"],
             "postman": [".json"],
-            "graphql": [".graphql", ".gql", ".json"]
-        }
+            "graphql": [".graphql", ".gql", ".json"],
+            "har": [".har", ".json"]
+        },
+        "export_formats": ["postman", "openapi", "har"],
     }
 

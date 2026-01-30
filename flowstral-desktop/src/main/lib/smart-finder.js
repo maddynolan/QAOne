@@ -502,15 +502,222 @@ class SmartFinder {
     // FAST PATH: Try remembered strategy from Strategy Memory
     // This skips the full search if we already know what works
     // SKIP fast path for generic buttons with scoping context!
+    // SKIP fast path when recipe lacks direct text identification!
     // ==========================================================================
     
+    // ==========================================================================
+    // CONTEXT-AWARE ELEMENT FINDING
+    // Handles: E-commerce products, Travel bookings, Food delivery, Table rows, etc.
+    // If action has productContext (or similar), find the context first, then the button
+    // ==========================================================================
+    const contextText = action?.productContext;
+    if (contextText && what?.text) {
+      this.log(`[CONTEXT SEARCH] Looking for "${what.text}" within context: "${contextText}"`);
+      
+      const contextResult = await this.tryStrategy('context-aware-search', async () => {
+        // Escape special regex characters in context text for CSS selectors
+        const escapedContext = contextText.replace(/['"]/g, '');
+        
+        // ─────────────────────────────────────────────────────────────────────
+        // COMPREHENSIVE CONTAINER SELECTORS (ordered by specificity)
+        // ─────────────────────────────────────────────────────────────────────
+        const containerSelectors = [
+          // AMAZON
+          `[data-component-type="s-search-result"]:has-text("${escapedContext}")`,
+          `[data-asin]:has-text("${escapedContext}")`,
+          `.s-result-item:has-text("${escapedContext}")`,
+          // WALMART
+          `[data-item-id]:has-text("${escapedContext}")`,
+          `[data-automation-id*="product"]:has-text("${escapedContext}")`,
+          `[data-testid*="list-view"]:has-text("${escapedContext}")`,
+          // TARGET
+          `[data-test="@web/ProductCard"]:has-text("${escapedContext}")`,
+          `[data-test="product-card"]:has-text("${escapedContext}")`,
+          `[data-test*="ProductCard"]:has-text("${escapedContext}")`,
+          // BEST BUY
+          `.sku-item:has-text("${escapedContext}")`,
+          `[data-sku-id]:has-text("${escapedContext}")`,
+          // EBAY
+          `.s-item:has-text("${escapedContext}")`,
+          // ETSY
+          `.v2-listing-card:has-text("${escapedContext}")`,
+          `[data-listing-id]:has-text("${escapedContext}")`,
+          // SHOPIFY
+          `.product-card:has-text("${escapedContext}")`,
+          `[data-product-id]:has-text("${escapedContext}")`,
+          // TRAVEL SITES
+          `[data-stid*="property-card"]:has-text("${escapedContext}")`,
+          `[data-testid="property-card"]:has-text("${escapedContext}")`,
+          `.sr_item:has-text("${escapedContext}")`,
+          // FOOD DELIVERY
+          `[data-anchor-id*="MenuItem"]:has-text("${escapedContext}")`,
+          `[data-testid*="menu-item"]:has-text("${escapedContext}")`,
+          // GENERIC (fallbacks)
+          `article:has-text("${escapedContext}")`,
+          `li:has-text("${escapedContext}")`,
+          `[class*="product"]:has-text("${escapedContext}")`,
+          `[class*="Product"]:has-text("${escapedContext}")`,
+          `[class*="card"]:has-text("${escapedContext}")`,
+          `[class*="Card"]:has-text("${escapedContext}")`,
+          `[class*="item"]:has-text("${escapedContext}")`,
+          `[class*="Item"]:has-text("${escapedContext}")`,
+          `[class*="tile"]:has-text("${escapedContext}")`,
+          `[class*="Tile"]:has-text("${escapedContext}")`,
+          `[class*="result"]:has-text("${escapedContext}")`,
+          `[role="listitem"]:has-text("${escapedContext}")`,
+          `tr:has-text("${escapedContext}")`,
+          `[role="row"]:has-text("${escapedContext}")`,
+        ];
+        
+        for (const containerSelector of containerSelectors) {
+          try {
+            const container = this.page.locator(containerSelector).first();
+            const containerCount = await container.count();
+            
+            if (containerCount > 0) {
+              this.log(`[CONTEXT SEARCH] Found container with: ${containerSelector.substring(0, 60)}...`);
+              
+              // ─────────────────────────────────────────────────────────────────
+              // COMPREHENSIVE BUTTON SELECTORS within the container
+              // ─────────────────────────────────────────────────────────────────
+              const buttonSelectors = [
+                // Exact text match
+                `button:has-text("${what.text}")`,
+                `[role="button"]:has-text("${what.text}")`,
+                `a:has-text("${what.text}")`,
+                // Data attribute patterns
+                `[data-test*="addToCart"]`,
+                `[data-testid*="add-to-cart"]`,
+                `[data-testid*="addToCart"]`,
+                `[data-automation-id*="add"]`,
+                `[data-test*="add"]`,
+                // Class patterns
+                `[class*="add-to-cart"]`,
+                `[class*="addToCart"]`,
+                `[class*="AddToCart"]`,
+                `[class*="buy-button"]`,
+                `[class*="BuyButton"]`,
+                // Aria patterns
+                `[aria-label*="add to cart" i]`,
+                `[aria-label*="add to bag" i]`,
+                `[aria-label*="buy" i]`,
+                // Generic button with cart icon
+                `button:has(svg[class*="cart"])`,
+                `button:has([class*="cart-icon"])`,
+                // Generic action buttons
+                `button.primary`,
+                `button[type="submit"]`,
+                // Travel/Booking specific
+                `[data-stid*="book"]`,
+                `[data-testid*="select"]`,
+                `button:has-text("Book")`,
+                `button:has-text("Reserve")`,
+                `button:has-text("Select")`,
+                // Food delivery specific
+                `button:has-text("Add")`,
+                `[data-testid*="add-item"]`,
+                // Table row actions
+                `button:has-text("Edit")`,
+                `button:has-text("Delete")`,
+                `button:has-text("View")`,
+                `[class*="action"]`,
+              ];
+              
+              for (const btnSelector of buttonSelectors) {
+                try {
+                  const button = container.locator(btnSelector).first();
+                  const btnCount = await button.count();
+                  
+                  if (btnCount > 0) {
+                    // Verify button is visible and enabled
+                    const isVisible = await button.isVisible().catch(() => false);
+                    const isEnabled = await button.isEnabled().catch(() => true);
+                    
+                    if (isVisible && isEnabled) {
+                      this.log(`[CONTEXT SEARCH] ✓ Found button "${what.text}" within "${contextText.substring(0, 30)}..."`);
+                      this.log(`[CONTEXT SEARCH]   Container: ${containerSelector.substring(0, 50)}`);
+                      this.log(`[CONTEXT SEARCH]   Button: ${btnSelector}`);
+                      return { success: true, locator: button };
+                    }
+                  }
+                } catch (e) {
+                  // Try next button selector
+                }
+              }
+              
+              this.log(`[CONTEXT SEARCH] Found container but no matching button inside`);
+            }
+          } catch (e) {
+            // Try next container selector
+          }
+        }
+        
+        // ─────────────────────────────────────────────────────────────────────
+        // FALLBACK: Text-based search with proximity
+        // Find the context text, then look for buttons nearby
+        // ─────────────────────────────────────────────────────────────────────
+        this.log(`[CONTEXT SEARCH] Trying text proximity fallback...`);
+        
+        try {
+          const contextLocator = this.page.getByText(escapedContext, { exact: false }).first();
+          if (await contextLocator.count() > 0) {
+            // Find the nearest common ancestor that might be a card
+            const ancestors = [
+              contextLocator.locator('xpath=ancestor::article'),
+              contextLocator.locator('xpath=ancestor::li'),
+              contextLocator.locator('xpath=ancestor::*[contains(@class, "product")]'),
+              contextLocator.locator('xpath=ancestor::*[contains(@class, "card")]'),
+              contextLocator.locator('xpath=ancestor::*[contains(@class, "item")]'),
+              contextLocator.locator('xpath=ancestor::*[@data-testid]'),
+              contextLocator.locator('xpath=ancestor::*[@data-test]'),
+            ];
+            
+            for (const ancestor of ancestors) {
+              try {
+                if (await ancestor.count() > 0) {
+                  const container = ancestor.first();
+                  const addButton = container.locator(`button:has-text("${what.text}")`).first();
+                  if (await addButton.count() > 0) {
+                    this.log(`[CONTEXT SEARCH] ✓ Found via text proximity!`);
+                    return { success: true, locator: addButton };
+                  }
+                }
+              } catch (e) {
+                // Try next ancestor
+              }
+            }
+          }
+        } catch (e) {
+          this.log(`[CONTEXT SEARCH] Text proximity failed: ${e.message}`);
+        }
+        
+        return { success: false };
+      }, attempts);
+      
+      if (contextResult.success) {
+        return this._recordLearningAndReturn(contextResult.locator);
+      }
+      
+      this.log(`[CONTEXT SEARCH] All strategies failed, falling back to normal search...`);
+    }
+    
     // Generic button texts that are common across multiple components
-    const GENERIC_BUTTON_TEXTS = ['new', 'edit', 'delete', 'save', 'cancel', 'close', 'submit', 'view all', 'add', 'remove'];
+    const GENERIC_BUTTON_TEXTS = ['new', 'edit', 'delete', 'save', 'cancel', 'close', 'submit', 'view all', 'add', 'remove', 'add to cart', 'buy', 'buy now'];
     const isGenericText = what?.text && GENERIC_BUTTON_TEXTS.includes(what.text.toLowerCase().trim());
     const hasSpecificContext = where?.relatedList || where?.componentName || confirm?.cssSelector?.includes('data-testid');
     
-    // Skip fast path for generic buttons with specific context - need full scoping!
-    const shouldSkipFastPath = isGenericText && hasSpecificContext;
+    // CRITICAL: If recipe only has tag (no text/role), CSS selectors are unreliable
+    // This happens with checkboxes where text is in nearby label
+    const hasOnlyTag = what?.tag && !what?.text && !what?.role;
+    const hasOnlyNearText = !what?.text && where?.nearText;
+    const cssIsPositional = confirm?.cssSelector && /nth-child|:first|:last|:eq\(/.test(confirm.cssSelector);
+    
+    // Skip fast path for:
+    // 1. Generic buttons with specific context (need full scoping)
+    // 2. Recipes with only tag + nearText (text verification not reliable with CSS)
+    // 3. Positional CSS selectors (span:nth-child(1) can match wrong elements)
+    const shouldSkipFastPath = (isGenericText && hasSpecificContext) || 
+                               (hasOnlyTag && hasOnlyNearText && cssIsPositional);
     
     if (this.enableLearning && this.strategyMemory && !shouldSkipFastPath) {
       const fingerprint = this.strategyMemory.createFingerprint(recipe, action);
@@ -540,7 +747,12 @@ class SmartFinder {
       // Store fingerprint for learning later
       this._currentFingerprint = fingerprint;
     } else if (shouldSkipFastPath) {
-      this.log(`[FAST PATH] Skipped for generic text "${what?.text}" with specific context`);
+      // Log specific reason for skipping
+      if (isGenericText && hasSpecificContext) {
+        this.log(`[FAST PATH] Skipped for generic text "${what?.text}" with specific context`);
+      } else if (hasOnlyTag && hasOnlyNearText && cssIsPositional) {
+        this.log(`[FAST PATH] Skipped: Recipe has only tag "${what?.tag}" + nearText "${where?.nearText}" with positional CSS - too risky for fast path`);
+      }
       // Still create fingerprint for learning
       if (this.enableLearning && this.strategyMemory) {
         this._currentFingerprint = this.strategyMemory.createFingerprint(recipe, action);
@@ -1114,6 +1326,145 @@ class SmartFinder {
     }
     
     // ==========================================================================
+    // PHASE 2.6: NEAR TEXT STRATEGY (BEFORE text-based methods)
+    // Critical for checkboxes, radio buttons where the clickable element is
+    // NEXT TO the label text, not containing it directly
+    // This runs REGARDLESS of whether what.text exists!
+    // ==========================================================================
+    
+    if (where?.nearText && !what?.text) {
+      // Only run this specialized strategy when:
+      // - We have nearText (label text nearby)
+      // - We DON'T have what.text (can't use normal text strategies)
+      // This is the checkbox/radio scenario
+      
+      this.log(`[PHASE 2.6] nearText strategy: "${where.nearText}" (no direct text)`);
+      
+      const nearTextResult = await this.tryStrategy('near-text-specialized', async () => {
+        const searchText = this.normalizeText(where.nearText);
+        this.log(`[near-text] Looking for clickable element near "${searchText}"`);
+        
+        // Use Playwright's getByText to find the label text first
+        const textLocator = scope.getByText(searchText, { exact: false });
+        const textCount = await textLocator.count();
+        
+        this.log(`[near-text] Found ${textCount} text elements matching "${searchText}"`);
+        
+        if (textCount > 0) {
+          // Iterate through text matches to find the RIGHT one
+          for (let i = 0; i < Math.min(textCount, 5); i++) {
+            const textEl = textLocator.nth(i);
+            
+            // Verify this text element contains our exact text (not just partial match)
+            const elText = await textEl.textContent().catch(() => '');
+            const normalizedElText = this.normalizeText(elText || '').toLowerCase().trim();
+            const normalizedSearch = searchText.toLowerCase().trim();
+            
+            // STRICTER MATCHING: Check if the text is a close match
+            // Option 1: Element text starts with search text
+            // Option 2: Element text is very similar (for minor whitespace/formatting diffs)
+            // Option 3: Search text is contained BUT element is not much longer (to avoid partial matches)
+            const startsWithMatch = normalizedElText.startsWith(normalizedSearch);
+            const exactMatch = normalizedElText === normalizedSearch;
+            const containsMatch = normalizedElText.includes(normalizedSearch);
+            const lengthRatio = normalizedElText.length / normalizedSearch.length;
+            
+            // Only accept if:
+            // - Exact match
+            // - Starts with the search text
+            // - Contains the search text AND length is within 50% (avoids "I am..." matching "I have...")
+            const isGoodMatch = exactMatch || startsWithMatch || (containsMatch && lengthRatio < 1.5);
+            
+            if (!isGoodMatch) {
+              this.log(`[near-text] Skipping text element ${i}: "${elText.substring(0, 50)}" doesn't closely match "${normalizedSearch.substring(0, 50)}"`);
+              continue;
+            }
+            
+            this.log(`[near-text] Checking text element ${i}: "${elText}"`);
+            
+            // Strategy 1: Check for checkbox/radio in same label structure
+            try {
+              const checkboxInLabel = textEl.locator('xpath=ancestor::label//input[@type="checkbox" or @type="radio"]').first();
+              if (await checkboxInLabel.count() > 0 && await checkboxInLabel.isVisible()) {
+                this.log(`[near-text] ✓ Found checkbox/radio input in label ancestor`);
+                return { success: true, locator: checkboxInLabel };
+              }
+            } catch (e) { /* continue */ }
+            
+            // Strategy 2: Check for custom checkbox role in label
+            try {
+              const roleCheckbox = textEl.locator('xpath=ancestor::label//*[@role="checkbox" or @role="radio" or @role="switch"]').first();
+              if (await roleCheckbox.count() > 0 && await roleCheckbox.isVisible()) {
+                this.log(`[near-text] ✓ Found role=checkbox in label ancestor`);
+                return { success: true, locator: roleCheckbox };
+              }
+            } catch (e) { /* continue */ }
+            
+            // Strategy 3: Check preceding sibling (checkbox before text)
+            try {
+              const precedingInput = textEl.locator('xpath=preceding-sibling::input[@type="checkbox" or @type="radio"]').first();
+              if (await precedingInput.count() > 0 && await precedingInput.isVisible()) {
+                this.log(`[near-text] ✓ Found checkbox as preceding sibling`);
+                return { success: true, locator: precedingInput };
+              }
+              
+              const precedingSpan = textEl.locator('xpath=preceding-sibling::span[contains(@class,"check") or @role="checkbox"]').first();
+              if (await precedingSpan.count() > 0 && await precedingSpan.isVisible()) {
+                this.log(`[near-text] ✓ Found checkbox span as preceding sibling`);
+                return { success: true, locator: precedingSpan };
+              }
+            } catch (e) { /* continue */ }
+            
+            // Strategy 4: Check parent's first child (common: <label><span class="checkbox"></span>Text</label>)
+            try {
+              const parent = textEl.locator('xpath=parent::*');
+              const firstChild = parent.locator(':scope > *:first-child');
+              if (await firstChild.count() > 0) {
+                const fcTag = await firstChild.evaluate(el => el.tagName.toLowerCase()).catch(() => '');
+                const fcType = await firstChild.getAttribute('type').catch(() => '');
+                const fcRole = await firstChild.getAttribute('role').catch(() => '');
+                const fcClass = await firstChild.getAttribute('class').catch(() => '');
+                
+                if (fcType === 'checkbox' || fcType === 'radio' || 
+                    fcRole === 'checkbox' || fcRole === 'radio' ||
+                    fcClass?.includes('check') || fcClass?.includes('radio')) {
+                  if (await firstChild.isVisible()) {
+                    this.log(`[near-text] ✓ Found checkbox as parent's first child (${fcTag}, type=${fcType}, role=${fcRole})`);
+                    return { success: true, locator: firstChild };
+                  }
+                }
+              }
+            } catch (e) { /* continue */ }
+            
+            // Strategy 5: Look for label with "for" attribute
+            try {
+              const label = textEl.locator('xpath=ancestor::label[@for]').first();
+              if (await label.count() > 0) {
+                const forId = await label.getAttribute('for');
+                if (forId) {
+                  const forTarget = this.page.locator(`#${forId}`);
+                  if (await forTarget.count() > 0 && await forTarget.isVisible()) {
+                    this.log(`[near-text] ✓ Found checkbox via label[for="${forId}"]`);
+                    return { success: true, locator: forTarget };
+                  }
+                }
+              }
+            } catch (e) { /* continue */ }
+          }
+        }
+        
+        return { success: false, count: 0 };
+      }, attempts);
+      
+      if (nearTextResult.success) {
+        this.log(`[near-text] Successfully found checkbox near "${where.nearText}"`);
+        return this._recordLearningAndReturn(nearTextResult.locator);
+      }
+      
+      this.log(`[near-text] No checkbox found near "${where.nearText}", continuing to other strategies`);
+    }
+    
+    // ==========================================================================
     // PHASE 3: Try text-based methods
     // ==========================================================================
     
@@ -1186,6 +1537,172 @@ class SmartFinder {
         
         if (labelResult.success) return labelResult.locator;
       }
+      
+      // ==========================================================================
+      // NEAR TEXT STRATEGY: Find clickable elements near specific text
+      // Critical for checkboxes, radio buttons where the clickable element is
+      // NEXT TO the label text, not containing it
+      // ==========================================================================
+      
+      const nearTextResult = await this.tryStrategy('near-text', async () => {
+        const searchText = this.normalizeText(where.nearText);
+        this.log(`[near-text] Looking for clickable element near "${searchText}"`);
+        
+        // Strategy 1: Find text, then find clickable sibling/parent
+        // Use evaluate for complex DOM traversal
+        const result = await this.page.evaluate((text) => {
+          const normalizeText = (t) => t?.replace(/\s+/g, ' ').trim().toLowerCase() || '';
+          const searchLower = normalizeText(text);
+          
+          // Find all text nodes/elements containing the text
+          const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+            null,
+            false
+          );
+          
+          let foundElement = null;
+          let node;
+          while (node = walker.nextNode()) {
+            const nodeText = node.textContent || node.innerText || '';
+            if (normalizeText(nodeText).includes(searchLower)) {
+              // For text nodes, get parent element
+              const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+              if (el && normalizeText(el.innerText || el.textContent || '') === searchLower) {
+                foundElement = el;
+                break;
+              }
+              // Also check if this element's direct text matches
+              if (el) {
+                const directText = Array.from(el.childNodes)
+                  .filter(n => n.nodeType === Node.TEXT_NODE)
+                  .map(n => n.textContent)
+                  .join('');
+                if (normalizeText(directText) === searchLower) {
+                  foundElement = el;
+                  break;
+                }
+              }
+            }
+          }
+          
+          if (!foundElement) return null;
+          
+          // Now find the associated clickable element
+          // Check these locations:
+          // 1. Previous sibling (checkbox before label)
+          // 2. Parent's first child (checkbox at start of label)
+          // 3. Preceding element within parent (custom checkbox span)
+          // 4. Parent label's "for" attribute target
+          
+          const checkClickable = (el) => {
+            if (!el) return null;
+            const tag = el.tagName?.toLowerCase();
+            const type = el.type?.toLowerCase();
+            const role = el.getAttribute?.('role');
+            
+            // Actual checkbox/radio
+            if (tag === 'input' && (type === 'checkbox' || type === 'radio')) {
+              return el;
+            }
+            // Custom checkbox span with role
+            if (role === 'checkbox' || role === 'radio' || role === 'switch') {
+              return el;
+            }
+            // Span/div that looks like a custom checkbox
+            if ((tag === 'span' || tag === 'div') && 
+                (el.className?.includes('checkbox') || el.className?.includes('radio') ||
+                 el.className?.includes('check') || el.className?.includes('custom'))) {
+              return el;
+            }
+            return null;
+          };
+          
+          // Strategy 1: Check previous sibling
+          let clickable = checkClickable(foundElement.previousElementSibling);
+          if (clickable) return { selector: null, element: clickable.outerHTML.substring(0, 200) };
+          
+          // Strategy 2: Check parent's first child
+          clickable = checkClickable(foundElement.parentElement?.firstElementChild);
+          if (clickable && clickable !== foundElement) return { selector: null, element: clickable.outerHTML.substring(0, 200) };
+          
+          // Strategy 3: Look within same label/container
+          const parent = foundElement.closest('label') || foundElement.parentElement;
+          if (parent) {
+            for (const child of parent.querySelectorAll('input, span, div')) {
+              clickable = checkClickable(child);
+              if (clickable) return { selector: null, element: clickable.outerHTML.substring(0, 200) };
+            }
+          }
+          
+          // Strategy 4: If in a label, check "for" attribute
+          const label = foundElement.closest('label');
+          if (label?.htmlFor) {
+            const forTarget = document.getElementById(label.htmlFor);
+            clickable = checkClickable(forTarget);
+            if (clickable) return { selector: `#${label.htmlFor}`, element: clickable.outerHTML.substring(0, 200) };
+          }
+          
+          // Strategy 5: Just return the text element itself if it looks clickable
+          if (foundElement.onclick || foundElement.getAttribute('role') === 'checkbox' || 
+              foundElement.closest('[role="checkbox"]')) {
+            return { selector: null, element: foundElement.outerHTML.substring(0, 200) };
+          }
+          
+          return null;
+        }, searchText);
+        
+        if (result) {
+          this.log(`[near-text] Found clickable element near "${searchText}": ${result.element}`);
+          
+          // Now we need to find this element with a Playwright locator
+          // Use getByText to find the label, then navigate to the checkbox
+          const textLocator = scope.getByText(searchText, { exact: false });
+          const textCount = await textLocator.count();
+          
+          if (textCount > 0) {
+            // Try to find the checkbox relative to the text
+            for (let i = 0; i < Math.min(textCount, 3); i++) {
+              const textEl = textLocator.nth(i);
+              
+              // Check for checkbox in same label/parent structure
+              const checkboxInParent = textEl.locator('xpath=ancestor::label//input[@type="checkbox"] | xpath=ancestor::label//input[@type="radio"] | xpath=ancestor::label//*[@role="checkbox"] | xpath=ancestor::label//*[@role="radio"]').first();
+              if (await checkboxInParent.count() > 0 && await checkboxInParent.isVisible()) {
+                this.log(`[near-text] Found checkbox in label ancestor`);
+                return { success: true, locator: checkboxInParent };
+              }
+              
+              // Check preceding sibling
+              const precedingSibling = textEl.locator('xpath=preceding-sibling::input[@type="checkbox"] | xpath=preceding-sibling::input[@type="radio"] | xpath=preceding-sibling::*[@role="checkbox"]').first();
+              if (await precedingSibling.count() > 0 && await precedingSibling.isVisible()) {
+                this.log(`[near-text] Found checkbox as preceding sibling`);
+                return { success: true, locator: precedingSibling };
+              }
+              
+              // Check parent's first child (common pattern: <label><span class="checkbox"></span>Text</label>)
+              const parentFirstChild = textEl.locator('xpath=parent::*/child::*[1][self::input or self::span or self::div]').first();
+              if (await parentFirstChild.count() > 0 && await parentFirstChild.isVisible()) {
+                // Verify it looks like a checkbox
+                const role = await parentFirstChild.getAttribute('role').catch(() => '');
+                const type = await parentFirstChild.getAttribute('type').catch(() => '');
+                const className = await parentFirstChild.getAttribute('class').catch(() => '');
+                
+                if (type === 'checkbox' || type === 'radio' || 
+                    role === 'checkbox' || role === 'radio' ||
+                    className?.includes('check') || className?.includes('radio')) {
+                  this.log(`[near-text] Found checkbox as parent's first child`);
+                  return { success: true, locator: parentFirstChild };
+                }
+              }
+            }
+          }
+        }
+        
+        return { success: false, count: 0 };
+      }, attempts);
+      
+      if (nearTextResult.success) return this._recordLearningAndReturn(nearTextResult.locator);
     }
     
     // ==========================================================================
@@ -1356,6 +1873,16 @@ class SmartFinder {
           `[role="link"]:has-text("${searchText}")`,
           `[role="menuitem"]:has-text("${searchText}")`,
           `[role="option"]:has-text("${searchText}")`,
+          
+          // Segmented controls / toggle button groups (styled radio buttons)
+          `[role="radio"]:has-text("${searchText}")`,
+          `[role="switch"]:has-text("${searchText}")`,
+          `[aria-pressed]:has-text("${searchText}")`,
+          `[aria-selected]:has-text("${searchText}")`,
+          `label:has-text("${searchText}")`,
+          `.btn-group :has-text("${searchText}")`,
+          `.button-group :has-text("${searchText}")`,
+          `[role="radiogroup"] :has-text("${searchText}")`,
           
           // Salesforce one-app components
           `one-app-nav-bar-item-root a:has-text("${searchText}")`,
@@ -1989,10 +2516,18 @@ class SmartFinder {
   
   /**
    * Try a remembered strategy from Strategy Memory
+   * CRITICAL: Must verify text content for CSS-based strategies to avoid wrong element matches!
    */
   async _tryRememberedStrategy(remembered, recipe) {
     const { strategy, selector } = remembered;
-    const { what, which, confirm } = recipe;
+    const { what, where, which, confirm } = recipe;
+    
+    // Determine expected text for verification
+    // Can come from what.text, where.nearText, or which.ariaLabel
+    const expectedText = what?.text || where?.nearText || which?.ariaLabel;
+    
+    // CSS-based strategies need extra text verification since positional selectors can match wrong elements
+    const needsTextVerification = ['css-fallback', 'css-fallback-parent'].includes(strategy) && expectedText;
     
     try {
       let locator;
@@ -2064,9 +2599,82 @@ class SmartFinder {
       if (locator) {
         const count = await locator.count().catch(() => 0);
         if (count > 0) {
-          const isVisible = await locator.first().isVisible().catch(() => false);
+          const firstLocator = locator.first();
+          const isVisible = await firstLocator.isVisible().catch(() => false);
+          
           if (isVisible) {
-            return { success: true, locator: locator.first() };
+            // ================================================================
+            // CRITICAL TEXT VERIFICATION for CSS-based strategies
+            // Positional CSS selectors (span:nth-child(1)) can match wrong elements!
+            // We must verify the found element contains the expected text
+            // ================================================================
+            if (needsTextVerification) {
+              try {
+                // Get text from element and nearby context
+                const elementText = await firstLocator.textContent().catch(() => '') || '';
+                const normalizedElementText = this.normalizeText(elementText || '');
+                const normalizedExpected = this.normalizeText(expectedText || '');
+                
+                // Safety check - if expected text is empty, skip verification
+                if (!normalizedExpected) {
+                  this.log(`[FAST PATH] No expected text to verify, allowing match`);
+                } else {
+                  // Check if element text contains expected text (case-insensitive)
+                  const textMatches = normalizedElementText.toLowerCase().includes(normalizedExpected.toLowerCase());
+                  
+                  // Also check nearby text (parent, siblings) for "nearText" matches
+                  let nearTextMatches = false;
+                  if (!textMatches && where?.nearText) {
+                    try {
+                      // Check parent element's text
+                      const parentText = await firstLocator.locator('xpath=..').textContent().catch(() => '') || '';
+                      const normalizedParentText = this.normalizeText(parentText || '');
+                      nearTextMatches = normalizedParentText.toLowerCase().includes(normalizedExpected.toLowerCase());
+                      
+                      // Also check if the label sibling matches (common for checkboxes)
+                      if (!nearTextMatches) {
+                        // Try following sibling first
+                        const followingText = await firstLocator.locator('xpath=following-sibling::*[1]').textContent().catch(() => '') || '';
+                        if (followingText) {
+                          nearTextMatches = this.normalizeText(followingText).toLowerCase().includes(normalizedExpected.toLowerCase());
+                        }
+                        // Try preceding sibling if following didn't match
+                        if (!nearTextMatches) {
+                          const precedingText = await firstLocator.locator('xpath=preceding-sibling::*[1]').textContent().catch(() => '') || '';
+                          if (precedingText) {
+                            nearTextMatches = this.normalizeText(precedingText).toLowerCase().includes(normalizedExpected.toLowerCase());
+                          }
+                        }
+                      }
+                    } catch (siblingError) {
+                      // Sibling lookup failed, just use direct text match result
+                      this.log(`[FAST PATH] Sibling lookup error (non-critical): ${siblingError.message}`);
+                    }
+                  }
+                  
+                  if (!textMatches && !nearTextMatches) {
+                    this.log(`[FAST PATH] Text verification FAILED! Expected "${normalizedExpected}", found "${normalizedElementText}"`);
+                    this.log(`[FAST PATH] CSS selector matched WRONG element - falling back to full search`);
+                    
+                    // CRITICAL: Record this as a failure to clear the bad cache entry
+                    if (this.strategyMemory && this._currentFingerprint) {
+                      this.strategyMemory.recordFailure(this._currentFingerprint, strategy);
+                      this.log(`[FAST PATH] Recorded failure to invalidate cached strategy`);
+                    }
+                    
+                    return { success: false, reason: 'text_mismatch' };
+                  }
+                  
+                  this.log(`[FAST PATH] Text verification PASSED: "${normalizedExpected}"`);
+                }
+              } catch (verifyError) {
+                // SAFE FALLBACK: If verification fails entirely, allow the match
+                // This ensures we don't break existing behavior
+                this.log(`[FAST PATH] Text verification error: ${verifyError.message}, allowing match anyway`);
+              }
+            }
+            
+            return { success: true, locator: firstLocator };
           }
         }
       }

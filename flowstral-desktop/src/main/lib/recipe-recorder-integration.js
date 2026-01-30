@@ -392,20 +392,45 @@ function getRecipeClickCaptureScript() {
         console.log('[Flowstral Recipe] Skip click - ' + tag + ' (change handler will capture Select)');
         return;
       }
-      // Also skip clicks on labels FOR text inputs - clicking label focuses the input
+      // Handle labels - but DON'T skip segmented control labels (labels for radio/checkbox in button groups)
       if (tag === 'label') {
         var forId = element.getAttribute('for');
-        if (forId) {
-          var linkedInput = document.getElementById(forId);
-          if (linkedInput) {
-            var linkedTag = linkedInput.tagName.toLowerCase();
-            var linkedType = (linkedInput.type || '').toLowerCase();
-            if (linkedTag === 'input' && ['text', 'email', 'password', 'search', 'tel', 'url', 'number', ''].includes(linkedType)) {
-              console.log('[Flowstral Recipe] Skip click - label for text input');
-              return;
-            }
-            if (linkedTag === 'textarea') {
-              console.log('[Flowstral Recipe] Skip click - label for textarea');
+        var linkedInput = forId ? document.getElementById(forId) : element.querySelector('input');
+        
+        if (linkedInput) {
+          var linkedTag = linkedInput.tagName.toLowerCase();
+          var linkedType = (linkedInput.type || '').toLowerCase();
+          
+          // Skip labels for text inputs - clicking focuses the input
+          if (linkedTag === 'input' && ['text', 'email', 'password', 'search', 'tel', 'url', 'number', ''].includes(linkedType)) {
+            console.log('[Flowstral Recipe] Skip click - label for text input');
+            return;
+          }
+          if (linkedTag === 'textarea') {
+            console.log('[Flowstral Recipe] Skip click - label for textarea');
+            return;
+          }
+          
+          // DON'T skip labels for radio/checkbox if they look like segmented controls
+          // These are visually styled as buttons and should be recorded as clicks
+          if (linkedTag === 'input' && (linkedType === 'radio' || linkedType === 'checkbox')) {
+            var isSegmentedControl = element.closest(
+              '[role="radiogroup"], [role="group"], .btn-group, .button-group, ' +
+              '.segmented-control, .toggle-group, .button-select, fieldset'
+            );
+            var hasButtonStyle = element.classList && (
+              element.classList.contains('btn') ||
+              element.classList.contains('button') ||
+              element.classList.contains('option') ||
+              element.classList.contains('choice')
+            );
+            
+            if (isSegmentedControl || hasButtonStyle) {
+              console.log('[Flowstral Recipe] ★ Recording segmented control click (label for ' + linkedType + '):', element.textContent?.trim());
+              // Don't return - let this be recorded as a click!
+            } else {
+              // Regular radio/checkbox label - let the change handler deal with it
+              console.log('[Flowstral Recipe] Skip click - label for ' + linkedType + ' (change handler will capture)');
               return;
             }
           }

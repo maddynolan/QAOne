@@ -38,7 +38,7 @@ redis:
       enabled: true
       size: 10Gi
 
-# Backend API
+# Backend API (default: cloud LLM via OPENAI_API_KEY / ANTHROPIC_API_KEY; OLLAMA disabled)
 backend:
   image:
     repository: qaai/backend
@@ -52,7 +52,8 @@ backend:
     DATABASE_URL: postgresql://qaai:qaai_password@postgresql:5432/qaai
     S3_ENDPOINT_URL: http://minio:9000
     REDIS_URL: redis://redis-master:6379
-    OLLAMA_URL: http://ollama:11434
+    # OLLAMA_URL not set by default - use cloud API keys. Set if ollama.enabled: true
+    # OLLAMA_URL: http://ollama:11434
   resources:
     requests:
       memory: "2Gi"
@@ -66,9 +67,10 @@ backend:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
 
-# Ollama
+# Ollama (local LLM) - DISABLED by default. We use cloud API keys (OpenAI/Anthropic) for SaaS.
+# Set enabled: true and set backend env OLLAMA_URL for on-prem with local LLM.
 ollama:
-  enabled: true
+  enabled: false
   image:
     repository: ollama/ollama
     tag: latest

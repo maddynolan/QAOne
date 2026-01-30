@@ -216,17 +216,27 @@ class GoRunnerClient:
         )
         logger.info(f"Registered runner {agent_id} at {hostname}:{port}")
     
+    def _parent_run_ids(self) -> Dict[str, List[str]]:
+        """Map parent run_id -> [child_run_id, ...] for distributed runs."""
+        if not hasattr(self, "_parent_to_children"):
+            self._parent_to_children: Dict[str, List[str]] = {}
+        return self._parent_to_children
+
     async def start_run(self, run_id: str, scenario_json: bytes, 
                        config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Start a load test run on available runner(s).
-        
-        For distributed runs, will split VUs across multiple runners.
+        When multiple runners are available and total_vus exceeds one runner's capacity,
+        splits VUs across runners (run_id-0, run_id-1, ...) and aggregates.
         """
         total_vus = config.get("virtual_users", 10)
         
-        # Find available runners
-        available = [r for r in self.runners.values() if r.status == "online" and r.available_vus > 0]
+        # Find available runners (by available_vus descending)
+        available = sorted(
+            [r for r in self.runners.values() if r.status == "online" and r.available_vus > 0],
+            key=lambda r: r.available_vus,
+            reverse=True,
+        )
         
         if not available:
             return {
@@ -235,35 +245,62 @@ class GoRunnerClient:
                 "use_fallback": True
             }
         
-        # For now, use single runner (extend for distributed)
-        runner = max(available, key=lambda r: r.available_vus)
+        # Single runner: use as before
+        if len(available) == 1 or total_vus <= available[0].available_vus:
+            runner = available[0]
+            if runner.available_vus < total_vus:
+                logger.warning(f"Runner {runner.agent_id} has fewer VUs ({runner.available_vus}) than requested ({total_vus})")
+            try:
+                result = await self._send_start_run(runner, run_id, scenario_json, config)
+                if result.get("success"):
+                    runner.active_runs.append(run_id)
+                    runner.current_vus += min(total_vus, runner.available_vus)
+                    runner.available_vus = runner.max_vus - runner.current_vus
+                    runner.status = "busy" if runner.available_vus == 0 else "online"
+                return result
+            except Exception as e:
+                logger.error(f"Failed to start run on {runner.agent_id}: {e}")
+                return {"success": False, "error": str(e), "use_fallback": True}
         
-        if runner.available_vus < total_vus:
-            logger.warning(f"Runner {runner.agent_id} has fewer VUs ({runner.available_vus}) than requested ({total_vus})")
-        
-        # Start run on runner
-        try:
-            result = await self._send_start_run(runner, run_id, scenario_json, config)
-            
-            if result.get("success"):
-                runner.active_runs.append(run_id)
-                runner.current_vus += min(total_vus, runner.available_vus)
-                runner.available_vus = runner.max_vus - runner.current_vus
-                runner.status = "busy" if runner.available_vus == 0 else "online"
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Failed to start run on {runner.agent_id}: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "use_fallback": True
-            }
+        # Distributed: split VUs across runners by capacity
+        remaining = total_vus
+        total_avail = sum(r.available_vus for r in available)
+        child_ids = []
+        for i, runner in enumerate(available):
+            if remaining <= 0:
+                break
+            vus_for_runner = min(runner.available_vus, max(1, round(total_vus * runner.available_vus / total_avail)))
+            vus_for_runner = min(vus_for_runner, remaining)
+            child_id = f"{run_id}-{i}"
+            child_config = {**config, "virtual_users": vus_for_runner}
+            try:
+                result = await self._send_start_run(runner, child_id, scenario_json, child_config)
+                if result.get("success"):
+                    runner.active_runs.append(child_id)
+                    runner.current_vus += vus_for_runner
+                    runner.available_vus = runner.max_vus - runner.current_vus
+                    runner.status = "busy" if runner.available_vus == 0 else "online"
+                    child_ids.append(child_id)
+                    remaining -= vus_for_runner
+            except Exception as e:
+                logger.error(f"Failed to start run {child_id} on {runner.agent_id}: {e}")
+        if child_ids:
+            self._parent_run_ids()[run_id] = child_ids
+            return {"success": True, "child_run_ids": child_ids}
+        return {"success": False, "error": "Could not start any runner", "use_fallback": True}
     
     async def stop_run(self, run_id: str, graceful: bool = True) -> Dict[str, Any]:
-        """Stop a running test"""
-        # Find runner with this run
+        """Stop a running test (or all children if distributed)."""
+        children = self._parent_run_ids().get(run_id)
+        if children:
+            results = []
+            for cid in children:
+                r = await self.stop_run(cid, graceful)
+                results.append(r)
+            if run_id in self._parent_run_ids():
+                del self._parent_run_ids()[run_id]
+            return {"success": all(r.get("success") for r in results), "child_results": results}
+        
         runner = None
         for r in self.runners.values():
             if run_id in r.active_runs:
@@ -275,19 +312,38 @@ class GoRunnerClient:
         
         try:
             result = await self._send_stop_run(runner, run_id, graceful)
-            
             if result.get("success"):
                 runner.active_runs.remove(run_id)
-                # VU count will be updated via metrics
-            
             return result
-            
         except Exception as e:
             logger.error(f"Failed to stop run: {e}")
             return {"success": False, "error": str(e)}
     
     async def get_metrics(self, run_id: str) -> Optional[RunnerMetrics]:
-        """Get current metrics for a run"""
+        """Get current metrics for a run (aggregates from children if distributed)."""
+        children = self._parent_run_ids().get(run_id)
+        if children:
+            metrics_list = []
+            for cid in children:
+                m = await self.get_metrics(cid)
+                if m:
+                    metrics_list.append(m)
+            if not metrics_list:
+                return None
+            total_requests = sum(getattr(m, "total_requests", 0) for m in metrics_list)
+            failed_requests = sum(getattr(m, "failed_requests", 0) for m in metrics_list)
+            successful_requests = sum(getattr(m, "successful_requests", 0) for m in metrics_list)
+            rps = sum(getattr(m, "requests_per_second", 0) for m in metrics_list)
+            avgs = [getattr(m, "response_time_avg", 0) for m in metrics_list if getattr(m, "response_time_avg", 0)]
+            response_time_avg = sum(avgs) / len(avgs) if avgs else 0.0
+            return RunnerMetrics(
+                total_requests=total_requests,
+                failed_requests=failed_requests,
+                successful_requests=successful_requests,
+                requests_per_second=rps,
+                response_time_avg=response_time_avg,
+            )
+        
         runner = None
         for r in self.runners.values():
             if run_id in r.active_runs:

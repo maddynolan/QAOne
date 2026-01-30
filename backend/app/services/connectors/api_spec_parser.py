@@ -7,7 +7,7 @@ import logging
 import json
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 import re
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class APISpecParser:
     """Enhanced parser for various API specification formats"""
     
     def __init__(self):
-        self.supported_formats = ["openapi", "swagger", "wsdl", "postman", "graphql", "rest"]
+        self.supported_formats = ["openapi", "swagger", "wsdl", "postman", "graphql", "rest", "har"]
     
     def parse(self, spec_content: str, spec_format: str, content_type: str = "json") -> Dict[str, Any]:
         """
@@ -40,6 +40,8 @@ class APISpecParser:
                 return self._parse_graphql(spec_content, content_type)
             elif spec_format.lower() == "wsdl":
                 return self._parse_wsdl(spec_content, content_type)
+            elif spec_format.lower() == "har":
+                return self._parse_har(spec_content, content_type)
             else:
                 raise ValueError(f"Unsupported format: {spec_format}")
         except Exception as e:
@@ -463,7 +465,89 @@ class APISpecParser:
             if var.get("key", "").lower() in ["base_url", "baseUrl", "url"]:
                 return var.get("value", "")
         return ""
-    
+
+    def _parse_har(self, content: str, content_type: str) -> Dict[str, Any]:
+        """Parse HAR (HTTP Archive) into normalized OpenAPI-like spec for test generation.
+        Used for: recorder/desktop network capture, HAR file import into API tab.
+        """
+        content = content.strip() if isinstance(content, str) else content
+        if isinstance(content, str):
+            if content.startswith('"') and content.endswith('"'):
+                try:
+                    content = json.loads(content)
+                    if isinstance(content, str):
+                        content = content.strip()
+                except json.JSONDecodeError:
+                    pass
+            data = json.loads(content) if isinstance(content, str) else content
+        else:
+            data = content
+        log = data.get("log", data) if isinstance(data, dict) else {}
+        entries = log.get("entries", [])
+        if not entries:
+            return {
+                "format": "openapi",
+                "version": "3.0.0",
+                "info": {"title": "HAR Import", "version": "1.0.0"},
+                "base_url": "",
+                "servers": [],
+                "paths": {},
+                "components": {},
+                "security": [],
+                "tags": [],
+            }
+        base_url = ""
+        paths = {}
+        for i, entry in enumerate(entries):
+            req = entry.get("request", {})
+            res = entry.get("response", {})
+            method = (req.get("method") or "GET").upper()
+            url_str = req.get("url", "")
+            try:
+                parsed = urlparse(url_str)
+                path = parsed.path or "/"
+                if not base_url:
+                    base_url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+            except Exception:
+                path = "/"
+            if path not in paths:
+                paths[path] = {}
+            if method in paths[path]:
+                continue
+            headers_list = req.get("headers", [])
+            headers = {}
+            if isinstance(headers_list, list):
+                for h in headers_list:
+                    if isinstance(h, dict) and "name" in h:
+                        headers[h["name"]] = h.get("value", "")
+            post_data = req.get("postData") or {}
+            body = post_data.get("text") if isinstance(post_data, dict) else None
+            status = res.get("status", 200)
+            paths[path][method] = {
+                "operation_id": f"har_{i}_{method}_{path.replace('/', '_').strip('_')}",
+                "summary": f"{method} {path}",
+                "description": f"From HAR entry",
+                "parameters": [],
+                "request_body": {"content": {"application/json": {"schema": {"type": "object"}}}} if body else {},
+                "responses": {str(status): {"description": f"Status {status}"}},
+                "tags": ["har"],
+                "security": [],
+                "deprecated": False,
+                "_har_request_body": body,
+                "_har_headers": headers,
+            }
+        return {
+            "format": "openapi",
+            "version": "3.0.0",
+            "info": {"title": "HAR Import", "version": "1.0.0"},
+            "base_url": base_url,
+            "servers": [{"url": base_url}] if base_url else [],
+            "paths": paths,
+            "components": {},
+            "security": [],
+            "tags": [{"name": "har"}],
+        }
+
     def _normalize_parameters(self, parameters: List[Dict]) -> List[Dict]:
         """Normalize OpenAPI parameters"""
         normalized = []

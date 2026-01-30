@@ -950,6 +950,74 @@ ipcMain.handle('playwright-recorder-stop-test', async (event, options) => {
 });
 
 // ============================================================================
+// FAILURE REPAIR IPC HANDLERS
+// Help users fix failed steps with browser-assisted debugging
+// ============================================================================
+
+// Get the last failure state (screenshot, URL, step info)
+ipcMain.handle('playwright-recorder-get-failure-state', async () => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    const state = playwrightRecorder.getLastFailureState();
+    if (!state) return { success: false, error: 'No failure state saved' };
+    return { success: true, state };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Re-open browser to the failed state (for visual debugging)
+ipcMain.handle('playwright-recorder-reopen-to-failure', async () => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.reopenToFailedState();
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Retry just the failed step with an updated action
+ipcMain.handle('playwright-recorder-retry-failed-step', async (event, updatedAction) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.retryFailedStep(updatedAction);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Resume test execution from the failed step
+ipcMain.handle('playwright-recorder-resume-from-failure', async (event, options) => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.resumeFromFailedStep(options);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Manually close the browser (when done debugging)
+ipcMain.handle('playwright-recorder-close-browser', async () => {
+  try {
+    if (!playwrightRecorder) return { success: false, error: 'No recorder' };
+    return await playwrightRecorder.closeBrowser();
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Check if browser is currently open
+ipcMain.handle('playwright-recorder-is-browser-open', async () => {
+  try {
+    if (!playwrightRecorder) return { open: false };
+    const page = playwrightRecorder.page;
+    return { open: page && !page.isClosed() };
+  } catch (error) {
+    return { open: false };
+  }
+});
+
+// ============================================================================
 // ELEMENT PICKER & DEBUG IPC HANDLERS
 // For fixing failed steps with visual element selection
 // ============================================================================
@@ -1158,6 +1226,49 @@ ipcMain.handle('ai-find-element', async (event, description) => {
     }
 
     return { success: false, error: 'AI could not find the element' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ============================================================================
+// STRATEGY MEMORY IPC HANDLERS
+// For clearing cached element-finding strategies that may have gone bad
+// ============================================================================
+
+const { getStrategyMemory } = require('./lib/strategy-memory');
+
+// Clear all strategy memory (reset learning)
+ipcMain.handle('strategy-memory-clear-all', async () => {
+  try {
+    const memory = getStrategyMemory();
+    const count = memory.clearAll();
+    return { success: true, clearedCount: count };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Clear strategy memory entries matching a pattern
+ipcMain.handle('strategy-memory-clear-pattern', async (event, pattern) => {
+  try {
+    const memory = getStrategyMemory();
+    const count = memory.clearByPattern(pattern);
+    return { success: true, clearedCount: count };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Get strategy memory stats
+ipcMain.handle('strategy-memory-stats', async () => {
+  try {
+    const memory = getStrategyMemory();
+    return { 
+      success: true, 
+      entryCount: memory.memory.size,
+      strategyStats: memory.strategyStats
+    };
   } catch (error) {
     return { success: false, error: error.message };
   }

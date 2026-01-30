@@ -32,7 +32,11 @@ import {
   Lightbulb,
   Image as ImageIcon,
   RefreshCw,
-  Type
+  Type,
+  RotateCcw,
+  SkipForward,
+  MonitorPlay,
+  X as CloseIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -105,12 +109,27 @@ interface RecordedAction {
   manualText?: string;
 }
 
+interface FailureState {
+  stepIndex: number;
+  step: any;
+  error: string;
+  screenshot: string | null;
+  url: string | null;
+}
+
 interface ElementRepairWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   action: RecordedAction | null;
   actionIndex: number;
   onSave: (updates: { manualSelector?: string; manualText?: string }) => void;
+  // NEW: Enhanced repair capabilities
+  failureState?: FailureState | null;
+  browserKeptOpen?: boolean;
+  onReopenBrowser?: () => Promise<{ success: boolean; error?: string }>;
+  onRetryStep?: (updates: { manualSelector?: string; manualText?: string }) => Promise<{ success: boolean; error?: string; message?: string }>;
+  onResumeFromHere?: (options?: { skipFailedStep?: boolean; updatedSteps?: any[] }) => Promise<{ success: boolean; error?: string }>;
+  onCloseBrowser?: () => Promise<{ success: boolean }>;
 }
 
 // Tab type
@@ -121,7 +140,14 @@ export default function ElementRepairWizard({
   onOpenChange,
   action,
   actionIndex,
-  onSave
+  onSave,
+  // NEW props
+  failureState,
+  browserKeptOpen = false,
+  onReopenBrowser,
+  onRetryStep,
+  onResumeFromHere,
+  onCloseBrowser
 }: ElementRepairWizardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('manual'); // Start with manual when browser might not be open
   const [isLoading, setIsLoading] = useState(false);
@@ -132,6 +158,10 @@ export default function ElementRepairWizard({
   const [selectedSelector, setSelectedSelector] = useState<string>('');
   const [manualTextOverride, setManualTextOverride] = useState<string>(''); // For text-based matching
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // NEW: Selector type selection (css, xpath, text, aria, ocr, coords, image)
+  const [selectorType, setSelectorType] = useState<'css' | 'xpath' | 'text' | 'aria' | 'ocr' | 'coords' | 'image'>('css');
+  const [showFallbackStrategies, setShowFallbackStrategies] = useState(false);
   
   // Debug state
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
@@ -144,6 +174,12 @@ export default function ElementRepairWizard({
   
   // Browser availability check
   const [browserAvailable, setBrowserAvailable] = useState(false);
+  
+  // NEW: Retry/Resume state
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryResult, setRetryResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isReopening, setIsReopening] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   // Get flowstral API
   const flowstral = (window as any).flowstral;
@@ -152,7 +188,16 @@ export default function ElementRepairWizard({
   useEffect(() => {
     const checkBrowser = async () => {
       try {
-        if (flowstral?.elementPicker) {
+        // First check if browser was kept open after failure
+        if (browserKeptOpen) {
+          setBrowserAvailable(true);
+          return;
+        }
+        // Then check via IPC
+        if (flowstral?.playwrightRecorder?.isBrowserOpen) {
+          const result = await flowstral.playwrightRecorder.isBrowserOpen();
+          setBrowserAvailable(result?.open || false);
+        } else if (flowstral?.elementPicker) {
           const status = await flowstral.getRecorderStatus?.();
           setBrowserAvailable(status?.browserReady || status?.hasPage || false);
         } else {
@@ -165,7 +210,7 @@ export default function ElementRepairWizard({
     if (open) {
       checkBrowser();
     }
-  }, [open, flowstral]);
+  }, [open, flowstral, browserKeptOpen]);
   
   // Pre-populate manual fields from action
   useEffect(() => {
@@ -272,17 +317,68 @@ export default function ElementRepairWizard({
     setIsPicking(false);
   };
 
-  // Test a selector
+  // Test a selector (supports multiple types)
   const testSelector = async (selector: string) => {
     if (!flowstral?.elementPicker || !selector) return;
 
     setTestResult(null);
     
     try {
-      const result = await flowstral.elementPicker.testSelector(selector);
+      // Convert selector based on type for testing
+      let testableSelector = selector;
+      let message = '';
+      
+      switch (selectorType) {
+        case 'xpath':
+          // XPath is passed directly to test (Playwright supports it)
+          testableSelector = `xpath=${selector}`;
+          break;
+        case 'text':
+          // Convert to text selector
+          testableSelector = `text=${selector}`;
+          break;
+        case 'aria':
+          // Convert to aria-label selector
+          testableSelector = `[aria-label*="${selector}" i]`;
+          break;
+        case 'coords':
+          // Coordinates can't be tested via selector
+          const coords = selector.split(',').map(s => parseInt(s.trim()));
+          if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+            setTestResult({
+              success: true,
+              message: `Coordinates (${coords[0]}, ${coords[1]}) will be clicked directly`
+            });
+            return;
+          } else {
+            setTestResult({
+              success: false,
+              message: 'Invalid coordinates. Use format: x,y (e.g., 150,300)'
+            });
+            return;
+          }
+        case 'ocr':
+          // OCR text will be searched visually
+          setTestResult({
+            success: true,
+            message: `OCR will search for visible text: "${selector}"`
+          });
+          return;
+        case 'image':
+          setTestResult({
+            success: true,
+            message: 'Image template matching configured'
+          });
+          return;
+        default:
+          // CSS selector as-is
+          testableSelector = selector;
+      }
+      
+      const result = await flowstral.elementPicker.testSelector(testableSelector);
       setTestResult({
         success: result.success,
-        message: result.message
+        message: result.message || (result.success ? `Found ${result.count || 1} element(s)` : 'Element not found')
       });
       
       // Highlight the element
@@ -327,6 +423,122 @@ export default function ElementRepairWizard({
     }
   };
 
+  // NEW: Re-open browser to failed state
+  const handleReopenBrowser = async () => {
+    if (!onReopenBrowser) {
+      // Fallback to flowstral API
+      if (flowstral?.playwrightRecorder?.reopenToFailure) {
+        setIsReopening(true);
+        try {
+          const result = await flowstral.playwrightRecorder.reopenToFailure();
+          if (result?.success) {
+            setBrowserAvailable(true);
+            toast.success('✅ Browser re-opened to failed state!');
+          } else {
+            toast.error(result?.error || 'Failed to re-open browser');
+          }
+        } catch (e: any) {
+          toast.error(e.message || 'Failed to re-open browser');
+        } finally {
+          setIsReopening(false);
+        }
+      }
+      return;
+    }
+    
+    setIsReopening(true);
+    try {
+      const result = await onReopenBrowser();
+      if (result?.success) {
+        setBrowserAvailable(true);
+        toast.success('✅ Browser re-opened to failed state!');
+      } else {
+        toast.error(result?.error || 'Failed to re-open browser');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to re-open browser');
+    } finally {
+      setIsReopening(false);
+    }
+  };
+  
+  // NEW: Retry the failed step with current edits
+  const handleRetryStep = async () => {
+    const updates = {
+      manualSelector: selectedSelector || undefined,
+      manualText: manualTextOverride || pickedElement?.text || undefined
+    };
+    
+    setIsRetrying(true);
+    setRetryResult(null);
+    
+    try {
+      let result;
+      if (onRetryStep) {
+        result = await onRetryStep(updates);
+      } else if (flowstral?.playwrightRecorder?.retryFailedStep) {
+        result = await flowstral.playwrightRecorder.retryFailedStep(updates);
+      } else {
+        throw new Error('Retry function not available');
+      }
+      
+      if (result?.success) {
+        setRetryResult({ success: true, message: result.message || 'Step executed successfully!' });
+        toast.success('✅ Step retry succeeded!');
+      } else {
+        setRetryResult({ success: false, message: result?.error || 'Step failed' });
+        toast.error(`❌ Step retry failed: ${result?.error || 'Unknown error'}`);
+      }
+    } catch (e: any) {
+      setRetryResult({ success: false, message: e.message || 'Retry failed' });
+      toast.error(e.message || 'Retry failed');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+  
+  // NEW: Resume test from this step (or skip it)
+  const handleResume = async (skipFailedStep: boolean = false) => {
+    setIsResuming(true);
+    
+    try {
+      let result;
+      if (onResumeFromHere) {
+        result = await onResumeFromHere({ skipFailedStep });
+      } else if (flowstral?.playwrightRecorder?.resumeFromFailure) {
+        result = await flowstral.playwrightRecorder.resumeFromFailure({ skipFailedStep });
+      } else {
+        throw new Error('Resume function not available');
+      }
+      
+      if (result?.success) {
+        toast.success('✅ Test resumed and completed!');
+        onOpenChange(false);
+      } else {
+        toast.error(`Test failed at another step: ${result?.error || 'Unknown error'}`);
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Resume failed');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+  
+  // NEW: Close browser manually
+  const handleCloseBrowser = async () => {
+    try {
+      if (onCloseBrowser) {
+        await onCloseBrowser();
+      } else if (flowstral?.playwrightRecorder?.closeBrowser) {
+        await flowstral.playwrightRecorder.closeBrowser();
+      }
+      setBrowserAvailable(false);
+      toast.success('Browser closed');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to close browser');
+    }
+  };
+
   // Save the fix
   const handleSave = () => {
     // Allow saving if we have selector, text override, or picked element
@@ -335,8 +547,46 @@ export default function ElementRepairWizard({
       return;
     }
 
+    // Build the selector based on type
+    let finalSelector = selectedSelector;
+    if (selectedSelector) {
+      switch (selectorType) {
+        case 'xpath':
+          finalSelector = `xpath=${selectedSelector}`;
+          break;
+        case 'text':
+          // For text type, store in manualText instead
+          if (!manualTextOverride) {
+            onSave({
+              manualText: selectedSelector
+            });
+            return;
+          }
+          finalSelector = `text=${selectedSelector}`;
+          break;
+        case 'aria':
+          finalSelector = `[aria-label*="${selectedSelector}" i]`;
+          break;
+        case 'coords':
+          // Store coordinates for special handling
+          finalSelector = `coords:${selectedSelector}`;
+          break;
+        case 'ocr':
+          // Store OCR text for special handling  
+          finalSelector = `ocr:${selectedSelector}`;
+          break;
+        case 'image':
+          // Store image template path
+          finalSelector = `image:${selectedSelector}`;
+          break;
+        default:
+          // CSS selector as-is
+          finalSelector = selectedSelector;
+      }
+    }
+
     onSave({
-      manualSelector: selectedSelector || undefined,
+      manualSelector: finalSelector || undefined,
       manualText: manualTextOverride || pickedElement?.text || undefined
     });
 
@@ -400,19 +650,60 @@ export default function ElementRepairWizard({
               </p>
             </div>
 
-            {/* Selector Override */}
+            {/* Selector Type Selector */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">
-                CSS Selector (Advanced)
+                Selector Type
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { type: 'css', label: 'CSS', icon: '#', hint: 'data-testid, class, id' },
+                  { type: 'xpath', label: 'XPath', icon: '/', hint: '//button[@name]' },
+                  { type: 'text', label: 'Text', icon: 'T', hint: 'Exact text match' },
+                  { type: 'aria', label: 'Aria', icon: '♿', hint: 'aria-label' },
+                ].map(({ type, label, icon, hint }) => (
+                  <button
+                    key={type}
+                    onClick={() => setSelectorType(type as any)}
+                    className={cn(
+                      'flex flex-col items-center p-2 rounded-lg border text-xs transition-colors',
+                      selectorType === type
+                        ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                        : 'bg-card/50 border-border hover:border-blue-500/50'
+                    )}
+                  >
+                    <span className="font-mono text-lg mb-1">{icon}</span>
+                    <span className="font-medium">{label}</span>
+                    <span className="text-[10px] text-muted-foreground">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Selector Input based on type */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                {selectorType === 'css' && 'CSS Selector'}
+                {selectorType === 'xpath' && 'XPath Expression'}
+                {selectorType === 'text' && 'Text to Find'}
+                {selectorType === 'aria' && 'Aria Label'}
               </label>
               <Input
                 value={selectedSelector}
                 onChange={(e) => setSelectedSelector(e.target.value)}
-                placeholder='e.g., #submit-btn, [data-testid="submit"], button.primary'
+                placeholder={
+                  selectorType === 'css' ? 'e.g., #submit-btn, [data-testid="submit"], button.primary' :
+                  selectorType === 'xpath' ? 'e.g., //button[@type="submit"], //a[contains(text(), "Click")]' :
+                  selectorType === 'text' ? 'e.g., Submit, Click Here, Login' :
+                  'e.g., Submit form, Close dialog, Search'
+                }
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Optional: CSS selector for precise element matching
+                {selectorType === 'css' && 'Standard CSS selector for precise element matching'}
+                {selectorType === 'xpath' && 'XPath for complex element paths (//tag[@attr="value"])'}
+                {selectorType === 'text' && 'Find element by visible text content'}
+                {selectorType === 'aria' && 'Find by accessibility label (best for buttons/links)'}
               </p>
             </div>
 
@@ -425,7 +716,7 @@ export default function ElementRepairWizard({
                 className="w-full"
               >
                 <Play className="h-3 w-3 mr-2" />
-                Test Selector in Browser
+                Test {selectorType.toUpperCase()} Selector in Browser
               </Button>
             )}
 
@@ -440,15 +731,82 @@ export default function ElementRepairWizard({
               </div>
             )}
 
+            {/* Fallback Strategies Accordion */}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => setShowFallbackStrategies(!showFallbackStrategies)}
+                className="w-full flex items-center justify-between p-3 bg-secondary/30 hover:bg-secondary/50 transition-colors"
+              >
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-400" />
+                  Advanced Fallback Strategies
+                </span>
+                <ChevronRight className={cn('h-4 w-4 transition-transform', showFallbackStrategies && 'rotate-90')} />
+              </button>
+              {showFallbackStrategies && (
+                <div className="p-3 space-y-3 bg-card/50">
+                  <p className="text-xs text-muted-foreground">
+                    Use these as last resort when standard selectors don't work:
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectorType('ocr');
+                        toast.info('OCR requires typing the exact visible text');
+                      }}
+                      className="flex flex-col items-center p-2 rounded-lg border border-border hover:border-amber-500/50 text-xs"
+                    >
+                      <Eye className="h-5 w-5 mb-1 text-amber-400" />
+                      <span className="font-medium">OCR Text</span>
+                      <span className="text-[10px] text-muted-foreground">Visual text</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectorType('coords');
+                        toast.info('Coordinates are fragile - use as last resort');
+                      }}
+                      className="flex flex-col items-center p-2 rounded-lg border border-border hover:border-red-500/50 text-xs"
+                    >
+                      <MousePointer2 className="h-5 w-5 mb-1 text-red-400" />
+                      <span className="font-medium">Coordinates</span>
+                      <span className="text-[10px] text-muted-foreground">X, Y position</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectorType('image');
+                        toast.info('Image matching requires a template screenshot');
+                      }}
+                      className="flex flex-col items-center p-2 rounded-lg border border-border hover:border-purple-500/50 text-xs"
+                    >
+                      <ImageIcon className="h-5 w-5 mb-1 text-purple-400" />
+                      <span className="font-medium">Image Match</span>
+                      <span className="text-[10px] text-muted-foreground">Visual template</span>
+                    </button>
+                  </div>
+                  {selectorType === 'coords' && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded p-2">
+                      <p className="text-xs text-red-400">
+                        ⚠️ Coordinates break when window size changes. Only use if nothing else works.
+                        Enter as: <code className="bg-background px-1 rounded">x,y</code> (e.g., 150,300)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Tips */}
             <div className="bg-secondary/30 rounded-lg p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">💡 Tips:</p>
-              <ul className="text-xs text-muted-foreground space-y-1 ml-4 list-disc">
-                <li>Use exact text as it appears on the page</li>
-                <li>For buttons, use the button label text</li>
-                <li>CSS selectors like <code className="bg-secondary px-1 rounded">[data-testid="..."]</code> are most reliable</li>
-                <li>Changes apply on next playback</li>
-              </ul>
+              <p className="text-xs font-medium text-muted-foreground mb-2">💡 Selector Reliability (best → worst):</p>
+              <ol className="text-xs text-muted-foreground space-y-1 ml-4 list-decimal">
+                <li><strong>data-testid</strong> - Most stable, never changes</li>
+                <li><strong>aria-label</strong> - Good for accessible elements</li>
+                <li><strong>ID</strong> - Stable if unique</li>
+                <li><strong>Text content</strong> - Works if text is unique</li>
+                <li><strong>CSS class</strong> - Can change with UI updates</li>
+                <li><strong>XPath</strong> - Powerful but fragile</li>
+                <li><strong>Coordinates</strong> - Last resort only</li>
+              </ol>
             </div>
           </div>
         );
@@ -915,34 +1273,170 @@ export default function ElementRepairWizard({
           </button>
         </div>
 
+        {/* Browser Status Banner */}
+        {!browserAvailable && failureState && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-400" />
+                <div>
+                  <p className="text-sm font-medium text-amber-400">Browser Closed</p>
+                  <p className="text-xs text-amber-400/80">Re-open to use Pick, Debug, and AI features</p>
+                </div>
+              </div>
+              <Button
+                onClick={handleReopenBrowser}
+                disabled={isReopening}
+                size="sm"
+                className="bg-amber-500 hover:bg-amber-600 text-black"
+              >
+                {isReopening ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <MonitorPlay className="h-4 w-4 mr-1" />
+                )}
+                Re-open Browser
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Browser Open Indicator */}
+        {browserAvailable && (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm text-emerald-400">Browser open - All features available</span>
+            </div>
+            <Button
+              onClick={handleCloseBrowser}
+              size="sm"
+              variant="ghost"
+              className="h-6 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <CloseIcon className="h-3 w-3 mr-1" />
+              Close
+            </Button>
+          </div>
+        )}
+        
+        {/* Failure Screenshot (if available) */}
+        {failureState?.screenshot && activeTab === 'manual' && (
+          <div className="mb-2">
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+              <ImageIcon className="h-3 w-3" /> Screenshot at failure
+            </p>
+            <div className="rounded-lg overflow-hidden border border-border max-h-32">
+              <img 
+                src={failureState.screenshot} 
+                alt="Failure screenshot" 
+                className="w-full h-auto object-contain bg-black"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Tab Content */}
-        <div className="py-4 max-h-[60vh] overflow-y-auto">
+        <div className="py-4 max-h-[50vh] overflow-y-auto">
           {renderTabContent()}
         </div>
+        
+        {/* Retry Result */}
+        {retryResult && (
+          <div className={cn(
+            'flex items-center gap-2 p-2 rounded-lg text-sm mb-2',
+            retryResult.success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+          )}>
+            {retryResult.success ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+            {retryResult.message}
+          </div>
+        )}
 
-        {/* Footer */}
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          {browserAvailable && selectedSelector && (
-            <Button
-              onClick={() => testSelector(selectedSelector)}
-              variant="outline"
-              className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Test
+        {/* Footer with enhanced actions */}
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {/* Left side: Close/Cancel */}
+          <div className="flex gap-2 flex-1">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
             </Button>
-          )}
-          <Button
-            onClick={handleSave}
-            disabled={!selectedSelector && !manualTextOverride && !pickedElement}
-            className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-          >
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            Save Fix
-          </Button>
+          </div>
+          
+          {/* Right side: Actions */}
+          <div className="flex gap-2 flex-wrap justify-end">
+            {/* Test Selector (if browser available) */}
+            {browserAvailable && selectedSelector && (
+              <Button
+                onClick={() => testSelector(selectedSelector)}
+                variant="outline"
+                size="sm"
+                className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+              >
+                <Play className="h-4 w-4 mr-1" />
+                Test
+              </Button>
+            )}
+            
+            {/* Retry Step (if browser available and we have a fix) */}
+            {browserAvailable && (selectedSelector || manualTextOverride) && (
+              <Button
+                onClick={handleRetryStep}
+                disabled={isRetrying}
+                variant="outline"
+                size="sm"
+                className="border-purple-500/50 text-purple-400 hover:bg-purple-500/10"
+              >
+                {isRetrying ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                )}
+                Retry Step
+              </Button>
+            )}
+            
+            {/* Resume from Here (if browser available and retry succeeded) */}
+            {browserAvailable && retryResult?.success && (
+              <>
+                <Button
+                  onClick={() => handleResume(false)}
+                  disabled={isResuming}
+                  size="sm"
+                  className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700"
+                >
+                  {isResuming ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4 mr-1" />
+                  )}
+                  Continue Test
+                </Button>
+              </>
+            )}
+            
+            {/* Skip & Continue (alternative if they want to skip this step) */}
+            {browserAvailable && failureState && !retryResult?.success && (
+              <Button
+                onClick={() => handleResume(true)}
+                disabled={isResuming}
+                variant="outline"
+                size="sm"
+                className="border-gray-500/50 text-gray-400 hover:bg-gray-500/10"
+              >
+                <SkipForward className="h-4 w-4 mr-1" />
+                Skip & Continue
+              </Button>
+            )}
+            
+            {/* Save Fix */}
+            <Button
+              onClick={handleSave}
+              disabled={!selectedSelector && !manualTextOverride && !pickedElement}
+              className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Save Fix
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -374,32 +374,30 @@ Required browser permissions (manifest.json):
 # Just zip the folder for distribution
 ```
 
-### 8. `lib/network-capture.js` - HTTP/WebSocket Recording (507 lines)
+### 8. `lib/network-capture.js` - HAR Capture for Load Testing & API Testing
 
-Browser-native network capture for load testing and API testing.
+Browser-native HTTP/WebSocket recording; exports **HAR (HTTP Archive)** for:
+
+- **Load testing:** Import HAR into k6, JMeter, Gatling, NeoLoad to replay traffic at scale.
+- **API testing:** Use HAR in Postman, Insomnia, or API test suites; request/response headers and timing preserved.
 
 ```javascript
 class NetworkCapture {
   start(sessionId)              // Start capturing network traffic
   stop()                        // Stop and return captured data
+  exportAsHAR()                 // Return HAR 1.2 format
   
-  // Captured data includes:
-  // - XHR/Fetch requests with full headers
-  // - WebSocket messages
-  // - Request/response timing
-  // - Auto-detected correlations (tokens, session IDs)
+  // Captured: XHR/Fetch/document/WebSocket; full headers; timing; request body
+  // Auto-detected correlations: session IDs, auth tokens, CSRF, request IDs
 }
 ```
 
 **Key Features:**
-- No proxy configuration needed
+- No proxy or SSL cert setup; works with any site (including strict CSP)
 - True browser timing (not proxy-delayed)
 - Full WebSocket support
-- Automatic correlation detection for:
-  - Session IDs
-  - Auth tokens
-  - CSRF tokens
-  - Request IDs
+- HAR 1.2 standard format
+- Automatic correlation detection for session IDs, auth tokens, CSRF tokens, request IDs
 
 ## Recent Updates
 

@@ -1257,11 +1257,11 @@
         <span class="status-label">Actions Recorded</span>
         <span class="status-value" id="actionCount">0</span>
       </div>
-      <!-- Network/Protocol Capture Toggle (OFF by default - enable for load testing) -->
+      <!-- HAR capture for load testing & API testing (OFF by default) -->
       <div class="status-row" id="networkCaptureRow">
-        <span class="status-label">🌐 Protocol Capture</span>
+        <span class="status-label" title="Capture HTTP/WebSocket as HAR for load testing and API testing">🌐 HAR (Load & API)</span>
         <span class="status-value">
-          <label class="toggle-switch" title="Enable for load/performance testing">
+          <label class="toggle-switch" title="Capture HAR for load testing (k6, JMeter) and API testing (Postman)">
             <input type="checkbox" id="networkCaptureToggle">
             <span class="toggle-slider"></span>
           </label>
@@ -1298,13 +1298,13 @@
       </button>
     </div>
     
-    <!-- Protocol/HAR Export - Only visible when protocol data is captured -->
+    <!-- HAR export for load testing & API testing - visible when protocol data captured -->
     <div class="controls protocol-actions" id="protocolActions" style="margin-top: 8px; display: none;">
-      <button class="btn" id="exportHarBtn" style="background: linear-gradient(135deg, #7c3aed, #8b5cf6); border-color: #7c3aed;" title="Export protocol data as HAR file">
+      <button class="btn" id="exportHarBtn" style="background: linear-gradient(135deg, #7c3aed, #8b5cf6); border-color: #7c3aed;" title="Export HAR file for load testing (k6, JMeter, Gatling) and API testing (Postman, Insomnia)">
         📦 Export HAR
       </button>
-      <button class="btn btn-secondary" id="loadTestBtn" title="Open load testing page with this protocol data">
-        ⚡ Load Test
+      <button class="btn btn-secondary" id="loadTestBtn" title="Send HAR to load testing or API testing (backend)">
+        ⚡ Load / API Test
       </button>
     </div>
 
