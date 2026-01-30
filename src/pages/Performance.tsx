@@ -16,12 +16,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "@/lib/api-config";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Test website endpoints for quick-start scenarios
 const ECOMMERCE_TEST_URL = "http://localhost:8002";
+
+// In-browser runner: quick validation only. For real load use Go runner or k6.
+const MAX_BROWSER_VUS = 20;
 
 interface TestMetrics {
   totalRequests: number;
@@ -141,6 +144,20 @@ const QUICK_START_SCENARIOS = [
       { method: "GET", path: "/api/performance/load?iterations=100", weight: 10 },
       { method: "GET", path: "/api/performance/delay/0.1", weight: 10 },
     ]
+  },
+  {
+    id: "pwa_load",
+    name: "📱 PWA Load",
+    description: "Load test PWA start URL (document + shell). Use your PWA base URL in Custom Config.",
+    virtualUsers: 30,
+    duration: 60,
+    rampUp: 10,
+    testType: "load",
+    endpoints: [
+      { method: "GET", path: "/", weight: 80 },
+      { method: "GET", path: "/manifest.json", weight: 10 },
+      { method: "GET", path: "/service-worker.js", weight: 10 },
+    ]
   }
 ];
 
@@ -176,9 +193,127 @@ export default function Performance() {
   const [serverCpuMetrics, setServerCpuMetrics] = useState<ServerCpuMetrics | null>(null);
   const [serverHealthWarnings, setServerHealthWarnings] = useState<string[]>([]);
   
+  // From Recorder: draft (backend) or sessionStorage
+  const [searchParams] = useSearchParams();
+  const [fromRecorderRequests, setFromRecorderRequests] = useState<Array<{ method: string; url: string; headers?: Record<string, string>; body?: string }>>([]);
+  const [fromRecorderTimestamp, setFromRecorderTimestamp] = useState<number | null>(null);
+  const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
+  const [recorderEndpoints, setRecorderEndpoints] = useState<Array<{ method: string; path: string; weight: number }>>([]);
+  
+  // Lighthouse
+  const [lighthouseUrl, setLighthouseUrl] = useState("");
+  const [lighthouseResult, setLighthouseResult] = useState<any>(null);
+  const [lighthouseLoading, setLighthouseLoading] = useState(false);
+  const [lighthouseFormFactor, setLighthouseFormFactor] = useState<"desktop" | "mobile">("desktop");
+  
   const testIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const metricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const serverMetricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Consume load test from Recorder: draft_id (backend) first, then sessionStorage fallback
+  useEffect(() => {
+    const draftId = searchParams.get("draft_id");
+    if (draftId) {
+      fetch(`${API_BASE_URL}/api/performance/drafts/${draftId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.draft?.requests?.length > 0) {
+            const requests = data.draft.requests as Array<{ method?: string; url: string; headers?: Record<string, string>; body?: string }>;
+            setFromRecorderRequests(requests.map((r) => ({ method: r.method || "GET", url: r.url, headers: r.headers, body: r.body })));
+            setFromRecorderTimestamp(data.draft.created_at ? Math.floor(data.draft.created_at * 1000) : null);
+            setLoadedDraftId(draftId);
+            toast.success(`Loaded draft ${draftId}: ${requests.length} requests`);
+          }
+        })
+        .catch(() => {
+          toast.error("Draft not found or expired. Try recording again.");
+        });
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem("pendingLoadTestRequests");
+      const ts = sessionStorage.getItem("pendingLoadTestTimestamp");
+      if (raw && ts) {
+        const requests = JSON.parse(raw) as Array<{ method?: string; url: string; headers?: Record<string, string>; body?: string }>;
+        if (Array.isArray(requests) && requests.length > 0) {
+          setFromRecorderRequests(requests.map((r) => ({ method: r.method || "GET", url: r.url, headers: r.headers, body: r.body })));
+          setFromRecorderTimestamp(parseInt(ts, 10) || null);
+          toast.success(`Loaded ${requests.length} requests from Recorder (session)`);
+        }
+      }
+    } catch (_) {
+      // ignore parse errors
+    }
+  }, [searchParams]);
+
+  const useRecorderRequests = () => {
+    if (fromRecorderRequests.length === 0) return;
+    const first = fromRecorderRequests[0];
+    try {
+      const u = new URL(first.url);
+      const baseUrl = `${u.protocol}//${u.host}`;
+      setCustomConfig((c) => ({ ...c, baseUrl }));
+      const endpoints: Array<{ method: string; path: string; weight: number }> = fromRecorderRequests.map((r) => {
+        try {
+          const u2 = new URL(r.url);
+          const path = u2.pathname || "/";
+          const search = u2.search || "";
+          return { method: r.method || "GET", path: path + search, weight: 100 };
+        } catch {
+          return { method: r.method || "GET", path: "/", weight: 100 };
+        }
+      });
+      setRecorderEndpoints(endpoints);
+      setActiveTab("config");
+      sessionStorage.removeItem("pendingLoadTestRequests");
+      sessionStorage.removeItem("pendingLoadTestTimestamp");
+      setFromRecorderRequests([]);
+      setFromRecorderTimestamp(null);
+      setLoadedDraftId(null);
+      if (searchParams.get("draft_id")) window.history.replaceState({}, "", "/performance");
+      toast.success("Using recorder requests. Adjust base URL and Run Custom Test.");
+    } catch (e) {
+      toast.error("Could not parse recorder URLs");
+    }
+  };
+
+  const dismissRecorderRequests = () => {
+    setFromRecorderRequests([]);
+    setFromRecorderTimestamp(null);
+    setLoadedDraftId(null);
+    setRecorderEndpoints([]);
+    sessionStorage.removeItem("pendingLoadTestRequests");
+    sessionStorage.removeItem("pendingLoadTestTimestamp");
+    if (searchParams.get("draft_id")) {
+      window.history.replaceState({}, "", "/performance");
+    }
+  };
+
+  const runLighthouse = async () => {
+    const url = lighthouseUrl.trim();
+    if (!url) {
+      toast.error("Enter a URL");
+      return;
+    }
+    setLighthouseLoading(true);
+    setLighthouseResult(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/performance/lighthouse/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, form_factor: lighthouseFormFactor, timeout_seconds: 120 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Lighthouse run failed");
+      setLighthouseResult(data);
+      toast.success("Lighthouse run completed");
+    } catch (e: any) {
+      toast.error(e?.message || "Lighthouse run failed");
+      setLighthouseResult({ success: false, error: e?.message });
+    } finally {
+      setLighthouseLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadSystemMetrics();
@@ -358,21 +493,34 @@ export default function Performance() {
     }
   };
 
-  // Run actual load test using the frontend
+  // Run actual load test using the frontend (in-browser = quick validation only)
   const runLoadTest = async (scenario?: typeof QUICK_START_SCENARIOS[0]) => {
-    const config = scenario || {
-      virtualUsers: customConfig.virtualUsers,
-      duration: customConfig.duration,
-      rampUp: customConfig.rampUp,
-      endpoints: [{ method: "GET", path: "/api/products", weight: 100 }]
-    };
+    const defaultEndpoints = recorderEndpoints.length > 0
+      ? recorderEndpoints
+      : [{ method: "GET" as const, path: "/api/products", weight: 100 }];
+    let virtualUsers = scenario?.virtualUsers ?? customConfig.virtualUsers;
+    if (virtualUsers > MAX_BROWSER_VUS) {
+      toast.warning(`In-browser runner capped at ${MAX_BROWSER_VUS} VUs. Use Go runner or k6 for ${virtualUsers}+ VUs.`);
+      virtualUsers = MAX_BROWSER_VUS;
+    }
+    const config = scenario
+      ? { ...scenario, virtualUsers: Math.min(scenario.virtualUsers, MAX_BROWSER_VUS) }
+      : { virtualUsers, duration: customConfig.duration, rampUp: customConfig.rampUp, endpoints: defaultEndpoints };
     
     const baseUrl = customConfig.baseUrl || ECOMMERCE_TEST_URL;
     
-    // Check if target is reachable
+    // Check if target is reachable (try /health then base URL)
     try {
-      const healthCheck = await fetch(`${baseUrl}/health`);
-      if (!healthCheck.ok) throw new Error("Target not reachable");
+      let ok = false;
+      try {
+        const healthCheck = await fetch(`${baseUrl}/health`);
+        ok = healthCheck.ok;
+      } catch (_) {}
+      if (!ok) {
+        const rootCheck = await fetch(baseUrl, { method: "HEAD" }).catch(() => fetch(baseUrl));
+        ok = rootCheck?.ok ?? false;
+      }
+      if (!ok) throw new Error("Target not reachable");
     } catch (error) {
       toast.error(`Cannot connect to ${baseUrl}. Make sure the test website is running.`);
       return;
@@ -737,7 +885,7 @@ export default function Performance() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="quickstart">
             <Rocket className="w-4 h-4 mr-2" />
             Quick Start
@@ -763,7 +911,36 @@ export default function Performance() {
             <Cpu className="w-4 h-4 mr-2" />
             System
           </TabsTrigger>
+          <TabsTrigger value="lighthouse">
+            <Gauge className="w-4 h-4 mr-2" />
+            Lighthouse
+          </TabsTrigger>
+          <TabsTrigger value="setup">
+            <Settings className="w-4 h-4 mr-2" />
+            Setup
+          </TabsTrigger>
         </TabsList>
+
+        {/* From Recorder: pending load test requests */}
+        {fromRecorderRequests.length > 0 && (
+          <Alert className="border-blue-500 bg-blue-500/10">
+            <Rocket className="h-4 w-4" />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-4">
+              <span>
+                <strong>From Recorder:</strong> {fromRecorderRequests.length} request(s) ready for load testing.
+                Use these to run a load test with the same endpoints you recorded.
+              </span>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={useRecorderRequests}>
+                  Use these requests
+                </Button>
+                <Button size="sm" variant="outline" onClick={dismissRecorderRequests}>
+                  Dismiss
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Record Tab - Protocol Capture & Server Monitoring */}
         <TabsContent value="record" className="space-y-4">
@@ -1067,7 +1244,12 @@ export default function Performance() {
           <Alert>
             <Rocket className="h-4 w-4" />
             <AlertDescription>
-              <strong>Quick Start:</strong> Run pre-configured load tests against the e-commerce demo site at <code>{ECOMMERCE_TEST_URL}</code>
+              <strong>Quick validation (browser):</strong> Max {MAX_BROWSER_VUS} VUs in-browser. For real load (50–10,000+ VUs) use <strong>Setup</strong> tab → Go runner or k6.
+            </AlertDescription>
+          </Alert>
+          <Alert className="border-muted">
+            <AlertDescription>
+              Pre-configured scenarios (e.g. e-commerce demo at <code>{ECOMMERCE_TEST_URL}</code>). Set Base URL in Config for your target.
             </AlertDescription>
           </Alert>
           
@@ -1380,6 +1562,14 @@ export default function Performance() {
 
         {/* Custom Config Tab */}
         <TabsContent value="config" className="space-y-4">
+          {recorderEndpoints.length > 0 && (
+            <Alert className="border-blue-500/50 bg-blue-500/5">
+              <Rocket className="h-4 w-4" />
+              <AlertDescription>
+                <strong>From Recorder:</strong> Running with {recorderEndpoints.length} endpoint(s). Clear by running a Quick Start scenario or Dismiss in the banner above.
+              </AlertDescription>
+            </Alert>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Custom Test Configuration</CardTitle>
@@ -1397,12 +1587,15 @@ export default function Performance() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Virtual Users</Label>
+                  <Label>Virtual Users (browser max {MAX_BROWSER_VUS})</Label>
                   <Input
                     type="number"
-                    value={customConfig.virtualUsers}
-                    onChange={(e) => setCustomConfig({ ...customConfig, virtualUsers: parseInt(e.target.value) || 10 })}
+                    min={1}
+                    max={MAX_BROWSER_VUS}
+                    value={Math.min(customConfig.virtualUsers, MAX_BROWSER_VUS)}
+                    onChange={(e) => setCustomConfig({ ...customConfig, virtualUsers: Math.min(parseInt(e.target.value) || 10, MAX_BROWSER_VUS) })}
                   />
+                  <p className="text-xs text-muted-foreground">For more VUs use Go runner or k6 (Setup tab).</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Duration (seconds)</Label>
@@ -1452,6 +1645,44 @@ export default function Performance() {
 
         {/* History Tab */}
         <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Compare runs (last vs baseline)</CardTitle>
+              <CardDescription>Compare two runs for regression detection. Uses backend run manager (POST /runs/compare).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Run metadata and time-series are stored by the backend. Use API runs (POST /api/performance/tests/run) then GET /api/performance/runs and POST /api/performance/runs/compare with run_ids for trend comparison.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE_URL}/api/performance/runs?limit=10`);
+                    const data = await res.json();
+                    if (data.runs?.length >= 2) {
+                      const runIds = [data.runs[0].run_id, data.runs[1].run_id];
+                      const compareRes = await fetch(`${API_BASE_URL}/api/performance/runs/compare`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ run_ids: runIds }),
+                      });
+                      const compareData = await compareRes.json();
+                      toast.success(compareData.comparison ? "Comparison loaded. Check network response for details." : "No runs to compare yet.");
+                    } else {
+                      toast.info("Run at least 2 tests via API to compare (GET /runs, POST /runs/compare).");
+                    }
+                  } catch (e) {
+                    toast.error("Failed to compare runs");
+                  }
+                }}
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Compare last 2 runs (API)
+              </Button>
+            </CardContent>
+          </Card>
           {testHistory.length > 0 ? (
             <div className="space-y-4">
               {testHistory.map((test, index) => (
@@ -1547,6 +1778,156 @@ export default function Performance() {
               ) : (
                 <p className="text-muted-foreground">System metrics not available</p>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Lighthouse Tab - Core Web Vitals & Performance score */}
+        <TabsContent value="lighthouse" className="space-y-4">
+          <Alert>
+            <Gauge className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Lighthouse:</strong> Run Google Lighthouse against any URL to get Performance score and Core Web Vitals (LCP, FCP, CLS, TBT, TTI). Integrates with PWA and load testing.
+            </AlertDescription>
+          </Alert>
+          <Card>
+            <CardHeader>
+              <CardTitle>Run Lighthouse</CardTitle>
+              <CardDescription>Enter a URL and run Lighthouse (requires Node.js and npx on the backend)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex-1 min-w-[200px] space-y-2">
+                  <Label>URL</Label>
+                  <Input
+                    value={lighthouseUrl}
+                    onChange={(e) => setLighthouseUrl(e.target.value)}
+                    placeholder="https://your-pwa.example.com"
+                  />
+                </div>
+                <div className="space-y-2 w-32">
+                  <Label>Device</Label>
+                  <Select value={lighthouseFormFactor} onValueChange={(v: "desktop" | "mobile") => setLighthouseFormFactor(v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="desktop">Desktop</SelectItem>
+                      <SelectItem value="mobile">Mobile</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={runLighthouse} disabled={lighthouseLoading}>
+                  {lighthouseLoading ? (
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Running...</>
+                  ) : (
+                    <><Play className="w-4 h-4 mr-2" /> Run Lighthouse</>
+                  )}
+                </Button>
+              </div>
+              {lighthouseResult && (
+                <div className="p-4 rounded-lg border bg-muted/50 space-y-4">
+                  {lighthouseResult.error ? (
+                    <p className="text-destructive">{lighthouseResult.error}</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-background rounded">
+                          <p className="text-xs text-muted-foreground">Performance</p>
+                          <p className="text-2xl font-bold">
+                            {lighthouseResult.performance_score != null
+                              ? Math.round((lighthouseResult.performance_score as number) * 100)
+                              : "—"}
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-background rounded">
+                          <p className="text-xs text-muted-foreground">LCP</p>
+                          <p className="text-xl font-bold">
+                            {lighthouseResult.lcp_ms != null ? `${(lighthouseResult.lcp_ms / 1000).toFixed(2)}s` : "—"}
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-background rounded">
+                          <p className="text-xs text-muted-foreground">FCP</p>
+                          <p className="text-xl font-bold">
+                            {lighthouseResult.fcp_ms != null ? `${(lighthouseResult.fcp_ms / 1000).toFixed(2)}s` : "—"}
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-background rounded">
+                          <p className="text-xs text-muted-foreground">CLS</p>
+                          <p className="text-xl font-bold">
+                            {lighthouseResult.cls != null ? lighthouseResult.cls.toFixed(3) : "—"}
+                          </p>
+                        </div>
+                      </div>
+                      {(lighthouseResult.tbt_ms != null || lighthouseResult.tti_ms != null) && (
+                        <div className="flex gap-4 text-sm">
+                          {lighthouseResult.tbt_ms != null && (
+                            <span><strong>TBT:</strong> {(lighthouseResult.tbt_ms / 1000).toFixed(2)}s</span>
+                          )}
+                          {lighthouseResult.tti_ms != null && (
+                            <span><strong>TTI:</strong> {(lighthouseResult.tti_ms / 1000).toFixed(2)}s</span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Setup Tab - Step-by-step: Go runner, k6, Lighthouse, Server metrics */}
+        <TabsContent value="setup" className="space-y-4">
+          <Alert>
+            <Settings className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Enterprise setup:</strong> Go runner (load engine), k6, Lighthouse, and Server Resource Monitoring (SRM). Follow steps to integrate with your environment.
+            </AlertDescription>
+          </Alert>
+          <Card>
+            <CardHeader>
+              <CardTitle>1. Go Runner (load engine)</CardTitle>
+              <CardDescription>Optional: run the Go-based load runner for high-scale tests. Backend compiles scenarios to JSON; Go runner executes.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p><strong>Install:</strong> Build from <code>runner/</code>: <code>go build -o runner ./cmd/runner</code>. Or use the in-browser load test (no Go required).</p>
+              <p><strong>Start:</strong> <code>./runner --port 50051</code>. Backend discovers on port 50051 or use POST /api/performance/runner/register.</p>
+              <p><strong>API:</strong> GET /api/performance/runner/status, POST /api/performance/runner/start-local, POST /api/performance/runner/discover.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>2. k6 (optional)</CardTitle>
+              <CardDescription>Export HAR or use compiled scenario; run k6 externally for maximum scale.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p><strong>Install:</strong> <a href="https://k6.io/docs/getting-started/installation/" target="_blank" rel="noreferrer" className="text-primary underline">k6.io</a>.</p>
+              <p><strong>Use:</strong> Record in Recorder with Load toggle → Quick Load Test → Perf tab uses requests. Or export HAR from Protocol Capture and run <code>k6 run script.js</code>.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>3. Lighthouse (Core Web Vitals)</CardTitle>
+              <CardDescription>Backend runs Lighthouse via npx. Ensure Node.js is installed on the backend host.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p><strong>Install:</strong> Node.js on backend server. First run: <code>npx lighthouse &lt;url&gt;</code> will fetch Lighthouse. Or install globally: <code>npm i -g lighthouse</code>.</p>
+              <p><strong>Use:</strong> Lighthouse tab in this page, or POST /api/performance/lighthouse/run with <code>{"{ \"url\": \"https://...\" }"}</code>. PWA: POST /api/performance/pwa/performance.</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>4. Server-side metrics (SRM)</CardTitle>
+              <CardDescription>Monitor target server CPU, memory, disk during load tests. Like LoadRunner SiteScope.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p><strong>Steps:</strong></p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Record tab → Server CPU Monitoring → Add server (type: Prometheus / Linux SSH / Windows WMI / AWS CloudWatch). Set host, port, credentials if needed.</li>
+                <li>Enable Server Monitoring → Start monitoring (POST /api/srm/start).</li>
+                <li>Run a load test; backend can record response times via POST /api/srm/record-response-time.</li>
+                <li>Stop monitoring → View correlation (GET /api/srm/correlation).</li>
+              </ol>
+              <p><strong>API:</strong> POST /api/srm/servers, POST /api/srm/start, POST /api/srm/stop, GET /api/srm/current, GET /api/srm/correlation.</p>
             </CardContent>
           </Card>
         </TabsContent>

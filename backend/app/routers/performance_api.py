@@ -319,6 +319,143 @@ async def compile_api_requests(request: Request, body: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/compile/load-requests")
+async def compile_load_requests(request: Request, body: dict):
+    """
+    Compile load test requests from Recorder (pendingLoadTestRequests) into a scenario.
+    Same shape as Recorder: [{ method, url, headers?, body? }].
+    
+    Body:
+        requests: list - Requests from recorder (method, url, headers?, body?)
+        name: str - Scenario name (default: "From Recorder")
+        config: dict - Optional { virtual_users, duration_seconds, ramp_up_seconds, target_url }
+    """
+    try:
+        requests_data = body.get("requests", [])
+        if not requests_data:
+            raise HTTPException(status_code=400, detail="requests are required")
+        
+        name = body.get("name", "From Recorder")
+        config_data = body.get("config", {})
+        
+        config = Config(
+            virtual_users=config_data.get("virtual_users", 50),
+            duration_seconds=config_data.get("duration_seconds", 60),
+            ramp_up_seconds=config_data.get("ramp_up_seconds", 10),
+            target_url=config_data.get("target_url", ""),
+            think_time_min_ms=config_data.get("think_time_min_ms", 1000),
+            think_time_max_ms=config_data.get("think_time_max_ms", 3000),
+            stages=config_data.get("stages", []),
+            arrival_rate=config_data.get("arrival_rate"),
+        )
+        
+        compiler = get_scenario_compiler()
+        scenario = compiler.compile_from_api_requests(requests_data, name, config)
+        
+        return {
+            "status": "success",
+            "scenario_id": scenario.scenario_id,
+            "compiled_scenario": scenario.to_dict(),
+            "base_url": config.target_url or (scenario.config.target_url if scenario.config else ""),
+        }
+    
+    except Exception as e:
+        logger.error(f"Error compiling load requests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# DRAFTS - Backend persistence for load-test drafts (replaces sessionStorage)
+# ============================================================================
+
+from app.services.performance.draft_store import get_draft_store
+
+
+@router.post("/drafts")
+async def create_draft(request: Request, body: dict):
+    """
+    Create a load-test draft (captured requests). Shareable, durable, auditable.
+    Recorder posts here and redirects to /performance?draft_id=...
+    Body: requests (list), name (str), source (str), created_by (str), ttl_seconds (int)
+    """
+    try:
+        requests_data = body.get("requests", [])
+        if not requests_data:
+            raise HTTPException(status_code=400, detail="requests are required")
+        name = body.get("name", "From Recorder")
+        source = body.get("source", "recorder")
+        created_by = body.get("created_by")
+        ttl_seconds = body.get("ttl_seconds", 24 * 3600)
+        metadata = body.get("metadata", {})
+        store = get_draft_store()
+        draft = store.create(
+            requests=requests_data,
+            name=name,
+            source=source,
+            created_by=created_by,
+            ttl_seconds=ttl_seconds,
+            metadata=metadata,
+        )
+        return {
+            "status": "success",
+            "draft_id": draft.draft_id,
+            "request_count": len(draft.requests),
+            "message": "Draft created. Load in Perf tab with ?draft_id=" + draft.draft_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating draft: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/drafts/{draft_id}")
+async def get_draft(request: Request, draft_id: str):
+    """Get a draft by ID. Returns 404 if expired or not found."""
+    try:
+        store = get_draft_store()
+        draft = store.get(draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail=f"Draft not found or expired: {draft_id}")
+        return {"status": "success", "draft": draft.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting draft: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/drafts")
+async def list_drafts(request: Request, limit: int = 50):
+    """List recent drafts (for UI or audit)."""
+    try:
+        store = get_draft_store()
+        drafts = store.list_drafts(limit=limit)
+        return {
+            "status": "success",
+            "drafts": [d.to_dict() for d in drafts],
+            "count": len(drafts),
+        }
+    except Exception as e:
+        logger.error(f"Error listing drafts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/drafts/{draft_id}")
+async def delete_draft(request: Request, draft_id: str):
+    """Delete a draft."""
+    try:
+        store = get_draft_store()
+        if not store.delete(draft_id):
+            raise HTTPException(status_code=404, detail=f"Draft not found: {draft_id}")
+        return {"status": "success", "message": f"Draft {draft_id} deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting draft: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # GO RUNNER ENDPOINTS - Manage Go-based performance test runners
 # ============================================================================
@@ -465,6 +602,37 @@ async def stop_local_runner(request: Request):
     
     except Exception as e:
         logger.error(f"Error stopping local runner: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runner/heartbeat")
+async def runner_heartbeat(request: Request):
+    """Runner heartbeat: current status for health checks and capacity-aware scheduling."""
+    try:
+        client = get_go_runner_client()
+        runners = [
+            {
+                "agent_id": r.agent_id,
+                "hostname": r.hostname,
+                "port": r.port,
+                "status": r.status,
+                "available_vus": r.available_vus,
+                "current_vus": r.current_vus,
+                "max_vus": r.max_vus,
+                "active_runs": r.active_runs,
+            }
+            for r in client.runners.values()
+        ]
+        return {
+            "status": "success",
+            "go_runner_available": client.is_go_runner_available(),
+            "runner_count": len(runners),
+            "available_capacity": client.get_available_capacity(),
+            "runners": runners,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Runner heartbeat failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1209,3 +1377,151 @@ async def get_default_thresholds():
         "status": "success",
         "thresholds": RunManager.get_default_thresholds()
     }
+
+
+# ============================================================================
+# LIGHTHOUSE & PWA PERFORMANCE - Core Web Vitals, PWA URL audits
+# ============================================================================
+
+from app.services.performance.lighthouse_service import (
+    run_lighthouse,
+    run_lighthouse_hardened,
+    get_lighthouse_report,
+    get_lighthouse_result,
+)
+
+
+@router.post("/lighthouse/run")
+async def lighthouse_run(request: Request, body: dict):
+    """
+    Run Google Lighthouse against a URL. Returns Performance score and Core Web Vitals
+    (LCP, FCP, CLS, TBT, TTI). Integrates with load testing and PWA performance.
+    
+    Body:
+        url: str - URL to audit (http/https)
+        form_factor: str - "desktop" or "mobile" (default: desktop)
+        timeout_seconds: int - Max run time (default: 120)
+    """
+    try:
+        url = body.get("url", "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        form_factor = body.get("form_factor", "desktop")
+        timeout_seconds = body.get("timeout_seconds", 120)
+        
+        result = await run_lighthouse(
+            url=url,
+            form_factor=form_factor,
+            timeout_seconds=timeout_seconds,
+        )
+        return {"status": "success", **result}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lighthouse run failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/lighthouse/run-hardened")
+async def lighthouse_run_hardened(request: Request, body: dict):
+    """
+    Run Lighthouse multiple times and return median result (stability).
+    Optional: save raw JSON artifacts to disk.
+    Body: url, form_factor, timeout_seconds, runs (default 3), cache_strategy (cold|warm), save_artifacts (bool), artifacts_dir (str)
+    """
+    try:
+        url = body.get("url", "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        form_factor = body.get("form_factor", "desktop")
+        timeout_seconds = body.get("timeout_seconds", 120)
+        runs = body.get("runs", 3)
+        cache_strategy = body.get("cache_strategy", "cold")
+        save_artifacts = body.get("save_artifacts", True)
+        artifacts_dir = body.get("artifacts_dir")
+        if not artifacts_dir:
+            from pathlib import Path
+            artifacts_dir = str(Path("data") / "lighthouse_artifacts")
+        result = await run_lighthouse_hardened(
+            url=url,
+            form_factor=form_factor,
+            timeout_seconds=timeout_seconds,
+            runs=runs,
+            cache_strategy=cache_strategy,
+            save_artifacts=save_artifacts,
+            artifacts_dir=artifacts_dir,
+        )
+        return {"status": "success", **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lighthouse hardened run failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lighthouse/report/{run_id}")
+async def lighthouse_report(request: Request, run_id: str):
+    """Get stored Lighthouse report (full JSON) for a run_id."""
+    try:
+        stored = get_lighthouse_report(run_id)
+        if not stored:
+            raise HTTPException(status_code=404, detail=f"Lighthouse report not found: {run_id}")
+        return {"status": "success", "run_id": run_id, "report": stored.get("report"), "result": stored.get("result")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Lighthouse report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/lighthouse/result/{run_id}")
+async def lighthouse_result(request: Request, run_id: str):
+    """Get Lighthouse result summary (scores, Web Vitals) for a run_id."""
+    try:
+        result = get_lighthouse_result(run_id)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Lighthouse result not found: {run_id}")
+        return {"status": "success", **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Lighthouse result: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/pwa/performance")
+async def pwa_performance(request: Request, body: dict):
+    """
+    PWA-specific performance: run Lighthouse against the PWA URL.
+    Use for PWA load-test pipeline (LCP/FCP/CLS under load or after load).
+    Full PWA audit (manifest, service worker, offline) runs in Flowstral Desktop.
+    
+    Body:
+        url: str - PWA URL (e.g. start_url or root)
+        form_factor: str - "desktop" or "mobile"
+        timeout_seconds: int - Max Lighthouse run time
+    """
+    try:
+        url = body.get("url", "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        form_factor = body.get("form_factor", "mobile")
+        timeout_seconds = body.get("timeout_seconds", 120)
+        
+        result = await run_lighthouse(
+            url=url,
+            form_factor=form_factor,
+            timeout_seconds=timeout_seconds,
+        )
+        return {
+            "status": "success",
+            "pwa_url": url,
+            "lighthouse": result,
+            "message": "PWA performance (Lighthouse). For manifest/SW/offline audit use Flowstral Desktop PWA actions.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PWA performance run failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

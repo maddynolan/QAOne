@@ -146,7 +146,7 @@ class DataPool:
 
 @dataclass
 class Config:
-    """Load test configuration"""
+    """Load test configuration. Supports stages (ramp/spike/step/soak) and think-time distribution."""
     virtual_users: int = 10
     duration_seconds: int = 60
     ramp_up_seconds: int = 10
@@ -157,9 +157,13 @@ class Config:
     request_timeout_ms: int = 30000
     think_time_min_ms: int = 1000
     think_time_max_ms: int = 3000
+    # Workload modeling: stages = [[duration_seconds, target_vus], ...] e.g. [[30, 10], [60, 50], [30, 0]]
+    stages: List[List[int]] = field(default_factory=list)
+    # Optional: arrival rate (requests/sec) as alternative to VU count
+    arrival_rate: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out = {
             "virtual_users": self.virtual_users,
             "duration_seconds": self.duration_seconds,
             "ramp_up_seconds": self.ramp_up_seconds,
@@ -171,6 +175,11 @@ class Config:
             "think_time_min_ms": self.think_time_min_ms,
             "think_time_max_ms": self.think_time_max_ms
         }
+        if self.stages:
+            out["stages"] = self.stages
+        if self.arrival_rate is not None:
+            out["arrival_rate"] = self.arrival_rate
+        return out
 
 
 @dataclass

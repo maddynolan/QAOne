@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   Play, Square, Pause, Trash2, Download, ExternalLink, Save,
   CheckCircle, Video, Globe, Search, Filter, Loader2,
@@ -83,6 +83,7 @@ import {
 } from "@/lib/automation-linking";
 // Element Repair Wizard - Visual element picker for fixing failed steps
 import ElementRepairWizard from "@/components/ElementRepairWizard";
+import SimpleStepEditor from "@/components/SimpleStepEditor";
 // Confidence System - Shows reliability of element identification
 import { StepConfidenceIndicator, ConfidenceLevel } from "@/components/confidence";
 
@@ -810,6 +811,8 @@ export default function PlaywrightRecorderPage() {
   const [editingActionIndex, setEditingActionIndex] = useState<number | null>(null);
   const [manualSelectorInput, setManualSelectorInput] = useState("");
   const [manualTextInput, setManualTextInput] = useState("");
+  // Use simplified editor by default (more user-friendly)
+  const [useSimpleEditor, setUseSimpleEditor] = useState(true);
   
   // Ref for auto-scrolling to newly added actions
   const actionsEndRef = useRef<HTMLDivElement>(null);
@@ -823,6 +826,20 @@ export default function PlaywrightRecorderPage() {
   // Mobile device emulation - 50+ devices
   const [selectedMobileDevice, setSelectedMobileDevice] = useState<string>('desktop');
   const [selectedNetwork, setSelectedNetwork] = useState<string>('none');
+  
+  // ============ RE-RECORD FROM BUILDER STATE ============
+  // When user clicks "Re-record" on a failed step in the builder, we load context here
+  const [searchParams] = useSearchParams();
+  const [rerecordContext, setRerecordContext] = useState<{
+    source: string;
+    testCaseId: string;
+    testCaseName: string;
+    stepIndex: number;
+    step: any;
+    returnTo: string;
+    timestamp: number;
+  } | null>(null);
+  const [showRerecordBanner, setShowRerecordBanner] = useState(false);
   
   // Device categories for organized dropdown
   const deviceCategories = {
@@ -1015,6 +1032,25 @@ export default function PlaywrightRecorderPage() {
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [showRunMenu, setShowRunMenu] = useState(false);
   
+  // Keep browser open on failure - allows visual debugging, element picking, AI assist
+  const [keepBrowserOpenOnFailure, setKeepBrowserOpenOnFailure] = useState(true);
+  // Track if browser is currently open (after failure)
+  const [browserKeptOpen, setBrowserKeptOpen] = useState(false);
+  // Track failure state for B+C Hybrid repair wizard
+  const [failureState, setFailureState] = useState<{
+    stepIndex: number;
+    step: RecordedAction;
+    error: string;
+    screenshot: string | null;
+    url: string | null;
+    similarElements?: Array<{
+      id: string;
+      text: string;
+      selector: string;
+      type?: string;
+    }>;
+  } | null>(null);
+  
   // Export dropdown
   const [showExportMenu, setShowExportMenu] = useState(false);
   
@@ -1151,6 +1187,30 @@ export default function PlaywrightRecorderPage() {
         } else {
           // Clear stale data
           localStorage.removeItem('recordForStep');
+        }
+      }
+      
+      // Check for re-record context from builder (for fixing failed steps)
+      const rerecordData = localStorage.getItem('flowstral_rerecord_context');
+      if (rerecordData) {
+        const context = JSON.parse(rerecordData);
+        // Only use if recent (within 10 minutes)
+        if (context.timestamp && Date.now() - context.timestamp < 10 * 60 * 1000) {
+          setRerecordContext(context);
+          setShowRerecordBanner(true);
+          
+          // Pre-populate URL if available from the failed step's context
+          if (context.step?.url) {
+            setUrl(context.step.url);
+          }
+          
+          toast.info(`🔄 Re-record Mode: Recording replacement for step ${context.stepIndex + 1}`, {
+            description: `"${context.step?.name || context.step?.type || 'Unknown step'}" in "${context.testCaseName}"`,
+            duration: 8000,
+          });
+        } else {
+          // Clear stale data
+          localStorage.removeItem('flowstral_rerecord_context');
         }
       }
     } catch (e) {
@@ -3170,12 +3230,13 @@ const handleExportToBuilder = async () => {
     window.location.href = '/api';
   };
 
-  // Quick test in Perf tab - sends captured network requests for load testing
-  const handleQuickLoadTest = () => {
+  // Quick test in Perf tab - sends captured network requests for load testing.
+  // Prefer backend draft (shareable, durable); fallback to sessionStorage.
+  const API_BASE_PERF = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const handleQuickLoadTest = async () => {
     let loadTestRequests: any[] = [];
     
     if (capturedNetworkRequests.length > 0) {
-      // Use actual captured network requests
       loadTestRequests = capturedNetworkRequests.map((req, index) => ({
         id: `recorded-${index}-${Date.now()}`,
         method: req.method,
@@ -3185,8 +3246,7 @@ const handleExportToBuilder = async () => {
         responseTime: req.responseTime,
       }));
     } else {
-      // Generate basic requests from the recorded URL for load testing
-      const baseUrl = (url || 'http://localhost:8002').replace(/\/+$/, ''); // Remove trailing slashes
+      const baseUrl = (url || 'http://localhost:8002').replace(/\/+$/, '');
       loadTestRequests = [
         { id: `gen-1-${Date.now()}`, method: 'GET', url: `${baseUrl}/api/products`, headers: {}, body: '' },
         { id: `gen-2-${Date.now()}`, method: 'GET', url: `${baseUrl}/api/cart`, headers: {}, body: '' },
@@ -3195,13 +3255,95 @@ const handleExportToBuilder = async () => {
       toast.info("Generated sample load test requests from target URL. For actual traffic capture, use HAR import.");
     }
     
+    try {
+      const res = await fetch(`${API_BASE_PERF}/api/performance/drafts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: loadTestRequests,
+          name: 'From Recorder',
+          source: 'recorder',
+          ttl_seconds: 24 * 3600,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.draft_id) {
+        toast.success(`Draft created. Opening Perf tab...`);
+        window.location.href = `/performance?draft_id=${data.draft_id}`;
+        return;
+      }
+    } catch (_) {
+      // fallback to sessionStorage
+    }
     sessionStorage.setItem('pendingLoadTestRequests', JSON.stringify(loadTestRequests));
     sessionStorage.setItem('pendingLoadTestTimestamp', Date.now().toString());
-    
     toast.success(`Sending ${loadTestRequests.length} requests to Perf tab...`);
-    
-    // Navigate to Perf tab
     window.location.href = '/performance';
+  };
+
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const exportCapturedAsPostman = async () => {
+    if (capturedNetworkRequests.length === 0) {
+      toast.error('No captured requests');
+      return;
+    }
+    try {
+      const requests = capturedNetworkRequests.map((req: any) => ({
+        url: req.url,
+        method: req.method || 'GET',
+        headers: req.headers || {},
+        body: req.body || '',
+      }));
+      const res = await fetch(`${API_BASE}/api/import/export-postman`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests, name: 'Recorded API Collection' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const blob = new Blob([data.collection_json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'recorded-postman-collection.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success('Postman collection downloaded');
+    } catch (e: any) {
+      toast.error(e?.message || 'Export failed');
+    }
+  };
+  const exportCapturedAsHAR = async () => {
+    if (capturedNetworkRequests.length === 0) {
+      toast.error('No captured requests');
+      return;
+    }
+    try {
+      const requests = capturedNetworkRequests.map((req: any) => ({
+        url: req.url,
+        method: req.method || 'GET',
+        headers: req.headers || {},
+        body: req.body || '',
+        statusCode: req.statusCode ?? req.status ?? 200,
+        duration: req.duration ?? req.responseTime ?? 0,
+        timestamp: req.timestamp ?? Date.now() / 1000,
+      }));
+      const res = await fetch(`${API_BASE}/api/import/export-har`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests, creator_name: 'QAAI Recorder' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const blob = new Blob([data.har_json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'recorded-traffic.har.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success('HAR file downloaded');
+    } catch (e: any) {
+      toast.error(e?.message || 'Export failed');
+    }
   };
 
   // Execute SOQL Query via Electron or Backend
@@ -3593,16 +3735,22 @@ Recorded Test
       }
     }, 800); // Update progress every 800ms
     
+    // Clear previous failure state
+    setFailureState(null);
+    setBrowserKeptOpen(false);
+    
     try {
       let result: any;
       
       if (flowstral?.playwrightRecorder?.runTest) {
         // Use normalized actions for robust playback
         // freshBrowser: true = completely clean browser with no stored state
+        // keepBrowserOpenOnFailure: true = don't close browser on failure (for debugging)
         result = await flowstral.playwrightRecorder.runTest({
           steps: normalizedActions,
           url: url,
-          freshBrowser: freshBrowser // NEW: Clean browser mode
+          freshBrowser: freshBrowser,
+          keepBrowserOpenOnFailure: keepBrowserOpenOnFailure
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
@@ -3700,10 +3848,26 @@ Recorded Test
         error: testPassed ? undefined : (result?.error || result?.failError || 'Test failed')
       });
       
+      // Track browser and failure state for B+C Hybrid repair
+      if (!testPassed) {
+        setBrowserKeptOpen(result?.browserKeptOpen || false);
+        if (result?.failureState) {
+          setFailureState({
+            stepIndex: result.failureState.stepIndex,
+            step: result.failureState.step,
+            error: result.failureState.error,
+            screenshot: result.failureState.screenshot,
+            url: result.failureState.url,
+            similarElements: result.failureState.similarElements || []
+          });
+        }
+      }
+      
       if (testPassed) {
         toast.success(`✅ Test Passed! (${actions.length} steps)`, { id: 'run' });
       } else {
-        toast.error(`❌ Test Failed: ${result?.error || 'Unknown error'}`, { id: 'run' });
+        const browserMsg = result?.browserKeptOpen ? ' Browser kept open for debugging.' : '';
+        toast.error(`❌ Test Failed: ${result?.error || 'Unknown error'}${browserMsg}`, { id: 'run' });
       }
     } catch (error: any) {
       if (progressInterval) clearInterval(progressInterval);
@@ -4137,6 +4301,69 @@ Recorded Test
 
   return (
     <div className="h-full bg-background text-foreground flex flex-col overflow-hidden">
+      {/* ============ RE-RECORD BANNER (from Builder) ============ */}
+      {showRerecordBanner && rerecordContext && (
+        <div className="shrink-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Video className="h-4 w-4" />
+            <div className="text-sm">
+              <span className="font-medium">Re-recording Step {rerecordContext.stepIndex + 1}</span>
+              <span className="mx-2 opacity-70">•</span>
+              <span className="opacity-90">{rerecordContext.step?.name || rerecordContext.step?.type}</span>
+              <span className="mx-2 opacity-70">•</span>
+              <span className="text-xs opacity-70">from "{rerecordContext.testCaseName}"</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs opacity-70">Record the step, then save to update the test</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs bg-white/10 border-white/30 hover:bg-white/20"
+              onClick={() => {
+                // Return to builder without saving
+                localStorage.removeItem('flowstral_rerecord_context');
+                setShowRerecordBanner(false);
+                if (rerecordContext.returnTo) {
+                  navigate(rerecordContext.returnTo);
+                }
+              }}
+            >
+              Cancel & Return
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-white text-purple-600 hover:bg-white/90"
+              disabled={actions.length === 0}
+              onClick={() => {
+                // Save the re-recorded step and return to builder
+                if (actions.length > 0) {
+                  // Get the first recorded action as the replacement
+                  const replacementAction = actions[0];
+                  // Save to localStorage for builder to pick up
+                  localStorage.setItem('flowstral_rerecord_result', JSON.stringify({
+                    ...rerecordContext,
+                    replacementAction,
+                    timestamp: Date.now(),
+                  }));
+                  localStorage.removeItem('flowstral_rerecord_context');
+                  setShowRerecordBanner(false);
+                  toast.success('Step recorded! Returning to builder...');
+                  setTimeout(() => {
+                    if (rerecordContext.returnTo) {
+                      navigate(rerecordContext.returnTo);
+                    }
+                  }, 500);
+                }
+              }}
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Save & Return
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ============ TOP TOOLBAR ============ */}
       <div className="h-12 min-h-[48px] shrink-0 bg-card border-b border-gray-200 dark:border-border flex items-center justify-between px-4 overflow-visible">
         <div className="flex items-center gap-2 shrink-0">
@@ -4171,7 +4398,7 @@ Recorded Test
                 <ChevronDown className="h-3 w-3 ml-1.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-52 p-1">
+            <PopoverContent align="end" className="w-64 p-1">
               <button
                 onClick={() => handleRunTest(false, false)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-emerald-500/20 text-left transition-colors"
@@ -4202,6 +4429,28 @@ Recorded Test
                   <div className="text-[10px] text-muted-foreground">Pause, edit, step-by-step</div>
                 </div>
               </button>
+              
+              {/* Separator */}
+              <div className="h-px bg-border my-1" />
+              
+              {/* Keep Browser Open Toggle */}
+              <div 
+                className="w-full flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-secondary/50 rounded transition-colors"
+                onClick={() => setKeepBrowserOpenOnFailure(!keepBrowserOpenOnFailure)}
+              >
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-blue-400" />
+                  <div>
+                    <div className="font-medium text-xs">Keep Browser Open</div>
+                    <div className="text-[10px] text-muted-foreground">On failure, for debugging</div>
+                  </div>
+                </div>
+                <Switch
+                  checked={keepBrowserOpenOnFailure}
+                  onCheckedChange={setKeepBrowserOpenOnFailure}
+                  className="ml-2"
+                />
+              </div>
             </PopoverContent>
           </Popover>
                     <Button
@@ -4279,6 +4528,30 @@ Recorded Test
               <Activity className="h-3.5 w-3.5 mr-1" />
               Perf {capturedNetworkRequests.length > 0 && `(${capturedNetworkRequests.length})`}
             </Button>
+          )}
+          {capturedNetworkRequests.length > 0 && !isRecording && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-xs border-violet-500/50 text-violet-400 hover:bg-violet-500/20"
+                onClick={exportCapturedAsPostman}
+                title="Download captured requests as Postman Collection"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Postman
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-xs border-amber-500/50 text-amber-400 hover:bg-amber-500/20"
+                onClick={exportCapturedAsHAR}
+                title="Download captured requests as HAR"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                HAR
+              </Button>
+            </>
           )}
           <Select onValueChange={handleExport}>
             <SelectTrigger className="h-8 w-[100px] text-xs border-white/20 bg-transparent">
@@ -8547,30 +8820,137 @@ Recorded Test
         }}
       />
 
-      {/* ============ ELEMENT REPAIR WIZARD ============ */}
-      {/* Enhanced wizard with element picker, debug info, and AI assist */}
-      <ElementRepairWizard
-        open={editSelectorModalOpen}
-        onOpenChange={setEditSelectorModalOpen}
-        action={editingActionIndex !== null ? actions[editingActionIndex] : null}
-        actionIndex={editingActionIndex || 0}
-        onSave={(updates) => {
-          if (editingActionIndex === null) return;
-          
-          // Update the action with the new selector/text
-          setActions(prev => prev.map((action, idx) => {
-            if (idx !== editingActionIndex) return action;
-            return {
-              ...action,
-              manualSelector: updates.manualSelector || action.manualSelector,
-              manualText: updates.manualText || action.manualText,
-            };
-          }));
-          
-          setEditSelectorModalOpen(false);
-          setEditingActionIndex(null);
-        }}
-      />
+      {/* ============ STEP EDITOR ============ */}
+      {/* B+C Hybrid: Click to re-record + Visual selector cards */}
+      {useSimpleEditor ? (
+        <SimpleStepEditor
+          open={editSelectorModalOpen}
+          onOpenChange={(open) => {
+            setEditSelectorModalOpen(open);
+            if (!open) setEditingActionIndex(null);
+          }}
+          step={editingActionIndex !== null ? actions[editingActionIndex] : null}
+          stepIndex={editingActionIndex || 0}
+          // Only show failure info if editing the ACTUAL failed step
+          failureScreenshot={editingActionIndex === failureState?.stepIndex ? failureState?.screenshot : null}
+          failureError={editingActionIndex === failureState?.stepIndex ? failureState?.error : null}
+          browserOpen={browserKeptOpen}
+          similarElements={editingActionIndex === failureState?.stepIndex ? (failureState?.similarElements || []) : []}
+          overlaySuggestions={suggestResult?.suggestions?.slice(0, 10).map(s => ({
+            text: s.element || s.description || '',
+            selector: s.selector || '',
+            type: s.type || 'unknown'
+          })) || []}
+          onElementPicked={(element) => {
+            // Immediately save the picked element - no extra button!
+            if (editingActionIndex === null) return;
+            setActions(prev => prev.map((action, idx) => {
+              if (idx !== editingActionIndex) return action;
+              return {
+                ...action,
+                manualSelector: element.selector || action.manualSelector,
+                manualText: element.text || action.manualText,
+              };
+            }));
+            // Dialog closes automatically after pick
+          }}
+          onSkip={() => {
+            // Mark step to skip on next run
+            if (editingActionIndex !== null) {
+              setActions(prev => prev.map((action, idx) => {
+                if (idx !== editingActionIndex) return action;
+                return { ...action, skip: true };
+              }));
+            }
+          }}
+          onStartPicker={async () => {
+            const flowstral = (window as any).flowstral;
+            if (flowstral?.elementPicker?.start) {
+              const result = await flowstral.elementPicker.start();
+              if (result?.success && result.elementInfo) {
+                return {
+                  success: true,
+                  text: result.elementInfo.text,
+                  selector: result.elementInfo.selectors?.[0]?.selector
+                };
+              }
+              return result;
+            }
+            return { success: false, error: 'Picker not available' };
+          }}
+        />
+      ) : (
+        <ElementRepairWizard
+          open={editSelectorModalOpen}
+          onOpenChange={(open) => {
+            setEditSelectorModalOpen(open);
+            if (!open) {
+              setEditingActionIndex(null);
+            }
+          }}
+          action={editingActionIndex !== null ? actions[editingActionIndex] : null}
+          actionIndex={editingActionIndex || 0}
+          onSave={(updates) => {
+            if (editingActionIndex === null) return;
+            setActions(prev => prev.map((action, idx) => {
+              if (idx !== editingActionIndex) return action;
+              return {
+                ...action,
+                manualSelector: updates.manualSelector || action.manualSelector,
+                manualText: updates.manualText || action.manualText,
+              };
+            }));
+            setEditSelectorModalOpen(false);
+            setEditingActionIndex(null);
+          }}
+          failureState={failureState}
+          browserKeptOpen={browserKeptOpen}
+          onReopenBrowser={async () => {
+            const flowstral = (window as any).flowstral;
+            if (flowstral?.playwrightRecorder?.reopenToFailure) {
+              const result = await flowstral.playwrightRecorder.reopenToFailure();
+              if (result?.success) setBrowserKeptOpen(true);
+              return result;
+            }
+            return { success: false, error: 'Reopen function not available' };
+          }}
+          onRetryStep={async (updates) => {
+            const flowstral = (window as any).flowstral;
+            if (flowstral?.playwrightRecorder?.retryFailedStep) {
+              return await flowstral.playwrightRecorder.retryFailedStep(updates);
+            }
+            return { success: false, error: 'Retry function not available' };
+          }}
+          onResumeFromHere={async (options) => {
+            const flowstral = (window as any).flowstral;
+            if (flowstral?.playwrightRecorder?.resumeFromFailure) {
+              const result = await flowstral.playwrightRecorder.resumeFromFailure(options);
+              if (result?.success) {
+                setTestExecutionResult(prev => prev ? {
+                  ...prev,
+                  status: 'passed',
+                  stepResults: prev.stepResults.map((s, i) => 
+                    s.status === 'failed' || s.status === 'skipped' 
+                      ? { ...s, status: 'passed' } 
+                      : s
+                  )
+                } : null);
+              }
+              return result;
+            }
+            return { success: false, error: 'Resume function not available' };
+          }}
+          onCloseBrowser={async () => {
+            const flowstral = (window as any).flowstral;
+            if (flowstral?.playwrightRecorder?.closeBrowser) {
+              const result = await flowstral.playwrightRecorder.closeBrowser();
+              if (result?.success) setBrowserKeptOpen(false);
+              return result;
+            }
+            return { success: false };
+          }}
+        />
+      )}
     </div>
   );
 }
