@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { isElectron } from '@/lib/electron-bridge';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AIBadge } from '@/contexts/AIContext';
+import { useLandingPlugins, LandingPluginsProvider, type PluginKey } from '@/contexts/LandingPluginsContext';
 import {
   Settings,
   Bell,
@@ -47,9 +48,11 @@ interface NavItem {
   label: string;
   path: string;
   description?: string;
+  plugin?: PluginKey; // If set, tab is only shown when this plugin is licensed and enabled
 }
 
 // Workflow: Record → Build → Tests (with Runs inside) - NO ICONS in nav
+// Tabs with `plugin` property are shown/hidden based on license
 const mainNavItems: NavItem[] = [
   {
     id: 'recorder',
@@ -74,24 +77,28 @@ const mainNavItems: NavItem[] = [
     label: 'Mobile',
     path: '/mobile',
     description: 'Mobile device testing',
+    plugin: 'mobile', // License-controlled
   },
   {
     id: 'api',
     label: 'API',
     path: '/api',
     description: 'API testing',
+    plugin: 'api', // License-controlled
   },
   {
     id: 'performance',
     label: 'Perf',
     path: '/performance',
     description: 'Load testing',
+    plugin: 'perf', // License-controlled
   },
   {
     id: 'accessibility',
     label: 'A11y',
     path: '/accessibility',
     description: 'Accessibility testing',
+    plugin: 'a11y', // License-controlled
   },
   {
     id: 'visual-testing',
@@ -222,8 +229,14 @@ function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { isAvailable } = useLandingPlugins();
   const currentPath = location.pathname;
   const inElectron = isElectron();
+  
+  // Filter nav items based on license - only show tabs user has access to
+  const visibleNavItems = mainNavItems.filter(item => 
+    !item.plugin || isAvailable(item.plugin)
+  );
 
   // Simplified menu - only core features from landing page
   const coreFeatures = [
@@ -253,9 +266,9 @@ function Header() {
           theme === 'light' ? "bg-gray-200" : "bg-gray-800"
         )} />
         
-        {/* Main Navigation Tabs - Clean text only */}
+        {/* Main Navigation Tabs - Clean text only, filtered by license */}
         <nav className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {mainNavItems.map(item => {
+          {visibleNavItems.map(item => {
             // Smart path matching
             let isActive = false;
             if (item.id === 'builder') {
@@ -406,7 +419,7 @@ function Header() {
 // MAIN LAYOUT EXPORT
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function StreamlinedLayout({ children }: { children?: React.ReactNode }) {
+function StreamlinedLayoutContent({ children }: { children?: React.ReactNode }) {
   const { theme } = useTheme();
   
   return (
@@ -422,6 +435,14 @@ export function StreamlinedLayout({ children }: { children?: React.ReactNode }) 
       </main>
       <Toaster position="bottom-right" richColors />
     </div>
+  );
+}
+
+export function StreamlinedLayout({ children }: { children?: React.ReactNode }) {
+  return (
+    <LandingPluginsProvider>
+      <StreamlinedLayoutContent>{children}</StreamlinedLayoutContent>
+    </LandingPluginsProvider>
   );
 }
 
