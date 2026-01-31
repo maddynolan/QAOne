@@ -33,11 +33,13 @@ import {
   PauseCircle, Square, CheckSquare, XCircle, Circle,
   Pencil, Trash2, Copy, MoreHorizontal, Filter, Download,
   FileSpreadsheet, TestTube, Beaker, Microscope,
-  Smartphone, Wifi, Map, Compass, Navigation, Route
+  Smartphone, Wifi, Map, Compass, Navigation, Route,
+  SlidersHorizontal, Plug
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { LandingPluginsProvider, useLandingPlugins, type LandingPlugins, type PluginKey, pluginMetadata } from '@/contexts/LandingPluginsContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HERO SECTION WITH INTERACTIVE PREVIEW
@@ -773,7 +775,18 @@ function FlowstralSection() {
 // FEATURES SHOWCASE - Premium Cards
 // ═══════════════════════════════════════════════════════════════════════════
 
-const features = [
+type PluginKey = keyof LandingPlugins;
+
+const features: Array<{
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  gradient: string;
+  bgGradient: string;
+  highlights: string[];
+  href: string;
+  plugin?: PluginKey;
+}> = [
   {
     icon: MousePointer,
     title: 'Smart Recorder',
@@ -808,7 +821,8 @@ const features = [
     gradient: 'from-sky-500 to-indigo-500',
     bgGradient: 'from-sky-50 to-indigo-50',
     highlights: ['50+ Devices', 'Network Throttling', 'Native Apps'],
-    href: '/products/mobile-testing'
+    href: '/products/mobile-testing',
+    plugin: 'mobile'
   },
   {
     icon: ClipboardCheck,
@@ -826,7 +840,8 @@ const features = [
     gradient: 'from-pink-500 to-rose-500',
     bgGradient: 'from-pink-50 to-rose-50',
     highlights: ['Multi-Protocol', 'Security Scan', 'Chaining'],
-    href: '/products/api-testing'
+    href: '/products/api-testing',
+    plugin: 'api'
   },
   {
     icon: Activity,
@@ -835,7 +850,8 @@ const features = [
     gradient: 'from-emerald-500 to-teal-500',
     bgGradient: 'from-emerald-50 to-teal-50',
     highlights: ['10k+ VUs', 'Auto-Correlation', 'Load Patterns'],
-    href: '/products/performance'
+    href: '/products/performance',
+    plugin: 'perf'
   },
   {
     icon: Eye,
@@ -853,13 +869,16 @@ const features = [
     gradient: 'from-teal-500 to-emerald-500',
     bgGradient: 'from-teal-50 to-emerald-50',
     highlights: ['WCAG 2.1', 'Fix Guides', 'Reports'],
-    href: '/products/accessibility'
+    href: '/products/accessibility',
+    plugin: 'a11y'
   },
 ];
 
 function FeaturesSection() {
   const navigate = useNavigate();
-  
+  const { isAvailable, isLicensed } = useLandingPlugins();
+  const visibleFeatures = features.filter((f) => !f.plugin || isAvailable(f.plugin));
+
   return (
     <section id="features" className="py-24 bg-white relative">
       <div className="max-w-7xl mx-auto px-6">
@@ -878,7 +897,7 @@ function FeaturesSection() {
 
         {/* Features Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {features.map((feature, idx) => (
+          {visibleFeatures.map((feature, idx) => (
             <div 
               key={idx}
               onClick={() => navigate(feature.href)}
@@ -1559,12 +1578,28 @@ function CTASection() {
 function Header() {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const { plugins, setPlugin, isLicensed, license } = useLandingPlugins();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (!pluginsOpen) return;
+    const close = () => setPluginsOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [pluginsOpen]);
+
+  const pluginOptions: { key: PluginKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { key: 'api', label: 'API Testing', icon: Globe },
+    { key: 'perf', label: 'Performance', icon: Activity },
+    { key: 'a11y', label: 'Accessibility', icon: Accessibility },
+    { key: 'mobile', label: 'Mobile Testing', icon: Smartphone },
+  ];
   
   return (
     <header className={cn(
@@ -1589,6 +1624,90 @@ function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
+          {/* Optional plugins: what to show on landing page (license-aware) */}
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-600 hover:text-slate-900 font-medium gap-1.5"
+              onClick={(e) => { e.stopPropagation(); setPluginsOpen((v) => !v); }}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span className="hidden sm:inline">Customize</span>
+              <Plug className="w-3.5 h-3.5" />
+            </Button>
+            {pluginsOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-lg py-3 z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500 uppercase">Show on landing</span>
+                  <Badge className="text-[10px] bg-gradient-to-r from-blue-100 to-violet-100 text-violet-700 border-0">
+                    {license.tier.charAt(0).toUpperCase() + license.tier.slice(1)}
+                  </Badge>
+                </div>
+                <div className="px-2 py-1 space-y-0.5">
+                  {pluginOptions.map(({ key, label, icon: Icon }) => {
+                    const licensed = isLicensed(key);
+                    const requiredTier = pluginMetadata[key].tier;
+                    
+                    return (
+                      <label
+                        key={key}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                          licensed 
+                            ? "hover:bg-slate-50 cursor-pointer" 
+                            : "opacity-60 cursor-not-allowed"
+                        )}
+                        title={licensed ? `Toggle ${label}` : `Requires ${requiredTier} license or higher`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={plugins[key]}
+                          onChange={(e) => licensed && setPlugin(key, e.target.checked)}
+                          disabled={!licensed}
+                          className={cn(
+                            "rounded border-slate-300",
+                            !licensed && "opacity-50"
+                          )}
+                        />
+                        <Icon className={cn(
+                          "w-4 h-4",
+                          licensed ? "text-slate-400" : "text-slate-300"
+                        )} />
+                        <span className={cn(
+                          "text-sm flex-1",
+                          licensed ? "text-slate-700" : "text-slate-400"
+                        )}>{label}</span>
+                        {!licensed && (
+                          <div className="flex items-center gap-1">
+                            <Lock className="w-3 h-3 text-amber-500" />
+                            <span className="text-[10px] text-amber-600 font-medium uppercase">
+                              {requiredTier}
+                            </span>
+                          </div>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                {license.tier !== 'enterprise' && (
+                  <div className="px-4 pt-3 mt-2 border-t border-slate-100">
+                    <Button 
+                      size="sm" 
+                      className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs"
+                      onClick={() => navigate('/pricing')}
+                    >
+                      <Rocket className="w-3 h-3 mr-1.5" />
+                      Upgrade to unlock all features
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <Button variant="ghost" className="text-slate-600 hover:text-slate-900 font-medium" onClick={() => navigate('/signin')}>
             Sign In
           </Button>
@@ -1719,7 +1838,12 @@ function Footer() {
 // MAIN LANDING PAGE
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function LandingPage() {
+function LandingPageContent() {
+  const { isAvailable } = useLandingPlugins();
+  const showPerfOrApi = isAvailable('perf') || isAvailable('api');
+  const showA11y = isAvailable('a11y');
+  const showMobile = isAvailable('mobile');
+
   return (
     <div className="min-h-screen bg-white">
       <Header />
@@ -1727,13 +1851,21 @@ export default function LandingPage() {
         <HeroSection />
         <FlowstralSection />
         <FlowpilotSection />
-        <MobileTestingSection />
+        {showMobile && <MobileTestingSection />}
         <FeaturesSection />
-        <PerformanceAPISection />
-        <VisualA11ySection />
+        {showPerfOrApi && <PerformanceAPISection />}
+        {showA11y && <VisualA11ySection />}
         <CTASection />
       </main>
       <Footer />
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <LandingPluginsProvider>
+      <LandingPageContent />
+    </LandingPluginsProvider>
   );
 }

@@ -112,16 +112,16 @@ services:
   #   restart: unless-stopped
   #   # Models: docker exec qaai-ollama ollama pull qwen2.5-coder:14b
 
-  # Frontend (if needed)
+  # Frontend
   frontend:
     build:
-      context: ./src
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
     container_name: qaai-frontend
-    environment:
-      REACT_APP_API_URL: http://localhost:8000
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
     networks:
