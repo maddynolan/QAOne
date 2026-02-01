@@ -3,6 +3,9 @@
  * 
  * Centralized collection of all data generators for form filling.
  * Searchable, categorized, with examples and descriptions.
+ * 
+ * ENHANCED: Now supports backend API integration for unlimited unique data (10,000+)
+ * using Python Faker library when available.
  */
 
 export interface SmartFillGenerator {
@@ -20,6 +23,9 @@ export interface SmartFillGenerator {
     default: any;
     options?: { label: string; value: any }[];
   }[];
+  // Backend mapping for unlimited data generation
+  backendType?: string;  // Maps to TestDataGenerator type
+  supportsUnlimited?: boolean;  // If true, can generate 10,000+ unique values via API
 }
 
 export interface GeneratorCategory {
@@ -27,6 +33,112 @@ export interface GeneratorCategory {
   name: string;
   icon: string;
   color: string;
+}
+
+// ============================================================================
+// BACKEND API INTEGRATION
+// ============================================================================
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+/**
+ * Generate data using backend TestDataGenerator (with Faker support)
+ * Use this for large batches (10,000+) to avoid frontend pool exhaustion
+ */
+export async function generateFromBackend(
+  dataType: string,
+  count: number = 1,
+  options: Record<string, any> = {},
+  ensureUnique: boolean = true
+): Promise<string[]> {
+  try {
+    if (count === 1) {
+      // Single value - use simple endpoint
+      const response = await fetch(`${API_BASE_URL}/api/v2/testing/datagen/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data_type: dataType,
+          count: 1,
+          options,
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Backend generation failed');
+      const data = await response.json();
+      return Array.isArray(data.values) ? data.values : [data.value];
+    } else {
+      // Batch generation - use optimized endpoint
+      const response = await fetch(`${API_BASE_URL}/api/v2/testing/datagen/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data_type: dataType,
+          count,
+          ensure_unique: ensureUnique,
+          options,
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Backend batch generation failed');
+      const data = await response.json();
+      return data.values || [];
+    }
+  } catch (error) {
+    console.error('Backend generation error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if backend has Faker enabled for unlimited data
+ */
+export async function checkBackendCapabilities(): Promise<{
+  fakerEnabled: boolean;
+  maxUniqueCapability: string;
+  availableTypes: string[];
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v2/testing/datagen/stats`);
+    if (!response.ok) throw new Error('Failed to fetch capabilities');
+    const data = await response.json();
+    return {
+      fakerEnabled: data.stats?.faker_enabled || false,
+      maxUniqueCapability: data.stats?.max_unique_capability || 'Limited',
+      availableTypes: data.stats?.available_types || [],
+    };
+  } catch {
+    return {
+      fakerEnabled: false,
+      maxUniqueCapability: 'Unknown (backend unavailable)',
+      availableTypes: [],
+    };
+  }
+}
+
+/**
+ * Generate batch with progress callback for large datasets
+ */
+export async function generateBatchWithProgress(
+  dataType: string,
+  count: number,
+  onProgress?: (generated: number, total: number) => void,
+  options: Record<string, any> = {}
+): Promise<string[]> {
+  const BATCH_SIZE = 1000;
+  const results: string[] = [];
+  
+  for (let i = 0; i < count; i += BATCH_SIZE) {
+    const batchCount = Math.min(BATCH_SIZE, count - i);
+    const batch = await generateFromBackend(dataType, batchCount, options, true);
+    results.push(...batch);
+    
+    if (onProgress) {
+      onProgress(results.length, count);
+    }
+  }
+  
+  return results;
 }
 
 // ============================================================================
@@ -100,6 +212,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => pick(FIRST_NAMES),
     generate: () => pick(FIRST_NAMES),
     keywords: ['first', 'name', 'given', 'fname', 'firstname'],
+    backendType: 'firstName',
+    supportsUnlimited: true,
   },
   {
     id: 'last_name',
@@ -109,6 +223,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => pick(LAST_NAMES),
     generate: () => pick(LAST_NAMES),
     keywords: ['last', 'name', 'surname', 'family', 'lname', 'lastname'],
+    backendType: 'lastName',
+    supportsUnlimited: true,
   },
   {
     id: 'middle_name',
@@ -118,6 +234,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => pick(MIDDLE_NAMES),
     generate: () => pick(MIDDLE_NAMES),
     keywords: ['middle', 'name', 'mname'],
+    backendType: 'firstName',  // Use first name as middle names
+    supportsUnlimited: true,
   },
   {
     id: 'full_name',
@@ -127,6 +245,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
     generate: () => `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`,
     keywords: ['full', 'name', 'complete', 'fullname'],
+    backendType: 'fullName',
+    supportsUnlimited: true,
   },
   {
     id: 'full_name_with_middle',
@@ -189,6 +309,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
       { label: 'Domain', type: 'text', key: 'domain', default: '' },
       { label: 'Prefix', type: 'text', key: 'prefix', default: '' },
     ],
+    backendType: 'email',
+    supportsUnlimited: true,
   },
   {
     id: 'email_test',
@@ -198,6 +320,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `test.user${randInt(1, 999)}@example.com`,
     generate: () => `test.user${randInt(1, 9999)}@example.com`,
     keywords: ['email', 'test', 'example'],
+    backendType: 'email',
+    supportsUnlimited: true,
   },
   {
     id: 'phone_us',
@@ -207,6 +331,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `(${randInt(200, 999)}) ${randInt(200, 999)}-${randInt(1000, 9999)}`,
     generate: () => `(${randInt(200, 999)}) ${randInt(200, 999)}-${randInt(1000, 9999)}`,
     keywords: ['phone', 'telephone', 'mobile', 'cell', 'us'],
+    backendType: 'phone',
+    supportsUnlimited: true,
   },
   {
     id: 'phone_intl',
@@ -227,6 +353,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `${randInt(100, 9999)} ${pick(STREET_NAMES)} ${pick(STREET_TYPES)}`,
     generate: () => `${randInt(100, 9999)} ${pick(STREET_NAMES)} ${pick(STREET_TYPES)}`,
     keywords: ['street', 'address', 'line1'],
+    backendType: 'streetAddress',
+    supportsUnlimited: true,
   },
   {
     id: 'address_line2',
@@ -245,6 +373,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => pick(CITIES),
     generate: () => pick(CITIES),
     keywords: ['city', 'town'],
+    backendType: 'city',
+    supportsUnlimited: true,
   },
   {
     id: 'state',
@@ -499,6 +629,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `${pick(FIRST_NAMES).toLowerCase()}${randInt(1, 9999)}`,
     generate: () => `${pick(FIRST_NAMES).toLowerCase()}${randInt(1, 9999)}`,
     keywords: ['username', 'user', 'login', 'id'],
+    backendType: 'username',
+    supportsUnlimited: true,
   },
   {
     id: 'password_simple',
@@ -531,6 +663,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => `${pick(COMPANY_PREFIXES)} ${pick(COMPANY_SUFFIXES)}`,
     generate: () => `${pick(COMPANY_PREFIXES)} ${pick(COMPANY_SUFFIXES)}`,
     keywords: ['company', 'business', 'organization', 'org'],
+    backendType: 'companyName',
+    supportsUnlimited: true,
   },
   {
     id: 'job_title',
@@ -540,6 +674,8 @@ export const SMART_FILL_GENERATORS: SmartFillGenerator[] = [
     example: () => pick(JOB_TITLES),
     generate: () => pick(JOB_TITLES),
     keywords: ['job', 'title', 'position', 'role', 'occupation'],
+    backendType: 'jobTitle',
+    supportsUnlimited: true,
   },
   {
     id: 'department',

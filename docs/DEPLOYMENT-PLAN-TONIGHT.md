@@ -401,7 +401,7 @@ The platform supports license-based feature gating for optional modules:
 
 | Plugin Key | Feature | Description |
 |------------|---------|-------------|
-| `api` | API Testing | REST, GraphQL, SOAP testing with security scanning |
+| `api` | API Testing | REST, GraphQL, SOAP, Mock Server, DataGen (10K+ unique values), OWASP Security |
 | `perf` | Performance Testing | Load testing with 10k+ VUs, SRM, Lighthouse |
 | `a11y` | Accessibility Testing | WCAG 2.1 scanning with remediation guidance |
 | `mobile` | Mobile Testing | 50+ device profiles, network throttling |
@@ -449,3 +449,82 @@ The landing page supports optional plugin visibility: **API**, **Performance**, 
 - `src/pages/LandingPage.tsx` - Filtered rendering with license indicators
 - `flowstral-desktop/src/main/index.js` - Desktop IPC handlers
 - `flowstral-desktop/src/main/webapp-preload.js` - Desktop injection
+
+---
+
+## 13. API Testing - Enterprise Features (NEW)
+
+The API Testing module now includes enterprise-grade features comparable to Postman and ReadyAPI:
+
+### 13.1 Test Data Generation (DataGen)
+
+Generate unlimited unique test data (10,000+ values) with Faker integration:
+
+```bash
+# Install Faker for unlimited data generation
+pip install faker
+```
+
+**Supported data types:** 50+ types including names, emails, addresses, phones, companies, credit cards, UUIDs, dates, custom patterns, and more.
+
+**Smart Fill Integration:** The Builder's Smart Fill feature now connects to the backend DataGen API for batch generation.
+
+### 13.2 Mock Server
+
+Create real HTTP mock servers for service virtualization:
+
+- **Dynamic responses:** Use `{{$random.email}}` templates
+- **Scenario-based:** Different responses based on conditions
+- **Stateful sequences:** Simulate API state changes
+- **Request logging:** Verify requests received
+- **Auto-generation:** Create mocks from OpenAPI specs
+
+### 13.3 Backend Endpoints (API Testing)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v2/testing/capabilities` | GET | List all capabilities |
+| `/api/v2/testing/datagen/types` | GET | Available data types |
+| `/api/v2/testing/datagen/generate` | POST | Generate single/few values |
+| `/api/v2/testing/datagen/batch` | POST | Generate 10,000+ unique values |
+| `/api/v2/testing/datagen/stats` | GET | Generation statistics |
+| `/api/v2/testing/mock/server` | POST | Create mock server |
+| `/api/v2/testing/mock/server/{id}/start` | POST | Start mock server |
+| `/api/v2/testing/mock/server/{id}/endpoint` | POST | Add mock endpoint |
+| `/api/v2/testing/mock/server/{id}/verify` | POST | Verify requests received |
+
+### 13.4 Verification Commands
+
+```bash
+# Check DataGen capabilities
+curl http://localhost:8000/api/v2/testing/datagen/stats
+# Expected: {"status":"success","stats":{"faker_enabled":true,...}}
+
+# Generate 10,000 unique emails
+curl -X POST http://localhost:8000/api/v2/testing/datagen/batch \
+  -H "Content-Type: application/json" \
+  -d '{"data_type": "email", "count": 10000, "ensure_unique": true}'
+
+# Create and start mock server
+curl -X POST http://localhost:8000/api/v2/testing/mock/server \
+  -d '{"name": "Test API", "port": 8081}'
+```
+
+### 13.5 Testing Documentation
+
+See `docs/API-TESTING-TEST-GUIDE.md` for complete feature verification with public test APIs:
+- JSONPlaceholder, ReqRes, HTTPBin for REST
+- Swagger Petstore for OpenAPI
+- GraphQL Countries for GraphQL
+- CountryInfo Service for SOAP/WSDL
+
+### 13.6 Key Files
+
+| File | Description |
+|------|-------------|
+| `backend/app/services/api_testing/test_data_generator.py` | DataGen with Faker |
+| `backend/app/services/api_testing/mock_server.py` | Real HTTP mock server |
+| `backend/app/routers/enhanced_api_testing_api.py` | API endpoints |
+| `src/lib/smart-fill-generators.ts` | Frontend generators + backend API |
+| `src/components/SmartFillDialog.tsx` | Smart Fill UI with batch mode |
+| `docs/API-TESTING-ENTERPRISE.md` | Full feature documentation |

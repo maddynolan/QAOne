@@ -6,9 +6,10 @@
  * - Browse by category
  * - See example values
  * - Configure constraints
+ * - BATCH GENERATION: Generate 10,000+ unique values via backend API (with Faker)
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,33 +20,60 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Search, Zap, RefreshCw, Check, Settings2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { Search, Zap, RefreshCw, Check, Settings2, Download, Copy, Server, Infinity } from 'lucide-react';
 import {
   SMART_FILL_GENERATORS,
   GENERATOR_CATEGORIES,
   searchGenerators,
   getGeneratorsByCategory,
   SmartFillGenerator,
+  generateFromBackend,
+  checkBackendCapabilities,
+  generateBatchWithProgress,
 } from '@/lib/smart-fill-generators';
 
 interface SmartFillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectValue: (value: string, generatorId: string) => void;
+  onSelectBatch?: (values: string[], generatorId: string) => void;  // For batch generation
   fieldLabel?: string;  // For auto-detect suggestion
+  enableBatchMode?: boolean;  // Show batch generation tab
 }
 
 export function SmartFillDialog({
   open,
   onOpenChange,
   onSelectValue,
+  onSelectBatch,
   fieldLabel = '',
+  enableBatchMode = true,
 }: SmartFillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedGenerator, setSelectedGenerator] = useState<SmartFillGenerator | null>(null);
   const [constraints, setConstraints] = useState<Record<string, any>>({});
   const [previewValue, setPreviewValue] = useState<string>('');
+  
+  // Batch generation state
+  const [activeTab, setActiveTab] = useState<'single' | 'batch'>('single');
+  const [batchCount, setBatchCount] = useState<number>(100);
+  const [batchValues, setBatchValues] = useState<string[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [backendStatus, setBackendStatus] = useState<{
+    fakerEnabled: boolean;
+    maxUniqueCapability: string;
+  } | null>(null);
+  
+  // Check backend capabilities on mount
+  useEffect(() => {
+    if (open && enableBatchMode) {
+      checkBackendCapabilities().then(setBackendStatus);
+    }
+  }, [open, enableBatchMode]);
 
   // Filter generators based on search or category
   const filteredGenerators = useMemo(() => {
@@ -88,6 +116,66 @@ export function SmartFillDialog({
       setSearchQuery('');
       setSelectedCategory(null);
     }
+  };
+  
+  // Generate batch using backend API
+  const handleGenerateBatch = async () => {
+    if (!selectedGenerator?.backendType) return;
+    
+    setBatchLoading(true);
+    setBatchProgress(0);
+    setBatchValues([]);
+    
+    try {
+      const values = await generateBatchWithProgress(
+        selectedGenerator.backendType,
+        batchCount,
+        (generated, total) => {
+          setBatchProgress((generated / total) * 100);
+        },
+        constraints
+      );
+      setBatchValues(values);
+    } catch (error) {
+      console.error('Batch generation failed:', error);
+      // Fallback to frontend generation for smaller batches
+      if (batchCount <= 100) {
+        const values = Array.from({ length: batchCount }, () => 
+          selectedGenerator.generate(constraints)
+        );
+        setBatchValues(values);
+      }
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+  
+  // Apply batch values
+  const handleApplyBatch = () => {
+    if (selectedGenerator && batchValues.length > 0 && onSelectBatch) {
+      onSelectBatch(batchValues, selectedGenerator.id);
+      onOpenChange(false);
+      // Reset state
+      setBatchValues([]);
+      setSelectedGenerator(null);
+    }
+  };
+  
+  // Copy batch to clipboard
+  const handleCopyBatch = () => {
+    navigator.clipboard.writeText(batchValues.join('\n'));
+  };
+  
+  // Download batch as CSV
+  const handleDownloadBatch = () => {
+    const csv = batchValues.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selectedGenerator?.id || 'data'}_${batchValues.length}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -212,11 +300,19 @@ export function SmartFillDialog({
           </div>
 
           {/* Right: Preview & Configure */}
-          <div className="w-72 flex flex-col">
+          <div className="w-80 flex flex-col">
             {selectedGenerator ? (
               <>
                 <div className="p-3 border-b">
-                  <h3 className="font-medium text-sm">{selectedGenerator.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-sm">{selectedGenerator.name}</h3>
+                    {selectedGenerator.supportsUnlimited && (
+                      <Badge variant="outline" className="text-[9px] h-4">
+                        <Infinity className="h-2.5 w-2.5 mr-0.5" />
+                        Unlimited
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {selectedGenerator.description}
                   </p>
@@ -262,35 +358,141 @@ export function SmartFillDialog({
                   </div>
                 )}
 
-                {/* Preview */}
-                <div className="p-3 flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-xs font-medium">Preview</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={refreshPreview}
+                {/* Tabs: Single vs Batch */}
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'single' | 'batch')} className="flex-1 flex flex-col">
+                  <TabsList className="mx-3 mt-2 grid grid-cols-2">
+                    <TabsTrigger value="single" className="text-xs">Single Value</TabsTrigger>
+                    <TabsTrigger 
+                      value="batch" 
+                      className="text-xs"
+                      disabled={!enableBatchMode || !selectedGenerator.supportsUnlimited}
                     >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Regenerate
+                      Batch (10K+)
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  {/* Single Value Tab */}
+                  <TabsContent value="single" className="flex-1 flex flex-col p-3 pt-2 m-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-xs font-medium">Preview</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={refreshPreview}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Regenerate
+                      </Button>
+                    </div>
+                    <div className="p-3 bg-muted rounded-lg flex-1">
+                      <code className="text-sm break-all">{previewValue}</code>
+                    </div>
+                    <Button className="w-full mt-3" onClick={handleApply}>
+                      <Check className="h-4 w-4 mr-2" />
+                      Use This Value
                     </Button>
-                  </div>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <code className="text-sm break-all">{previewValue}</code>
-                  </div>
-                </div>
-
-                {/* Apply Button */}
-                <div className="p-3 border-t">
-                  <Button
-                    className="w-full"
-                    onClick={handleApply}
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Use This Value
-                  </Button>
-                </div>
+                  </TabsContent>
+                  
+                  {/* Batch Generation Tab */}
+                  <TabsContent value="batch" className="flex-1 flex flex-col p-3 pt-2 m-0">
+                    {/* Backend status */}
+                    {backendStatus && (
+                      <div className="flex items-center gap-2 mb-3 text-xs">
+                        <Server className={`h-3 w-3 ${backendStatus.fakerEnabled ? 'text-green-500' : 'text-yellow-500'}`} />
+                        <span className="text-muted-foreground">
+                          {backendStatus.fakerEnabled ? 'Faker enabled' : 'Basic mode'} — {backendStatus.maxUniqueCapability}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Batch count */}
+                    <div className="space-y-2 mb-3">
+                      <Label className="text-xs font-medium">How many values?</Label>
+                      <div className="flex gap-2">
+                        {[100, 1000, 5000, 10000].map(n => (
+                          <Button
+                            key={n}
+                            variant={batchCount === n ? 'default' : 'outline'}
+                            size="sm"
+                            className="text-xs h-7 px-2"
+                            onClick={() => setBatchCount(n)}
+                          >
+                            {n >= 1000 ? `${n/1000}K` : n}
+                          </Button>
+                        ))}
+                        <Input
+                          type="number"
+                          className="h-7 w-20 text-xs"
+                          value={batchCount}
+                          onChange={(e) => setBatchCount(parseInt(e.target.value) || 100)}
+                          min={1}
+                          max={100000}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Generate button */}
+                    <Button 
+                      onClick={handleGenerateBatch} 
+                      disabled={batchLoading}
+                      className="mb-3"
+                    >
+                      {batchLoading ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Generate {batchCount.toLocaleString()} Values
+                        </>
+                      )}
+                    </Button>
+                    
+                    {/* Progress */}
+                    {batchLoading && (
+                      <Progress value={batchProgress} className="h-2 mb-3" />
+                    )}
+                    
+                    {/* Results */}
+                    {batchValues.length > 0 && (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-xs font-medium">
+                            Generated {batchValues.length.toLocaleString()} unique values
+                          </Label>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleCopyBatch}>
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleDownloadBatch}>
+                              <Download className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto bg-muted rounded-lg p-2 max-h-32">
+                          <code className="text-[10px] text-muted-foreground">
+                            {batchValues.slice(0, 10).map((v, i) => (
+                              <div key={i}>{v}</div>
+                            ))}
+                            {batchValues.length > 10 && (
+                              <div className="text-violet-500">... and {batchValues.length - 10} more</div>
+                            )}
+                          </code>
+                        </div>
+                        
+                        {onSelectBatch && (
+                          <Button className="w-full mt-3" onClick={handleApplyBatch}>
+                            <Check className="h-4 w-4 mr-2" />
+                            Use All {batchValues.length.toLocaleString()} Values
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-center p-4">
@@ -300,6 +502,11 @@ export function SmartFillDialog({
                   <p className="text-xs mt-1">
                     Click any generator to preview and configure
                   </p>
+                  {enableBatchMode && (
+                    <p className="text-[10px] mt-3 text-violet-500">
+                      Generators with <Infinity className="h-2.5 w-2.5 inline mx-0.5" /> support 10,000+ unique values
+                    </p>
+                  )}
                 </div>
               </div>
             )}
