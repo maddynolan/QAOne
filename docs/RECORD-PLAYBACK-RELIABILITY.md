@@ -14,6 +14,9 @@
 6. [Visual Fingerprinting](#6-visual-fingerprinting)
 7. [Smart Disambiguation](#7-smart-disambiguation)
 8. [Configuration & Tuning](#8-configuration--tuning)
+9. [Supported Enterprise Frameworks](#9-supported-enterprise-frameworks)
+10. [Step Repair: Assisted Re-record](#10-step-repair-assisted-re-record)
+11. [Screenshot Policy](#11-screenshot-policy)
 
 ---
 
@@ -446,3 +449,170 @@ CONFIG.recovery.dismissOverlays = true;
 | Unknown failure | AI vision fallback + detailed suggestions |
 
 **Result:** Every action either succeeds with high confidence, or fails with clear, actionable guidance on how to fix it.
+
+---
+
+## 9. Supported Enterprise Frameworks
+
+The system supports **300+ custom element types** across major enterprise platforms:
+
+### Enterprise SaaS Applications
+
+| Application | Framework | Custom Elements |
+|-------------|-----------|-----------------|
+| **Salesforce** | Lightning Web Components | `lightning-button`, `lightning-input`, `lightning-combobox`, etc. |
+| **SAP** | UI5 Web Components | `ui5-button`, `ui5-input`, `ui5-select`, etc. |
+| **ServiceNow** | Next Experience | `now-*` components with data-testid |
+| **Workday** | Canvas Kit (React) | `canvas-button`, `canvas-input`, `canvas-modal`, etc. |
+| **Oracle Cloud** | Oracle JET | `oj-button`, `oj-input-text`, `oj-select-single`, etc. |
+| **Microsoft Dynamics 365** | Fluent UI | `fluent-button`, `fluent-text-field`, `fluent-dialog`, etc. |
+| **Jira/Confluence** | Atlassian Design System | `ak-button`, `ak-modal`, `ak-tabs`, etc. |
+| **Zendesk** | Garden | `garden-button`, `garden-input`, `garden-modal`, etc. |
+| **HubSpot** | Custom React | Standard data-testid + selenium attributes |
+| **Adobe** | Spectrum | `sp-button`, `sp-textfield`, `sp-dialog`, etc. |
+
+### Popular UI Frameworks
+
+| Framework | Technology | Custom Elements |
+|-----------|------------|-----------------|
+| **Angular Material** | Angular | `mat-button`, `mat-input`, `mat-dialog`, etc. |
+| **Ant Design** | React | Class-based (`ant-btn`, `ant-input`) |
+| **Vuetify** | Vue | `v-btn`, `v-text-field`, `v-dialog`, etc. |
+| **PrimeNG** | Angular | `p-button`, `p-dropdown`, `p-dialog`, etc. |
+| **Chakra UI** | React | `chakra-button`, `chakra-input`, etc. |
+| **Blueprint** | React | `bp5-button`, `bp5-input`, etc. |
+| **Carbon Design** | IBM | `cds-button`, `cds-text-input`, etc. |
+| **Shoelace** | Web Components | `sl-button`, `sl-input`, etc. |
+| **Ionic** | Hybrid Mobile | `ion-button`, `ion-input`, etc. |
+
+### Enterprise Data Grids
+
+| Grid | Elements |
+|------|----------|
+| **AG Grid** | `ag-grid`, `ag-header-cell`, `ag-cell`, `ag-row` |
+| **Kendo UI** | `kendo-grid`, `kendo-treelist`, etc. |
+| **DevExtreme** | `dx-datagrid`, `dx-treelist`, etc. |
+
+### Test ID Attributes Recognized
+
+```javascript
+// Standard
+'data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa', 'data-e2e'
+
+// Salesforce
+'data-target-selection-name', 'data-refid', 'data-component-id'
+
+// SAP
+'stable-dom-ref', 'data-sap-ui'
+
+// ServiceNow
+'data-sn-test-id', 'sn-atf-'
+
+// Workday
+'data-automation-widget', 'data-uxi-widget-type'
+
+// Oracle
+'data-afr-', 'af:id'
+
+// Microsoft
+'data-id', 'data-lp-id'
+
+// Atlassian
+'data-ds--'
+
+// Zendesk
+'data-garden-id'
+```
+
+---
+
+## 10. Step Repair: Assisted Re-record
+
+When a step fails or is flagged as wrong, users can repair it **without any technical knowledge**.
+
+### The Repair Flow
+
+```
+1. User flags step 3 as wrong
+         ↓
+2. User clicks "Repair This Step"
+         ↓
+3. System re-runs steps 1, 2 (prerequisites)
+         ↓
+4. Browser PAUSES at step 3 state
+         ↓
+5. User performs the correct action manually
+         ↓
+6. System captures new element recipe
+         ↓
+7. Test is fixed and can continue
+```
+
+### Repair Modes
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| **PAUSE_BEFORE** | Stop before executing flagged step | Inspect what's wrong |
+| **PAUSE_AFTER** | Execute step, then pause | Verify result |
+| **INTERACTIVE** | Pause and wait for user action | Re-record the step |
+
+### API Usage
+
+```javascript
+const { StepRepairManager, REPAIR_MODES } = require('./lib/step-repair');
+
+const repair = new StepRepairManager({
+  executor: testExecutor,
+  onRepairPause: ({ message, screenshot }) => {
+    // Show user the paused state
+    showUI({ message, screenshot });
+  },
+});
+
+// Start repair session
+await repair.startRepairSession(testData, stepIndex, REPAIR_MODES.INTERACTIVE);
+
+// User performs action... system calls captureUserAction()
+await repair.captureUserAction(actionData);
+
+// Apply the fix
+const result = await repair.applyFix({ saveToTest: true, continueTest: true });
+```
+
+---
+
+## 11. Screenshot Policy
+
+Screenshots are captured **only when needed** to minimize overhead:
+
+### When Screenshots Are Captured
+
+| Scenario | Capture? | Reason |
+|----------|----------|--------|
+| Step fails | ✅ Yes | Debug evidence |
+| Confidence < 75% | ✅ Yes | Potential issue |
+| User flagged step | ✅ Yes | Investigation |
+| Successful step | ❌ No | Not needed |
+| First run (success) | ❌ No | Not needed |
+
+### Configuration
+
+```javascript
+const ScreenshotPolicy = {
+  CAPTURE_ON: {
+    FAILURE: true,
+    LOW_CONFIDENCE: true,
+    USER_FLAG: true,
+    EVERY_STEP: false,       // Expensive, disabled by default
+  },
+  CONFIDENCE_THRESHOLD: 75,   // Below this = capture
+  CLEAR_ON_SUCCESS: true,     // Clear if retry succeeds
+};
+```
+
+### Storage
+
+- Screenshots stored temporarily during test run
+- Persisted only for failures or flagged steps
+- Auto-cleared after successful re-run
+- Maximum 50MB memory limit (auto-evicts oldest)
