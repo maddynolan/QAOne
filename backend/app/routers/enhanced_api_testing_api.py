@@ -18,6 +18,8 @@ from app.services.api_testing import (
     get_reporting_engine
 )
 from app.services.api_testing.environment_manager import get_environment_manager
+from app.services.api_testing.openapi_validator import get_openapi_validator, get_schema_inference_engine
+from app.services.api_testing.data_driven_engine import get_data_driven_engine
 from app.services.connectors.api_spec_parser import APISpecParser
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,9 @@ execution_engine = get_test_execution_engine()
 virtualization = get_service_virtualization()
 reporting = get_reporting_engine()
 environment_manager = get_environment_manager()
+openapi_validator = get_openapi_validator()
+schema_inference = get_schema_inference_engine()
+data_driven_engine = get_data_driven_engine()
 
 
 # Request Models
@@ -73,6 +78,33 @@ class EnvironmentRequest(BaseModel):
     environment_config: Dict[str, Any]
 
 
+class OpenAPIValidateRequest(BaseModel):
+    """Request for OpenAPI spec validation"""
+    spec: Dict[str, Any]
+    apply_auto_fixes: bool = False
+
+
+class DataSourceRequest(BaseModel):
+    """Request for data-driven data source"""
+    name: str
+    source_type: str  # csv, json, excel, inline
+    content: Optional[str] = None  # For CSV/JSON text
+    data_path: Optional[str] = None  # For JSON: path to array, e.g. "data.items"
+    rows: Optional[List[Dict[str, Any]]] = None  # For inline
+
+
+class DataDrivenExecuteRequest(BaseModel):
+    """Request for data-driven test execution"""
+    test_suite: Dict[str, Any]
+    source_id: str
+    execution_config: Optional[Dict[str, Any]] = None
+
+
+class SchemaInferRequest(BaseModel):
+    """Request for schema inference from response"""
+    response_data: Any
+
+
 # Endpoints
 
 @router.post("/test-suite/generate")
@@ -106,6 +138,100 @@ async def generate_enhanced_test_suite(request: EnhancedTestSuiteRequest):
         }
     except Exception as e:
         logger.error(f"Error generating enhanced test suite: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/openapi/validate")
+async def validate_openapi_spec(request: OpenAPIValidateRequest):
+    """
+    Validate OpenAPI spec and report issues. Handles incomplete specs gracefully.
+    Returns errors, warnings, info, and optional auto-fixes.
+    """
+    try:
+        result = openapi_validator.validate(request.spec)
+        if request.apply_auto_fixes and result.get("auto_fixes_available", 0) > 0:
+            fixed_spec, applied_list = openapi_validator.apply_auto_fixes(request.spec)
+            result["fixed_spec"] = fixed_spec
+            result["applied_fixes"] = applied_list
+        return result
+    except Exception as e:
+        logger.error(f"OpenAPI validation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/openapi/infer-schema")
+async def infer_schema_from_response(request: SchemaInferRequest):
+    """
+    Infer JSON schema from actual API response. Use when OpenAPI spec is incomplete.
+    """
+    try:
+        schema = schema_inference.infer_schema(request.response_data)
+        return {"status": "success", "schema": schema}
+    except Exception as e:
+        logger.error(f"Schema inference error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/data-driven/source")
+async def create_data_source(request: DataSourceRequest):
+    """
+    Create a data source for data-driven testing (CSV, JSON, Excel, or inline).
+    Comparable to Postman/ReadyAPI data sources.
+    """
+    try:
+        if request.source_type == "csv" and request.content:
+            source_id = data_driven_engine.create_csv_source(request.name, request.content)
+        elif request.source_type == "json" and request.content:
+            source_id = data_driven_engine.create_json_source(
+                request.name, request.content, data_path=request.data_path
+            )
+        elif request.source_type == "inline" and request.rows:
+            source_id = data_driven_engine.create_inline_source(request.name, request.rows)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide content for csv/json or rows for inline"
+            )
+        preview = data_driven_engine.get_data_source_preview(source_id)
+        return {"status": "success", "source_id": source_id, "preview": preview}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Data source creation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/data-driven/source/{source_id}/preview")
+async def get_data_source_preview(source_id: str, max_rows: int = 10):
+    """Get preview of a data source."""
+    try:
+        preview = data_driven_engine.get_data_source_preview(source_id, max_rows=max_rows)
+        if "error" in preview:
+            raise HTTPException(status_code=404, detail=preview["error"])
+        return preview
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Data source preview error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/data-driven/execute")
+async def execute_data_driven_tests(request: DataDrivenExecuteRequest):
+    """
+    Execute test suite with data-driven iterations (CSV/JSON rows).
+    Variables in test suite are substituted per row.
+    """
+    try:
+        import asyncio
+        results = await data_driven_engine.execute_data_driven_tests(
+            request.test_suite,
+            request.source_id,
+            request.execution_config or {}
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Data-driven execution error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
