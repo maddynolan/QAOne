@@ -737,12 +737,21 @@ class DataGenRequest(BaseModel):
     data_type: str
     count: int = 1
     options: Optional[Dict[str, Any]] = None
+    ensure_unique: bool = True  # For large batches
 
 
 class DataGenObjectRequest(BaseModel):
     """Request for object generation from schema"""
     schema: Dict[str, Any]
     count: int = 1
+
+
+class DataGenBatchRequest(BaseModel):
+    """Request for large batch generation (10,000+)"""
+    data_type: str
+    count: int
+    ensure_unique: bool = True
+    options: Optional[Dict[str, Any]] = None
 
 
 @router.get("/datagen/types")
@@ -835,6 +844,68 @@ async def generate_test_object(request: DataGenObjectRequest):
     except Exception as e:
         logger.error(f"Object generation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/datagen/batch")
+async def generate_large_batch(request: DataGenBatchRequest):
+    """
+    Generate large batches of test data (10,000+ records).
+    Optimized for bulk data generation with optional uniqueness guarantee.
+    
+    Requires Faker library for best results: pip install faker
+    """
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    try:
+        gen = get_test_data_generator()
+        options = request.options or {}
+        
+        values = gen.generate_large_batch(
+            request.data_type,
+            request.count,
+            ensure_unique=request.ensure_unique,
+            **options
+        )
+        
+        stats = gen.get_stats()
+        
+        return {
+            "status": "success",
+            "data_type": request.data_type,
+            "count": len(values),
+            "unique_count": len(set(str(v) for v in values)),
+            "values": values,
+            "faker_enabled": stats.get("faker_enabled", False)
+        }
+    except Exception as e:
+        logger.error(f"Batch generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/datagen/stats")
+async def get_datagen_stats():
+    """Get data generation statistics and capabilities"""
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    gen = get_test_data_generator()
+    return {
+        "status": "success",
+        "stats": gen.get_stats()
+    }
+
+
+@router.post("/datagen/reset-tracking")
+async def reset_datagen_tracking(data_type: str = None):
+    """Reset uniqueness tracking (allows duplicates to be generated again)"""
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    gen = get_test_data_generator()
+    gen.reset_uniqueness_tracking(data_type)
+    
+    return {
+        "status": "success",
+        "message": f"Tracking reset for: {data_type or 'all types'}"
+    }
 
 
 # ===================== Mock Server Endpoints =====================

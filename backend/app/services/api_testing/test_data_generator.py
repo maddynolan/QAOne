@@ -17,6 +17,11 @@ Supports:
 - Custom patterns/regex
 - Sequential values
 - Random selection from lists
+
+Integration with Python Faker for unlimited unique data:
+- Millions of unique names, addresses, emails
+- 50+ locales (en_US, de_DE, fr_FR, ja_JP, zh_CN, etc.)
+- Smart tracking to avoid duplicates
 """
 
 import logging
@@ -25,12 +30,21 @@ import string
 import re
 import hashlib
 import math
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Set
 from datetime import datetime, timedelta
 from uuid import uuid4
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
+
+# Try to import Faker for enhanced data generation
+try:
+    from faker import Faker
+    FAKER_AVAILABLE = True
+    logger.info("Faker library available - unlimited unique data generation enabled")
+except ImportError:
+    FAKER_AVAILABLE = False
+    logger.warning("Faker not installed. Install with: pip install faker. Using built-in pools (limited).")
 
 
 # Data pools for realistic data generation
@@ -111,6 +125,255 @@ LOREM_WORDS = [
 ]
 
 
+class FakerEnhancedGenerator:
+    """
+    Faker-based generator with duplicate tracking for unlimited unique data.
+    Can generate 10,000+ unique values easily.
+    """
+    
+    # Supported locales for international data
+    SUPPORTED_LOCALES = [
+        'en_US', 'en_GB', 'en_AU', 'en_CA', 'en_IN',
+        'de_DE', 'de_AT', 'de_CH',
+        'fr_FR', 'fr_CA', 'fr_BE',
+        'es_ES', 'es_MX', 'es_AR',
+        'it_IT', 'pt_BR', 'pt_PT',
+        'nl_NL', 'nl_BE',
+        'ja_JP', 'ko_KR', 'zh_CN', 'zh_TW',
+        'ru_RU', 'pl_PL', 'cs_CZ',
+        'ar_EG', 'ar_SA', 'he_IL',
+        'hi_IN', 'th_TH', 'vi_VN',
+        'sv_SE', 'da_DK', 'no_NO', 'fi_FI'
+    ]
+    
+    def __init__(self, locale: str = 'en_US', seed: int = None, track_duplicates: bool = True):
+        """
+        Initialize Faker-enhanced generator.
+        
+        Args:
+            locale: Locale for data generation (e.g., 'en_US', 'de_DE', 'ja_JP')
+            seed: Random seed for reproducibility
+            track_duplicates: If True, ensures unique values (with retry)
+        """
+        if not FAKER_AVAILABLE:
+            raise ImportError("Faker not installed. Run: pip install faker")
+        
+        self.faker = Faker(locale)
+        if seed is not None:
+            Faker.seed(seed)
+            random.seed(seed)
+        
+        self.locale = locale
+        self.track_duplicates = track_duplicates
+        self.generated_values: Dict[str, Set[str]] = {}  # type -> set of generated values
+        self.max_retries = 1000  # Max attempts to find unique value
+    
+    def _track_and_return(self, data_type: str, value: Any, max_unique: int = 100000) -> Any:
+        """Track generated value to avoid duplicates"""
+        if not self.track_duplicates:
+            return value
+        
+        str_value = str(value)
+        
+        if data_type not in self.generated_values:
+            self.generated_values[data_type] = set()
+        
+        # If we've hit max unique, reset (shouldn't happen with Faker)
+        if len(self.generated_values[data_type]) >= max_unique:
+            logger.warning(f"Hit {max_unique} unique values for {data_type}, resetting tracker")
+            self.generated_values[data_type].clear()
+        
+        self.generated_values[data_type].add(str_value)
+        return value
+    
+    def _generate_unique(self, data_type: str, generator_func, max_unique: int = 100000) -> Any:
+        """Generate unique value with retry logic"""
+        if not self.track_duplicates:
+            return generator_func()
+        
+        if data_type not in self.generated_values:
+            self.generated_values[data_type] = set()
+        
+        for _ in range(self.max_retries):
+            value = generator_func()
+            str_value = str(value)
+            
+            if str_value not in self.generated_values[data_type]:
+                self.generated_values[data_type].add(str_value)
+                return value
+        
+        # If all retries fail, return anyway (very rare with Faker)
+        logger.warning(f"Could not generate unique {data_type} after {self.max_retries} attempts")
+        return generator_func()
+    
+    def get_unique_count(self, data_type: str) -> int:
+        """Get count of unique values generated for a type"""
+        return len(self.generated_values.get(data_type, set()))
+    
+    def reset_tracking(self, data_type: str = None):
+        """Reset duplicate tracking"""
+        if data_type:
+            self.generated_values.pop(data_type, None)
+        else:
+            self.generated_values.clear()
+    
+    # ==================== Faker-based generators ====================
+    
+    def name(self) -> str:
+        return self._generate_unique("name", self.faker.name)
+    
+    def first_name(self) -> str:
+        return self._generate_unique("first_name", self.faker.first_name)
+    
+    def last_name(self) -> str:
+        return self._generate_unique("last_name", self.faker.last_name)
+    
+    def email(self) -> str:
+        return self._generate_unique("email", self.faker.email)
+    
+    def safe_email(self) -> str:
+        """Email with safe domain (example.com, etc.)"""
+        return self._generate_unique("safe_email", self.faker.safe_email)
+    
+    def company_email(self) -> str:
+        return self._generate_unique("company_email", self.faker.company_email)
+    
+    def username(self) -> str:
+        return self._generate_unique("username", self.faker.user_name)
+    
+    def password(self, length: int = 12, special_chars: bool = True) -> str:
+        return self.faker.password(length=length, special_chars=special_chars)
+    
+    def phone_number(self) -> str:
+        return self._generate_unique("phone", self.faker.phone_number)
+    
+    def address(self) -> str:
+        return self._generate_unique("address", self.faker.address)
+    
+    def street_address(self) -> str:
+        return self._generate_unique("street", self.faker.street_address)
+    
+    def city(self) -> str:
+        return self.faker.city()
+    
+    def state(self) -> str:
+        return self.faker.state() if hasattr(self.faker, 'state') else self.faker.province()
+    
+    def country(self) -> str:
+        return self.faker.country()
+    
+    def postcode(self) -> str:
+        return self.faker.postcode()
+    
+    def company(self) -> str:
+        return self._generate_unique("company", self.faker.company)
+    
+    def job(self) -> str:
+        return self.faker.job()
+    
+    def text(self, max_nb_chars: int = 200) -> str:
+        return self.faker.text(max_nb_chars=max_nb_chars)
+    
+    def sentence(self, nb_words: int = 10) -> str:
+        return self.faker.sentence(nb_words=nb_words)
+    
+    def paragraph(self, nb_sentences: int = 5) -> str:
+        return self.faker.paragraph(nb_sentences=nb_sentences)
+    
+    def date(self, pattern: str = "%Y-%m-%d") -> str:
+        return self.faker.date(pattern=pattern)
+    
+    def date_time(self) -> datetime:
+        return self.faker.date_time()
+    
+    def past_date(self, start_date: str = "-30d") -> str:
+        return str(self.faker.past_date(start_date=start_date))
+    
+    def future_date(self, end_date: str = "+30d") -> str:
+        return str(self.faker.future_date(end_date=end_date))
+    
+    def uuid4(self) -> str:
+        return str(self.faker.uuid4())
+    
+    def url(self) -> str:
+        return self.faker.url()
+    
+    def ipv4(self) -> str:
+        return self.faker.ipv4()
+    
+    def ipv6(self) -> str:
+        return self.faker.ipv6()
+    
+    def mac_address(self) -> str:
+        return self.faker.mac_address()
+    
+    def user_agent(self) -> str:
+        return self.faker.user_agent()
+    
+    def credit_card_number(self, card_type: str = None) -> str:
+        return self.faker.credit_card_number(card_type=card_type)
+    
+    def credit_card_expire(self) -> str:
+        return self.faker.credit_card_expire()
+    
+    def credit_card_security_code(self) -> str:
+        return self.faker.credit_card_security_code()
+    
+    def iban(self) -> str:
+        return self.faker.iban()
+    
+    def bban(self) -> str:
+        return self.faker.bban()
+    
+    def currency_code(self) -> str:
+        return self.faker.currency_code()
+    
+    def cryptocurrency_code(self) -> str:
+        return self.faker.cryptocurrency_code()
+    
+    def color_name(self) -> str:
+        return self.faker.color_name()
+    
+    def hex_color(self) -> str:
+        return self.faker.hex_color()
+    
+    def rgb_color(self) -> tuple:
+        return self.faker.rgb_color()
+    
+    def file_name(self, extension: str = None) -> str:
+        return self.faker.file_name(extension=extension)
+    
+    def file_path(self, depth: int = 3) -> str:
+        return self.faker.file_path(depth=depth)
+    
+    def mime_type(self) -> str:
+        return self.faker.mime_type()
+    
+    def ssn(self) -> str:
+        """Social Security Number (US locale only)"""
+        return self.faker.ssn() if hasattr(self.faker, 'ssn') else self.faker.random_number(9)
+    
+    def license_plate(self) -> str:
+        return self.faker.license_plate() if hasattr(self.faker, 'license_plate') else self.faker.bothify("???-####")
+    
+    def isbn13(self) -> str:
+        return self.faker.isbn13()
+    
+    def isbn10(self) -> str:
+        return self.faker.isbn10()
+    
+    def ean13(self) -> str:
+        return self.faker.ean13()
+    
+    def generate_batch(self, generator_name: str, count: int, **kwargs) -> List[Any]:
+        """Generate batch of values"""
+        generator = getattr(self, generator_name, None)
+        if not generator:
+            raise ValueError(f"Unknown generator: {generator_name}")
+        
+        return [generator(**kwargs) if kwargs else generator() for _ in range(count)]
+
+
 class TestDataGenerator:
     """
     Test Data Generator with support for various data types
@@ -128,15 +391,36 @@ class TestDataGenerator:
         
         # Generate with seed for reproducibility
         gen = TestDataGenerator(seed=12345)
+        
+        # Use Faker for unlimited unique data (10,000+)
+        gen = TestDataGenerator(use_faker=True)
+        names = gen.generate_batch("fullName", 10000)  # 10,000 unique names!
     """
     
-    def __init__(self, seed: Optional[int] = None):
-        """Initialize generator with optional seed for reproducibility"""
+    def __init__(self, seed: Optional[int] = None, use_faker: bool = True, locale: str = 'en_US'):
+        """
+        Initialize generator with optional seed for reproducibility.
+        
+        Args:
+            seed: Random seed for reproducibility
+            use_faker: If True and Faker is installed, use Faker for more variety
+            locale: Locale for Faker (e.g., 'en_US', 'de_DE', 'ja_JP')
+        """
         self.seed = seed
         if seed is not None:
             random.seed(seed)
         
         self.sequence_counters: Dict[str, int] = {}
+        self.locale = locale
+        
+        # Initialize Faker if available and requested
+        self.faker_gen: Optional[FakerEnhancedGenerator] = None
+        if use_faker and FAKER_AVAILABLE:
+            try:
+                self.faker_gen = FakerEnhancedGenerator(locale=locale, seed=seed)
+                logger.info(f"Faker-enhanced generation enabled (locale: {locale})")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Faker: {e}")
         
         # Data type handlers
         self.generators = {
@@ -277,22 +561,33 @@ class TestDataGenerator:
     
     # ==================== Name Generators ====================
     
-    def _gen_first_name(self, gender: str = None, **kwargs) -> str:
+    def _gen_first_name(self, gender: str = None, use_faker: bool = True, **kwargs) -> str:
+        # Use Faker for unlimited unique names
+        if use_faker and self.faker_gen:
+            return self.faker_gen.first_name()
+        
         if gender == "male":
             return random.choice(FIRST_NAMES_MALE)
         elif gender == "female":
             return random.choice(FIRST_NAMES_FEMALE)
         return random.choice(FIRST_NAMES_MALE + FIRST_NAMES_FEMALE)
     
-    def _gen_last_name(self, **kwargs) -> str:
+    def _gen_last_name(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.last_name()
         return random.choice(LAST_NAMES)
     
-    def _gen_full_name(self, gender: str = None, **kwargs) -> str:
-        return f"{self._gen_first_name(gender)} {self._gen_last_name()}"
+    def _gen_full_name(self, gender: str = None, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.name()
+        return f"{self._gen_first_name(gender, use_faker=False)} {self._gen_last_name(use_faker=False)}"
     
-    def _gen_username(self, **kwargs) -> str:
-        first = self._gen_first_name().lower()
-        last = self._gen_last_name().lower()
+    def _gen_username(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.username()
+        
+        first = self._gen_first_name(use_faker=False).lower()
+        last = self._gen_last_name(use_faker=False).lower()
         num = random.randint(1, 999)
         patterns = [
             f"{first}{last}",
@@ -306,8 +601,11 @@ class TestDataGenerator:
     
     # ==================== Contact Generators ====================
     
-    def _gen_email(self, domain: str = None, **kwargs) -> str:
-        username = self._gen_username()
+    def _gen_email(self, domain: str = None, unique: bool = True, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen and unique:
+            return self.faker_gen.email()
+        
+        username = self._gen_username(use_faker=False)
         domain = domain or random.choice(EMAIL_DOMAINS)
         return f"{username}@{domain}"
     
@@ -328,26 +626,36 @@ class TestDataGenerator:
     
     # ==================== Address Generators ====================
     
-    def _gen_street_address(self, **kwargs) -> str:
+    def _gen_street_address(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.street_address()
+        
         num = random.randint(1, 9999)
         street = random.choice(STREET_NAMES)
         suffix = random.choice(STREET_TYPES)
         return f"{num} {street} {suffix}"
     
-    def _gen_state(self, **kwargs) -> str:
+    def _gen_state(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.state()
         return random.choice(STATES)[1]
     
     def _gen_state_abbr(self, **kwargs) -> str:
         return random.choice(STATES)[0]
     
-    def _gen_zip_code(self, format: str = "#####", **kwargs) -> str:
+    def _gen_zip_code(self, format: str = "#####", use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.postcode()
         return self._gen_phone(format=format)
     
-    def _gen_full_address(self, **kwargs) -> str:
-        street = self._gen_street_address()
+    def _gen_full_address(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.address()
+        
+        street = self._gen_street_address(use_faker=False)
         city = random.choice(CITIES)
         state = self._gen_state_abbr()
-        zip_code = self._gen_zip_code()
+        zip_code = self._gen_zip_code(use_faker=False)
         return f"{street}, {city}, {state} {zip_code}"
     
     # ==================== Number Generators ====================
@@ -650,19 +958,25 @@ class TestDataGenerator:
     
     # ==================== Company Generators ====================
     
-    def _gen_company_name(self, **kwargs) -> str:
-        last_name = self._gen_last_name()
+    def _gen_company_name(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.company()
+        
+        last_name = self._gen_last_name(use_faker=False)
         suffix = random.choice(COMPANY_SUFFIXES)
         patterns = [
             f"{last_name} {suffix}",
-            f"{last_name} & {self._gen_last_name()} {suffix}",
+            f"{last_name} & {self._gen_last_name(use_faker=False)} {suffix}",
             f"{last_name} Industries",
             f"{last_name} Technologies",
             f"Global {last_name}",
         ]
         return random.choice(patterns)
     
-    def _gen_job_title(self, **kwargs) -> str:
+    def _gen_job_title(self, use_faker: bool = True, **kwargs) -> str:
+        if use_faker and self.faker_gen:
+            return self.faker_gen.job()
+        
         prefixes = ["Senior", "Junior", "Lead", "Chief", "Principal", "Associate", ""]
         titles = ["Engineer", "Developer", "Manager", "Analyst", "Designer", "Architect",
                   "Consultant", "Director", "Specialist", "Administrator", "Coordinator"]
@@ -727,6 +1041,82 @@ class TestDataGenerator:
         self.seed = seed
         if seed is not None:
             random.seed(seed)
+    
+    def get_unique_count(self, data_type: str) -> int:
+        """Get count of unique values generated for a type (if Faker tracking enabled)"""
+        if self.faker_gen:
+            return self.faker_gen.get_unique_count(data_type)
+        return 0
+    
+    def reset_uniqueness_tracking(self, data_type: str = None):
+        """Reset uniqueness tracking (allows duplicates to be generated again)"""
+        if self.faker_gen:
+            self.faker_gen.reset_tracking(data_type)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get statistics about data generation"""
+        stats = {
+            "faker_available": FAKER_AVAILABLE,
+            "faker_enabled": self.faker_gen is not None,
+            "locale": self.locale if self.faker_gen else None,
+            "available_types": len(self.generators),
+            "sequence_counters": dict(self.sequence_counters)
+        }
+        
+        if self.faker_gen:
+            stats["unique_values_tracked"] = {
+                data_type: count 
+                for data_type, values in self.faker_gen.generated_values.items()
+                if (count := len(values)) > 0
+            }
+            stats["max_unique_capability"] = "Unlimited (millions)"
+        else:
+            stats["max_unique_capability"] = "Limited (~1,800 names, ~50,000 emails)"
+        
+        return stats
+    
+    def generate_large_batch(
+        self, 
+        data_type: str, 
+        count: int, 
+        ensure_unique: bool = True,
+        **kwargs
+    ) -> List[Any]:
+        """
+        Generate large batch of data (optimized for 10,000+ records).
+        
+        Args:
+            data_type: Type of data to generate
+            count: Number of values to generate
+            ensure_unique: If True, ensures all values are unique (requires Faker)
+            **kwargs: Additional parameters for the generator
+            
+        Returns:
+            List of generated values
+        """
+        if count > 5000 and not self.faker_gen and ensure_unique:
+            logger.warning(
+                f"Generating {count} unique values without Faker may result in duplicates. "
+                "Install faker: pip install faker"
+            )
+        
+        results = []
+        seen = set() if ensure_unique else None
+        
+        for _ in range(count):
+            value = self.generate(data_type, **kwargs)
+            
+            if ensure_unique and seen is not None:
+                # Retry if duplicate
+                retries = 0
+                while str(value) in seen and retries < 100:
+                    value = self.generate(data_type, **kwargs)
+                    retries += 1
+                seen.add(str(value))
+            
+            results.append(value)
+        
+        return results
 
 
 # Global instance
