@@ -581,6 +581,10 @@ async def resolve_environment_variables(
 @router.get("/capabilities")
 async def get_capabilities():
     """Get comprehensive capabilities of the API testing tool"""
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    gen = get_test_data_generator()
+    
     return {
         "status": "success",
         "capabilities": {
@@ -588,22 +592,47 @@ async def get_capabilities():
             "formats": enhanced_engine.supported_formats,
             "databases": db_connector.supported_databases,
             "execution_modes": execution_engine.execution_modes,
+            "datagen_types": gen.list_types(),
             "features": [
                 "Multi-protocol support (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket)",
                 "Database connectivity and assertions",
-                "Data-driven testing",
-                "Service virtualization/mocking",
+                "Data-driven testing (CSV, JSON, Excel, Database)",
+                "Test data generation (DataGen) - 50+ data types",
+                "Mock server (real HTTP server) with dynamic responses",
+                "Service virtualization with scenarios and sequences",
                 "Load and performance testing",
                 "Comprehensive reporting and analytics",
-                "CI/CD integration",
-                "Multiple execution modes",
+                "CI/CD integration with exit codes",
+                "Multiple execution modes (manual, automated, scheduled, ci_cd, load)",
                 "Security testing (OWASP API Top 10)",
                 "Contract testing",
                 "Integration testing",
-                "Trend analysis",
-                "Environment management",
-                "Variable resolution"
-            ]
+                "OpenAPI validation with auto-fixes",
+                "Schema inference from responses",
+                "Request chaining with property transfer",
+                "OAuth2 authentication (all grant types, PKCE)",
+                "Environment management with variable resolution",
+                "Trend analysis and recommendations"
+            ],
+            "comparison_to_postman": {
+                "data_driven_testing": "Yes - CSV, JSON, Excel, Inline, Database",
+                "mock_servers": "Yes - Real HTTP mock servers with request verification",
+                "test_data_generation": "Yes - 50+ data types (DataGen equivalent)",
+                "collection_runner": "Yes - Via test execution engine",
+                "environments": "Yes - Full environment management",
+                "oauth2": "Yes - All grant types including PKCE",
+                "assertions": "Yes - JSONPath, XPath, regex, schema, status, headers",
+                "ci_cd_integration": "Yes - With exit codes and fail-fast mode"
+            },
+            "comparison_to_readyapi": {
+                "soap_wsdl": "Yes - Full WSDL parsing and test generation",
+                "service_virtualization": "Yes - Mock servers with scenarios",
+                "data_driven": "Yes - Multiple data sources",
+                "datagen": "Yes - Comprehensive test data generation",
+                "security_testing": "Yes - OWASP API Top 10",
+                "groovy_scripts": "Partial - Basic script support",
+                "database_assertions": "Yes - PostgreSQL, MySQL, MongoDB, etc."
+            }
         }
     }
 
@@ -700,3 +729,372 @@ async def run_security_scan(request: SecurityScanRequest):
         logger.error(f"Security scan error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ===================== Test Data Generator Endpoints =====================
+
+class DataGenRequest(BaseModel):
+    """Request for data generation"""
+    data_type: str
+    count: int = 1
+    options: Optional[Dict[str, Any]] = None
+
+
+class DataGenObjectRequest(BaseModel):
+    """Request for object generation from schema"""
+    schema: Dict[str, Any]
+    count: int = 1
+
+
+@router.get("/datagen/types")
+async def get_datagen_types():
+    """Get all available data generation types (DataGen equivalent)"""
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    gen = get_test_data_generator()
+    return {
+        "status": "success",
+        "types": gen.list_types(),
+        "categories": {
+            "names": ["firstName", "lastName", "fullName", "maleFirstName", "femaleFirstName", "username"],
+            "contact": ["email", "phone", "phoneInternational"],
+            "address": ["streetAddress", "city", "state", "stateAbbr", "zipCode", "country", "fullAddress"],
+            "numbers": ["integer", "float", "decimal"],
+            "identifiers": ["uuid", "guid", "objectId"],
+            "dates": ["date", "datetime", "timestamp", "isoDate", "pastDate", "futureDate"],
+            "financial": ["creditCard", "creditCardExpiry", "cvv", "price", "currency"],
+            "boolean": ["boolean", "yesNo", "truefalse"],
+            "text": ["word", "sentence", "paragraph", "lorem"],
+            "strings": ["alphanumeric", "alpha", "numeric", "hex", "base64"],
+            "patterns": ["pattern", "regex"],
+            "collections": ["randomElement", "sequential", "weighted"],
+            "company": ["companyName", "jobTitle"],
+            "internet": ["url", "domain", "ipv4", "ipv6", "macAddress", "userAgent"],
+            "colors": ["hexColor", "rgbColor"]
+        }
+    }
+
+
+@router.post("/datagen/generate")
+async def generate_test_data(request: DataGenRequest):
+    """
+    Generate random test data (like ReadyAPI DataGen or Postman dynamic variables)
+    
+    Example types: email, fullName, uuid, integer, phone, creditCard, isoDate, etc.
+    """
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    try:
+        gen = get_test_data_generator()
+        options = request.options or {}
+        
+        if request.count == 1:
+            value = gen.generate(request.data_type, **options)
+        else:
+            value = gen.generate_batch(request.data_type, request.count, **options)
+        
+        return {
+            "status": "success",
+            "data_type": request.data_type,
+            "count": request.count,
+            "value": value
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Data generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/datagen/object")
+async def generate_test_object(request: DataGenObjectRequest):
+    """
+    Generate test objects from schema definition
+    
+    Schema example:
+    {
+        "name": {"type": "fullName"},
+        "email": {"type": "email"},
+        "age": {"type": "integer", "min": 18, "max": 65}
+    }
+    """
+    from app.services.api_testing.test_data_generator import get_test_data_generator
+    
+    try:
+        gen = get_test_data_generator()
+        
+        if request.count == 1:
+            value = gen.generate_object(request.schema)
+        else:
+            value = [gen.generate_object(request.schema) for _ in range(request.count)]
+        
+        return {
+            "status": "success",
+            "count": request.count,
+            "objects": value
+        }
+    except Exception as e:
+        logger.error(f"Object generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===================== Mock Server Endpoints =====================
+
+class MockServerCreateRequest(BaseModel):
+    """Request to create a mock server"""
+    name: str
+    port: int = 0  # 0 = auto-assign
+    host: str = "127.0.0.1"
+
+
+class MockEndpointRequest(BaseModel):
+    """Request to add a mock endpoint"""
+    endpoint_id: str
+    path: str
+    method: str
+    response_body: Any
+    response_status: int = 200
+    response_headers: Optional[Dict[str, str]] = None
+    response_delay_ms: int = 0
+    dynamic: bool = False
+    scenarios: Optional[List[Dict[str, Any]]] = None
+    sequence_responses: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/mock/server")
+async def create_mock_server(request: MockServerCreateRequest):
+    """
+    Create a new mock server (actual HTTP server)
+    Unlike basic service virtualization, this starts a real HTTP server.
+    """
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    try:
+        mock = get_mock_server()
+        server_id = mock.create_server(
+            name=request.name,
+            port=request.port,
+            host=request.host
+        )
+        server_info = mock.get_server_info(server_id)
+        
+        return {
+            "status": "success",
+            "server_id": server_id,
+            "server": server_info
+        }
+    except Exception as e:
+        logger.error(f"Mock server creation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mock/server/{server_id}/start")
+async def start_mock_server(server_id: str):
+    """Start a mock server (begins listening for requests)"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    try:
+        mock = get_mock_server()
+        base_url = mock.start(server_id)
+        
+        return {
+            "status": "success",
+            "message": f"Mock server started",
+            "base_url": base_url
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Mock server start error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mock/server/{server_id}/stop")
+async def stop_mock_server(server_id: str):
+    """Stop a running mock server"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    success = mock.stop(server_id)
+    
+    if success:
+        return {"status": "success", "message": "Mock server stopped"}
+    else:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+
+@router.delete("/mock/server/{server_id}")
+async def delete_mock_server(server_id: str):
+    """Delete a mock server"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    success = mock.delete_server(server_id)
+    
+    if success:
+        return {"status": "success", "message": "Mock server deleted"}
+    else:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+
+@router.get("/mock/server")
+async def list_mock_servers():
+    """List all mock servers"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    servers = mock.list_servers()
+    
+    return {
+        "status": "success",
+        "servers": servers
+    }
+
+
+@router.get("/mock/server/{server_id}")
+async def get_mock_server_info(server_id: str):
+    """Get mock server information"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    info = mock.get_server_info(server_id)
+    
+    if info:
+        return {
+            "status": "success",
+            "server": info,
+            "endpoints": list(mock.endpoints.get(server_id, {}).keys())
+        }
+    else:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+
+@router.post("/mock/server/{server_id}/endpoint")
+async def add_mock_endpoint(server_id: str, request: MockEndpointRequest):
+    """Add an endpoint to a mock server"""
+    from app.services.api_testing.mock_server import get_mock_server, MockEndpoint
+    
+    try:
+        mock = get_mock_server()
+        
+        endpoint = MockEndpoint(
+            endpoint_id=request.endpoint_id,
+            path=request.path,
+            method=request.method.upper(),
+            response_body=request.response_body,
+            response_status=request.response_status,
+            response_headers=request.response_headers or {"Content-Type": "application/json"},
+            response_delay_ms=request.response_delay_ms,
+            dynamic=request.dynamic,
+            scenarios=request.scenarios or [],
+            sequence_responses=request.sequence_responses or []
+        )
+        
+        endpoint_id = mock.add_endpoint(server_id, endpoint)
+        
+        return {
+            "status": "success",
+            "endpoint_id": endpoint_id
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Add endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mock/server/{server_id}/from-openapi")
+async def create_mock_from_openapi(server_id: str, openapi_spec: Dict[str, Any]):
+    """Generate mock endpoints from OpenAPI specification"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    try:
+        mock = get_mock_server()
+        endpoint_ids = mock.add_endpoints_from_openapi(server_id, openapi_spec)
+        
+        return {
+            "status": "success",
+            "endpoints_created": len(endpoint_ids),
+            "endpoint_ids": endpoint_ids
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"OpenAPI mock generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/mock/server/{server_id}/endpoint/{endpoint_id}")
+async def remove_mock_endpoint(server_id: str, endpoint_id: str):
+    """Remove an endpoint from a mock server"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    success = mock.remove_endpoint(server_id, endpoint_id)
+    
+    if success:
+        return {"status": "success", "message": "Endpoint removed"}
+    else:
+        raise HTTPException(status_code=404, detail="Endpoint not found")
+
+
+@router.get("/mock/server/{server_id}/logs")
+async def get_mock_request_logs(
+    server_id: str,
+    limit: int = 100,
+    method: str = None,
+    path: str = None
+):
+    """Get request logs from mock server"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    logs = mock.get_request_logs(server_id, limit=limit, method=method, path=path)
+    
+    return {
+        "status": "success",
+        "logs": logs,
+        "count": len(logs)
+    }
+
+
+@router.post("/mock/server/{server_id}/verify")
+async def verify_mock_requests(
+    server_id: str,
+    method: str,
+    path: str,
+    expected_count: int = None,
+    body_contains: str = None
+):
+    """
+    Verify requests were made to mock server.
+    Useful for testing that your code made expected API calls.
+    """
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    result = mock.verify_requests(
+        server_id,
+        method=method,
+        path=path,
+        expected_count=expected_count,
+        body_contains=body_contains
+    )
+    
+    return {
+        "status": "success",
+        **result
+    }
+
+
+@router.delete("/mock/server/{server_id}/logs")
+async def clear_mock_logs(server_id: str):
+    """Clear request logs for a mock server"""
+    from app.services.api_testing.mock_server import get_mock_server
+    
+    mock = get_mock_server()
+    success = mock.clear_request_logs(server_id)
+    
+    if success:
+        return {"status": "success", "message": "Logs cleared"}
+    else:
+        raise HTTPException(status_code=404, detail="Server not found")
