@@ -528,3 +528,109 @@ See `docs/API-TESTING-TEST-GUIDE.md` for complete feature verification with publ
 | `src/lib/smart-fill-generators.ts` | Frontend generators + backend API |
 | `src/components/SmartFillDialog.tsx` | Smart Fill UI with batch mode |
 | `docs/API-TESTING-ENTERPRISE.md` | Full feature documentation |
+
+---
+
+## 14. Performance Testing - Enterprise Features (NEW)
+
+The Performance Testing module now includes enterprise-grade features comparable to k6, Gatling, and LoadRunner:
+
+### 14.1 Workload Models (k6 Executors)
+
+Six workload models for realistic load patterns:
+
+| Model | Type | Description |
+|-------|------|-------------|
+| `constant_vus` | Closed | Fixed VUs for duration |
+| `ramping_vus` | Closed | VUs ramp up/down over stages |
+| `per_vu_iterations` | Closed | Each VU runs N iterations |
+| `shared_iterations` | Closed | Total iterations split across VUs |
+| `constant_arrival_rate` | Open | Fixed requests/second |
+| `ramping_arrival_rate` | Open | Ramp arrival rate over stages |
+
+**API Example:**
+```bash
+curl -X POST http://localhost:8000/api/performance/workload/create \
+  -d '{"model_type": "ramping_vus", "stages": [{"duration_seconds": 60, "target": 100}, {"duration_seconds": 120, "target": 100}, {"duration_seconds": 60, "target": 0}]}'
+```
+
+### 14.2 k6-Style Checks and Assertions
+
+Inline assertions during request execution:
+
+```bash
+curl -X POST http://localhost:8000/api/performance/checks/execute \
+  -d '{
+    "response": {"status": 200, "body": "{\"success\": true}", "response_time_ms": 150},
+    "checks": [
+      {"name": "status is 200", "type": "status", "expected": 200},
+      {"name": "body contains success", "type": "body_contains", "expected": "success"},
+      {"name": "response time < 500ms", "type": "response_time", "expected": 500, "operator": "<"}
+    ]
+  }'
+```
+
+### 14.3 Custom Metrics
+
+Four metric types like k6:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| Counter | Cumulative count | Total requests |
+| Gauge | Point-in-time value | Active VUs |
+| Rate | Pass/fail ratio | Success rate |
+| Trend | Distribution with percentiles | Response times |
+
+**Prometheus Export:** `GET /api/performance/metrics/prometheus`
+
+### 14.4 Groups and Tags
+
+Organize requests into logical flows:
+
+```bash
+# Start group
+curl -X POST http://localhost:8000/api/performance/groups/start -d '{"name": "login_flow"}'
+
+# Make requests...
+
+# End group
+curl -X POST http://localhost:8000/api/performance/groups/end -d '{"name": "login_flow"}'
+
+# Get group metrics
+curl http://localhost:8000/api/performance/groups/summary
+```
+
+### 14.5 Lifecycle Hooks
+
+- **Global setup:** Runs once before all VUs
+- **Global teardown:** Runs once after all VUs
+- **Per-VU setup:** Runs once per VU before iterations
+- **Per-VU teardown:** Runs once per VU after iterations
+- **Pre/post request:** Runs before/after each request
+
+### 14.6 Performance Key Files
+
+| File | Description |
+|------|-------------|
+| `backend/app/services/performance/workload_models.py` | k6-style executors |
+| `backend/app/services/performance/checks_engine.py` | Inline checks/assertions |
+| `backend/app/services/performance/custom_metrics.py` | Counter, Gauge, Rate, Trend |
+| `backend/app/services/performance/groups_tags.py` | Request organization |
+| `backend/app/services/performance/lifecycle_hooks.py` | Setup/teardown hooks |
+| `backend/app/routers/performance_api.py` | All performance endpoints |
+
+### 14.7 Verification Commands
+
+```bash
+# Check capabilities
+curl http://localhost:8000/api/performance/capabilities
+
+# List workload types
+curl http://localhost:8000/api/performance/workload/types
+
+# Get metrics summary
+curl http://localhost:8000/api/performance/metrics/summary
+
+# Get checks summary
+curl http://localhost:8000/api/performance/checks/summary
+```

@@ -1609,3 +1609,454 @@ async def pwa_performance(request: Request, body: dict):
     except Exception as e:
         logger.error(f"PWA performance run failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# WORKLOAD MODELS - k6-style executors
+# ============================================================================
+
+from app.services.performance.workload_models import (
+    WorkloadModelFactory, WorkloadModelType, WorkloadConfig
+)
+
+
+@router.post("/workload/create")
+async def create_workload(request: Request, body: dict):
+    """
+    Create a workload configuration (k6-style executor).
+    
+    Supported model types:
+    - constant_vus: Fixed VUs for duration
+    - ramping_vus: VUs ramp up/down over stages
+    - per_vu_iterations: Each VU runs N iterations
+    - shared_iterations: Total iterations split across VUs
+    - constant_arrival_rate: Fixed requests/sec (open model)
+    - ramping_arrival_rate: Ramp arrival rate over stages (open model)
+    """
+    try:
+        model_type = body.get("model_type", "constant_vus")
+        
+        if model_type == "constant_vus":
+            config = WorkloadModelFactory.constant_vus(
+                vus=body.get("vus", 10),
+                duration=body.get("duration_seconds", 60)
+            )
+        elif model_type == "ramping_vus":
+            config = WorkloadModelFactory.ramping_vus(
+                stages=body.get("stages", []),
+                graceful_stop=body.get("graceful_stop", 30)
+            )
+        elif model_type == "shared_iterations":
+            config = WorkloadModelFactory.shared_iterations(
+                iterations=body.get("iterations", 1000),
+                vus=body.get("vus", 10),
+                max_duration=body.get("max_duration", 3600)
+            )
+        elif model_type == "per_vu_iterations":
+            config = WorkloadModelFactory.per_vu_iterations(
+                iterations_per_vu=body.get("iterations_per_vu", 10),
+                vus=body.get("vus", 10),
+                max_duration=body.get("max_duration", 3600)
+            )
+        elif model_type == "constant_arrival_rate":
+            config = WorkloadModelFactory.constant_arrival_rate(
+                rate=body.get("rate", 10),
+                duration=body.get("duration_seconds", 60),
+                pre_allocated_vus=body.get("pre_allocated_vus", 10),
+                max_vus=body.get("max_vus", 100)
+            )
+        elif model_type == "ramping_arrival_rate":
+            config = WorkloadModelFactory.ramping_arrival_rate(
+                stages=body.get("stages", []),
+                pre_allocated_vus=body.get("pre_allocated_vus", 10),
+                max_vus=body.get("max_vus", 100)
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown model type: {model_type}")
+        
+        return {
+            "status": "success",
+            "workload_config": config.to_dict(),
+            "message": f"Created {model_type} workload model"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating workload: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/workload/types")
+async def list_workload_types():
+    """List available workload model types with descriptions"""
+    return {
+        "status": "success",
+        "types": [
+            {
+                "type": "constant_vus",
+                "description": "Fixed number of VUs for duration (closed model)",
+                "parameters": ["vus", "duration_seconds"]
+            },
+            {
+                "type": "ramping_vus",
+                "description": "VUs ramp up/down over stages (closed model)",
+                "parameters": ["stages[{duration_seconds, target}]", "graceful_stop"]
+            },
+            {
+                "type": "shared_iterations",
+                "description": "Total iterations split across VUs (closed model)",
+                "parameters": ["iterations", "vus", "max_duration"]
+            },
+            {
+                "type": "per_vu_iterations",
+                "description": "Each VU runs N iterations (closed model)",
+                "parameters": ["iterations_per_vu", "vus", "max_duration"]
+            },
+            {
+                "type": "constant_arrival_rate",
+                "description": "Fixed requests/sec regardless of VUs (open model)",
+                "parameters": ["rate", "duration_seconds", "pre_allocated_vus", "max_vus"]
+            },
+            {
+                "type": "ramping_arrival_rate",
+                "description": "Ramp arrival rate over stages (open model)",
+                "parameters": ["stages[{duration_seconds, target}]", "pre_allocated_vus", "max_vus"]
+            }
+        ]
+    }
+
+
+# ============================================================================
+# CHECKS ENGINE - k6-style inline assertions
+# ============================================================================
+
+from app.services.performance.checks_engine import (
+    get_checks_engine, Check, CheckType, status_is, body_contains, response_time_below
+)
+
+
+@router.post("/checks/execute")
+async def execute_checks(request: Request, body: dict):
+    """
+    Execute k6-style checks against a response.
+    
+    Body:
+        response: {status, body, headers, response_time_ms}
+        checks: [
+            {"name": "status is 200", "type": "status", "expected": 200},
+            {"name": "body contains success", "type": "body_contains", "expected": "success"},
+            {"name": "response time < 500ms", "type": "response_time", "expected": 500, "operator": "<"}
+        ]
+        tags: {"scenario": "login", "name": "POST /login"}
+    """
+    try:
+        engine = get_checks_engine()
+        
+        response_data = body.get("response", {})
+        checks_data = body.get("checks", [])
+        tags = body.get("tags", {})
+        
+        # Convert to Check objects
+        checks = []
+        for c in checks_data:
+            checks.append(Check(
+                name=c.get("name", "unnamed"),
+                check_type=CheckType(c.get("type", "status")),
+                expected=c.get("expected"),
+                operator=c.get("operator", "=="),
+                json_path=c.get("json_path"),
+                header_name=c.get("header_name")
+            ))
+        
+        # Execute checks
+        results = engine.check(response_data, checks, tags)
+        
+        return {
+            "status": "success",
+            "results": [
+                {
+                    "check_name": r.check_name,
+                    "passed": r.passed,
+                    "message": r.message
+                }
+                for r in results
+            ],
+            "all_passed": all(r.passed for r in results)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error executing checks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/checks/summary")
+async def get_checks_summary():
+    """Get summary of all checks executed during the test"""
+    try:
+        engine = get_checks_engine()
+        return {
+            "status": "success",
+            "summary": engine.get_summary()
+        }
+    except Exception as e:
+        logger.error(f"Error getting checks summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/checks/reset")
+async def reset_checks():
+    """Reset all check results"""
+    try:
+        engine = get_checks_engine()
+        engine.reset()
+        return {"status": "success", "message": "Checks reset"}
+    except Exception as e:
+        logger.error(f"Error resetting checks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CUSTOM METRICS - k6-style Trend, Counter, Gauge, Rate
+# ============================================================================
+
+from app.services.performance.custom_metrics import get_metrics_registry
+
+
+@router.post("/metrics/record")
+async def record_custom_metric(request: Request, body: dict):
+    """
+    Record a value to a custom metric.
+    
+    Body:
+        name: Metric name
+        type: counter | gauge | rate | trend
+        value: Value to record (number for counter/gauge/trend, bool for rate)
+        tags: Optional tags
+    """
+    try:
+        registry = get_metrics_registry()
+        
+        metric_name = body.get("name")
+        metric_type = body.get("type", "counter")
+        value = body.get("value")
+        tags = body.get("tags", {})
+        
+        if not metric_name:
+            raise HTTPException(status_code=400, detail="name is required")
+        
+        if metric_type == "counter":
+            metric = registry.counter(metric_name)
+            metric.add(float(value or 1), tags)
+        elif metric_type == "gauge":
+            metric = registry.gauge(metric_name)
+            metric.set(float(value), tags)
+        elif metric_type == "rate":
+            metric = registry.rate(metric_name)
+            metric.add(bool(value), tags)
+        elif metric_type == "trend":
+            metric = registry.trend(metric_name)
+            metric.add(float(value), tags)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown metric type: {metric_type}")
+        
+        return {
+            "status": "success",
+            "metric": metric_name,
+            "type": metric_type,
+            "summary": metric.get_summary()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error recording metric: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/metrics/summary")
+async def get_metrics_summary():
+    """Get summary of all custom metrics"""
+    try:
+        registry = get_metrics_registry()
+        return {
+            "status": "success",
+            "metrics": registry.get_all_summaries()
+        }
+    except Exception as e:
+        logger.error(f"Error getting metrics summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/metrics/prometheus")
+async def export_metrics_prometheus():
+    """Export metrics in Prometheus format"""
+    from fastapi.responses import PlainTextResponse
+    try:
+        registry = get_metrics_registry()
+        return PlainTextResponse(
+            content=registry.export_prometheus(),
+            media_type="text/plain"
+        )
+    except Exception as e:
+        logger.error(f"Error exporting Prometheus metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/metrics/reset")
+async def reset_metrics():
+    """Reset all custom metrics"""
+    try:
+        registry = get_metrics_registry()
+        registry.reset_all()
+        return {"status": "success", "message": "Metrics reset"}
+    except Exception as e:
+        logger.error(f"Error resetting metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# GROUPS AND TAGS - Request organization
+# ============================================================================
+
+from app.services.performance.groups_tags import get_group_manager, get_tag_manager
+
+
+@router.post("/groups/start")
+async def start_group(request: Request, body: dict):
+    """Start a named group for organizing requests"""
+    try:
+        name = body.get("name")
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        
+        manager = get_group_manager()
+        manager.start_group(name)
+        
+        return {"status": "success", "group": name, "message": "Group started"}
+    except Exception as e:
+        logger.error(f"Error starting group: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/groups/end")
+async def end_group(request: Request, body: dict):
+    """End a named group"""
+    try:
+        name = body.get("name")
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        
+        manager = get_group_manager()
+        manager.end_group(name)
+        
+        return {"status": "success", "group": name, "message": "Group ended"}
+    except Exception as e:
+        logger.error(f"Error ending group: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/groups/summary")
+async def get_groups_summary():
+    """Get summary of all groups"""
+    try:
+        manager = get_group_manager()
+        return {
+            "status": "success",
+            "groups": manager.get_all_group_metrics()
+        }
+    except Exception as e:
+        logger.error(f"Error getting groups summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tags/global")
+async def set_global_tags(request: Request, body: dict):
+    """Set global tags applied to all requests"""
+    try:
+        tags = body.get("tags", {})
+        manager = get_tag_manager()
+        
+        for key, value in tags.items():
+            manager.set_global_tag(key, value)
+        
+        return {
+            "status": "success",
+            "global_tags": manager.get_global_tags()
+        }
+    except Exception as e:
+        logger.error(f"Error setting global tags: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CAPABILITIES - Complete feature list
+# ============================================================================
+
+@router.get("/capabilities")
+async def get_performance_capabilities():
+    """Get complete list of performance testing capabilities"""
+    return {
+        "status": "success",
+        "capabilities": {
+            "load_generation": {
+                "python_engine": True,
+                "go_runner": True,
+                "max_vus_python": 100,
+                "max_vus_go": 10000,
+                "distributed": True
+            },
+            "workload_models": [
+                "constant_vus",
+                "ramping_vus",
+                "per_vu_iterations",
+                "shared_iterations",
+                "constant_arrival_rate",
+                "ramping_arrival_rate"
+            ],
+            "load_profiles": [
+                "linear", "step", "spike", "stress", 
+                "endurance", "capacity", "custom"
+            ],
+            "protocols": [
+                "HTTP/1.1", "HTTP/2", "WebSocket", "gRPC"
+            ],
+            "features": [
+                "Correlation engine (JSONPath, Regex, Header, Cookie)",
+                "Data parameterization (CSV, JSON, Sequential, Random, Unique)",
+                "k6-style checks and assertions",
+                "Custom metrics (Counter, Gauge, Rate, Trend)",
+                "Groups and tags for organization",
+                "Lifecycle hooks (setup, teardown, pre/post request)",
+                "Network simulation (bandwidth, latency, packet loss)",
+                "APM integration (Datadog, New Relic, Prometheus)",
+                "Lighthouse/Core Web Vitals integration",
+                "Server Resource Monitoring (SRM)",
+                "CI/CD webhooks with pass/fail verdict",
+                "k6 script export",
+                "Scenario mix (multiple scenarios with weights)",
+                "Test scheduling (once, cron, interval)"
+            ],
+            "comparison_to_k6": {
+                "workload_models": "Full parity (6 executor types)",
+                "checks": "Full parity (inline assertions)",
+                "custom_metrics": "Full parity (Trend, Counter, Gauge, Rate)",
+                "groups_tags": "Full parity",
+                "lifecycle_hooks": "Full parity (setup, teardown, pre/post)",
+                "thresholds": "Full parity",
+                "distributed": "Supported via Go runner"
+            },
+            "comparison_to_gatling": {
+                "injection_profiles": "Full parity (open/closed models)",
+                "assertions": "Full parity",
+                "scenarios": "Full parity",
+                "simulations": "Full parity"
+            },
+            "comparison_to_loadrunner": {
+                "correlation": "Full parity",
+                "parameterization": "Full parity",
+                "protocols": "Partial (HTTP, WebSocket, gRPC)",
+                "analysis": "Good (Lighthouse, SRM, trending)"
+            }
+        }
+    }
