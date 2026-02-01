@@ -13,6 +13,9 @@
 const { findElementWithAI, clickAtCoordinates, fillAtCoordinates, retryWithBackoff } = require('./ai-fallback');
 const RecordingUtils = require('./recording-utils');
 
+// Import Reliability Layer - eliminates false positives
+const ReliabilityLayer = require('./reliability-layer');
+
 // Import PWA testing module (lazy loaded to avoid startup cost if not used)
 let PWATesting = null;
 const getPWATesting = () => {
@@ -495,6 +498,46 @@ async function handleClick(ctx, action, options = {}) {
     }));
     console.log(`[ActionHandler] Element details: tag=${elementInfo.tag}, href=${elementInfo.href}`);
   } catch (e) {}
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // RELIABILITY LAYER: Pre-action verification
+  // Ensures element is truly actionable before clicking
+  // ═══════════════════════════════════════════════════════════════════════
+  const preActionCheck = await ReliabilityLayer.verifyElementActionable(ctx.page, clickResult.locator, 'click');
+  
+  if (!preActionCheck.actionable) {
+    console.log(`[ActionHandler] ⚠️ Pre-action check failed:`, preActionCheck.issues.join(', '));
+    console.log(`[ActionHandler] 💡 Suggestion: ${preActionCheck.suggestion}`);
+    
+    // Return with fix suggestions
+    return { 
+      success: false, 
+      error: preActionCheck.issues.join('; '),
+      suggestion: preActionCheck.suggestion,
+      checks: preActionCheck.checks
+    };
+  }
+  
+  if (preActionCheck.issues.length > 0) {
+    console.log(`[ActionHandler] ⚠️ Warnings:`, preActionCheck.issues.join(', '));
+  }
+  
+  // Handle multiple matches with smart disambiguation
+  const count = await clickResult.locator.count().catch(() => 1);
+  if (count > 1) {
+    console.log(`[ActionHandler] Multiple elements (${count}) found, disambiguating...`);
+    const disambiguated = await ReliabilityLayer.disambiguateMatches(
+      ctx.page, 
+      clickResult.locator, 
+      action.recipe,
+      action.visualFingerprint
+    );
+    clickResult.locator = disambiguated.locator;
+    console.log(`[ActionHandler] Selected candidate ${disambiguated.index} (confidence: ${(disambiguated.confidence * 100).toFixed(0)}%)`);
+    if (disambiguated.reasons) {
+      console.log(`[ActionHandler] Reasons: ${disambiguated.reasons.join(', ')}`);
+    }
+  }
   
   // Scroll into view and highlight briefly
   await clickResult.locator.scrollIntoViewIfNeeded().catch(() => {});
