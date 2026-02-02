@@ -262,17 +262,74 @@ export default function MobileTestingPage() {
           </Button>
         </div>
         
-        {/* Info Banner */}
-        <div className={cn(
-          "mt-4 p-3 rounded-lg border flex items-center gap-3",
-          theme === 'light'
-            ? "bg-sky-50 border-sky-200"
-            : "bg-sky-500/10 border-sky-500/30"
-        )}>
-          <Globe className={cn("w-5 h-5", theme === 'light' ? 'text-sky-600' : 'text-sky-400')} />
-          <p className={cn("text-sm", theme === 'light' ? 'text-sky-800' : 'text-sky-300')}>
-            <strong>Looking for mobile web testing?</strong> Use the <button onClick={() => navigate('/recorder')} className="underline font-semibold">Record tab</button> with 50+ device profiles for mobile browser emulation.
-          </p>
+        {/* Testing Type Cards */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Mobile Web */}
+          <button
+            onClick={() => navigate('/recorder')}
+            className={cn(
+              "p-4 rounded-lg border text-left transition-all hover:scale-[1.02]",
+              theme === 'light'
+                ? "bg-sky-50 border-sky-200 hover:border-sky-400"
+                : "bg-sky-500/10 border-sky-500/30 hover:border-sky-500"
+            )}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Globe className={cn("w-5 h-5", theme === 'light' ? 'text-sky-600' : 'text-sky-400')} />
+              <span className={cn("font-semibold", theme === 'light' ? 'text-sky-800' : 'text-sky-300')}>
+                Mobile Web Testing
+              </span>
+            </div>
+            <p className={cn("text-xs", theme === 'light' ? 'text-sky-700' : 'text-sky-400')}>
+              Test responsive websites with 50+ device profiles (iPhone, Android, iPad)
+            </p>
+            <div className={cn("mt-2 text-xs font-medium", theme === 'light' ? 'text-sky-600' : 'text-sky-400')}>
+              → Record Tab
+            </div>
+          </button>
+
+          {/* PWA Load Testing */}
+          <button
+            onClick={() => navigate('/performance')}
+            className={cn(
+              "p-4 rounded-lg border text-left transition-all hover:scale-[1.02]",
+              theme === 'light'
+                ? "bg-amber-50 border-amber-200 hover:border-amber-400"
+                : "bg-amber-500/10 border-amber-500/30 hover:border-amber-500"
+            )}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className={cn("w-5 h-5", theme === 'light' ? 'text-amber-600' : 'text-amber-400')} />
+              <span className={cn("font-semibold", theme === 'light' ? 'text-amber-800' : 'text-amber-300')}>
+                PWA Load Testing
+              </span>
+            </div>
+            <p className={cn("text-xs", theme === 'light' ? 'text-amber-700' : 'text-amber-400')}>
+              Load test PWA apps - service worker, app shell, manifest, offline mode
+            </p>
+            <div className={cn("mt-2 text-xs font-medium", theme === 'light' ? 'text-amber-600' : 'text-amber-400')}>
+              → Performance Tab → PWA Load preset
+            </div>
+          </button>
+
+          {/* Native App (Current Page) */}
+          <div className={cn(
+            "p-4 rounded-lg border",
+            theme === 'light'
+              ? "bg-violet-50 border-violet-300 ring-2 ring-violet-300"
+              : "bg-violet-500/20 border-violet-500 ring-2 ring-violet-500"
+          )}>
+            <div className="flex items-center gap-2 mb-2">
+              <Smartphone className={cn("w-5 h-5", theme === 'light' ? 'text-violet-600' : 'text-violet-400')} />
+              <span className={cn("font-semibold", theme === 'light' ? 'text-violet-800' : 'text-violet-300')}>
+                Native App Testing
+              </span>
+              <Badge className="ml-auto text-[10px] bg-violet-500 text-white">Current</Badge>
+            </div>
+            <p className={cn("text-xs", theme === 'light' ? 'text-violet-700' : 'text-violet-400')}>
+              Test iOS Simulator & Android Emulator apps with Maestro
+            </p>
+          </div>
         </div>
       </div>
 
@@ -743,6 +800,149 @@ export default function MobileTestingPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Section: Capabilities Overview */}
+      <div className="mt-6 grid md:grid-cols-2 gap-6">
+        {/* Supported Features */}
+        <div className={cn(
+          "rounded-xl border p-5",
+          theme === 'light'
+            ? "bg-white border-gray-200"
+            : "bg-gray-900 border-gray-800"
+        )}>
+          <h3 className={cn(
+            "text-sm font-semibold mb-4 flex items-center gap-2",
+            theme === 'light' ? 'text-gray-900' : 'text-white'
+          )}>
+            <CheckCircle2 className="w-4 h-4 text-green-500" /> Supported Features
+          </h3>
+          <div className="space-y-2 text-xs">
+            {[
+              { feature: 'iOS Simulator Testing', desc: 'Full UI automation with Maestro' },
+              { feature: 'Android Emulator Testing', desc: 'Full UI automation with Maestro' },
+              { feature: 'Mobile Web (50+ devices)', desc: 'Record tab with device profiles' },
+              { feature: 'PWA Load Testing', desc: 'Performance tab → PWA preset' },
+              { feature: 'Touch Gestures', desc: 'Tap, swipe, scroll, pinch' },
+              { feature: 'Visual Recording', desc: 'Maestro Studio for recording' },
+              { feature: 'Network Throttling', desc: '3G, 4G, offline simulation' },
+              { feature: 'Geolocation Mocking', desc: 'Set custom GPS coordinates' },
+            ].map((item, idx) => (
+              <div key={idx} className={cn(
+                "flex items-start gap-2 p-2 rounded",
+                theme === 'light' ? 'bg-green-50' : 'bg-green-500/10'
+              )}>
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 shrink-0" />
+                <div>
+                  <span className={cn("font-medium", theme === 'light' ? 'text-green-800' : 'text-green-400')}>
+                    {item.feature}
+                  </span>
+                  <p className={cn("text-[10px]", theme === 'light' ? 'text-green-600' : 'text-green-500')}>
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Coming Soon */}
+        <div className={cn(
+          "rounded-xl border p-5",
+          theme === 'light'
+            ? "bg-white border-gray-200"
+            : "bg-gray-900 border-gray-800"
+        )}>
+          <h3 className={cn(
+            "text-sm font-semibold mb-4 flex items-center gap-2",
+            theme === 'light' ? 'text-gray-900' : 'text-white'
+          )}>
+            <AlertCircle className="w-4 h-4 text-amber-500" /> Coming Soon
+          </h3>
+          <div className="space-y-2 text-xs">
+            {[
+              { feature: 'Real Device Testing', desc: 'BrowserStack & Sauce Labs integration', eta: 'Q1' },
+              { feature: 'Appium Support', desc: 'Alternative to Maestro for native apps', eta: 'Q2' },
+              { feature: 'Push Notification Testing', desc: 'Test notification flows', eta: 'Q2' },
+              { feature: 'Biometric Mocking', desc: 'Face ID, Touch ID, fingerprint', eta: 'Q2' },
+              { feature: 'Deep Link Testing', desc: 'Universal links, app links', eta: 'Q1' },
+              { feature: 'Mobile Accessibility', desc: 'VoiceOver, TalkBack support', eta: 'Q3' },
+            ].map((item, idx) => (
+              <div key={idx} className={cn(
+                "flex items-start gap-2 p-2 rounded",
+                theme === 'light' ? 'bg-amber-50' : 'bg-amber-500/10'
+              )}>
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className={cn("font-medium", theme === 'light' ? 'text-amber-800' : 'text-amber-400')}>
+                      {item.feature}
+                    </span>
+                    <Badge variant="outline" className={cn(
+                      "text-[9px] h-4",
+                      theme === 'light' ? 'border-amber-300 text-amber-600' : 'border-amber-500 text-amber-400'
+                    )}>
+                      {item.eta}
+                    </Badge>
+                  </div>
+                  <p className={cn("text-[10px]", theme === 'light' ? 'text-amber-600' : 'text-amber-500')}>
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* PWA Testing Quick Guide */}
+      <div className={cn(
+        "mt-6 rounded-xl border p-5",
+        theme === 'light'
+          ? "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+          : "bg-gradient-to-r from-amber-900/20 to-orange-900/20 border-amber-500/30"
+      )}>
+        <h3 className={cn(
+          "text-sm font-semibold mb-3 flex items-center gap-2",
+          theme === 'light' ? 'text-amber-900' : 'text-amber-300'
+        )}>
+          <Zap className="w-4 h-4" /> How to Load Test PWA / Mobile Apps
+        </h3>
+        <div className="grid md:grid-cols-3 gap-4 text-xs">
+          <div className={cn(
+            "p-3 rounded-lg",
+            theme === 'light' ? 'bg-white/80' : 'bg-gray-900/50'
+          )}>
+            <div className={cn("font-semibold mb-1", theme === 'light' ? 'text-amber-800' : 'text-amber-400')}>
+              1. PWA Load Test
+            </div>
+            <p className={cn(theme === 'light' ? 'text-amber-700' : 'text-amber-400/80')}>
+              Go to <strong>Performance</strong> tab → Select <strong>PWA Load</strong> preset → Enter your PWA URL → Run
+            </p>
+          </div>
+          <div className={cn(
+            "p-3 rounded-lg",
+            theme === 'light' ? 'bg-white/80' : 'bg-gray-900/50'
+          )}>
+            <div className={cn("font-semibold mb-1", theme === 'light' ? 'text-amber-800' : 'text-amber-400')}>
+              2. Lighthouse Mobile Audit
+            </div>
+            <p className={cn(theme === 'light' ? 'text-amber-700' : 'text-amber-400/80')}>
+              Go to <strong>Performance</strong> tab → <strong>Lighthouse</strong> section → Select "Mobile" → Get Core Web Vitals
+            </p>
+          </div>
+          <div className={cn(
+            "p-3 rounded-lg",
+            theme === 'light' ? 'bg-white/80' : 'bg-gray-900/50'
+          )}>
+            <div className={cn("font-semibold mb-1", theme === 'light' ? 'text-amber-800' : 'text-amber-400')}>
+              3. Mobile Web Load Test
+            </div>
+            <p className={cn(theme === 'light' ? 'text-amber-700' : 'text-amber-400/80')}>
+              Use custom script with mobile user-agent headers and throttled network conditions
+            </p>
           </div>
         </div>
       </div>
