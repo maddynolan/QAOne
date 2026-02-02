@@ -184,19 +184,27 @@ async function verifyElementActionable(page, locator, actionType = 'click') {
     // 6. Check in viewport
     const box = await locator.first().boundingBox();
     const viewport = page.viewportSize();
-    const inViewport = box && 
-      box.x >= -box.width && 
-      box.y >= -box.height && 
-      box.x < viewport.width + box.width && 
-      box.y < viewport.height + box.height;
     
-    if (!inViewport) {
-      issues.push('Element is outside viewport');
-      // Auto-scroll into view
-      await locator.first().scrollIntoViewIfNeeded().catch(() => {});
-      await page.waitForTimeout(200);
+    // Handle case where viewport or box is null (can happen during page transitions)
+    if (!viewport || !box) {
+      // Skip viewport check if we can't get dimensions, but don't fail
+      console.log(`[Reliability] Skipping viewport check: viewport=${!!viewport}, box=${!!box}`);
+      checks.inViewport = true; // Assume in viewport, let click proceed
+    } else {
+      const inViewport = 
+        box.x >= -box.width && 
+        box.y >= -box.height && 
+        box.x < viewport.width + box.width && 
+        box.y < viewport.height + box.height;
+      
+      if (!inViewport) {
+        issues.push('Element is outside viewport');
+        // Auto-scroll into view
+        await locator.first().scrollIntoViewIfNeeded().catch(() => {});
+        await page.waitForTimeout(200);
+      }
+      checks.inViewport = true;
     }
-    checks.inViewport = true;
     
     return {
       actionable: true,
