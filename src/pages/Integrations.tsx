@@ -56,7 +56,7 @@ export default function Integrations() {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div>
         <h1 className="text-3xl font-bold gradient-text">Integrations</h1>
         <p className="text-muted-foreground mt-1">
