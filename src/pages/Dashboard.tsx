@@ -109,16 +109,17 @@ const ActionItem = ({
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
-    passRate: 89,
-    criticalDefects: 2,
-    highDefects: 5,
-    totalDefects: 12,
-    totalTestCases: 10,
-    totalTestSuites: 3,
-    testsRun: 156,
-    avgExecutionTime: 4.2,
-    automationRate: 65,
-    releaseReadiness: 82
+    passRate: 0,
+    criticalDefects: 0,
+    highDefects: 0,
+    totalDefects: 0,
+    totalTestCases: 0,
+    totalTestSuites: 0,
+    totalTestRuns: 0,
+    testsRun: 0,
+    avgExecutionTime: 0,
+    automationRate: 0,
+    releaseReadiness: 0
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,60 +129,74 @@ export default function Dashboard() {
   }, []);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
-      // Load real data from endpoints
-      const [testCases, defects, testSuites] = await Promise.all([
+      // Load real data from endpoints - including test runs
+      const [testCases, defects, testSuites, testRuns] = await Promise.all([
         fetch(`${API_BASE_URL}/test-cases`).then(r => r.ok ? r.json() : []),
         fetch(`${API_BASE_URL}/defects`).then(r => r.ok ? r.json() : []),
-        fetch(`${API_BASE_URL}/test-suites`).then(r => r.ok ? r.json() : [])
+        fetch(`${API_BASE_URL}/test-suites`).then(r => r.ok ? r.json() : []),
+        fetch(`${API_BASE_URL}/test-runs`).then(r => r.ok ? r.json() : [])
       ]);
 
-      const tcList = Array.isArray(testCases) ? testCases : [];
+      const tcList = Array.isArray(testCases) ? testCases : testCases?.test_cases || [];
       const defList = Array.isArray(defects) ? defects : defects?.defects || [];
       const suiteList = Array.isArray(testSuites) ? testSuites : testSuites?.test_suites || [];
+      const runList = Array.isArray(testRuns) ? testRuns : testRuns?.test_runs || testRuns?.runs || [];
 
-      const criticalDef = defList.filter((d: any) => d.severity === 'critical' || d.priority === 'critical').length;
-      const highDef = defList.filter((d: any) => d.severity === 'high' || d.priority === 'high').length;
+      // Filter open defects only
+      const openDefects = defList.filter((d: any) => 
+        d.status === 'open' || d.status === 'in_progress' || d.status === 'new' || !d.status
+      );
+      const criticalDef = openDefects.filter((d: any) => d.severity === 'critical' || d.priority === 'critical').length;
+      const highDef = openDefects.filter((d: any) => d.severity === 'high' || d.priority === 'high').length;
 
-      // Get real test run data from results service
+      // Get real test run data from results service (in-memory runs from current session)
       const testRunResults = resultsIngestionService.getAllResults();
       
-      // Calculate stats from real test runs
-      let totalTests = 0;
+      // Calculate stats from both API runs and in-memory runs
+      let totalTestsExecuted = 0;
       let passedTests = 0;
       let failedTests = 0;
       let totalDuration = 0;
       
+      // Count from in-memory results
       testRunResults.forEach(run => {
         run.test_cases.forEach(tc => {
-          totalTests++;
+          totalTestsExecuted++;
           if (tc.status === 'passed') passedTests++;
           if (tc.status === 'failed') failedTests++;
         });
         totalDuration += run.metadata.duration || 0;
       });
       
-      const passRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
+      // Also count from API test runs
+      runList.forEach((run: any) => {
+        if (run.total_tests) totalTestsExecuted += run.total_tests;
+        if (run.passed) passedTests += run.passed;
+        if (run.failed) failedTests += run.failed;
+      });
+      
+      const passRate = totalTestsExecuted > 0 ? Math.round((passedTests / totalTestsExecuted) * 100) : 0;
       const avgDuration = testRunResults.length > 0 ? totalDuration / testRunResults.length / 1000 : 0;
 
       // Calculate release readiness based on pass rate and defects
       const defectPenalty = (criticalDef * 15) + (highDef * 5);
       const releaseScore = Math.max(0, Math.round((passRate * 0.6) + (100 - defectPenalty) * 0.4));
 
-      setStats(prev => ({
-        ...prev,
-        totalTestCases: tcList.length || 10,
-        totalTestSuites: suiteList.length || 3,
-        totalDefects: defList.length || 12,
-        criticalDefects: criticalDef || 2,
-        highDefects: highDef || 5,
-        // Real stats from test runs
-        passRate: passRate || prev.passRate,
-        testsRun: totalTests || prev.testsRun,
-        avgExecutionTime: avgDuration > 0 ? parseFloat(avgDuration.toFixed(1)) : prev.avgExecutionTime,
-        automationRate: testRunResults.length > 0 ? 100 : prev.automationRate,
-        releaseReadiness: releaseScore || prev.releaseReadiness
-      }));
+      setStats({
+        totalTestCases: tcList.length,
+        totalTestSuites: suiteList.length,
+        totalTestRuns: runList.length + testRunResults.length,
+        totalDefects: openDefects.length,
+        criticalDefects: criticalDef,
+        highDefects: highDef,
+        passRate: passRate,
+        testsRun: totalTestsExecuted,
+        avgExecutionTime: avgDuration > 0 ? parseFloat(avgDuration.toFixed(1)) : 0,
+        automationRate: tcList.filter((tc: any) => tc.type === 'automated' || tc.automated).length / Math.max(tcList.length, 1) * 100,
+        releaseReadiness: releaseScore
+      });
 
       // Build recent activity from real test runs
       const activities: any[] = [];
@@ -578,7 +593,7 @@ export default function Dashboard() {
                   <Play className="h-5 w-5 text-green-500" />
                   <div className="text-left">
                     <span className="text-sm font-medium block">Test Execution History</span>
-                    <span className="text-xs text-muted-foreground">{stats.testsRun} tests executed</span>
+                    <span className="text-xs text-muted-foreground">{stats.totalTestRuns} runs ({stats.testsRun} tests executed)</span>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4" />
@@ -604,8 +619,10 @@ export default function Dashboard() {
                   // Export report
                   const report = `Quality Report - ${new Date().toLocaleDateString()}
                   
-Test Coverage: ${stats.testCoverage}%
+Test Cases: ${stats.totalTestCases}
+Test Suites: ${stats.totalTestSuites}
 Pass Rate: ${stats.passRate}%
+Tests Executed: ${stats.testsRun}
 Critical Defects: ${stats.criticalDefects}
 Total Defects: ${stats.totalDefects}
 Release Readiness: ${stats.releaseReadiness}%`;
