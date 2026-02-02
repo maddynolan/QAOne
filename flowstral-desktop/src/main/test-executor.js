@@ -242,10 +242,36 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
    * UNIFIED EXECUTION INTERFACE: findElementWithRetry
    * Compatible with ActionHandlers module for shared execution logic
    * Uses SmartFinder with retry and fallbacks
+   * 
+   * PRIORITY ORDER:
+   * 1. Manual Override (user-specified selector) - HIGHEST priority
+   * 2. SmartFinder V2 (recipe-based)
+   * 3. Legacy selector-based finding
    */
   async findElementWithRetry(action) {
     const maxRetries = 3;
     const baseDelay = 500;
+    
+    // ============================================================
+    // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
+    // When automation fails, users can specify exactly how to find the element
+    // ============================================================
+    const manualOverride = action.manualOverride || action.selectorObj?.manualOverride;
+    if (manualOverride) {
+      console.log(`[Executor] 🎯 MANUAL OVERRIDE: Using user-specified selector: "${manualOverride}"`);
+      try {
+        const manualLocator = this.page.locator(manualOverride);
+        const count = await manualLocator.count();
+        if (count > 0) {
+          console.log(`[Executor] ✅ Manual override found ${count} element(s)`);
+          return { locator: manualLocator.first(), strategy: { type: 'manualOverride', value: manualOverride } };
+        } else {
+          console.log(`[Executor] ⚠️ Manual override selector found 0 elements, falling back to automatic strategies`);
+        }
+      } catch (e) {
+        console.log(`[Executor] ⚠️ Manual override selector failed: ${e.message}, falling back`);
+      }
+    }
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -279,6 +305,15 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
   /**
    * UNIFIED EXECUTION INTERFACE: _findElement
    * Legacy selector-based element finding for ActionHandlers compatibility
+   * 
+   * PRIORITY ORDER:
+   * 1. Manual Override (user-specified selector)
+   * 2. Test ID (most reliable)
+   * 3. ARIA Label
+   * 4. Name attribute
+   * 5. ID (if not dynamic)
+   * 6. CSS selector
+   * 7. Text content
    */
   async _findElement(action) {
     const selectorObj = action.selectorObj || {};
@@ -286,6 +321,27 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     const elementIndex = action.args?.[1] || 0;
     
     const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
+    
+    // ============================================================
+    // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
+    // ============================================================
+    const manualOverride = action.manualOverride || selectorObj.manualOverride;
+    if (manualOverride) {
+      console.log(`[Executor._findElement] 🎯 Trying manual override: "${manualOverride}"`);
+      try {
+        const manualLocator = getAtIndex(this.page.locator(manualOverride));
+        const count = await manualLocator.count().catch(() => 0);
+        if (count > 0) {
+          const isVisible = await manualLocator.isVisible({ timeout: 2000 }).catch(() => false);
+          if (isVisible) {
+            console.log(`[Executor._findElement] ✅ Manual override succeeded`);
+            return { locator: manualLocator, strategy: { type: 'manualOverride', value: manualOverride } };
+          }
+        }
+      } catch (e) {
+        console.log(`[Executor._findElement] ⚠️ Manual override failed: ${e.message}`);
+      }
+    }
     
     const selectorsToTry = [];
     
