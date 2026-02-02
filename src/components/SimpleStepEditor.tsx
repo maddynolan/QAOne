@@ -416,15 +416,15 @@ export default function SimpleStepEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-card border-border">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[90vh] bg-card border-border flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="text-lg font-semibold flex items-center gap-2">
             <XCircle className="h-5 w-5 text-red-400" />
             Step {stepIndex + 1} Failed
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto pr-2 flex-1 min-h-0">
           {/* What Failed */}
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
             <p className="text-sm text-foreground font-medium">

@@ -899,7 +899,30 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           let clickLocator = null;
           const maxRetries = 3;
           
-          // V2: TRY SMARTFINDER FIRST (recipe-based element finding)
+          // ============================================================
+          // MANUAL OVERRIDE - CHECK FIRST! User-specified selector takes HIGHEST priority
+          // ============================================================
+          const manualOverride = resolvedStep.manualOverride || selectorObj.manualOverride;
+          if (manualOverride && !clickSuccess) {
+            console.log(`[Executor] 🎯 ClickText MANUAL OVERRIDE: Trying "${manualOverride}"`);
+            try {
+              const manualLocator = getAtIndex(this.page.locator(manualOverride));
+              const count = await manualLocator.count().catch(() => 0);
+              if (count > 0) {
+                await manualLocator.waitFor({ state: 'visible', timeout: 5000 });
+                await manualLocator.click({ timeout: 5000 });
+                clickSuccess = true;
+                clickLocator = manualLocator;
+                console.log(`[Executor] ✅ Manual override click successful!`);
+              } else {
+                console.log(`[Executor] ⚠️ Manual override found 0 elements, trying other strategies`);
+              }
+            } catch (e) {
+              console.log(`[Executor] ⚠️ Manual override failed: ${e.message}, trying other strategies`);
+            }
+          }
+          
+          // V2: TRY SMARTFINDER SECOND (recipe-based element finding)
           // This uses semantic identification (role, text, context) instead of brittle selectors
           if (this.useSmartFinder && !clickSuccess) {
             try {
