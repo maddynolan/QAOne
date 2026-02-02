@@ -159,6 +159,8 @@ class StrategyMemory {
    */
   recordSuccess(fingerprint, strategy, selector = null, executionTimeMs = null) {
     let entry = this.memory.get(fingerprint);
+    const isNewEntry = !entry;
+    const strategyChanged = entry && entry.strategy !== strategy;
     
     if (!entry) {
       entry = {
@@ -193,10 +195,13 @@ class StrategyMemory {
     // Update global strategy stats
     this._updateStrategyStats(strategy, true);
     
-    // Persist if configured
-    this._maybePersist();
+    // Persist IMMEDIATELY for new entries or strategy changes (important learning)
+    // These are the most valuable learnings to not lose
+    const forcePersist = isNewEntry || strategyChanged;
+    this._maybePersist(forcePersist);
     
-    console.log(`[StrategyMemory] Recorded success: "${strategy}" for ${fingerprint} (${entry.successCount} successes)`);
+    const logSuffix = forcePersist ? ' [PERSISTED IMMEDIATELY]' : '';
+    console.log(`[StrategyMemory] Recorded success: "${strategy}" for ${fingerprint} (${entry.successCount} successes)${logSuffix}`);
   }
   
   /**
@@ -335,12 +340,14 @@ class StrategyMemory {
   
   /**
    * Save memory to disk (if configured)
+   * @param {boolean} force - Force immediate persist (skip throttle)
    */
-  _maybePersist() {
+  _maybePersist(force = false) {
     if (!this.persistPath) return;
     
-    // Throttle writes (max once per 5 seconds)
-    if (this._lastPersist && Date.now() - this._lastPersist < 5000) {
+    // Throttle writes (max once per 2 seconds) UNLESS forced
+    // Reduced from 5s to 2s for faster learning
+    if (!force && this._lastPersist && Date.now() - this._lastPersist < 2000) {
       return;
     }
     
@@ -426,6 +433,17 @@ function getStrategyMemory(options = {}) {
       (process.env.APPDATA ? 
         path.join(process.env.APPDATA, 'flowstral', 'strategy-memory.json') :
         path.join(__dirname, '..', '..', '..', 'data', 'strategy-memory.json'));
+    
+    // Ensure directory exists before creating instance
+    const dir = path.dirname(defaultPath);
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`[StrategyMemory] Created directory: ${dir}`);
+      }
+    } catch (e) {
+      console.error(`[StrategyMemory] Failed to create directory ${dir}:`, e.message);
+    }
     
     instance = new StrategyMemory({
       persistPath: defaultPath,

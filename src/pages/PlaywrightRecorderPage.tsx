@@ -8377,7 +8377,7 @@ Recorded Test
                           }
                         } : undefined}
                         className={cn(
-                          "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all overflow-clip relative",
+                          "group flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all overflow-clip relative",
                           isPausedHere && "bg-amber-500/20 border border-amber-500/50 ring-1 ring-amber-500/30",
                           isCurrent && !isPausedHere && "bg-blue-500/20 border border-blue-500/30",
                           stepResult?.status === 'passed' && "bg-emerald-500/10 hover:bg-emerald-500/20",
@@ -8426,7 +8426,7 @@ Recorded Test
                                 <span className="ml-1 text-xs bg-amber-500/20 text-amber-400 px-1 rounded">🚩</span>
                               )}
                             </span>
-                            {/* Action buttons for failed steps */}
+                            {/* Action buttons for FAILED steps - Fix + Flag */}
                             {isFailed && testExecutionResult?.status !== 'running' && (
                               <div className="flex items-center gap-1 shrink-0">
                                 {/* Fix button - opens step editor */}
@@ -8441,7 +8441,7 @@ Recorded Test
                                 >
                                   Fix
                                 </button>
-                                {/* Mark as false positive button */}
+                                {/* Mark as false positive - for steps that fail but shouldn't */}
                                 {action.id && !falsePositiveSteps.has(action.id) && (
                                   <button
                                     onClick={(e) => {
@@ -8456,6 +8456,35 @@ Recorded Test
                                 )}
                                 {/* Remove false positive flag */}
                                 {action.id && falsePositiveSteps.has(action.id) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      unmarkFalsePositive(action.id!);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 rounded border border-gray-500/30"
+                                    title="Remove false positive flag"
+                                  >
+                                    Unflag
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {/* FALSE POSITIVE FLAG for PASSED steps - key feature! */}
+                            {/* A false positive = step PASSES but clicked wrong element */}
+                            {stepResult?.status === 'passed' && testExecutionResult?.status !== 'running' && action.id && (
+                              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+                                {!falsePositiveSteps.has(action.id) ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      markStepAsFalsePositive(idx, stepResult?.screenshot || null);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-amber-500/10 hover:bg-amber-500/30 text-amber-400/70 hover:text-amber-400 rounded border border-amber-500/20 hover:border-amber-500/30"
+                                    title="Flag as false positive - step passed but clicked wrong element"
+                                  >
+                                    🚩 Flag
+                                  </button>
+                                ) : (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
