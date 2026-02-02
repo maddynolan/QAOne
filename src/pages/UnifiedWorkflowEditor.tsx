@@ -4314,7 +4314,7 @@ export default function UnifiedWorkflowEditor() {
                   <span className="text-[11px] font-medium text-foreground truncate">{testCase.name || 'Recorded Test'}</span>
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  {steps.length} step{steps.length !== 1 ? 's' : ''} • {steps.filter(s => s.type.startsWith('assert')).length} verifications
+                  {testCase.steps.length} step{testCase.steps.length !== 1 ? 's' : ''} • {testCase.steps.filter(s => s.type.startsWith('assert')).length} verifications
                 </div>
               </div>
 
