@@ -3787,8 +3787,7 @@ Recorded Test
     setShowTestResultModal(true);
     
     // Real-time progress tracking via IPC events (not fake simulation)
-    // Set up step progress listener if available
-    const electronAPI = (window as any).electronAPI;
+    // Set up step progress listener if available (electronAPI already declared above)
     let stepProgressCleanup: (() => void) | null = null;
     
     // Listen for step progress events from the executor
