@@ -51,9 +51,19 @@ interface NavItem {
   plugin?: PluginKey; // If set, tab is only shown when this plugin is licensed and enabled
 }
 
-// Workflow: Record → Build → Tests (with Runs inside) - NO ICONS in nav
-// Tabs with `plugin` property are shown/hidden based on license
+// ═══════════════════════════════════════════════════════════════════════════
+// NAVIGATION CONFIGURATION
+// 
+// CORE tabs (always shown): Record, Build, Tests
+// PLUGIN tabs (license + user preference): Mobile, API, Perf, A11y, Visual, SF, Flowpilot, Alchemy
+// 
+// Users can disable plugins they don't need via Settings > Plugins
+// ═══════════════════════════════════════════════════════════════════════════
+
 const mainNavItems: NavItem[] = [
+  // ─────────────────────────────────────────────────────────────────────────
+  // CORE TABS - Always visible (the foundation of the platform)
+  // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'recorder',
     label: 'Record',
@@ -72,57 +82,64 @@ const mainNavItems: NavItem[] = [
     path: '/test-cases',
     description: 'Repository, Suites, Plans, Runs',
   },
+  // ─────────────────────────────────────────────────────────────────────────
+  // PLUGIN TABS - Visible based on license tier + user preference
+  // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'mobile',
     label: 'Mobile',
     path: '/mobile',
     description: 'Mobile device testing',
-    plugin: 'mobile', // License-controlled
+    plugin: 'mobile',
   },
   {
     id: 'api',
     label: 'API',
     path: '/api',
     description: 'API testing',
-    plugin: 'api', // License-controlled
+    plugin: 'api',
   },
   {
     id: 'performance',
     label: 'Perf',
     path: '/performance',
     description: 'Load testing',
-    plugin: 'perf', // License-controlled
+    plugin: 'perf',
   },
   {
     id: 'accessibility',
     label: 'A11y',
     path: '/accessibility',
     description: 'Accessibility testing',
-    plugin: 'a11y', // License-controlled
+    plugin: 'a11y',
   },
   {
     id: 'visual-testing',
     label: 'Visual',
     path: '/visual-testing',
     description: 'Visual regression testing',
+    plugin: 'visual',
   },
   {
     id: 'code-alchemy',
     label: 'Alchemy',
     path: '/code-alchemy',
     description: 'Import repos as test cases',
+    plugin: 'alchemy',
   },
   {
     id: 'salesforce',
     label: 'SF',
     path: '/salesforce',
     description: 'Salesforce tools',
+    plugin: 'salesforce',
   },
   {
     id: 'flowpilot',
     label: 'Flowpilot',
     path: '/flowpilot',
     description: 'Goal-based AI testing',
+    plugin: 'flowpilot',
   },
 ];
 
@@ -233,21 +250,26 @@ function Header() {
   const currentPath = location.pathname;
   const inElectron = isElectron();
   
-  // Filter nav items based on license - only show tabs user has access to
+  // Filter nav items based on license + user preference
   const visibleNavItems = mainNavItems.filter(item => 
     !item.plugin || isAvailable(item.plugin)
   );
 
-  // Simplified menu - only core features from landing page
-  const coreFeatures = [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+  // More menu items - some are plugin-controlled
+  const moreMenuItems = [
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, plugin: null }, // Always available
+    { label: 'Analytics', path: '/analytics', icon: BarChart3, plugin: 'analytics' as const },
     { divider: true },
-    { label: 'Secrets Vault', path: '/secrets', icon: Shield },
-    { label: 'Integrations', path: '/integrations', icon: Plug },
+    { label: 'Secrets Vault', path: '/secrets', icon: Shield, plugin: 'secrets' as const },
+    { label: 'Integrations', path: '/integrations', icon: Plug, plugin: 'integrations' as const },
     { divider: true },
-    { label: 'Settings', path: '/settings', icon: Settings },
+    { label: 'Settings', path: '/settings', icon: Settings, plugin: null }, // Always available
   ];
+
+  // Filter more menu items based on plugins
+  const coreFeatures = moreMenuItems.filter(item => 
+    item.divider || !item.plugin || isAvailable(item.plugin)
+  );
 
   return (
     <header className={cn(

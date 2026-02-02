@@ -1,27 +1,46 @@
 /**
- * Optional plugin selections for the landing page (API, Perf, A11y, Mobile).
- * Used by web and desktop to show/hide sections and feature cards.
+ * Plugin/Module Management System
  * 
- * Supports license-based access control:
- * - Each plugin can be enabled/disabled by user preference
- * - Each plugin can be licensed/unlicensed based on tenant license
- * - Only licensed plugins can be enabled
- * - Unlicensed plugins show lock icon with upgrade prompt
+ * Controls which features are available based on:
+ * 1. License tier (free, starter, professional, enterprise)
+ * 2. User preference (can hide licensed features they don't need)
+ * 
+ * ARCHITECTURE COMPARISON WITH COMPETITORS:
+ * 
+ * | Tool          | Model                    | QAAI Equivalent           |
+ * |---------------|--------------------------|---------------------------|
+ * | Tricentis     | Module-based purchase    | Plugin tiers              |
+ * | Katalon       | Free + paid tiers        | License tiers             |
+ * | SmartBear     | Base + add-ons           | Core + plugins            |
+ * | mabl          | All-in-one, feature-gated| Single product + plugins  |
+ * 
+ * QAAI MODEL:
+ * - CORE: Record, Build, Tests, Dashboard, Settings (always available)
+ * - PLUGINS: API, Perf, A11y, Mobile, Visual, SF, Flowpilot, Alchemy, etc.
+ * - Each plugin has a minimum tier requirement
+ * - Users can hide plugins they don't need (declutter UI)
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const STORAGE_KEY = 'flowstral_landing_plugins';
+const STORAGE_KEY = 'flowstral_plugins';
 const LICENSE_STORAGE_KEY = 'flowstral_license_info';
 
-export type PluginKey = 'api' | 'perf' | 'a11y' | 'mobile';
+// All available plugin keys
+export type PluginKey = 
+  | 'api' 
+  | 'perf' 
+  | 'a11y' 
+  | 'mobile' 
+  | 'visual' 
+  | 'salesforce' 
+  | 'flowpilot' 
+  | 'alchemy'
+  | 'analytics'
+  | 'secrets'
+  | 'integrations';
 
-export type LandingPlugins = {
-  api: boolean;
-  perf: boolean;
-  a11y: boolean;
-  mobile: boolean;
-};
+export type LandingPlugins = Record<PluginKey, boolean>;
 
 export type LicenseTier = 'free' | 'starter' | 'professional' | 'enterprise';
 
@@ -30,20 +49,29 @@ export type LicenseInfo = {
   licensedPlugins: PluginKey[];
   expiresAt?: string;
   tenantId?: string;
+  maxUsers?: number;
+  features?: string[];
 };
 
-// Default plugins (all enabled for display, but license controls access)
+// Default plugins - enterprise shows all, others are tier-gated
 const defaultPlugins: LandingPlugins = {
   api: true,
   perf: true,
   a11y: true,
   mobile: true,
+  visual: true,
+  salesforce: true,
+  flowpilot: true,
+  alchemy: true,
+  analytics: true,
+  secrets: true,
+  integrations: true,
 };
 
-// Default license (enterprise has all, free tier has none)
+// Default license (enterprise has all)
 const defaultLicense: LicenseInfo = {
   tier: 'enterprise',
-  licensedPlugins: ['api', 'perf', 'a11y', 'mobile'],
+  licensedPlugins: ['api', 'perf', 'a11y', 'mobile', 'visual', 'salesforce', 'flowpilot', 'alchemy', 'analytics', 'secrets', 'integrations'],
 };
 
 // Plugin metadata for UI display
@@ -51,31 +79,130 @@ export const pluginMetadata: Record<PluginKey, {
   label: string;
   description: string;
   icon: string;
-  tier: LicenseTier; // Minimum tier required
+  tier: LicenseTier;
+  category: 'testing' | 'platform' | 'ai' | 'enterprise';
+  navPath?: string; // Navigation path if this plugin adds a tab
 }> = {
   api: {
     label: 'API Testing',
-    description: 'REST, GraphQL, SOAP testing with security scanning',
+    description: 'REST, GraphQL, SOAP, Mock Server, Security Scanning, 10K+ data generation',
     icon: 'Globe',
     tier: 'starter',
+    category: 'testing',
+    navPath: '/api',
   },
   perf: {
     label: 'Performance Testing',
-    description: 'Load testing with 10k+ VUs, SRM, Lighthouse integration',
+    description: 'Load testing with 10k+ VUs, k6-style checks, SRM, Lighthouse integration',
     icon: 'Activity',
     tier: 'professional',
+    category: 'testing',
+    navPath: '/performance',
   },
   a11y: {
     label: 'Accessibility Testing',
     description: 'WCAG 2.1 A/AA/AAA scanning with remediation guidance',
     icon: 'Accessibility',
     tier: 'starter',
+    category: 'testing',
+    navPath: '/accessibility',
   },
   mobile: {
     label: 'Mobile Testing',
-    description: '50+ device profiles, network throttling, native app support',
+    description: '50+ device profiles, network throttling, responsive testing',
     icon: 'Smartphone',
     tier: 'professional',
+    category: 'testing',
+    navPath: '/mobile',
+  },
+  visual: {
+    label: 'Visual Testing',
+    description: 'Screenshot comparison, visual regression, 6 testing modes',
+    icon: 'Eye',
+    tier: 'starter',
+    category: 'testing',
+    navPath: '/visual-testing',
+  },
+  salesforce: {
+    label: 'Salesforce',
+    description: 'Native Salesforce testing with 20+ specialized tools',
+    icon: 'Cloud',
+    tier: 'professional',
+    category: 'platform',
+    navPath: '/salesforce',
+  },
+  flowpilot: {
+    label: 'Flowpilot (AI)',
+    description: 'Goal-based AI testing - describe what to test, AI does the rest',
+    icon: 'Bot',
+    tier: 'professional',
+    category: 'ai',
+    navPath: '/flowpilot',
+  },
+  alchemy: {
+    label: 'Code Alchemy',
+    description: 'Import existing test repos, convert between frameworks',
+    icon: 'Wand2',
+    tier: 'starter',
+    category: 'platform',
+    navPath: '/code-alchemy',
+  },
+  analytics: {
+    label: 'Advanced Analytics',
+    description: 'Flaky test detection, trend analysis, strategy effectiveness',
+    icon: 'BarChart3',
+    tier: 'starter',
+    category: 'enterprise',
+    navPath: '/analytics',
+  },
+  secrets: {
+    label: 'Secrets Vault',
+    description: 'Secure credential storage, environment variables, API keys',
+    icon: 'Shield',
+    tier: 'professional',
+    category: 'enterprise',
+    navPath: '/secrets',
+  },
+  integrations: {
+    label: 'Integrations',
+    description: 'Jira, Azure DevOps, GitHub, Slack, CI/CD pipelines',
+    icon: 'Plug',
+    tier: 'starter',
+    category: 'enterprise',
+    navPath: '/integrations',
+  },
+};
+
+// Tier hierarchy for comparison
+export const tierInfo: Record<LicenseTier, {
+  label: string;
+  description: string;
+  color: string;
+  plugins: PluginKey[];
+}> = {
+  free: {
+    label: 'Free',
+    description: 'Core Record & Playback only',
+    color: 'gray',
+    plugins: [], // No plugins, just core
+  },
+  starter: {
+    label: 'Starter',
+    description: 'Essential testing plugins',
+    color: 'blue',
+    plugins: ['api', 'a11y', 'visual', 'alchemy', 'analytics', 'integrations'],
+  },
+  professional: {
+    label: 'Professional',
+    description: 'Full testing suite',
+    color: 'purple',
+    plugins: ['api', 'perf', 'a11y', 'mobile', 'visual', 'salesforce', 'flowpilot', 'alchemy', 'analytics', 'secrets', 'integrations'],
+  },
+  enterprise: {
+    label: 'Enterprise',
+    description: 'Everything + priority support',
+    color: 'amber',
+    plugins: ['api', 'perf', 'a11y', 'mobile', 'visual', 'salesforce', 'flowpilot', 'alchemy', 'analytics', 'secrets', 'integrations'],
   },
 };
 
