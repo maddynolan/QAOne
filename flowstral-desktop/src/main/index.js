@@ -25,6 +25,7 @@ const EmbeddedBrowser = require('./embedded-browser');
 const PlaywrightRecorder = require('./playwright-recorder');
 const LocalStorage = require('./local-storage');
 const TestExecutor = require('./test-executor');
+const { registerDiagnosticsIPC, getDiagnosticsCollector } = require('./lib/diagnostics-collector');
 
 // Playwright recorder instance (standalone browser)
 let playwrightRecorder = null;
@@ -187,9 +188,17 @@ function createWebappView() {
     return { action: 'deny' };
   });
 
-  // Focus webapp when it finishes loading
+  // Focus webapp when it finishes loading; inject landing plugins so landing page shows correct sections
   webappView.webContents.on('did-finish-load', () => {
     webappView?.webContents.focus();
+    const landingPlugins = store.get('landingPlugins');
+    if (landingPlugins && typeof landingPlugins === 'object') {
+      webappView.webContents.executeJavaScript(`
+        try {
+          localStorage.setItem('flowstral_landing_plugins', JSON.stringify(${JSON.stringify(landingPlugins)}));
+        } catch (e) {}
+      `).catch(() => {});
+    }
   });
   
   // Enable opening DevTools for webapp with Ctrl+Shift+I when focused on webapp
@@ -543,6 +552,18 @@ ipcMain.handle('set-config', (event, config) => {
   if (config.serverUrl) store.set('serverUrl', config.serverUrl);
   if (config.mode) store.set('mode', config.mode);
   if (config.preferences) store.set('preferences', { ...store.get('preferences'), ...config.preferences });
+  return true;
+});
+
+// Landing page optional plugins (API, Perf, A11y, Mobile) — what to show on landing
+const defaultLandingPlugins = { api: true, perf: true, a11y: true, mobile: true };
+ipcMain.handle('get-landing-plugins', () => {
+  return store.get('landingPlugins') || defaultLandingPlugins;
+});
+ipcMain.handle('set-landing-plugins', (event, plugins) => {
+  if (plugins && typeof plugins === 'object') {
+    store.set('landingPlugins', { ...defaultLandingPlugins, ...plugins });
+  }
   return true;
 });
 
@@ -3456,6 +3477,10 @@ app.whenReady().then(async () => {
   createWindow();
   await initializeServices();
   createTray();
+  
+  // Register diagnostics IPC handlers for remote support
+  registerDiagnosticsIPC(ipcMain);
+  console.log('[App] Diagnostics collector initialized');
   
   // Register global shortcut to open webapp DevTools (F12)
   globalShortcut.register('F12', () => {
