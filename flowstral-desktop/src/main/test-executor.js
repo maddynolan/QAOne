@@ -795,8 +795,13 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       // ============================================================
       // UNIFIED EXECUTION: Try ActionHandlers first for common actions
       // This ensures consistent behavior with PlaywrightRecorder
+      // BUT: If unified handler fails for CLICK, fall through to legacy 
+      // which has 11+ additional fallback strategies
       // ============================================================
       const unifiedResult = await ActionHandlers.executeAction(this, resolvedStep, { timeout: this.timeout });
+      
+      // Check if this is a click action that might need legacy fallbacks
+      const isClickAction = ['ClickText', 'Click', 'click', 'clicktext', 'clickelement'].includes(normalizedAction);
       
       if (unifiedResult.success) {
         // Action handled successfully by unified handler
@@ -805,13 +810,18 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           result.screenshot = unifiedResult.screenshot;
         }
         // Continue to result handling at end of try block
-      } else if (!unifiedResult.delegateToContext && !unifiedResult.error?.includes('Unknown action')) {
+      } else if (!unifiedResult.delegateToContext && !unifiedResult.error?.includes('Unknown action') && !isClickAction) {
         // Unified handler tried but failed - throw error
+        // EXCEPTION: Click actions should fall through to legacy handler for additional strategies
         throw new Error(unifiedResult.error || `Action failed: ${normalizedAction}`);
       } else {
-        // Unified handler doesn't handle this action, use legacy switch
-        // (Salesforce-specific actions, tab switching, etc.)
-        console.log(`[Executor] Delegating to legacy handler: ${normalizedAction}`);
+        // Unified handler doesn't handle this action OR click failed, use legacy switch
+        // Legacy ClickText has 11+ fallback strategies that unified handler doesn't have
+        if (isClickAction && !unifiedResult.success) {
+          console.log(`[Executor] Click failed in unified handler, trying legacy ClickText with additional strategies...`);
+        } else {
+          console.log(`[Executor] Delegating to legacy handler: ${normalizedAction}`);
+        }
       
       switch (normalizedAction) {
         // Navigation
