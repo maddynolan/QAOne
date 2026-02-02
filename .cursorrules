@@ -9,6 +9,33 @@ Before working on this project, read these documents:
 4. **Debug Session Findings**: `docs/DEBUGGING_SESSION_FINDINGS.md` - All bugs found and fixed
 5. **Record/Playback Deep Dive**: `docs/RECORD_PLAYBACK_DEEP_DIVE.md` - Architecture and flow details
 
+## CRITICAL: Record & Playback Core Documentation
+
+**BEFORE modifying ANY recording or playback code, you MUST read:**
+
+`docs/RECORD-PLAYBACK-CORE-ARCHITECTURE.md`
+
+This is the **living document** for QAAI's core Record & Playback system. It contains:
+- Complete architecture diagrams
+- All key file locations and functions
+- Manual override system (CRITICAL - do not break)
+- Selector generation priority
+- Element finding strategy (10+ phases)
+- Data flow diagrams
+- Regression prevention checklist
+- Common failure modes
+
+**Files that trigger this requirement:**
+- `flowstral-desktop/src/main/playwright-recorder.js`
+- `flowstral-desktop/src/main/test-executor.js`
+- `flowstral-desktop/src/main/lib/smart-finder.js`
+- `flowstral-desktop/src/main/lib/action-handlers.js`
+- `flowstral-extension/src/lib/recorder-engine.js`
+- `src/pages/PlaywrightRecorderPage.tsx`
+- `src/components/SimpleStepEditor.tsx`
+
+**After making changes:** Update the document with any architecture changes.
+
 ## Project Overview
 
 QAAI is a full-suite enterprise QA automation platform with:
