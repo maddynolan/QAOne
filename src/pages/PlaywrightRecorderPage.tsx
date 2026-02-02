@@ -23,7 +23,8 @@ import {
   PenLine, LayoutGrid, ArrowRight, Upload, Activity,
   Navigation, Building2, Users, User, Contact, Briefcase,
   FileBox, MapPin, Compass, Route, TestTube, FlaskConical,
-  Accessibility, Scan, Link2, Bug, Bot, Network, Smartphone, Wifi, Monitor
+  Accessibility, Scan, Link2, Bug, Bot, Network, Smartphone, Wifi, Monitor,
+  Timer, Gauge
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1040,6 +1041,10 @@ export default function PlaywrightRecorderPage() {
   
   // Keep browser open on failure - allows visual debugging, element picking, AI assist
   const [keepBrowserOpenOnFailure, setKeepBrowserOpenOnFailure] = useState(true);
+  // Playback speed - slows down execution for debugging
+  const [playbackSpeed, setPlaybackSpeed] = useState<'0.25x' | '0.5x' | '1x' | '2x'>('1x');
+  // Highlight elements during playback
+  const [highlightElements, setHighlightElements] = useState(true);
   // Track if browser is currently open (after failure)
   const [browserKeptOpen, setBrowserKeptOpen] = useState(false);
   // Track failure state for B+C Hybrid repair wizard
@@ -1055,6 +1060,27 @@ export default function PlaywrightRecorderPage() {
       selector: string;
       type?: string;
     }>;
+  } | null>(null);
+  
+  // ============ FALSE POSITIVE WORKFLOW ============
+  // Steps marked as false positive - stored per action ID
+  // When a step is marked false positive:
+  // 1. Screenshot is captured
+  // 2. On next run, test stops at this step
+  // 3. Element picker opens for easy fixing
+  // 4. User clicks correct element → fix saved
+  const [falsePositiveSteps, setFalsePositiveSteps] = useState<Map<string, {
+    stepIndex: number;
+    screenshot: string | null;
+    markedAt: number;
+    reason?: string;
+  }>>(new Map());
+  
+  // Flag when test is stopped at a false positive step for repair
+  const [stoppedAtFalsePositive, setStoppedAtFalsePositive] = useState<{
+    stepIndex: number;
+    actionId: string;
+    screenshot: string | null;
   } | null>(null);
   
   // Export dropdown
@@ -3760,19 +3786,63 @@ Recorded Test
     });
     setShowTestResultModal(true);
     
-    // Simulate step progress for visual feedback (since IPC events are unreliable)
-    let progressInterval: NodeJS.Timeout | null = null;
-    let currentIdx = 0;
+    // Real-time progress tracking via IPC events (not fake simulation)
+    // Set up step progress listener if available
+    const electronAPI = (window as any).electronAPI;
+    let stepProgressCleanup: (() => void) | null = null;
     
-    progressInterval = setInterval(() => {
-      if (currentIdx < actions.length) {
-        setTestExecutionResult(prev => prev && prev.status === 'running' ? { 
-          ...prev, 
-          currentStep: currentIdx 
-        } : prev);
-        currentIdx++;
-      }
-    }, 800); // Update progress every 800ms
+    // Listen for step progress events from the executor
+    if (electronAPI?.onStepProgress) {
+      stepProgressCleanup = electronAPI.onStepProgress((data: { step: number; status: string; error?: string; screenshot?: string }) => {
+        console.log('[Test] Step progress:', data);
+        setTestExecutionResult(prev => {
+          if (!prev || prev.status !== 'running') return prev;
+          const newResults = [...prev.stepResults];
+          // Update the step result
+          newResults[data.step] = {
+            index: data.step,
+            status: data.status as any,
+            error: data.error,
+            screenshot: data.screenshot
+          };
+          return {
+            ...prev,
+            currentStep: data.step,
+            stepResults: newResults
+          };
+        });
+        
+        // Auto-scroll to current step
+        setTimeout(() => {
+          const container = document.getElementById('execution-steps-container');
+          const currentStepEl = container?.children[data.step] as HTMLElement;
+          if (currentStepEl) {
+            currentStepEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      });
+    }
+    
+    // Fallback: Poll-based progress tracking with proper step identification
+    let progressInterval: NodeJS.Timeout | null = null;
+    if (!stepProgressCleanup) {
+      // Only use fallback if no IPC events available
+      console.log('[Test] Using fallback progress polling');
+      progressInterval = setInterval(async () => {
+        // Try to get actual test status from executor
+        const flowstral = (window as any).flowstral;
+        if (flowstral?.playwrightRecorder?.getTestProgress) {
+          const progress = await flowstral.playwrightRecorder.getTestProgress();
+          if (progress && progress.currentStep !== undefined) {
+            setTestExecutionResult(prev => prev && prev.status === 'running' ? { 
+              ...prev, 
+              currentStep: progress.currentStep,
+              stepResults: progress.stepResults || prev.stepResults
+            } : prev);
+          }
+        }
+      }, 500);
+    }
     
     // Clear previous failure state
     setFailureState(null);
@@ -3780,6 +3850,11 @@ Recorded Test
     
     try {
       let result: any;
+      
+      // Calculate slowMo delay based on playback speed
+      const slowMoDelay = playbackSpeed === '0.25x' ? 1000 : 
+                          playbackSpeed === '0.5x' ? 500 : 
+                          playbackSpeed === '2x' ? 0 : 200;
       
       if (flowstral?.playwrightRecorder?.runTest) {
         // Use normalized actions for robust playback
@@ -3789,7 +3864,9 @@ Recorded Test
           steps: normalizedActions,
           url: url,
           freshBrowser: freshBrowser,
-          keepBrowserOpenOnFailure: keepBrowserOpenOnFailure
+          keepBrowserOpenOnFailure: keepBrowserOpenOnFailure,
+          slowMo: slowMoDelay,
+          highlight: highlightElements
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
@@ -3838,7 +3915,8 @@ Recorded Test
         });
       }
       
-      // Stop progress simulation
+      // Stop progress tracking (both IPC listener and interval)
+      if (stepProgressCleanup) stepProgressCleanup();
       if (progressInterval) clearInterval(progressInterval);
       
       console.log('[Test] Result:', result);
@@ -3900,6 +3978,21 @@ Recorded Test
             similarElements: result.failureState.similarElements || []
           });
         }
+        
+        // ============ FALSE POSITIVE AUTO-REPAIR ============
+        // Check if any failed step was marked as false positive
+        // If so, auto-open the step editor for immediate fixing
+        const failedSteps = stepResults.filter(s => s.status === 'failed');
+        for (const failedStep of failedSteps) {
+          const action = actions[failedStep.index];
+          if (action?.id && falsePositiveSteps.has(action.id)) {
+            // This was a flagged step - auto-open editor
+            setTimeout(() => {
+              handleFalsePositiveStop(failedStep.index, action.id!, failedStep.screenshot || null);
+            }, 500); // Small delay to let UI settle
+            break; // Only handle first false positive
+          }
+        }
       }
       
       if (testPassed) {
@@ -3909,6 +4002,8 @@ Recorded Test
         toast.error(`❌ Test Failed: ${result?.error || 'Unknown error'}${browserMsg}`, { id: 'run' });
       }
     } catch (error: any) {
+      // Cleanup progress tracking
+      if (stepProgressCleanup) stepProgressCleanup();
       if (progressInterval) clearInterval(progressInterval);
       
       setTestExecutionResult({
@@ -4140,6 +4235,61 @@ Recorded Test
       });
     }
   }, [isTestPaused, pausedAtStep, editingPausedStep, actions]);
+
+  // ============ FALSE POSITIVE HANDLERS ============
+  // Mark a failed step as false positive (element not reliably found)
+  const markStepAsFalsePositive = useCallback((stepIndex: number, screenshot: string | null, reason?: string) => {
+    const action = actions[stepIndex];
+    if (!action || !action.id) return;
+    
+    setFalsePositiveSteps(prev => {
+      const newMap = new Map(prev);
+      newMap.set(action.id!, {
+        stepIndex,
+        screenshot,
+        markedAt: Date.now(),
+        reason
+      });
+      return newMap;
+    });
+    
+    toast.success(
+      `🚩 Step ${stepIndex + 1} marked as false positive. On next run, test will stop here for you to fix.`,
+      { duration: 4000 }
+    );
+  }, [actions]);
+  
+  // Remove false positive flag from a step
+  const unmarkFalsePositive = useCallback((actionId: string) => {
+    setFalsePositiveSteps(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(actionId);
+      return newMap;
+    });
+    toast.info('False positive flag removed');
+  }, []);
+  
+  // Handle when test stops at a false positive step - auto-open element picker
+  const handleFalsePositiveStop = useCallback((stepIndex: number, actionId: string, screenshot: string | null) => {
+    setStoppedAtFalsePositive({ stepIndex, actionId, screenshot });
+    
+    // Auto-open the step editor for this step
+    setEditingActionIndex(stepIndex);
+    setEditSelectorModalOpen(true);
+    
+    toast.info(
+      '🎯 Stopped at flagged step. Click the correct element to fix it.',
+      { duration: 5000 }
+    );
+  }, []);
+  
+  // Clear false positive stop state when step is fixed
+  const handleFalsePositiveFixed = useCallback((actionId: string) => {
+    setStoppedAtFalsePositive(null);
+    // Remove from false positive list since it's now fixed
+    unmarkFalsePositive(actionId);
+    toast.success('✅ Step fixed! Run test again to continue.');
+  }, [unmarkFalsePositive]);
 
   // Stop test execution and close browser
   const handleStopTest = useCallback(() => {
@@ -4471,6 +4621,49 @@ Recorded Test
               
               {/* Separator */}
               <div className="h-px bg-border my-1" />
+              
+              {/* Playback Speed Selector */}
+              <div className="px-3 py-2">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Gauge className="h-4 w-4 text-purple-400" />
+                  <span className="font-medium text-xs">Playback Speed</span>
+                </div>
+                <div className="flex gap-1">
+                  {(['0.25x', '0.5x', '1x', '2x'] as const).map((speed) => (
+                    <button
+                      key={speed}
+                      onClick={() => setPlaybackSpeed(speed)}
+                      className={cn(
+                        "flex-1 px-2 py-1 text-[10px] rounded transition-colors",
+                        playbackSpeed === speed 
+                          ? "bg-purple-500/30 text-purple-300 border border-purple-500/50" 
+                          : "bg-secondary/50 hover:bg-secondary text-muted-foreground"
+                      )}
+                    >
+                      {speed}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Highlight Elements Toggle */}
+              <div 
+                className="w-full flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-secondary/50 rounded transition-colors"
+                onClick={() => setHighlightElements(!highlightElements)}
+              >
+                <div className="flex items-center gap-2">
+                  <Scan className="h-4 w-4 text-yellow-400" />
+                  <div>
+                    <div className="font-medium text-xs">Highlight Elements</div>
+                    <div className="text-[10px] text-muted-foreground">Visual indicator during run</div>
+                  </div>
+                </div>
+                <Switch
+                  checked={highlightElements}
+                  onCheckedChange={setHighlightElements}
+                  className="ml-2"
+                />
+              </div>
               
               {/* Keep Browser Open Toggle */}
               <div 
@@ -5203,6 +5396,15 @@ Recorded Test
                           {isCrossOriginAction(action) && (
                             <span className="ml-1 text-yellow-500">⚠️</span>
                           )}
+                          {/* False positive indicator */}
+                          {action.id && falsePositiveSteps.has(action.id) && (
+                            <span 
+                              className="ml-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded border border-amber-500/30"
+                              title="Flagged as false positive - test will stop here for fixing"
+                            >
+                              🚩 Flagged
+                            </span>
+                          )}
                         </p>
                         {/* Confidence indicator - shows when confidence is not HIGH or multiple matches */}
                         <StepConfidenceIndicator
@@ -5259,6 +5461,28 @@ Recorded Test
                           <span className="text-[10px]">{currentStepIndex + 1}</span>
                         </Button>
                       )}
+                      {/* COPY SELECTOR BUTTON - Quick copy for debugging */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-secondary/50 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const selector = action.selectorObj?.manualOverride || 
+                                          action.selectorObj?.primary || 
+                                          action.selectorObj?.selector || 
+                                          action.selector || '';
+                          if (selector) {
+                            navigator.clipboard.writeText(selector);
+                            toast.success('Selector copied!', { duration: 1500 });
+                          } else {
+                            toast.error('No selector to copy');
+                          }
+                        }}
+                        title="Copy selector to clipboard"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
                       {/* EDIT SELECTOR BUTTON - Manual Override - Always visible */}
                       <Button
                         variant="ghost"
@@ -8113,7 +8337,7 @@ Recorded Test
             {/* Step Results List */}
             <div className="flex gap-4 overflow-hidden max-w-full">
               <ScrollArea className={cn("flex-1 overflow-hidden", isTestPaused ? "h-[200px]" : "h-[350px]")}>
-                <div className="space-y-1 pr-2 overflow-hidden max-w-full">
+                <div className="space-y-1 pr-2 overflow-hidden max-w-full" id="execution-steps-container">
                   {actions.map((action, idx) => {
                     // DISPLAY-ONLY: Skip duplicate fills (same as recorded steps list)
                     if (action.qword === 'Fill') {
@@ -8135,12 +8359,24 @@ Recorded Test
                     const stepResult = testExecutionResult?.stepResults.find(r => r.index === idx);
                     const isCurrent = (testExecutionResult?.status === 'running' && testExecutionResult?.currentStep === idx) || 
                                      (isTestPaused && pausedAtStep === idx);
+                    const isFailed = stepResult?.status === 'failed';
                     const hasScreenshot = !!stepResult?.screenshot;
                     const isPausedHere = isTestPaused && pausedAtStep === idx;
+                    
+                    // Auto-scroll ref for current or failed step
+                    const shouldScrollTo = isCurrent || (isFailed && !testExecutionResult?.stepResults.some((r, i) => i > idx && r.status === 'failed'));
                     
                     return (
                       <div 
                         key={action.id || idx}
+                        ref={shouldScrollTo ? (el) => {
+                          if (el) {
+                            // Delay scroll to ensure DOM is updated
+                            setTimeout(() => {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 50);
+                          }
+                        } : undefined}
                         className={cn(
                           "flex items-start gap-2 p-2 rounded-lg text-sm cursor-pointer transition-all overflow-clip relative",
                           isPausedHere && "bg-amber-500/20 border border-amber-500/50 ring-1 ring-amber-500/30",
@@ -8172,24 +8408,79 @@ Recorded Test
                           {!isCurrent && !stepResult && !isPausedHere && <Circle className="h-4 w-4 text-muted-foreground" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className={cn(
-                            "break-words",
-                            isPausedHere && "text-amber-300",
-                            stepResult?.status === 'passed' && !isPausedHere && "text-emerald-400",
-                            stepResult?.status === 'failed' && !isPausedHere && "text-red-400",
-                            stepResult?.status === 'skipped' && "text-gray-400",
-                            !stepResult && !isPausedHere && "text-muted-foreground"
-                          )}>
-                            {(() => {
-                              const displayAction = maskSensitiveAction(action);
-                              return getDisplayDescription(displayAction);
-                            })()}
-                            {isPasswordField(action) && <span className="ml-1">🔒</span>}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "break-words flex-1",
+                              isPausedHere && "text-amber-300",
+                              stepResult?.status === 'passed' && !isPausedHere && "text-emerald-400",
+                              stepResult?.status === 'failed' && !isPausedHere && "text-red-400",
+                              stepResult?.status === 'skipped' && "text-gray-400",
+                              !stepResult && !isPausedHere && "text-muted-foreground"
+                            )}>
+                              {(() => {
+                                const displayAction = maskSensitiveAction(action);
+                                return getDisplayDescription(displayAction);
+                              })()}
+                              {isPasswordField(action) && <span className="ml-1">🔒</span>}
+                              {/* Show false positive badge if flagged */}
+                              {action.id && falsePositiveSteps.has(action.id) && (
+                                <span className="ml-1 text-xs bg-amber-500/20 text-amber-400 px-1 rounded">🚩</span>
+                              )}
+                            </span>
+                            {/* Action buttons for failed steps */}
+                            {isFailed && testExecutionResult?.status !== 'running' && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Fix button - opens step editor */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingActionIndex(idx);
+                                    setEditSelectorModalOpen(true);
+                                  }}
+                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                  title="Fix this step"
+                                >
+                                  Fix
+                                </button>
+                                {/* Mark as false positive button */}
+                                {action.id && !falsePositiveSteps.has(action.id) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      markStepAsFalsePositive(idx, stepResult?.screenshot || null);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded border border-amber-500/30"
+                                    title="Mark as false positive - test will stop here on next run for fixing"
+                                  >
+                                    🚩 Flag
+                                  </button>
+                                )}
+                                {/* Remove false positive flag */}
+                                {action.id && falsePositiveSteps.has(action.id) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      unmarkFalsePositive(action.id!);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 rounded border border-gray-500/30"
+                                    title="Remove false positive flag"
+                                  >
+                                    Unflag
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           {stepResult?.error && (
                             <p className="text-xs text-red-400 mt-1 truncate">{stepResult.error}</p>
                           )}
                         </div>
+                        {/* Step Duration */}
+                        {stepResult?.duration && (
+                          <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                            {stepResult.duration}ms
+                          </span>
+                        )}
                         {hasScreenshot && (
                           <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
@@ -8893,12 +9184,28 @@ Recorded Test
           open={editSelectorModalOpen}
           onOpenChange={(open) => {
             setEditSelectorModalOpen(open);
-            if (!open) setEditingActionIndex(null);
+            if (!open) {
+              setEditingActionIndex(null);
+              // Clear false positive stop state if we're closing without fixing
+              setStoppedAtFalsePositive(null);
+            }
           }}
           step={editingActionIndex !== null ? actions[editingActionIndex] : null}
           stepIndex={editingActionIndex || 0}
-          // Only show failure info if editing the ACTUAL failed step
-          failureScreenshot={editingActionIndex === failureState?.stepIndex ? failureState?.screenshot : null}
+          // Show failure info: prioritize false positive screenshot, then failure state
+          failureScreenshot={(() => {
+            if (editingActionIndex === null) return null;
+            const action = actions[editingActionIndex];
+            // Check false positive screenshot first
+            if (action?.id && falsePositiveSteps.has(action.id)) {
+              return falsePositiveSteps.get(action.id)?.screenshot || null;
+            }
+            // Fallback to failure state screenshot
+            if (editingActionIndex === failureState?.stepIndex) {
+              return failureState?.screenshot || null;
+            }
+            return null;
+          })()}
           failureError={editingActionIndex === failureState?.stepIndex ? failureState?.error : null}
           browserOpen={browserKeptOpen}
           similarElements={editingActionIndex === failureState?.stepIndex ? (failureState?.similarElements || []) : []}

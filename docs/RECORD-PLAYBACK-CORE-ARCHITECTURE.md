@@ -40,6 +40,8 @@
 9. [Regression Prevention Checklist](#9-regression-prevention-checklist)
 10. [Common Failure Modes](#10-common-failure-modes)
 11. [Testing Requirements](#11-testing-requirements)
+12. [**Industry Comparison & Best Practices**](#12-industry-comparison--best-practices)
+13. [**Proposed Enhancements (2026)**](#13-proposed-enhancements-2026)
 
 ---
 
@@ -854,11 +856,588 @@ describe('findElementWithRetry', () => {
 
 ---
 
+---
+
+## 12. Industry Comparison & Best Practices
+
+### 12.1 Competitive Analysis (2026)
+
+| Feature | QAAI (Current) | Playwright | Cypress | Katalon | Ranorex |
+|---------|---------------|------------|---------|---------|---------|
+| **Recording** | ✅ SmartSelector | ✅ Codegen | ✅ Studio | ✅ Recorder | ✅ Recorder |
+| **Self-Healing** | ⚠️ Strategy Memory | ❌ Manual | ❌ Manual | ✅ AI + Classic | ✅ AI-based |
+| **Multi-Browser** | ✅ Chromium/FF/WK | ✅ All | ⚠️ Chrome/FF | ✅ All | ✅ All |
+| **AI Vision Fallback** | ✅ GPT-4o | ❌ | ❌ | ✅ LLM-based | ⚠️ Limited |
+| **Visual Testing** | ❌ | ✅ pixelmatch | ⚠️ Plugin | ✅ Built-in | ✅ Built-in |
+| **Network Mocking** | ⚠️ Capture only | ✅ Full | ✅ Full | ⚠️ Basic | ⚠️ Basic |
+| **Parallel Execution** | ❌ | ✅ Native | ⚠️ Limited | ✅ | ✅ |
+| **App-Specific Logic** | ✅ 30+ Apps | ❌ | ❌ | ⚠️ SF only | ⚠️ SAP only |
+| **Step Repair UI** | ✅ SimpleStepEditor | ❌ | ❌ | ✅ | ✅ |
+| **Test Data Gen** | ❌ | ❌ | ❌ | ⚠️ Basic | ✅ |
+| **Mobile Testing** | ⚠️ Maestro | ⚠️ Emulation | ❌ | ✅ Native | ✅ Native |
+
+### 12.2 QAAI Current Strengths
+
+1. **Best-in-Class Selector Generation (SmartSelector)**
+   - 12+ priority levels with confidence scoring
+   - 30+ app-specific configurations (Salesforce, ServiceNow, Workday, etc.)
+   - Dynamic ID detection and rejection
+   - Automatic test-id preference
+
+2. **Robust Element Finding (SmartFinder)**
+   - 10+ phase strategy with learning (Strategy Memory)
+   - Role equivalences for flexible matching
+   - Contextual position tracking
+   - Memory persistence across sessions
+
+3. **Comprehensive Reliability Layer**
+   - Pre-action verification (visible, enabled, not obscured, stable)
+   - Auto overlay dismissal (cookie banners, modals)
+   - Post-action verification (state change detection)
+   - Smart disambiguation for multiple matches
+
+4. **AI-Powered Fallback**
+   - GPT-4o vision for coordinate-based element finding
+   - Budget-limited calls per test run
+   - Works when all deterministic strategies fail
+
+5. **User-Friendly Repair System**
+   - SimpleStepEditor with visual element picker
+   - Multiple selector type support (Text, CSS, XPath, ARIA)
+   - Similar element suggestions
+   - False positive flagging with screenshot capture
+
+### 12.3 Current Gaps vs Industry Leaders
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| No true self-healing (auto-update selectors) | Medium - Requires manual fixes | HIGH |
+| No visual regression testing | High - Can't detect visual bugs | HIGH |
+| No network request mocking | Medium - Can't test edge cases | MEDIUM |
+| No parallel test execution | High - Slow test suites | HIGH |
+| No slow-mo/debug playback | Medium - Hard to debug | MEDIUM |
+| No test data generation | Low - Manual data setup | LOW |
+| Limited mobile testing | Medium - Partial Maestro | MEDIUM |
+
+---
+
+## 13. Proposed Enhancements (2026)
+
+### 13.1 Self-Healing 2.0 (Katalon-style)
+
+**Current:** Strategy Memory remembers successful strategies.
+**Enhancement:** Automatically UPDATE the saved test with better selectors.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SELF-HEALING 2.0 FLOW                        │
+│                                                                 │
+│  1. Playback starts with original selector                      │
+│                     ↓                                          │
+│  2. Original selector FAILS                                     │
+│                     ↓                                          │
+│  3. SmartFinder tries alternative strategies (10+ phases)       │
+│                     ↓                                          │
+│  4. Alternative strategy SUCCEEDS                               │
+│                     ↓                                          │
+│  5. AUTOMATIC HEALING:                                          │
+│     - Update action.selectorObj with new selector               │
+│     - Add originalSelector to fallbacks array                   │
+│     - Update Strategy Memory                                    │
+│     - Mark step as "healed"                                     │
+│                     ↓                                          │
+│  6. Show user notification: "Step auto-healed"                  │
+│                     ↓                                          │
+│  7. Option to "Accept Healing" or "Revert"                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+```javascript
+// In test-executor.js - executeStep()
+async executeStep(step, index) {
+  const result = await this.findElementWithRetry(step);
+  
+  if (result.healedSelector && result.healedSelector !== step.selectorObj?.primary) {
+    // SELF-HEALING: Auto-update the step
+    const healedStep = {
+      ...step,
+      selectorObj: {
+        ...step.selectorObj,
+        primary: result.healedSelector,
+        selector: result.healedSelector,
+        healedAt: Date.now(),
+        healedFrom: step.selectorObj?.primary,
+        fallbacks: [
+          step.selectorObj?.primary,
+          ...(step.selectorObj?.fallbacks || [])
+        ]
+      },
+      _healed: true
+    };
+    
+    // Emit event for UI to update
+    this.emit('step-healed', { index, originalStep: step, healedStep });
+    
+    return healedStep;
+  }
+}
+```
+
+### 13.2 Visual Regression Testing
+
+**Purpose:** Detect unintended visual changes between test runs.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  VISUAL TESTING WORKFLOW                        │
+│                                                                 │
+│  DURING RECORDING:                                              │
+│  ├─ Capture baseline screenshot after each action               │
+│  ├─ Store with action ID as reference                           │
+│  └─ Annotate regions to ignore (dynamic content)                │
+│                                                                 │
+│  DURING PLAYBACK:                                               │
+│  ├─ After each action, capture comparison screenshot            │
+│  ├─ Compare using pixelmatch or SSIM algorithm                  │
+│  ├─ If diff > threshold (default 5%):                           │
+│  │   ├─ Mark step as "Visual Change Detected"                   │
+│  │   ├─ Generate diff image highlighting changes                │
+│  │   └─ User decides: Approve | Reject | Ignore Region          │
+│  └─ Store comparison history for trends                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Files to Create:**
+- `flowstral-desktop/src/main/lib/visual-testing.js`
+- `src/components/VisualDiffViewer.tsx`
+
+**API:**
+```javascript
+class VisualTester {
+  async captureBaseline(page, stepId, options = {}) {
+    // Capture full page or element screenshot
+    // Store as baseline with step ID
+  }
+  
+  async compare(page, stepId, options = {}) {
+    // Capture current screenshot
+    // Load baseline
+    // Compare using pixelmatch
+    // Return { match: true/false, diffPercent, diffImage }
+  }
+  
+  async approveAsNewBaseline(stepId) {
+    // Replace baseline with current
+  }
+  
+  async addIgnoreRegion(stepId, region) {
+    // Mark region to exclude from comparison
+  }
+}
+```
+
+### 13.3 Network Mocking (Stubbing)
+
+**Current:** Network capture only.
+**Enhancement:** Full request interception and mocking.
+
+```javascript
+// API for network mocking
+class NetworkMocker {
+  // Mock a specific endpoint
+  async mockRoute(pattern, response) {
+    await this.page.route(pattern, async (route) => {
+      await route.fulfill({
+        status: response.status || 200,
+        contentType: response.contentType || 'application/json',
+        body: JSON.stringify(response.body)
+      });
+    });
+  }
+  
+  // Record real responses for later mocking (HAR-based)
+  async recordMocks(patterns) {
+    // Intercept matching requests
+    // Save responses for replay
+  }
+  
+  // Replay recorded mocks
+  async replayMocks(harFile) {
+    // Load HAR file
+    // Set up routes for each recorded request
+  }
+  
+  // Simulate network conditions
+  async setNetworkConditions(profile) {
+    // offline, slow3G, fast3G, custom
+  }
+  
+  // Inject errors
+  async mockError(pattern, errorType) {
+    // timeout, 500, network-error
+  }
+}
+```
+
+**Use Cases:**
+1. Test error handling by mocking 500 responses
+2. Test offline mode by blocking all network
+3. Speed up tests by mocking slow APIs
+4. Test with consistent data by mocking responses
+
+### 13.4 Parallel Test Execution
+
+**Current:** Sequential execution only.
+**Enhancement:** Run multiple tests in parallel.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  PARALLEL EXECUTION MODES                       │
+│                                                                 │
+│  MODE 1: SAME MACHINE (Workers)                                 │
+│  ├─ Spawn N browser contexts (default: CPU cores)               │
+│  ├─ Each context runs independent tests                         │
+│  ├─ Shared storage state (optional: isolated)                   │
+│  └─ Merge results at end                                        │
+│                                                                 │
+│  MODE 2: DISTRIBUTED (Sharding)                                 │
+│  ├─ Split test suite: --shard=1/4, --shard=2/4, etc.           │
+│  ├─ Run shards on different machines                            │
+│  ├─ Collect results from all shards                             │
+│  └─ Generate unified report                                     │
+│                                                                 │
+│  CONFIGURATION:                                                 │
+│  {                                                              │
+│    "parallel": {                                                │
+│      "workers": 4,           // Number of parallel workers      │
+│      "fullyParallel": true,  // Run ALL tests in parallel       │
+│      "retries": 2,           // Retry failed tests              │
+│      "reporter": ["html", "json"]                               │
+│    }                                                            │
+│  }                                                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:**
+```javascript
+class ParallelExecutor {
+  constructor(options = {}) {
+    this.workers = options.workers || require('os').cpus().length;
+    this.results = [];
+  }
+  
+  async runParallel(tests, options = {}) {
+    // Split tests into chunks
+    const chunks = this.chunkTests(tests, this.workers);
+    
+    // Create worker contexts
+    const workers = await Promise.all(
+      chunks.map((chunk, i) => this.createWorker(i, chunk))
+    );
+    
+    // Wait for all workers to complete
+    const results = await Promise.all(
+      workers.map(w => w.run())
+    );
+    
+    // Merge and return results
+    return this.mergeResults(results);
+  }
+}
+```
+
+### 13.5 Debug Playback Mode (Slow-Mo)
+
+**Purpose:** Help users understand and debug test execution.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEBUG PLAYBACK FEATURES                      │
+│                                                                 │
+│  SLOW MOTION:                                                   │
+│  ├─ 0.25x, 0.5x, 1x, 2x speed options                          │
+│  ├─ Configurable delay between steps (0-5s)                     │
+│  └─ Visual highlight on target element before action            │
+│                                                                 │
+│  STEP-BY-STEP:                                                  │
+│  ├─ Pause before/after each step                                │
+│  ├─ "Next Step" button to advance                               │
+│  ├─ Inspect page state at any point                             │
+│  └─ Modify step data and retry                                  │
+│                                                                 │
+│  EXECUTION TIMELINE:                                            │
+│  ├─ Waterfall view of all steps                                 │
+│  ├─ Duration bar for each step                                  │
+│  ├─ Screenshots at each step                                    │
+│  ├─ Network requests aligned to steps                           │
+│  └─ Click any step to see details/screenshot                    │
+│                                                                 │
+│  ELEMENT HIGHLIGHTING:                                          │
+│  ├─ Draw box around target element                              │
+│  ├─ Show element info tooltip (selector, text)                  │
+│  ├─ Flash animation on click/fill                               │
+│  └─ Arrow pointing to target for off-screen elements            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation in TestExecutor:**
+```javascript
+async executeStep(step, index, options = {}) {
+  const { slowMo = 0, highlight = true, beforeStepDelay = 0 } = options;
+  
+  // Pre-step delay (for slow-mo)
+  if (beforeStepDelay > 0) {
+    await this.page.waitForTimeout(beforeStepDelay);
+  }
+  
+  // Find element
+  const result = await this.findElementWithRetry(step);
+  
+  // Highlight element before action
+  if (highlight && result.locator) {
+    await this.highlightElement(result.locator, {
+      color: 'blue',
+      duration: slowMo > 0 ? 1000 : 300,
+      label: step.description
+    });
+  }
+  
+  // Execute with slow-mo
+  await result.locator.click({ delay: slowMo });
+  
+  // Post-step delay
+  if (slowMo > 0) {
+    await this.page.waitForTimeout(slowMo);
+  }
+}
+
+async highlightElement(locator, options = {}) {
+  await locator.evaluate((el, opts) => {
+    // Create highlight overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      border: 3px solid ${opts.color || 'blue'};
+      border-radius: 4px;
+      background: ${opts.color || 'blue'}22;
+      pointer-events: none;
+      z-index: 99999;
+      transition: all 0.2s;
+    `;
+    
+    const rect = el.getBoundingClientRect();
+    overlay.style.top = `${rect.top + window.scrollY - 3}px`;
+    overlay.style.left = `${rect.left + window.scrollX - 3}px`;
+    overlay.style.width = `${rect.width + 6}px`;
+    overlay.style.height = `${rect.height + 6}px`;
+    
+    // Add label
+    if (opts.label) {
+      const label = document.createElement('div');
+      label.textContent = opts.label;
+      label.style.cssText = `
+        position: absolute; top: -24px; left: 0;
+        background: ${opts.color || 'blue'}; color: white;
+        padding: 2px 8px; border-radius: 4px; font-size: 12px;
+      `;
+      overlay.appendChild(label);
+    }
+    
+    document.body.appendChild(overlay);
+    
+    // Remove after duration
+    setTimeout(() => overlay.remove(), opts.duration || 1000);
+  }, options);
+}
+```
+
+### 13.6 Smart Recording Hints
+
+**Purpose:** Guide users during recording with real-time suggestions.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   SMART RECORDING HINTS                         │
+│                                                                 │
+│  WHILE RECORDING, SHOW:                                         │
+│                                                                 │
+│  1. SELECTOR QUALITY INDICATOR                                  │
+│     ├─ Green: data-testid found (best)                         │
+│     ├─ Yellow: using aria-label or text (good)                  │
+│     ├─ Orange: using CSS class (fragile)                        │
+│     └─ Red: using position/index (very fragile)                 │
+│                                                                 │
+│  2. SUGGESTIONS PANEL                                           │
+│     ├─ "Add data-testid for more reliable tests"                │
+│     ├─ "Multiple matches found - click is ambiguous"            │
+│     ├─ "Dynamic ID detected - may fail on re-run"               │
+│     └─ "Consider adding assertion after this step"              │
+│                                                                 │
+│  3. HOVER PREVIEW                                               │
+│     ├─ Show selector that will be used                          │
+│     ├─ Show confidence score (0-100)                            │
+│     ├─ Show alternative selectors available                     │
+│     └─ Highlight all matching elements (see ambiguity)          │
+│                                                                 │
+│  4. AUTO-ASSERTION SUGGESTIONS                                  │
+│     After click: "Assert page title changed?"                   │
+│     After fill: "Assert value is set?"                          │
+│     After nav: "Assert URL contains X?"                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 13.7 Test Data Generation
+
+**Purpose:** Auto-generate test data for forms.
+
+```javascript
+class TestDataGenerator {
+  // Generate realistic fake data
+  generate(fieldType, options = {}) {
+    switch (fieldType) {
+      case 'email': return `test_${Date.now()}@example.com`;
+      case 'name': return this.faker.name();
+      case 'phone': return this.faker.phone();
+      case 'address': return this.faker.address();
+      case 'date': return this.randomDate(options.min, options.max);
+      case 'number': return this.randomNumber(options.min, options.max);
+      case 'ssn': return this.faker.ssn();
+      case 'creditCard': return this.faker.creditCard();
+      // ... more types
+    }
+  }
+  
+  // Auto-detect field type from element
+  detectFieldType(element) {
+    const { name, placeholder, label, type, autocomplete } = element;
+    // Use ML model or rules to detect type
+  }
+  
+  // Fill form automatically with generated data
+  async autoFillForm(page, formSelector) {
+    const fields = await this.detectFormFields(page, formSelector);
+    for (const field of fields) {
+      const type = this.detectFieldType(field);
+      const value = this.generate(type);
+      await page.fill(field.selector, value);
+    }
+    return fields.map(f => ({ field: f.name, value: f.generatedValue }));
+  }
+}
+```
+
+### 13.8 Enhanced Mobile Testing
+
+**Current:** Basic Maestro integration.
+**Enhancement:** Full mobile recording and playback.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   MOBILE TESTING ROADMAP                        │
+│                                                                 │
+│  PHASE 1 (Current):                                             │
+│  ├─ Maestro integration for iOS/Android                         │
+│  └─ Device emulation in Playwright                              │
+│                                                                 │
+│  PHASE 2 (Proposed):                                            │
+│  ├─ Native iOS recording via XCTest                             │
+│  ├─ Native Android recording via Espresso                       │
+│  ├─ Real device cloud integration (BrowserStack, Sauce)         │
+│  └─ Touch gesture recording (swipe, pinch, long-press)          │
+│                                                                 │
+│  PHASE 3 (Future):                                              │
+│  ├─ Visual testing on mobile                                    │
+│  ├─ Performance testing on mobile                               │
+│  └─ Cross-device test execution                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 14. Implementation Priority Matrix
+
+| Enhancement | Impact | Effort | Priority | Timeline |
+|------------|--------|--------|----------|----------|
+| Self-Healing 2.0 | HIGH | MEDIUM | P0 | 2 weeks |
+| Debug Playback Mode | HIGH | LOW | P0 | 1 week |
+| Visual Regression Testing | HIGH | HIGH | P1 | 3 weeks |
+| Parallel Execution | HIGH | MEDIUM | P1 | 2 weeks |
+| Smart Recording Hints | MEDIUM | LOW | P2 | 1 week |
+| Network Mocking | MEDIUM | MEDIUM | P2 | 2 weeks |
+| Test Data Generation | LOW | MEDIUM | P3 | 2 weeks |
+| Enhanced Mobile | MEDIUM | HIGH | P3 | 4 weeks |
+
+---
+
+## 15. Quick Wins (Implement This Week)
+
+### 15.1 Add Execution Speed Control
+
+```typescript
+// In PlaywrightRecorderPage.tsx
+const [playbackSpeed, setPlaybackSpeed] = useState<'0.5x' | '1x' | '2x'>('1x');
+
+// Pass to test executor
+await electronAPI.testRunner.executeTest({
+  steps: normalizedActions,
+  settings: {
+    slowMo: playbackSpeed === '0.5x' ? 500 : playbackSpeed === '2x' ? 0 : 200,
+    highlight: true
+  }
+});
+```
+
+### 15.2 Add Step Duration Display
+
+```typescript
+// In execution result modal, show duration for each step
+{stepResult?.duration && (
+  <span className="text-xs text-muted-foreground ml-auto">
+    {stepResult.duration}ms
+  </span>
+)}
+```
+
+### 15.3 Add "Copy Selector" Button
+
+```typescript
+// In step list, add copy button for selector
+<Button
+  variant="ghost"
+  size="icon"
+  onClick={() => {
+    navigator.clipboard.writeText(action.selectorObj?.primary || '');
+    toast.success('Selector copied!');
+  }}
+>
+  <Copy className="h-3 w-3" />
+</Button>
+```
+
+### 15.4 Add Confidence Badge to Steps
+
+```typescript
+// Show confidence indicator on each step
+{action.selectorObj?.confidence && (
+  <Badge className={cn(
+    action.selectorObj.confidence >= 90 ? 'bg-green-500/20 text-green-400' :
+    action.selectorObj.confidence >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
+    'bg-red-500/20 text-red-400'
+  )}>
+    {action.selectorObj.confidence}%
+  </Badge>
+)}
+```
+
+---
+
 ## Document History
 
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-01-31 | Claude | Initial comprehensive documentation |
+| 2026-01-31 | Claude | Added industry comparison, proposed enhancements, quick wins |
 
 ---
 

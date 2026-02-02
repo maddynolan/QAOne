@@ -103,6 +103,46 @@ export default function SimpleStepEditor({
   // Get flowstral API
   const flowstral = (window as any).flowstral;
   
+  // Helper to extract aria-label value from selector
+  const extractAriaValue = (selector: string): string => {
+    const match = selector.match(/\[aria-label[*]?=["']([^"']+)["']/);
+    return match ? match[1] : '';
+  };
+  
+  // Helper to get placeholder text for selector type
+  const getSelectorPlaceholder = (type: string): string => {
+    switch (type) {
+      case 'css': return '#submit-btn, .btn-primary, [data-testid="login"]';
+      case 'xpath': return '//button[text()="Submit"], //a[@href="/login"]';
+      case 'aria': return 'Categories, Submit, Close Modal';
+      default: return '';
+    }
+  };
+  
+  // Generate live preview of final selector
+  const getFinalSelectorPreview = useCallback((): string => {
+    const text = manualText.trim();
+    const selector = manualSelector.trim();
+    
+    switch (selectorType) {
+      case 'text':
+        return text ? (exactMatch ? `text="${text}"` : `text=${text}`) : '';
+      case 'css':
+        return selector || '';
+      case 'xpath':
+        return selector ? (selector.startsWith('xpath=') ? selector : `xpath=${selector}`) : '';
+      case 'aria':
+        const ariaVal = selector || text;
+        return ariaVal ? (exactMatch ? `[aria-label="${ariaVal}"]` : `[aria-label*="${ariaVal}" i]`) : '';
+      case 'ocr':
+        return selector || text ? `ocr:${selector || text}` : '';
+      case 'coords':
+        return selector ? `coords:${selector}` : '';
+      default:
+        return '';
+    }
+  }, [selectorType, manualText, manualSelector, exactMatch]);
+  
   // Pre-populate manual fields when dialog opens
   useEffect(() => {
     if (open && step) {
@@ -112,23 +152,64 @@ export default function SimpleStepEditor({
       
       // Pre-populate selector if available
       const existingSelector = step.manualSelector || step.selector || '';
-      setManualSelector(existingSelector);
       
-      // Detect selector type from prefix
+      // Detect selector type from format and set appropriate values
       if (existingSelector.startsWith('xpath=')) {
         setSelectorType('xpath');
-        setManualSelector(existingSelector.substring(6));
+        setManualSelector(existingSelector.substring(6)); // Strip xpath= prefix
       } else if (existingSelector.startsWith('text=')) {
         setSelectorType('text');
+        // For text type, we use manualText, not manualSelector
+        const textVal = existingSelector.replace(/^text=["']?|["']?$/g, '');
+        setManualText(textVal || existingText);
+        setManualSelector('');
       } else if (existingSelector.includes('[aria-label')) {
         setSelectorType('aria');
+        // Extract the aria-label value
+        const ariaVal = extractAriaValue(existingSelector);
+        setManualSelector(ariaVal || existingText);
+      } else if (existingSelector.startsWith('ocr:')) {
+        setSelectorType('ocr');
+        setManualSelector(existingSelector.substring(4));
+      } else if (existingSelector.startsWith('coords:')) {
+        setSelectorType('coords');
+        setManualSelector(existingSelector.substring(7));
       } else if (existingSelector) {
+        // Default to CSS
         setSelectorType('css');
+        setManualSelector(existingSelector);
+      } else {
+        // No selector, default to text with element text
+        setSelectorType('text');
+        setManualSelector('');
       }
       
-      console.log('[SimpleStepEditor] Pre-populated:', { existingText, existingSelector });
+      console.log('[SimpleStepEditor] Pre-populated:', { existingText, existingSelector, detectedType: selectorType });
     }
   }, [open, step]);
+  
+  // When selector type changes, reset selector field appropriately
+  const handleSelectorTypeChange = useCallback((newType: typeof selectorType) => {
+    const prevType = selectorType;
+    setSelectorType(newType);
+    
+    // If switching to text type, clear selector (text type uses manualText)
+    if (newType === 'text') {
+      setManualSelector('');
+      // If we had an aria label, use it as text
+      if (prevType === 'aria' && manualSelector) {
+        setManualText(manualSelector);
+      }
+    } 
+    // If switching from text to aria, copy text to selector
+    else if (prevType === 'text' && newType === 'aria' && manualText && !manualSelector) {
+      setManualSelector(manualText);
+    }
+    // If switching to CSS/XPath from aria, format properly
+    else if ((newType === 'css' || newType === 'xpath') && prevType === 'aria') {
+      // Keep the selector as-is for manual editing
+    }
+  }, [selectorType, manualText, manualSelector]);
 
   // Reset state when dialog opens + debug logging
   useEffect(() => {
@@ -534,41 +615,67 @@ export default function SimpleStepEditor({
                   <p className="text-xs text-muted-foreground">Selector Type:</p>
                   <div className="flex flex-wrap gap-1">
                     {([
-                      { type: 'text', label: 'Text', icon: 'T' },
-                      { type: 'css', label: 'CSS', icon: '#' },
-                      { type: 'xpath', label: 'XPath', icon: '/' },
-                      { type: 'aria', label: 'Aria', icon: '♿' },
-                    ] as const).map(({ type, label, icon }) => (
+                      { type: 'text' as const, label: 'Text', icon: 'T', desc: 'Match by visible text' },
+                      { type: 'css' as const, label: 'CSS', icon: '#', desc: 'CSS selector' },
+                      { type: 'xpath' as const, label: 'XPath', icon: '/', desc: 'XPath expression' },
+                      { type: 'aria' as const, label: 'Aria', icon: '♿', desc: 'aria-label attribute' },
+                    ]).map(({ type, label, icon, desc }) => (
                       <button
                         key={type}
-                        onClick={() => setSelectorType(type)}
+                        onClick={() => handleSelectorTypeChange(type)}
+                        title={desc}
                         className={cn(
-                          'px-2 py-1 text-xs rounded border transition-colors flex items-center gap-1',
+                          'px-2.5 py-1.5 text-xs rounded border transition-colors flex items-center gap-1.5',
                           selectorType === type
                             ? 'bg-blue-500/20 border-blue-500 text-blue-400'
-                            : 'border-border hover:border-blue-500/50'
+                            : 'border-border hover:border-blue-500/50 text-muted-foreground hover:text-foreground'
                         )}
                       >
-                        <span className="font-mono">{icon}</span>
+                        <span className="font-mono text-sm">{icon}</span>
                         {label}
                       </button>
                     ))}
                   </div>
                 </div>
                 
-                {/* Selector Input for non-text types */}
-                {selectorType !== 'text' && selectorType !== 'ocr' && selectorType !== 'coords' && selectorType !== 'image' && (
-                  <input
-                    type="text"
-                    value={manualSelector}
-                    onChange={(e) => setManualSelector(e.target.value)}
-                    placeholder={
-                      selectorType === 'css' ? '#id, .class, [data-testid="..."]' :
-                      selectorType === 'xpath' ? '//a[text()="New Arrivals"]' :
-                      'aria-label value'
-                    }
-                    className="w-full px-2 py-1.5 text-xs font-mono border border-border rounded bg-background"
-                  />
+                {/* Selector Input - Different for each type */}
+                {selectorType === 'text' ? (
+                  // For Text type, the text input above is the main input - no extra field needed
+                  <div className="text-xs text-muted-foreground bg-secondary/50 rounded p-2">
+                    <span className="font-medium">Preview:</span>{' '}
+                    <code className="bg-background px-1 rounded text-blue-400">
+                      {getFinalSelectorPreview() || '(enter text above)'}
+                    </code>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {selectorType === 'css' ? 'CSS:' : 
+                         selectorType === 'xpath' ? 'XPath:' : 
+                         selectorType === 'aria' ? 'Label:' : 'Value:'}
+                      </span>
+                      <input
+                        type="text"
+                        value={manualSelector}
+                        onChange={(e) => setManualSelector(e.target.value)}
+                        placeholder={getSelectorPlaceholder(selectorType)}
+                        className="flex-1 px-2 py-1.5 text-xs font-mono border border-border rounded bg-background"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (manualText.trim() || manualSelector.trim())) {
+                            handleSaveManualFix();
+                          }
+                        }}
+                      />
+                    </div>
+                    {/* Live Preview */}
+                    <div className="text-xs text-muted-foreground bg-secondary/50 rounded p-2">
+                      <span className="font-medium">Will use:</span>{' '}
+                      <code className="bg-background px-1 rounded text-emerald-400 break-all">
+                        {getFinalSelectorPreview() || '(enter selector above)'}
+                      </code>
+                    </div>
+                  </div>
                 )}
                 
                 {/* Fallback Strategies Accordion */}
