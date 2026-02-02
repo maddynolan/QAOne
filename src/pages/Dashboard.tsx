@@ -148,7 +148,7 @@ export default function Dashboard() {
           icon: Bug,
           title: `${criticalDefs.length} Critical Defect${criticalDefs.length > 1 ? 's' : ''}`,
           description: 'Blocking issues need immediate attention',
-          action: () => navigate('/defects')
+          action: () => navigate('/test-cases?tab=defects')
         });
       }
       
@@ -158,7 +158,7 @@ export default function Dashboard() {
           icon: XCircle,
           title: `${failed} Failed Test${failed > 1 ? 's' : ''}`,
           description: 'Review and fix failing tests',
-          action: () => navigate('/test-runs')
+          action: () => navigate('/test-cases?tab=runs')
         });
       }
 
@@ -324,7 +324,7 @@ export default function Dashboard() {
             <Button 
               className="w-full justify-start" 
               variant="outline"
-              onClick={() => navigate('/test-runs')}
+              onClick={() => navigate('/test-cases?tab=runs')}
             >
               <Eye className="h-4 w-4 mr-2 text-purple-500" />
               View Test Runs
@@ -332,7 +332,7 @@ export default function Dashboard() {
             <Button 
               className="w-full justify-start" 
               variant="outline"
-              onClick={() => navigate('/defects')}
+              onClick={() => navigate('/test-cases?tab=defects')}
             >
               <Bug className="h-4 w-4 mr-2 text-red-500" />
               Manage Defects
@@ -367,7 +367,7 @@ export default function Dashboard() {
 
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/test-runs')}
+          onClick={() => navigate('/test-cases?tab=runs')}
         >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -384,7 +384,7 @@ export default function Dashboard() {
 
         <Card 
           className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/defects')}
+          onClick={() => navigate('/test-cases?tab=defects')}
         >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -433,7 +433,7 @@ export default function Dashboard() {
                 <Activity className="h-4 w-4 text-gray-500" />
                 Recent Test Runs
               </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/test-runs')}>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/test-cases?tab=runs')}>
                 View All <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
@@ -457,7 +457,7 @@ export default function Dashboard() {
                   <div 
                     key={run.id || i}
                     className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => navigate('/test-runs')}
+                    onClick={() => navigate('/test-cases?tab=runs')}
                   >
                     <div className="flex items-center gap-3">
                       {run.status === 'passed' ? (
