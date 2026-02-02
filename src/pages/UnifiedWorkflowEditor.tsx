@@ -432,201 +432,212 @@ type ViewMode = 'no-code' | 'code';
 // ============================================================================
 
 /**
- * Step Palette - Comprehensive test step types for manual & automated testing
+ * Step Palette - Streamlined test step types organized for robust test building
  * 
- * Organized for sprint-start test case creation:
- * - UI Actions: Core interactions (Navigate, Click, Input, Select)
- * - Verify: Assertions and validations
- * - Backend: API calls, DB queries, response validation
- * - Logic: Conditions, loops, reusable modules
- * - Wait: Timing and synchronization
- * - Data: Variables, test data generation
- * - Evidence: Screenshots, logs, recordings
+ * ORGANIZED BY TEST FLOW:
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 
+ * 🎯 CORE ACTIONS (Most Used - 80% of tests)
+ * ───────────────────────────────────────────
+ * 1. UI Actions    → Navigate, Click, Type, Select (basic interactions)
+ * 2. Verify        → Assert visibility, text, values (validation)
+ * 3. Wait          → Timing and synchronization
+ * 
+ * 📊 DATA & LOGIC (When tests need dynamic behavior)
+ * ───────────────────────────────────────────
+ * 4. Data          → Variables, extraction, data generation
+ * 5. Logic         → Conditions, loops, reusable modules, browser contexts
+ * 
+ * 🔧 ADVANCED (Complex scenarios)
+ * ───────────────────────────────────────────
+ * 6. Backend       → API calls, database queries
+ * 7. Advanced      → Tables, drag-drop, complex interactions
+ * 
+ * 📝 DOCUMENTATION
+ * ───────────────────────────────────────────
+ * 8. Evidence      → Screenshots, notes, manual steps
+ * 
+ * 🔌 PLUGINS (Show based on license)
+ * ───────────────────────────────────────────
+ * 9. Salesforce    → SF-specific automation
  */
 const STEP_CATEGORIES = {
-  // UI ACTIONS - Primary for manual test case creation
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CORE ACTIONS - These cover 80% of test cases
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // UI ACTIONS - The foundation of UI testing
   ui: {
     label: 'UI Actions',
     icon: MousePointer,
-    color: 'amber',
-    description: 'User interface interactions',
+    color: 'blue',
+    description: 'Core interactions - click, type, select',
+    priority: 1,
     steps: [
       { type: 'navigate', label: 'Navigate', icon: Navigation, color: 'bg-blue-500', desc: 'Go to URL' },
       { type: 'click', label: 'Click', icon: MousePointer, color: 'bg-blue-500', desc: 'Click element' },
-      { type: 'input', label: 'Input', icon: Type, color: 'bg-blue-500', desc: 'Enter text' },
-      { type: 'select', label: 'Select', icon: ChevronDown, color: 'bg-blue-500', desc: 'Choose option' },
+      { type: 'input', label: 'Type Text', icon: Type, color: 'bg-blue-500', desc: 'Enter text in field' },
+      { type: 'select', label: 'Select Option', icon: ChevronDown, color: 'bg-blue-500', desc: 'Choose from dropdown' },
       { type: 'hover', label: 'Hover', icon: Target, color: 'bg-blue-600', desc: 'Mouse hover' },
-      { type: 'upload', label: 'Upload', icon: Upload, color: 'bg-amber-600', desc: 'Upload file' },
+      { type: 'upload', label: 'Upload File', icon: Upload, color: 'bg-blue-600', desc: 'Upload file' },
+      { type: 'keyboard', label: 'Press Keys', icon: Keyboard, color: 'bg-blue-600', desc: 'Keyboard shortcuts' },
     ]
   },
-  // VERIFY - Assertions and validations
+  
+  // VERIFY - Assertions are critical for test validity
   verify: {
     label: 'Verify',
     icon: CheckCircle,
     color: 'green',
-    description: 'Assertions and validations',
+    description: 'Assert conditions are met',
+    priority: 2,
     steps: [
-      { type: 'assert', label: 'Element Visible', icon: Eye, color: 'bg-green-500', desc: 'Check visibility' },
-      { type: 'assert_text', label: 'Text Content', icon: Type, color: 'bg-green-500', desc: 'Verify text' },
+      { type: 'assert', label: 'Element Visible', icon: Eye, color: 'bg-green-500', desc: 'Check element exists' },
+      { type: 'assert_text', label: 'Text Content', icon: Type, color: 'bg-green-500', desc: 'Verify text on page' },
       { type: 'assert_value', label: 'Field Value', icon: FileText, color: 'bg-green-500', desc: 'Check input value' },
-      { type: 'assert_url', label: 'URL', icon: Link2, color: 'bg-green-600', desc: 'Verify URL' },
-      { type: 'assert_title', label: 'Page Title', icon: FileText, color: 'bg-green-600', desc: 'Check title' },
+      { type: 'assert_url', label: 'URL Contains', icon: Link2, color: 'bg-green-600', desc: 'Verify URL' },
+      { type: 'assert_title', label: 'Page Title', icon: FileText, color: 'bg-green-600', desc: 'Check page title' },
       { type: 'assert_count', label: 'Element Count', icon: Hash, color: 'bg-green-600', desc: 'Count elements' },
+      { type: 'computed_assert', label: 'Computed Assert', icon: Calculator, color: 'bg-green-700', desc: 'Math/formula check' },
+      { type: 'email_verify', label: 'Email Received', icon: Mail, color: 'bg-green-700', desc: 'Verify email' },
+      { type: 'file_verify', label: 'File Downloaded', icon: File, color: 'bg-green-700', desc: 'Verify file' },
     ]
   },
-  // BACKEND - API and Database
-  backend: {
-    label: 'Backend',
-    icon: Server,
-    color: 'blue',
-    description: 'API calls and database queries',
-    steps: [
-      { type: 'api', label: 'API Request', icon: Globe, color: 'bg-blue-500', desc: 'HTTP request' },
-      { type: 'api_validate', label: 'Validate Response', icon: CheckCircle, color: 'bg-blue-500', desc: 'Check API response' },
-      { type: 'api_extract', label: 'Extract Value', icon: Key, color: 'bg-blue-600', desc: 'Get from response' },
-      { type: 'db_query', label: 'Database Query', icon: Database, color: 'bg-orange-500', desc: 'SQL query' },
-      { type: 'db_validate', label: 'Validate Data', icon: ShieldCheck, color: 'bg-orange-500', desc: 'Check DB data' },
-    ]
-  },
-  // LOGIC - Control flow
-  logic: {
-    label: 'Logic',
-    icon: Share2,
-    color: 'purple',
-    description: 'Conditions, loops, and modules',
-    steps: [
-      { type: 'condition', label: 'If / Then', icon: Share2, color: 'bg-purple-500', desc: 'Conditional logic' },
-      { type: 'loop', label: 'Loop', icon: RefreshCw, color: 'bg-purple-500', desc: 'Repeat steps' },
-      { type: 'module', label: 'Reusable Module', icon: Package, color: 'bg-purple-600', desc: 'Import module' },
-      { type: 'group', label: 'Group Steps', icon: Layers, color: 'bg-purple-600', desc: 'Group together' },
-    ]
-  },
-  // WAIT - Synchronization
+
+  // WAIT - Critical for test stability
   wait: {
     label: 'Wait',
     icon: Clock,
     color: 'cyan',
     description: 'Timing and synchronization',
+    priority: 3,
     steps: [
-      { type: 'wait', label: 'Wait Time', icon: Timer, color: 'bg-cyan-500', desc: 'Fixed delay' },
+      { type: 'wait', label: 'Wait Time', icon: Timer, color: 'bg-cyan-500', desc: 'Fixed delay (ms)' },
       { type: 'wait_for_element', label: 'Wait for Element', icon: Eye, color: 'bg-cyan-500', desc: 'Until visible' },
       { type: 'wait_for_text', label: 'Wait for Text', icon: Type, color: 'bg-cyan-600', desc: 'Until text appears' },
       { type: 'wait_for_network', label: 'Wait for Network', icon: Activity, color: 'bg-cyan-600', desc: 'Network idle' },
     ]
   },
-  // DATA - Variables and test data
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DATA & LOGIC - Dynamic test behavior
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // DATA - Variables, extraction, generation
   data: {
     label: 'Data',
     icon: Database,
     color: 'violet',
     description: 'Variables and test data',
+    priority: 4,
     steps: [
-      { type: 'set_variable', label: 'Set Variable', icon: Edit, color: 'bg-violet-500', desc: 'Store value' },
-      { type: 'generate_data', label: 'Generate Data', icon: Wand2, color: 'bg-violet-500', desc: 'Random/fake data' },
-      { type: 'extract_text', label: 'Extract from Page', icon: FileText, color: 'bg-violet-600', desc: 'Get page data' },
-      { type: 'use_data_row', label: 'Data Row', icon: ClipboardList, color: 'bg-violet-600', desc: 'Use dataset row' },
+      { type: 'set_variable', label: 'Set Variable', icon: Edit, color: 'bg-violet-500', desc: 'Store a value' },
+      { type: 'extract_text', label: 'Extract from Page', icon: FileText, color: 'bg-violet-500', desc: 'Get text from element' },
+      { type: 'extract_variable', label: 'Extract to Variable', icon: Download, color: 'bg-violet-500', desc: 'Store element value' },
+      { type: 'generate_data', label: 'Generate Data', icon: Wand2, color: 'bg-violet-600', desc: 'Random/fake data' },
+      { type: 'use_data_row', label: 'Use Data Row', icon: ClipboardList, color: 'bg-violet-600', desc: 'Data-driven testing' },
     ]
   },
-  // ADVANCED UI - Dynamic selection and data extraction
-  advanced_ui: {
-    label: 'Advanced UI',
+
+  // LOGIC - Control flow, conditions, modules
+  logic: {
+    label: 'Logic',
+    icon: Share2,
+    color: 'purple',
+    description: 'Control flow and browser contexts',
+    priority: 5,
+    steps: [
+      { type: 'condition', label: 'If / Then', icon: Share2, color: 'bg-purple-500', desc: 'Conditional logic' },
+      { type: 'loop', label: 'Loop', icon: RefreshCw, color: 'bg-purple-500', desc: 'Repeat steps' },
+      { type: 'module', label: 'Reusable Module', icon: Package, color: 'bg-purple-600', desc: 'Import shared steps' },
+      { type: 'group', label: 'Group Steps', icon: Layers, color: 'bg-purple-600', desc: 'Organize steps' },
+      { type: 'frame_switch', label: 'Switch Frame', icon: Layout, color: 'bg-purple-700', desc: 'Enter iframe' },
+      { type: 'new_tab', label: 'New Tab', icon: Maximize2, color: 'bg-purple-700', desc: 'Handle new tab' },
+      { type: 'alert_handle', label: 'Handle Alert', icon: AlertCircle, color: 'bg-purple-700', desc: 'Accept/dismiss' },
+    ]
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ADVANCED - Complex scenarios
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // BACKEND - API and Database
+  backend: {
+    label: 'Backend',
+    icon: Server,
+    color: 'orange',
+    description: 'API calls and database queries',
+    priority: 6,
+    steps: [
+      { type: 'api', label: 'API Request', icon: Globe, color: 'bg-orange-500', desc: 'HTTP request' },
+      { type: 'api_validate', label: 'Validate Response', icon: CheckCircle, color: 'bg-orange-500', desc: 'Check API response' },
+      { type: 'api_extract', label: 'Extract Value', icon: Key, color: 'bg-orange-600', desc: 'Get from response' },
+      { type: 'db_query', label: 'Database Query', icon: Database, color: 'bg-orange-600', desc: 'SQL query' },
+      { type: 'db_validate', label: 'Validate Data', icon: ShieldCheck, color: 'bg-orange-700', desc: 'Check DB data' },
+    ]
+  },
+
+  // ADVANCED - Tables, complex interactions
+  advanced: {
+    label: 'Advanced',
     icon: Target,
-    color: 'emerald',
-    description: 'Dynamic selection, extraction & computed assertions',
-    steps: [
-      { type: 'smart_select', label: 'Smart Select', icon: Target, color: 'bg-emerald-500', desc: 'Find by text/attribute' },
-      { type: 'extract_variable', label: 'Extract Value', icon: Download, color: 'bg-emerald-500', desc: 'Store element value' },
-      { type: 'computed_assert', label: 'Computed Assert', icon: Calculator, color: 'bg-emerald-600', desc: 'Math assertions' },
-    ]
-  },
-  // TABLE OPERATIONS - Find rows, extract data
-  table_ops: {
-    label: 'Table Ops',
-    icon: Table,
     color: 'teal',
-    description: 'Table navigation and data extraction',
+    description: 'Tables, drag-drop, complex UI',
+    priority: 7,
     steps: [
-      { type: 'table_find', label: 'Find Row', icon: Search, color: 'bg-teal-500', desc: 'Find row by column' },
-      { type: 'table_extract', label: 'Extract Row', icon: Download, color: 'bg-teal-500', desc: 'Get row data' },
+      { type: 'smart_select', label: 'Smart Select', icon: Target, color: 'bg-teal-500', desc: 'Find by text/attribute' },
+      { type: 'table_find', label: 'Find in Table', icon: Search, color: 'bg-teal-500', desc: 'Find row by value' },
+      { type: 'table_extract', label: 'Extract from Table', icon: Download, color: 'bg-teal-500', desc: 'Get table data' },
       { type: 'table_assert', label: 'Assert Table', icon: CheckCircle, color: 'bg-teal-600', desc: 'Verify table data' },
+      { type: 'drag_drop', label: 'Drag & Drop', icon: Move, color: 'bg-teal-600', desc: 'Drag to target' },
+      { type: 'slider', label: 'Slider', icon: Sliders, color: 'bg-teal-600', desc: 'Set slider value' },
+      { type: 'date_picker', label: 'Date Picker', icon: Calendar, color: 'bg-teal-700', desc: 'Select date' },
+      { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, color: 'bg-teal-700', desc: 'Select multiple' },
+      { type: 'pdf_verify', label: 'PDF Content', icon: FileText, color: 'bg-teal-700', desc: 'Verify PDF content' },
     ]
   },
-  // COMPLEX INTERACTIONS - Drag, slider, date picker
-  complex_ui: {
-    label: 'Complex UI',
-    icon: Move,
-    color: 'amber',
-    description: 'Drag-drop, sliders, date pickers, keyboard',
-    steps: [
-      { type: 'drag_drop', label: 'Drag & Drop', icon: Move, color: 'bg-amber-500', desc: 'Drag to target' },
-      { type: 'slider', label: 'Slider', icon: Sliders, color: 'bg-amber-500', desc: 'Set slider value' },
-      { type: 'date_picker', label: 'Date Picker', icon: Calendar, color: 'bg-amber-600', desc: 'Select date' },
-      { type: 'keyboard', label: 'Keyboard', icon: Keyboard, color: 'bg-amber-600', desc: 'Press keys' },
-      { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, color: 'bg-amber-700', desc: 'Select multiple' },
-    ]
-  },
-  // MULTI-CONTEXT - Frames, tabs, alerts
-  multi_context: {
-    label: 'Multi-Context',
-    icon: Layout,
-    color: 'fuchsia',
-    description: 'iFrames, browser tabs, alerts',
-    steps: [
-      { type: 'frame_switch', label: 'Switch Frame', icon: Layout, color: 'bg-fuchsia-500', desc: 'Enter iframe' },
-      { type: 'new_tab', label: 'Tab Control', icon: Maximize2, color: 'bg-fuchsia-500', desc: 'Manage tabs' },
-      { type: 'alert_handle', label: 'Handle Alert', icon: AlertCircle, color: 'bg-fuchsia-600', desc: 'Accept/dismiss' },
-    ]
-  },
-  // EVIDENCE - Documentation & Visual Testing
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DOCUMENTATION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // EVIDENCE - Screenshots, notes, manual steps
   evidence: {
     label: 'Evidence',
     icon: Camera,
     color: 'rose',
-    description: 'Screenshots, visual testing, and logs',
+    description: 'Screenshots, notes, manual steps',
+    priority: 8,
     steps: [
       { type: 'screenshot', label: 'Screenshot', icon: Camera, color: 'bg-rose-500', desc: 'Capture screen' },
-      { type: 'visual_check', label: 'Visual Check', icon: Eye, color: 'bg-violet-500', desc: 'Compare to baseline' },
+      { type: 'visual_check', label: 'Visual Compare', icon: Eye, color: 'bg-rose-500', desc: 'Compare to baseline' },
       { type: 'log', label: 'Log Message', icon: FileText, color: 'bg-rose-500', desc: 'Add log entry' },
-    ]
-  },
-  // MANUAL - Freeform text for manual testing
-  manual: {
-    label: 'Manual',
-    icon: Pencil,
-    color: 'slate',
-    description: 'Freeform text & manual steps',
-    steps: [
-      { type: 'note', label: 'Note / Comment', icon: FileText, color: 'bg-slate-500', desc: 'Free-form text' },
+      { type: 'note', label: 'Note / Comment', icon: FileText, color: 'bg-slate-500', desc: 'Free-form note' },
       { type: 'manual_step', label: 'Manual Step', icon: ClipboardList, color: 'bg-slate-500', desc: 'Manual action' },
       { type: 'checkpoint', label: 'Checkpoint', icon: Flag, color: 'bg-slate-600', desc: 'Verification point' },
     ]
   },
-  // SALESFORCE - SF-specific steps (auto-connects via backend)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PLUGINS - Show based on license/settings
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // SALESFORCE - SF-specific steps
   salesforce: {
     label: 'Salesforce',
     icon: Cloud,
     color: 'sky',
-    description: 'Salesforce automation & assertions',
+    description: 'Salesforce automation',
+    priority: 9,
+    plugin: 'salesforce',
     steps: [
-      { type: 'sf_connect', label: 'SF Connect', icon: Cloud, color: 'bg-sky-500', desc: 'Connect to SF org (auto)' },
+      { type: 'sf_connect', label: 'SF Connect', icon: Cloud, color: 'bg-sky-500', desc: 'Connect to org' },
       { type: 'sf_navigate', label: 'SF Navigate', icon: Navigation, color: 'bg-sky-500', desc: 'Navigate in SF' },
-      { type: 'sf_query', label: 'SOQL Query', icon: Database, color: 'bg-sky-600', desc: 'Run SOQL query' },
-      { type: 'sf_assert', label: 'SF Assert', icon: ShieldCheck, color: 'bg-sky-600', desc: 'Assert record/field' },
+      { type: 'sf_query', label: 'SOQL Query', icon: Database, color: 'bg-sky-600', desc: 'Run SOQL' },
+      { type: 'sf_assert', label: 'SF Assert', icon: ShieldCheck, color: 'bg-sky-600', desc: 'Assert record' },
       { type: 'sf_metadata_assert', label: 'Metadata Assert', icon: Settings, color: 'bg-sky-700', desc: 'Assert metadata' },
-      { type: 'sf_login_as', label: 'Login As User', icon: User, color: 'bg-sky-700', desc: 'Switch user context' },
-      { type: 'sf_create_record', label: 'Create Record', icon: Plus, color: 'bg-sky-800', desc: 'Create SF record' },
-    ]
-  },
-  // COMPLEX VERIFY - Email, PDF, File verification
-  complex_verify: {
-    label: 'Complex Verify',
-    icon: Mail,
-    color: 'indigo',
-    description: 'Email, PDF, and file verification',
-    steps: [
-      { type: 'email_verify', label: 'Email Verify', icon: Mail, color: 'bg-indigo-500', desc: 'Verify email received' },
-      { type: 'pdf_verify', label: 'PDF Verify', icon: FileText, color: 'bg-indigo-600', desc: 'Verify PDF content' },
-      { type: 'file_verify', label: 'File Verify', icon: File, color: 'bg-indigo-700', desc: 'Verify downloaded file' },
+      { type: 'sf_login_as', label: 'Login As User', icon: User, color: 'bg-sky-700', desc: 'Switch user' },
+      { type: 'sf_create_record', label: 'Create Record', icon: Plus, color: 'bg-sky-800', desc: 'Create record' },
     ]
   },
 };
@@ -4296,54 +4307,16 @@ export default function UnifiedWorkflowEditor() {
           {/* Left Panel: Compact & Focused */}
           <aside className="w-48 flex-none border-r border-border bg-card overflow-y-auto">
             <div className="p-2 space-y-2">
-              {/* Settings Section - Compact */}
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger asChild>
-                  <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-border bg-secondary hover:bg-accent transition-all text-muted-foreground hover:text-foreground">
-                    <Settings className="h-3.5 w-3.5" />
-                    <span className="text-[11px] font-medium flex-1 text-left">Settings</span>
-                    <ChevronRight className="h-3 w-3" />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2 space-y-2">
-                  {/* Domain Selector */}
-                  <button 
-                    className="w-full text-left text-xs px-2 py-1.5 rounded bg-secondary border border-border hover:border-primary/50 flex items-center gap-2"
-                    onClick={() => setShowDomainSelector(true)}
-                  >
-                    <span>{DOMAINS[selectedDomain]?.icon}</span>
-                    <span className="truncate text-foreground">{DOMAINS[selectedDomain]?.label || 'Select Domain'}</span>
-                  </button>
-                  
-                  {/* Coverage - Only show if relevant */}
-                  {(() => {
-                    const coverage = calculateCoverage(coveredValidations, selectedDomain);
-                    if (coverage.percentage === 0) return null;
-                    return (
-                      <div className="px-2">
-                        <div className="flex items-center justify-between text-[10px] mb-1">
-                          <span className="text-muted-foreground">Coverage</span>
-                          <span className={`font-medium ${
-                            coverage.percentage >= 80 ? 'text-green-400' :
-                            coverage.percentage >= 50 ? 'text-amber-400' : 'text-red-400'
-                          }`}>
-                            {coverage.percentage}%
-                          </span>
-                        </div>
-                        <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${
-                              coverage.percentage >= 80 ? 'bg-green-500' :
-                              coverage.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${coverage.percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </CollapsibleContent>
-              </Collapsible>
+              {/* Test Info - Shows test name and step count */}
+              <div className="p-2 border border-border rounded-md bg-secondary/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <TestTube className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="text-[11px] font-medium text-foreground truncate">{testCase.name || 'Recorded Test'}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {steps.length} step{steps.length !== 1 ? 's' : ''} • {steps.filter(s => s.type.startsWith('assert')).length} verifications
+                </div>
+              </div>
 
               {/* Step Palette - Clean, organized categories */}
               <div className="space-y-2">
@@ -4354,17 +4327,27 @@ export default function UnifiedWorkflowEditor() {
                   const isExpanded = expandedCategories.includes(key);
                   const CategoryIcon = cat.icon;
                   
-                  // Color mapping for category headers
+                  // Color mapping for category headers - organized by test flow
                   const colorMap: Record<string, string> = {
-                    amber: 'border-amber-500/30 hover:border-blue-500/50 dark:border-amber-500/50 text-blue-600 dark:text-amber-400',
-                    green: 'border-green-500/30 hover:border-green-500/50 text-green-400',
-                    blue: 'border-blue-500/30 hover:border-blue-500/50 text-blue-400',
-                    purple: 'border-purple-500/30 hover:border-purple-500/50 text-purple-400',
-                    cyan: 'border-cyan-500/30 hover:border-cyan-500/50 text-cyan-400',
-                    violet: 'border-violet-500/30 hover:border-violet-500/50 text-violet-400',
-                    rose: 'border-rose-500/30 hover:border-rose-500/50 text-rose-400',
+                    // Core Actions
+                    blue: 'border-blue-500/30 hover:border-blue-500/50 text-blue-500 dark:text-blue-400',
+                    green: 'border-green-500/30 hover:border-green-500/50 text-green-500 dark:text-green-400',
+                    cyan: 'border-cyan-500/30 hover:border-cyan-500/50 text-cyan-500 dark:text-cyan-400',
+                    // Data & Logic
+                    violet: 'border-violet-500/30 hover:border-violet-500/50 text-violet-500 dark:text-violet-400',
+                    purple: 'border-purple-500/30 hover:border-purple-500/50 text-purple-500 dark:text-purple-400',
+                    // Advanced
+                    orange: 'border-orange-500/30 hover:border-orange-500/50 text-orange-500 dark:text-orange-400',
+                    teal: 'border-teal-500/30 hover:border-teal-500/50 text-teal-500 dark:text-teal-400',
+                    // Documentation
+                    rose: 'border-rose-500/30 hover:border-rose-500/50 text-rose-500 dark:text-rose-400',
+                    // Plugins
+                    sky: 'border-sky-500/30 hover:border-sky-500/50 text-sky-500 dark:text-sky-400',
                   };
                   const headerColor = colorMap[cat.color] || 'border-border text-foreground';
+                  
+                  // Skip Salesforce if not a plugin user (can be enhanced with actual license check)
+                  if (cat.plugin === 'salesforce' && !true) return null; // TODO: Check actual plugin license
                   
                   return (
                     <Collapsible
