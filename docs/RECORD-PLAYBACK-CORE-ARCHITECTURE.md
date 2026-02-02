@@ -448,6 +448,153 @@ Layer 4: AI Vision Fallback (screenshot + GPT-4o)
 - Element is not obscured (no overlay blocking)
 - Element is stable (not moving)
 
+---
+
+## 4.6 COMPLETE CLICK FLOW AUDIT (Updated Feb 2026)
+
+### Click "Categories" Example - Full Trace
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ CLICK "CATEGORIES" - COMPLETE EXECUTION FLOW                                    │
+│ Input: { type: 'click', text: 'Categories', recipe: { role: 'link', tag: 'a' } }│
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+User clicks "Run Test"
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: TestExecutor.executeStep()                                              │
+│ File: test-executor.js line 766                                                 │
+│ - Normalize action type: "click" or "ClickText"                                 │
+│ - Check if click action for fallback handling                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: ActionHandlers.executeAction()                                          │
+│ File: action-handlers.js line 2630                                              │
+│ - Routes to handleClick() for click/clicktext/clickelement                      │
+│ - If fails, NOW falls through to legacy (REGRESSION FIX)                        │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: handleClick() - 4 Layer System                                          │
+│ File: action-handlers.js line 339                                               │
+│                                                                                  │
+│ Layer 1: Check manual selectors (xpath=, coords:, ocr:, text=)                  │
+│ Layer 2: ctx.findElementWithRetry(action) → SmartFinder                         │
+│ Layer 3: searchIframesForClick() if not found                                   │
+│ Layer 4: AI Vision Fallback (screenshot + GPT-4o)                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: findElementWithRetry()                                                  │
+│ File: test-executor.js line 251                                                 │
+│                                                                                  │
+│ Priority Order:                                                                  │
+│ 1. manualOverride (selectorObj.manualOverride) ← HIGHEST PRIORITY              │
+│ 2. SmartFinder V2 (findElementV2)                                               │
+│ 3. Legacy _findElement (50+ strategies)                                         │
+│ 4. Retry up to 3x with exponential backoff                                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 5: SmartFinder.find()                                                      │
+│ File: smart-finder.js                                                           │
+│                                                                                  │
+│ Phases (in order):                                                               │
+│ • FAST PATH: StrategyMemory lookup (if remembered strategy exists)              │
+│ • Phase 0: testId → [data-testid="@web/Header/MainMenuLink"]                    │
+│ • Phase 1: Salesforce scoping (if SF detected)                                  │
+│ • Phase 2: role+text → getByRole('link', { name: 'Categories' })                │
+│ • Phase 3: text-exact → getByText('Categories', { exact: true })                │
+│ • Phase 4-9: aria, name, id, href, css fallbacks                                │
+│ • Phase 10: coordinates (last resort)                                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 6: ReliabilityLayer.verifyElementActionable()                              │
+│ File: reliability-layer.js line 84                                              │
+│                                                                                  │
+│ Pre-Click Checks:                                                                │
+│ ✓ exists: locator.count() > 0                                                   │
+│ ✓ visible: locator.isVisible()                                                  │
+│ ✓ enabled: not disabled                                                         │
+│ ✓ notObscured: elementFromPoint matches                                         │
+│ ✓ stable: boundingBox stable over 100ms                                         │
+│ ✓ inViewport: within viewport bounds (NULL SAFE now)                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ STEP 7: locator.click()                                                         │
+│ - Execute Playwright click action                                               │
+│ - Wait for navigation/response if applicable                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Strategy Confidence Percentages
+
+| Strategy | Confidence | Description | Example |
+|----------|------------|-------------|---------|
+| **manualOverride** | **100%** | User-specified selector | `[aria-label="Categories"]` |
+| **testId** | **95%** | data-testid attribute | `[data-testid="nav-categories"]` |
+| **role+text (fast path)** | **98%** | From StrategyMemory | `getByRole('link', { name: 'Categories' })` |
+| **role+text** | **90%** | Semantic matching | `getByRole('link', { name: 'Categories' })` |
+| **aria-label** | **85%** | Accessibility selector | `[aria-label="Categories"]` |
+| **text-exact** | **80%** | Exact text match | `getByText('Categories', { exact: true })` |
+| **text-partial** | **70%** | Partial text match | `getByText('Categories', { exact: false })` |
+| **name** | **75%** | Form name attribute | `[name="category-link"]` |
+| **id** | **65%** | Element ID (if stable) | `#categories-link` |
+| **css-selector** | **60%** | CSS selector | `.nav-link.categories` |
+| **href** | **55%** | Link href matching | `a[href*="/categories"]` |
+| **coordinates** | **30%** | Stored x,y position | `page.mouse.click(164, 68)` |
+| **ai-vision** | **50%** | AI screenshot analysis | GPT-4o coordinate detection |
+
+### Legacy ClickText Fallback Strategies (11 strategies)
+
+When unified handler fails, legacy ClickText case is tried:
+
+```javascript
+const textStrategies = [
+  { name: 'getByText(exact:false)', confidence: 70 },
+  { name: 'getByRole(button)',      confidence: 80 },
+  { name: 'getByRole(link)',        confidence: 85 },  // ← Would find Categories
+  { name: 'getByRole(checkbox)',    confidence: 80 },
+  { name: 'getByRole(radio)',       confidence: 80 },
+  { name: 'getByLabel',             confidence: 65 },
+  { name: 'label:has-text',         confidence: 60 },
+  { name: 'getByRole(menuitem)',    confidence: 75 },
+  { name: 'aria-label/title',       confidence: 75 },
+  { name: 'slds-checkbox',          confidence: 70 },  // Salesforce-specific
+  { name: 'text-sibling-input',     confidence: 55 },
+];
+```
+
+### Known Regressions Fixed (Feb 2026)
+
+| Issue | Root Cause | Fix | Commit |
+|-------|-----------|-----|--------|
+| **Unified handler blocking legacy fallbacks** | `ActionHandlers.executeAction` threw error instead of falling through | Allow click failures to try legacy 11 strategies | `37ceac49` |
+| **Viewport null crash** | `page.viewportSize()` returns null during transitions | Added null safety check | `34e57437` |
+| **tagName vs tag mismatch** | Recording stores `tagName`, playback looked for `tag` | Check both properties | `1a1eee84` |
+
+### Unit Tests
+
+**File:** `flowstral-desktop/src/main/lib/__tests__/click-flow.test.js`
+
+Tests cover:
+- Strategy priority order
+- SmartFinder phases
+- ReliabilityLayer null safety
+- Legacy fallback activation
+- Confidence scoring
+
 **Overlay Dismissal:**
 - Automatically closes cookie banners
 - Handles modal dialogs
