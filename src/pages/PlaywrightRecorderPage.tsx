@@ -814,6 +814,12 @@ export default function PlaywrightRecorderPage() {
   // Use simplified editor by default (more user-friendly)
   const [useSimpleEditor, setUseSimpleEditor] = useState(true);
   
+  // ============ RESIZABLE PANEL STATE ============
+  // Draggable separator between steps and suggestions panels
+  const [leftPanelWidth, setLeftPanelWidth] = useState(55); // percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
   // Ref for auto-scrolling to newly added actions
   const actionsEndRef = useRef<HTMLDivElement>(null);
   const prevActionsLengthRef = useRef<number>(0);
@@ -1229,6 +1235,39 @@ export default function PlaywrightRecorderPage() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRecording, isPaused]);
+
+  // ============ PANEL RESIZE HANDLERS ============
+  // Handle mouse move during resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !containerRef.current) return;
+      
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      
+      // Clamp between 30% and 75%
+      const clampedWidth = Math.min(75, Math.max(30, newWidth));
+      setLeftPanelWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizing) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Keyboard shortcuts for recorded actions (Delete, Ctrl+C, Ctrl+V)
   useEffect(() => {
@@ -4571,9 +4610,12 @@ Recorded Test
       </div>
 
       {/* ============ MAIN CONTENT ============ */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div ref={containerRef} className="flex-1 flex overflow-hidden min-h-0">
         {/* ============ LEFT PANEL - URL & Recorded Steps ============ */}
-        <div className="w-[55%] min-w-[500px] flex flex-col border-r border-border overflow-hidden">
+        <div 
+          style={{ width: `${leftPanelWidth}%` }} 
+          className="min-w-[400px] max-w-[75%] flex flex-col border-r border-border overflow-hidden"
+        >
           {/* URL Bar */}
           <div className="p-3 border-b border-border">
             {/* Device & Network Selection - Only show when NOT recording */}
@@ -5180,80 +5222,83 @@ Recorded Test
                         </p>
                       )}
                     </div>
-                    {/* Edit button for cross-origin actions */}
-                    {isCrossOriginAction(action) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingCrossOriginIndex(index);
-                          setCrossOriginUserActions((action as any).userActions || []);
-                          setShowCrossOriginEditor(true);
-                        }}
-                      >
-                        <PenLine className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                    )}
-                    {/* Quick link button - shown when hovering in existing mode */}
-                    {mode === 'existing' && selectedTestCase && !isMultiSelectMode && (
+                    {/* ============ ACTION BUTTONS - Always visible ============ */}
+                    <div className="flex items-center gap-1 shrink-0 ml-auto pl-2">
+                      {/* Edit button for cross-origin actions */}
+                      {isCrossOriginAction(action) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[10px] bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCrossOriginIndex(index);
+                            setCrossOriginUserActions((action as any).userActions || []);
+                            setShowCrossOriginEditor(true);
+                          }}
+                        >
+                          <PenLine className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                      {/* Quick link button - shown when hovering in existing mode */}
+                      {mode === 'existing' && selectedTestCase && !isMultiSelectMode && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1.5 opacity-0 group-hover:opacity-100 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            linkActionToStep(currentStepIndex, action, 'recorded');
+                            // Remove from actions list after linking
+                            setActions(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          title={`Link to Step ${currentStepIndex + 1}`}
+                        >
+                          <Link className="h-3 w-3 mr-0.5" />
+                          <span className="text-[10px]">{currentStepIndex + 1}</span>
+                        </Button>
+                      )}
+                      {/* EDIT SELECTOR BUTTON - Manual Override - Always visible */}
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-6 px-1.5 opacity-0 group-hover:opacity-100 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 shrink-0"
+                        size="icon"
+                        className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
                         onClick={(e) => {
                           e.stopPropagation();
-                          linkActionToStep(currentStepIndex, action, 'recorded');
-                          // Remove from actions list after linking
-                          setActions(prev => prev.filter((_, i) => i !== index));
+                          openEditSelectorModal(index);
                         }}
-                        title={`Link to Step ${currentStepIndex + 1}`}
+                        title="Edit step - Modify selector or value"
                       >
-                        <Link className="h-3 w-3 mr-0.5" />
-                        <span className="text-[10px]">{currentStepIndex + 1}</span>
+                        <Edit className="h-3 w-3" />
                       </Button>
-                    )}
-                    {/* EDIT SELECTOR BUTTON - Manual Override - Always visible for discoverability */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditSelectorModal(index);
-                      }}
-                      title="Edit step - Modify selector or value"
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    {/* DELETE BUTTON - Always visible for discoverability */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const actionName = action.description || action.qword || 'step';
-                        setActions(prev => prev.filter((_, i) => i !== index));
-                        // Also remove from selection if multi-selected
-                        if (selectedActionIndices.has(index)) {
-                          setSelectedActionIndices(prev => {
-                            const newSet = new Set(prev);
-                            newSet.delete(index);
-                            // Adjust indices for items after the deleted one
-                            const adjusted = new Set<number>();
-                            newSet.forEach(i => adjusted.add(i > index ? i - 1 : i));
-                            return adjusted;
-                          });
-                        }
-                        toast.success(`Deleted: ${actionName}`);
-                      }}
-                      title="Delete step"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                      {/* DELETE BUTTON - Always visible */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const actionName = action.description || action.qword || 'step';
+                          setActions(prev => prev.filter((_, i) => i !== index));
+                          // Also remove from selection if multi-selected
+                          if (selectedActionIndices.has(index)) {
+                            setSelectedActionIndices(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(index);
+                              // Adjust indices for items after the deleted one
+                              const adjusted = new Set<number>();
+                              newSet.forEach(i => adjusted.add(i > index ? i - 1 : i));
+                              return adjusted;
+                            });
+                          }
+                          toast.success(`Deleted: ${actionName}`);
+                        }}
+                        title="Delete step"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                   );
                 })}
@@ -5265,8 +5310,25 @@ Recorded Test
           </div>
         </div>
 
+        {/* ============ RESIZABLE DIVIDER ============ */}
+        <div
+          className={cn(
+            "w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-shrink-0 relative group",
+            isResizing && "bg-primary"
+          )}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+        >
+          {/* Visual grip indicator */}
+          <div className="absolute inset-y-0 -left-1 -right-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="w-1 h-8 rounded-full bg-primary/50" />
+          </div>
+        </div>
+
         {/* ============ RIGHT PANEL - Suggestions ============ */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-[250px]">
           <Tabs value={rightPanelTab} onValueChange={setRightPanelTab} className="h-full flex flex-col">
             {/* Tab Headers - Compact */}
             <div className="shrink-0 px-3 py-1.5 border-b border-border">
