@@ -42,6 +42,7 @@
 11. [Testing Requirements](#11-testing-requirements)
 12. [**Industry Comparison & Best Practices**](#12-industry-comparison--best-practices)
 13. [**Proposed Enhancements (2026)**](#13-proposed-enhancements-2026)
+14. [**Cross-Device Testing: Record Anywhere, Play Everywhere**](#14-cross-device-testing-record-anywhere-play-everywhere)
 
 ---
 
@@ -1579,12 +1580,234 @@ await electronAPI.testRunner.executeTest({
 
 ---
 
+## 14. Cross-Device Testing: Record Anywhere, Play Everywhere
+
+### 14.1 Current State Analysis
+
+**What We Have:**
+| Feature | Status | Details |
+|---------|--------|---------|
+| Mobile device emulation | ✅ 50+ devices | iPhone, Android, tablets in `mobile-devices.js` |
+| Device selection in UI | ✅ Working | Desktop dropdown with device categories |
+| Viewport configuration | ✅ Working | Sets viewport, userAgent, touch, scale factor |
+| Network throttling | ✅ Working | 4G, 3G, Slow 3G, 2G presets |
+| Semantic selectors | ✅ Primary | testId, role+text, aria-label (device-agnostic) |
+| Coordinate fallback | ⚠️ Device-dependent | boundingBox stored, won't work cross-device |
+| Device context in recipe | ❌ Missing | No "recorded on device X" metadata |
+| Responsive element handling | ❌ Missing | No hamburger menu ↔ nav bar mapping |
+
+### 14.2 Why Current System MOSTLY Works Cross-Device
+
+**SmartFinder uses semantic selectors that are device-agnostic:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SELECTORS THAT WORK CROSS-DEVICE (confidence order)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 1. manualOverride     [aria-label="Categories"]     ✅ Works everywhere     │
+│ 2. testId             [data-testid="nav-menu"]      ✅ Same on all devices  │
+│ 3. role+text          getByRole('link', 'Home')     ✅ Semantic, works      │
+│ 4. aria-label         [aria-label="Menu"]           ✅ Accessibility works  │
+│ 5. text-exact         getByText('Submit')           ✅ Text same on mobile  │
+│ 6. name               [name="email"]                ✅ Form fields work     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ SELECTORS THAT BREAK CROSS-DEVICE                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 7. coordinates        click(x:500, y:200)           ❌ BREAKS on resize     │
+│ 8. css with position  .nav > li:nth-child(3)       ⚠️ May break responsive │
+│ 9. boundingBox        {x:164, y:68, w:125}         ❌ BREAKS on resize     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Insight:** If recording uses high-confidence selectors (testId, role+text), playback should work on any device. Problems occur when:
+1. Fallback to coordinates is needed
+2. Site has completely different DOM on mobile (responsive breakpoints)
+3. Mobile-only elements (hamburger menu) don't exist on desktop
+
+### 14.3 Challenges: Responsive Web Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ RESPONSIVE BREAKPOINT CHALLENGE                                              │
+├──────────────────────────────────────┬──────────────────────────────────────┤
+│         DESKTOP (1920px)             │         MOBILE (390px)               │
+├──────────────────────────────────────┼──────────────────────────────────────┤
+│ <nav class="desktop-nav">            │ <button class="hamburger">           │
+│   <a href="/home">Home</a>           │   ☰                                  │
+│   <a href="/categories">Categories</a>│ </button>                            │
+│   <a href="/cart">Cart</a>           │ <div class="mobile-menu" hidden>     │
+│ </nav>                               │   <a href="/home">Home</a>           │
+│                                      │   <a href="/categories">Categories</a>│
+│                                      │   <a href="/cart">Cart</a>           │
+│                                      │ </div>                               │
+├──────────────────────────────────────┴──────────────────────────────────────┤
+│ PROBLEM: getByRole('link', 'Categories') finds DIFFERENT elements!          │
+│ - Desktop: .desktop-nav a (visible)                                         │
+│ - Mobile: .mobile-menu a (hidden until hamburger clicked)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 14.4 Proposed Implementation: Device-Aware Playback
+
+**Phase 1: Store Device Context in Recording (LOW RISK)**
+
+```javascript
+// In playwright-recorder.js - buildAction()
+const action = {
+  // ... existing fields ...
+  
+  // NEW: Device context for cross-device playback
+  deviceContext: {
+    recordedOn: this.mobileDevice?.name || 'desktop',
+    viewport: this.page.viewportSize(),
+    isMobile: this.isMobileMode,
+    userAgent: await this.page.evaluate(() => navigator.userAgent),
+  },
+  
+  // NEW: Element visibility at record time
+  elementVisibility: {
+    wasVisible: true,
+    wasInViewport: true,
+    viewportAtRecord: { width: 1920, height: 1080 },
+  },
+};
+```
+
+**Phase 2: Device-Aware SmartFinder (MEDIUM RISK)**
+
+```javascript
+// In smart-finder.js - find()
+async find(recipe, options = {}) {
+  const targetDevice = options.targetDevice || 'desktop';
+  const sourceDevice = recipe.deviceContext?.recordedOn || 'desktop';
+  
+  // If playing on different device, adjust strategy
+  if (sourceDevice !== targetDevice) {
+    console.log(`[SmartFinder] Cross-device: ${sourceDevice} → ${targetDevice}`);
+    
+    // SKIP coordinate-based strategies
+    this.skipStrategies.push('coordinates', 'boundingBox');
+    
+    // PREFER semantic strategies
+    this.boostStrategies(['role+text', 'testId', 'aria-label']);
+  }
+  
+  // ... existing find logic ...
+}
+```
+
+**Phase 3: Responsive Element Mapping (HIGHER RISK - OPTIONAL)**
+
+```javascript
+// In smart-finder.js - handleResponsiveElement()
+async handleResponsiveElement(recipe, sourceDevice, targetDevice) {
+  // Detect if we're looking for a nav element
+  const isNavElement = recipe.where?.landmark === 'navigation' || 
+                       recipe.what?.role === 'link' ||
+                       recipe.what?.text?.match(/menu|nav|home|cart/i);
+  
+  if (isNavElement && sourceDevice !== targetDevice) {
+    // Try mobile-specific patterns first
+    if (targetDevice !== 'desktop') {
+      // Check if hamburger menu needs to be opened first
+      const hamburger = await this.page.locator('[aria-label*="menu"], .hamburger, [data-testid*="menu-toggle"]').first();
+      if (await hamburger.isVisible()) {
+        console.log('[SmartFinder] Opening mobile menu before finding element');
+        await hamburger.click();
+        await this.page.waitForTimeout(300); // Let menu animate
+      }
+    }
+  }
+}
+```
+
+### 14.5 Implementation Priority Matrix
+
+| Feature | Impact | Risk | Priority | Effort |
+|---------|--------|------|----------|--------|
+| Store deviceContext in action | Medium | Low | P1 | 2 hours |
+| Skip coordinates on cross-device | High | Low | P1 | 1 hour |
+| Log warning on cross-device play | Medium | None | P1 | 30 min |
+| Boost semantic selectors | Medium | Low | P2 | 2 hours |
+| Auto-open mobile menu | High | Medium | P3 | 4 hours |
+| Responsive element mapping | High | High | P4 | 8+ hours |
+
+### 14.6 Safe Implementation Plan
+
+**DO FIRST (No Regression Risk):**
+
+1. **Add deviceContext to recorded actions** - Pure addition, no existing code changes
+2. **Log cross-device playback** - Just logging, no behavior change
+3. **Skip coordinate strategies on cross-device** - If sourceDevice ≠ targetDevice, disable coordinate fallback
+
+```javascript
+// Safe change in test-executor.js
+const isCrossDevicePlay = (action.deviceContext?.recordedOn || 'desktop') !== 
+                          (this.mobileDevice?.name || 'desktop');
+
+if (isCrossDevicePlay) {
+  console.log(`[Executor] Cross-device playback: ${action.deviceContext?.recordedOn} → ${this.mobileDevice?.name || 'desktop'}`);
+  // Don't use coordinate fallback
+  this.skipCoordinateFallback = true;
+}
+```
+
+**DO LATER (With Careful Testing):**
+
+1. Mobile menu auto-open
+2. Responsive element remapping
+3. Touch vs click event conversion
+
+### 14.7 What Already Works (No Changes Needed)
+
+**Target.com "Categories" Example:**
+
+```
+Recorded on Desktop:
+  recipe: { what: { role: 'link', text: 'Categories' }, which: { testId: '@web/Header/MainMenuLink' } }
+
+Played on iPhone 15 Pro:
+  SmartFinder tries:
+  1. testId: [data-testid="@web/Header/MainMenuLink"] → ✅ FOUND (same testId on mobile!)
+  2. role+text: getByRole('link', 'Categories') → ✅ FOUND (link exists)
+  
+  Result: WORKS WITHOUT CHANGES
+```
+
+**When it breaks:**
+
+```
+Recorded on Desktop:
+  Click "Navigation Menu" → Uses .desktop-nav selector
+  
+Played on iPhone:
+  .desktop-nav doesn't exist → Falls back to coordinates → FAILS
+  
+  FIX: Skip coordinate fallback, rely on semantic selectors
+```
+
+### 14.8 Testing Checklist for Cross-Device
+
+```
+□ Record on Desktop, play on Desktop → Should work (baseline)
+□ Record on Desktop, play on iPhone 15 → Test semantic selectors
+□ Record on iPhone 15, play on Desktop → Test reverse direction
+□ Record on iPhone, play on Galaxy → Test mobile-to-mobile
+□ Test site with responsive menu (hamburger on mobile)
+□ Test form submission (same fields on all devices)
+□ Test element with coordinates fallback (should skip on cross-device)
+```
+
+---
+
 ## Document History
 
 | Date | Author | Changes |
 |------|--------|---------|
 | 2026-01-31 | Claude | Initial comprehensive documentation |
 | 2026-01-31 | Claude | Added industry comparison, proposed enhancements, quick wins |
+| 2026-02-01 | Claude | Added click flow audit, unit tests, confidence percentages |
+| 2026-02-01 | Claude | Added Cross-Device Testing analysis and implementation plan |
 
 ---
 
