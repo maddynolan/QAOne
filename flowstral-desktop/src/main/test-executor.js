@@ -228,7 +228,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         recipe.what?.role || recipe.what?.tag, 
         recipe.what?.text || recipe.which?.testId);
       
-      const locator = await this.smartFinder.find(recipe);
+      // Pass cross-device flag to SmartFinder to skip coordinate strategies
+      const findOptions = {
+        skipCoordinateFallback: this._skipCoordinateFallback || false
+      };
+      
+      const locator = await this.smartFinder.find(recipe, findOptions);
       console.log('[Executor V2] Element found with SmartFinder');
       return locator;
       
@@ -782,6 +787,24 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         result.duration = Date.now() - startTime;
         result.name = step.description || step.name || step.qword || `Step`;
         return result;
+      }
+      
+      // ============================================================
+      // CROSS-DEVICE DETECTION (Phase 1)
+      // Detect if we're playing on a different device than recorded
+      // Maestro-inspired: Disable coordinate strategies cross-device
+      // ============================================================
+      const sourceDevice = step.deviceContext?.recordedOn || 'desktop';
+      const targetDevice = this.mobileDevice?.name || 'desktop';
+      const isCrossDevicePlay = sourceDevice !== targetDevice;
+      
+      if (isCrossDevicePlay) {
+        console.log(`[Executor] 🔄 CROSS-DEVICE PLAYBACK: Recorded on "${sourceDevice}" → Playing on "${targetDevice}"`);
+        console.log(`[Executor] ⚠️ Coordinate-based fallbacks will be skipped (viewport mismatch)`);
+        // Set flag for findElementWithRetry to skip coordinate strategies
+        this._skipCoordinateFallback = true;
+      } else {
+        this._skipCoordinateFallback = false;
       }
       
       // Replace variables in step values

@@ -11908,6 +11908,17 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         description = action.description || `${action.type} "${cleanText}"`;
     }
     
+    // ========== DEVICE CONTEXT FOR CROSS-DEVICE PLAYBACK ==========
+    // Stores device info at record time so playback can adapt strategies
+    // Maestro-inspired: Skip coordinate strategies when playing on different device
+    const deviceContext = {
+      recordedOn: this.mobileDevice?.name || 'desktop',
+      isMobile: this.isMobileMode || false,
+      viewport: this.page?.viewportSize?.() || { width: 1920, height: 1080 },
+      userAgent: this.mobileDevice?.config?.userAgent || 'desktop',
+      hasTouch: this.mobileDevice?.config?.hasTouch || false,
+    };
+    
     return {
       id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       qword,
@@ -11923,7 +11934,9 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       url: action.url || null,
       frameContext: action.frameContext || null,
       // For cross-origin placeholders, preserve user actions
-      userActions: action.userActions || []
+      userActions: action.userActions || [],
+      // NEW: Device context for cross-device playback (Phase 1)
+      deviceContext: deviceContext,
     };
   }
 

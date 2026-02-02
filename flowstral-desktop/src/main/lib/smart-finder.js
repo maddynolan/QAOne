@@ -472,12 +472,20 @@ class SmartFinder {
   /**
    * Find an element using its recipe
    * @param {Object} recipe - The ElementRecipe
-   * @param {Object} action - Optional action context for fingerprinting
+   * @param {Object} options - Optional options for finding
+   * @param {boolean} options.skipCoordinateFallback - Skip coordinate strategies (cross-device)
    * @returns {Promise<Locator>} - Playwright locator
    */
-  async find(recipe, action = {}) {
+  async find(recipe, options = {}) {
     this._executionStartTime = Date.now();
     this._resetTrackingState(); // Reset confidence tracking for new find
+    
+    // Store cross-device flag for coordinate strategy decisions
+    this._skipCoordinateFallback = options.skipCoordinateFallback || false;
+    if (this._skipCoordinateFallback) {
+      this.log('⚠️ Cross-device mode: Skipping coordinate-based fallback strategies');
+    }
+    
     this.log('Finding element:', JSON.stringify(recipe, null, 2));
     
     const { what, where, which, confirm } = recipe;
@@ -2066,10 +2074,11 @@ class SmartFinder {
     
     // ==========================================================================
     // PHASE 10: COORDINATE-BASED FALLBACK (for edge cases)
+    // SKIP if cross-device playback (coordinates won't work on different viewport)
     // ==========================================================================
     
     // Try using which.coordinates
-    if (which?.coordinates) {
+    if (which?.coordinates && !this._skipCoordinateFallback) {
       const coordResult = await this.tryStrategy('coordinates', async () => {
         const { x, y } = which.coordinates;
         const element = await this.page.evaluateHandle(
@@ -2087,7 +2096,8 @@ class SmartFinder {
     
     // Try using confirm.boundingBox (center point)
     // CRITICAL: Must validate the element found is actually clickable and not a loading overlay
-    if (confirm?.boundingBox) {
+    // SKIP if cross-device playback (coordinates won't match on different viewport)
+    if (confirm?.boundingBox && !this._skipCoordinateFallback) {
       const bboxResult = await this.tryStrategy('boundingBox-center', async () => {
         const { x, y, width, height } = confirm.boundingBox;
         // Calculate center of bounding box

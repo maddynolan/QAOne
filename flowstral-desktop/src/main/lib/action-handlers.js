@@ -367,6 +367,10 @@ async function handleClick(ctx, action, options = {}) {
     const coordStr = manualSelector.substring(7);
     const [x, y] = coordStr.split(',').map(s => parseInt(s.trim()));
     if (!isNaN(x) && !isNaN(y)) {
+      // Warn if cross-device but still allow manual coordinates (user knows best)
+      if (ctx._skipCoordinateFallback) {
+        console.log(`[ActionHandler] ⚠️ WARNING: Using coordinates cross-device may fail (viewport mismatch)`);
+      }
       console.log(`[ActionHandler] Using coordinates: (${x}, ${y})`);
       try {
         await ctx.page.mouse.click(x, y);
@@ -449,7 +453,8 @@ async function handleClick(ctx, action, options = {}) {
   }
   
   // Layer 4: AI FALLBACK - Last resort when all deterministic strategies fail
-  if (!clickResult && ctx.enableAIFallback) {
+  // SKIP if cross-device playback (coordinates won't work on different viewport)
+  if (!clickResult && ctx.enableAIFallback && !ctx._skipCoordinateFallback) {
     console.log(`[ActionHandler] All strategies failed after retries, trying AI fallback...`);
     const aiResult = await ctx.findElementWithAI(label || selector || action.description, 'click');
     if (aiResult) {
@@ -461,6 +466,8 @@ async function handleClick(ctx, action, options = {}) {
         console.log(`[ActionHandler] AI Fallback click failed:`, e.message);
       }
     }
+  } else if (!clickResult && ctx._skipCoordinateFallback) {
+    console.log(`[ActionHandler] ⚠️ Skipping AI/coordinate fallback (cross-device playback)`);
   }
   
   if (!clickResult) {
