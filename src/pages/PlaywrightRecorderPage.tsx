@@ -8908,16 +8908,38 @@ Recorded Test
             type: s.type || 'unknown'
           })) || []}
           onElementPicked={(element) => {
-            // Immediately save the picked element - no extra button!
+            // Immediately save the picked element - update selectorObj.manualOverride for playback!
             if (editingActionIndex === null) return;
+            console.log('[onElementPicked] Saving manual fix:', element);
             setActions(prev => prev.map((action, idx) => {
               if (idx !== editingActionIndex) return action;
+              const newSelector = element.selector || action.selectorObj?.manualOverride;
+              const newText = element.text || action.selectorObj?.text;
+              console.log('[onElementPicked] Updating action:', { 
+                idx, 
+                newSelector, 
+                newText,
+                selectorType: element.selectorType 
+              });
               return {
                 ...action,
-                manualSelector: element.selector || action.manualSelector,
-                manualText: element.text || action.manualText,
+                // CRITICAL: Update selectorObj.manualOverride for playback engine
+                selectorObj: {
+                  ...action.selectorObj,
+                  manualOverride: newSelector,
+                  text: newText,
+                  selector: newSelector,
+                },
+                // Also update args if it's a click with text
+                args: newText && (action.qword === 'Click' || action.qword === 'click')
+                  ? [newText, ...(action.args?.slice(1) || [])]
+                  : action.args,
+                // Keep backup fields for debugging
+                manualSelector: newSelector,
+                manualText: newText,
               };
             }));
+            toast.success(`Step updated! Will use: ${element.selector || element.text}`);
             // Dialog closes automatically after pick
           }}
           onSkip={() => {
@@ -8958,16 +8980,30 @@ Recorded Test
           actionIndex={editingActionIndex || 0}
           onSave={(updates) => {
             if (editingActionIndex === null) return;
+            console.log('[ElementRepairWizard onSave] Saving:', updates);
             setActions(prev => prev.map((action, idx) => {
               if (idx !== editingActionIndex) return action;
+              const newSelector = updates.manualSelector || action.selectorObj?.manualOverride;
+              const newText = updates.manualText || action.selectorObj?.text;
               return {
                 ...action,
-                manualSelector: updates.manualSelector || action.manualSelector,
-                manualText: updates.manualText || action.manualText,
+                // CRITICAL: Update selectorObj.manualOverride for playback engine
+                selectorObj: {
+                  ...action.selectorObj,
+                  manualOverride: newSelector,
+                  text: newText,
+                  selector: newSelector,
+                },
+                args: newText && (action.qword === 'Click' || action.qword === 'click')
+                  ? [newText, ...(action.args?.slice(1) || [])]
+                  : action.args,
+                manualSelector: newSelector,
+                manualText: newText,
               };
             }));
             setEditSelectorModalOpen(false);
             setEditingActionIndex(null);
+            toast.success(`Step updated! Will use: ${updates.manualSelector || updates.manualText}`);
           }}
           failureState={failureState}
           browserKeptOpen={browserKeptOpen}
