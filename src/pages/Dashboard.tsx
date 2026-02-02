@@ -109,17 +109,15 @@ const ActionItem = ({
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
-    testCoverage: 73,
     passRate: 89,
     criticalDefects: 2,
     highDefects: 5,
     totalDefects: 12,
     totalTestCases: 10,
-    totalRequirements: 10,
+    totalTestSuites: 3,
     testsRun: 156,
     avgExecutionTime: 4.2,
     automationRate: 65,
-    sprintProgress: 68,
     releaseReadiness: 82
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
@@ -131,23 +129,19 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      // Load real data from multiple endpoints
-      const [testCases, defects, requirements] = await Promise.all([
+      // Load real data from endpoints
+      const [testCases, defects, testSuites] = await Promise.all([
         fetch(`${API_BASE_URL}/test-cases`).then(r => r.ok ? r.json() : []),
         fetch(`${API_BASE_URL}/defects`).then(r => r.ok ? r.json() : []),
-        fetch(`${API_BASE_URL}/requirements`).then(r => r.ok ? r.json() : { requirements: [] })
+        fetch(`${API_BASE_URL}/test-suites`).then(r => r.ok ? r.json() : [])
       ]);
 
       const tcList = Array.isArray(testCases) ? testCases : [];
       const defList = Array.isArray(defects) ? defects : defects?.defects || [];
-      const reqList = requirements?.requirements || [];
+      const suiteList = Array.isArray(testSuites) ? testSuites : testSuites?.test_suites || [];
 
       const criticalDef = defList.filter((d: any) => d.severity === 'critical' || d.priority === 'critical').length;
       const highDef = defList.filter((d: any) => d.severity === 'high' || d.priority === 'high').length;
-
-      // Calculate test coverage (test cases linked to requirements / total requirements)
-      const linkedReqs = new Set(tcList.flatMap((tc: any) => tc.linkedRequirements || []));
-      const coverage = reqList.length > 0 ? Math.round((linkedReqs.size / reqList.length) * 100) : 0;
 
       // Get real test run data from results service
       const testRunResults = resultsIngestionService.getAllResults();
@@ -170,20 +164,23 @@ export default function Dashboard() {
       const passRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
       const avgDuration = testRunResults.length > 0 ? totalDuration / testRunResults.length / 1000 : 0;
 
+      // Calculate release readiness based on pass rate and defects
+      const defectPenalty = (criticalDef * 15) + (highDef * 5);
+      const releaseScore = Math.max(0, Math.round((passRate * 0.6) + (100 - defectPenalty) * 0.4));
+
       setStats(prev => ({
         ...prev,
         totalTestCases: tcList.length || 10,
+        totalTestSuites: suiteList.length || 3,
         totalDefects: defList.length || 12,
         criticalDefects: criticalDef || 2,
         highDefects: highDef || 5,
-        totalRequirements: reqList.length || 10,
-        testCoverage: coverage || 73,
         // Real stats from test runs
         passRate: passRate || prev.passRate,
         testsRun: totalTests || prev.testsRun,
         avgExecutionTime: avgDuration > 0 ? parseFloat(avgDuration.toFixed(1)) : prev.avgExecutionTime,
-        automationRate: testRunResults.length > 0 ? 100 : prev.automationRate, // All unified tests are automated
-        releaseReadiness: Math.round((passRate * 0.4) + (coverage * 0.3) + (100 - (criticalDef * 10)) * 0.3)
+        automationRate: testRunResults.length > 0 ? 100 : prev.automationRate,
+        releaseReadiness: releaseScore || prev.releaseReadiness
       }));
 
       // Build recent activity from real test runs
@@ -282,9 +279,9 @@ export default function Dashboard() {
             <BarChart3 className="h-4 w-4 mr-2" />
             Full Analytics
           </Button>
-          <Button onClick={() => navigate('/traceability')}>
-            <Target className="h-4 w-4 mr-2" />
-            Traceability
+          <Button onClick={() => navigate('/test-cases')}>
+            <TestTube className="h-4 w-4 mr-2" />
+            Test Cases
           </Button>
         </div>
       </div>
@@ -292,24 +289,24 @@ export default function Dashboard() {
       {/* Executive KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="Test Coverage"
-          value={`${stats.testCoverage}%`}
-          subtitle={`${stats.totalRequirements} requirements tracked`}
-          trend={stats.testCoverage >= 80 ? 'up' : 'down'}
-          trendValue={stats.testCoverage >= 80 ? 'On Target' : 'Below Target (80%)'}
-          icon={Target}
+          title="Test Cases"
+          value={stats.totalTestCases}
+          subtitle={`${stats.automationRate}% automated`}
+          trend={stats.totalTestCases > 0 ? 'up' : 'neutral'}
+          trendValue={stats.totalTestCases > 0 ? 'Tests available' : 'Create tests'}
+          icon={TestTube}
           color="border-l-blue-500"
-          onClick={() => navigate('/traceability')}
+          onClick={() => navigate('/test-cases')}
         />
         <KPICard
           title="Pass Rate"
           value={`${stats.passRate}%`}
           subtitle={`${stats.testsRun} tests executed`}
-          trend="up"
-          trendValue="+3% vs last week"
+          trend={stats.passRate >= 80 ? 'up' : 'down'}
+          trendValue={stats.passRate >= 80 ? 'On Target' : 'Below Target (80%)'}
           icon={CheckCircle2}
           color="border-l-green-500"
-          onClick={() => navigate('/runs')}
+          onClick={() => navigate('/test-runs')}
         />
         <KPICard
           title="Critical Defects"
@@ -324,12 +321,12 @@ export default function Dashboard() {
         <KPICard
           title="Release Readiness"
           value={`${stats.releaseReadiness}%`}
-          subtitle="Sprint 24 progress"
-          trend="up"
-          trendValue="On track for release"
+          subtitle="Overall quality score"
+          trend={stats.releaseReadiness >= 80 ? 'up' : 'down'}
+          trendValue={stats.releaseReadiness >= 80 ? 'On track' : 'Needs work'}
           icon={Gauge}
           color="border-l-purple-500"
-          onClick={() => navigate('/projects')}
+          onClick={() => navigate('/analytics')}
         />
       </div>
 
@@ -362,13 +359,13 @@ export default function Dashboard() {
                 icon={Bug}
               />
             )}
-            {stats.testCoverage < 80 && (
+            {stats.passRate < 80 && (
               <ActionItem
                 severity="warning"
-                title="Test Coverage Below Target"
-                description={`Current: ${stats.testCoverage}% | Target: 80% — ${Math.ceil((80 - stats.testCoverage) * stats.totalRequirements / 100)} requirements need test cases`}
-                action={() => navigate('/cases/create')}
-                actionLabel="Add Tests"
+                title="Pass Rate Below Target"
+                description={`Current: ${stats.passRate}% | Target: 80% — Review and fix failing tests`}
+                action={() => navigate('/test-runs')}
+                actionLabel="View Runs"
                 icon={TestTube}
               />
             )}
@@ -442,10 +439,10 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span>Coverage</span>
-                  <span className="font-medium">{stats.testCoverage}%</span>
+                  <span>Defect Free</span>
+                  <span className="font-medium">{Math.max(0, 100 - (stats.criticalDefects * 10) - (stats.highDefects * 5))}%</span>
                 </div>
-                <Progress value={stats.testCoverage} className="h-2" />
+                <Progress value={Math.max(0, 100 - (stats.criticalDefects * 10) - (stats.highDefects * 5))} className="h-2" />
               </div>
             </div>
           </CardContent>
@@ -474,8 +471,8 @@ export default function Dashboard() {
                 <FileText className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.totalRequirements}</p>
-                <p className="text-sm text-muted-foreground">Requirements</p>
+                <p className="text-2xl font-bold">{stats.totalTestSuites}</p>
+                <p className="text-sm text-muted-foreground">Test Suites</p>
               </div>
             </div>
           </CardContent>
@@ -561,13 +558,13 @@ export default function Dashboard() {
               <Button 
                 variant="outline" 
                 className="h-auto py-3 flex items-center justify-between"
-                onClick={() => navigate('/traceability')}
+                onClick={() => navigate('/test-cases')}
               >
                 <div className="flex items-center gap-3">
-                  <Target className="h-5 w-5 text-blue-500" />
+                  <TestTube className="h-5 w-5 text-blue-500" />
                   <div className="text-left">
-                    <span className="text-sm font-medium block">View Traceability Matrix</span>
-                    <span className="text-xs text-muted-foreground">Req → Test → Defect coverage</span>
+                    <span className="text-sm font-medium block">View Test Repository</span>
+                    <span className="text-xs text-muted-foreground">{stats.totalTestCases} test cases</span>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4" />
@@ -575,13 +572,13 @@ export default function Dashboard() {
               <Button 
                 variant="outline" 
                 className="h-auto py-3 flex items-center justify-between"
-                onClick={() => navigate('/runs')}
+                onClick={() => navigate('/test-runs')}
               >
                 <div className="flex items-center gap-3">
                   <Play className="h-5 w-5 text-green-500" />
                   <div className="text-left">
-                    <span className="text-sm font-medium block">Test Execution Status</span>
-                    <span className="text-xs text-muted-foreground">Current sprint progress</span>
+                    <span className="text-sm font-medium block">Test Execution History</span>
+                    <span className="text-xs text-muted-foreground">{stats.testsRun} tests executed</span>
                   </div>
                 </div>
                 <ChevronRight className="h-4 w-4" />
