@@ -65,6 +65,12 @@ const mainNavItems: NavItem[] = [
   // CORE TABS - Always visible (the foundation of the platform)
   // ─────────────────────────────────────────────────────────────────────────
   {
+    id: 'dashboard',
+    label: 'Dashboard',
+    path: '/dashboard',
+    description: 'Overview & analytics',
+  },
+  {
     id: 'recorder',
     label: 'Record',
     path: '/recorder',
@@ -255,11 +261,8 @@ function Header() {
     !item.plugin || isAvailable(item.plugin)
   );
 
-  // More menu items - some are plugin-controlled
+  // More menu items - additional features not in main nav
   const moreMenuItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, plugin: null }, // Always available
-    { label: 'Analytics', path: '/analytics', icon: BarChart3, plugin: 'analytics' as const },
-    { divider: true },
     { label: 'Secrets Vault', path: '/secrets', icon: Shield, plugin: 'secrets' as const },
     { label: 'Integrations', path: '/integrations', icon: Plug, plugin: 'integrations' as const },
     { divider: true },
