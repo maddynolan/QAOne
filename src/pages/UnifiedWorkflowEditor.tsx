@@ -36,7 +36,7 @@ import {
   Home, Briefcase, Gamepad2, BarChart3,
   Activity, FileJson, Link2, Key, Timer,
   ClipboardList, ArrowLeft, ArrowRight, Circle, CheckCircle2, XCircle as XCircleIcon, SkipForward, Ban,
-  Pencil, Flag, FileDown, Cloud, File,
+  Pencil, Flag, FileDown, Cloud, File, TestTube,
   // Advanced UI icons
   Table, Move, Sliders, Keyboard, Layout, Maximize2, CheckSquare, GripVertical,
   Crosshair
