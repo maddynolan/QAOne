@@ -1993,6 +1993,337 @@ async def set_global_tags(request: Request, body: dict):
 # CAPABILITIES - Complete feature list
 # ============================================================================
 
+# ============================================================================
+# ADVANCED CORRELATION - LoadRunner-level correlation
+# ============================================================================
+
+from app.services.performance.advanced_correlation import (
+    get_advanced_correlation_engine, AdvancedCorrelationRule, ExtractionType, PREBUILT_RULES
+)
+
+
+@router.post("/correlation/boundary-rule")
+async def create_boundary_rule(request: Request, body: dict):
+    """
+    Create a boundary-based correlation rule (LoadRunner style).
+    
+    Equivalent to LoadRunner's web_reg_save_param:
+    web_reg_save_param("token", "LB=token=", "RB=&", "ORD=1", LAST);
+    """
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        rule = engine.create_boundary_rule(
+            variable_name=body.get("variable_name"),
+            left_boundary=body.get("left_boundary"),
+            right_boundary=body.get("right_boundary", ""),
+            occurrence=body.get("occurrence", 1),
+            search_scope=body.get("search_scope", "body")
+        )
+        
+        return {
+            "status": "success",
+            "rule": rule.to_dict(),
+            "message": f"Created boundary rule: {rule.variable_name}"
+        }
+    except Exception as e:
+        logger.error(f"Error creating boundary rule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correlation/advanced-rule")
+async def create_advanced_rule(request: Request, body: dict):
+    """
+    Create an advanced correlation rule with full options.
+    
+    Supports: boundary, jsonpath, regex, xpath, header, cookie, html_form
+    """
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        rule = AdvancedCorrelationRule(
+            variable_name=body.get("variable_name"),
+            extraction_type=ExtractionType(body.get("extraction_type", "regex")),
+            left_boundary=body.get("left_boundary"),
+            right_boundary=body.get("right_boundary"),
+            pattern=body.get("pattern"),
+            header_name=body.get("header_name"),
+            cookie_name=body.get("cookie_name"),
+            form_name=body.get("form_name"),
+            field_name=body.get("field_name"),
+            occurrence=body.get("occurrence", 1),
+            search_scope=body.get("search_scope", "body"),
+            save_offset=body.get("save_offset", 0),
+            save_length=body.get("save_length", -1),
+            convert_to=body.get("convert_to"),
+            default_value=body.get("default_value", ""),
+            not_found_action=body.get("not_found_action", "warning")
+        )
+        
+        engine.add_rule(rule)
+        
+        return {
+            "status": "success",
+            "rule": rule.to_dict()
+        }
+    except Exception as e:
+        logger.error(f"Error creating advanced rule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correlation/extract")
+async def extract_correlation_values(request: Request, body: dict):
+    """
+    Extract correlation values from a response using configured rules.
+    """
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        response_body = body.get("response_body", "")
+        response_headers = body.get("response_headers", {})
+        session_id = body.get("session_id", "default")
+        request_name = body.get("request_name")
+        
+        extracted = engine.extract(response_body, response_headers, session_id, request_name)
+        
+        return {
+            "status": "success",
+            "extracted": extracted,
+            "all_variables": engine.get_all_variables(session_id)
+        }
+    except Exception as e:
+        logger.error(f"Error extracting correlation values: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correlation/detect-candidates")
+async def detect_correlation_candidates(request: Request, body: dict):
+    """
+    Detect potential correlation candidates in a response.
+    Returns suggestions for the correlation wizard.
+    """
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        response_body = body.get("response_body", "")
+        response_headers = body.get("response_headers", {})
+        
+        candidates = engine.detect_candidates(response_body, response_headers)
+        
+        return {
+            "status": "success",
+            "candidates": [c.to_dict() for c in candidates],
+            "message": f"Found {len(candidates)} correlation candidates"
+        }
+    except Exception as e:
+        logger.error(f"Error detecting candidates: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correlation/apply-suggestion")
+async def apply_correlation_suggestion(request: Request, body: dict):
+    """Apply a suggested correlation rule from the wizard"""
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        variable_name = body.get("variable_name")
+        if not variable_name:
+            raise HTTPException(status_code=400, detail="variable_name is required")
+        
+        success = engine.apply_suggestion(variable_name)
+        
+        return {
+            "status": "success" if success else "not_found",
+            "message": f"Applied suggestion: {variable_name}" if success else "Suggestion not found"
+        }
+    except Exception as e:
+        logger.error(f"Error applying suggestion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correlation/load-prebuilt")
+async def load_prebuilt_rules(request: Request, body: dict):
+    """
+    Load pre-built correlation rules for a specific application type.
+    
+    Available: generic_web, asp_net, java_web, php, oauth2, salesforce
+    """
+    try:
+        engine = get_advanced_correlation_engine()
+        
+        app_type = body.get("application_type", "generic_web")
+        
+        if app_type not in PREBUILT_RULES:
+            return {
+                "status": "error",
+                "available_types": list(PREBUILT_RULES.keys()),
+                "message": f"Unknown application type: {app_type}"
+            }
+        
+        engine.load_prebuilt_rules(app_type)
+        
+        return {
+            "status": "success",
+            "application_type": app_type,
+            "rules_loaded": len(PREBUILT_RULES[app_type]),
+            "message": f"Loaded pre-built rules for {app_type}"
+        }
+    except Exception as e:
+        logger.error(f"Error loading prebuilt rules: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/correlation/prebuilt-types")
+async def list_prebuilt_types():
+    """List available pre-built correlation rule sets"""
+    return {
+        "status": "success",
+        "types": {
+            name: {
+                "rule_count": len(rules),
+                "variables": [r.variable_name for r in rules]
+            }
+            for name, rules in PREBUILT_RULES.items()
+        }
+    }
+
+
+# ============================================================================
+# CUSTOM SCRIPTING - User-defined test scripts
+# ============================================================================
+
+from app.services.performance.script_engine import get_script_engine, ScriptContext
+
+
+@router.post("/scripts/register")
+async def register_script(request: Request, body: dict):
+    """
+    Register a custom script for use in tests.
+    
+    Scripts can define functions like:
+    - pre_request(ctx, request) - Modify request before sending
+    - post_response(ctx, request, response) - Process response
+    - setup(ctx) - Global setup
+    - teardown(ctx, data) - Global teardown
+    - vu_setup(ctx, data) - Per-VU setup
+    - custom_check(ctx, response) - Custom validation
+    """
+    try:
+        engine = get_script_engine()
+        
+        name = body.get("name")
+        code = body.get("code")
+        
+        if not name or not code:
+            raise HTTPException(status_code=400, detail="name and code are required")
+        
+        # Validate script
+        is_valid, error = engine.validate_script(code)
+        if not is_valid:
+            return {
+                "status": "error",
+                "error": error,
+                "message": "Script validation failed"
+            }
+        
+        engine.register_script(name, code)
+        
+        return {
+            "status": "success",
+            "name": name,
+            "message": "Script registered successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error registering script: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/scripts/execute")
+async def execute_script(request: Request, body: dict):
+    """
+    Execute a script function.
+    
+    For testing scripts before using in load tests.
+    """
+    try:
+        engine = get_script_engine()
+        
+        script_or_name = body.get("script") or body.get("name")
+        function_name = body.get("function", "pre_request")
+        
+        # Create context
+        context = ScriptContext(
+            vu_id=body.get("vu_id", "test_vu_1"),
+            iteration=body.get("iteration", 1),
+            test_start_time=datetime.utcnow(),
+            variables=body.get("variables", {})
+        )
+        
+        # Get additional arguments
+        kwargs = {}
+        if "request" in body:
+            kwargs["request"] = body["request"]
+        if "response" in body:
+            kwargs["response"] = body["response"]
+        if "data" in body:
+            kwargs["data"] = body["data"]
+        
+        result = engine.execute(script_or_name, function_name, context, **kwargs)
+        
+        return {
+            "status": "success" if result.success else "error",
+            "result": result.to_dict()
+        }
+    except Exception as e:
+        logger.error(f"Error executing script: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/scripts/validate")
+async def validate_script(request: Request, body: dict):
+    """Validate a script without executing it"""
+    try:
+        engine = get_script_engine()
+        
+        code = body.get("code")
+        if not code:
+            raise HTTPException(status_code=400, detail="code is required")
+        
+        is_valid, error = engine.validate_script(code)
+        
+        return {
+            "status": "valid" if is_valid else "invalid",
+            "error": error,
+            "message": "Script is valid" if is_valid else f"Validation failed: {error}"
+        }
+    except Exception as e:
+        logger.error(f"Error validating script: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scripts/templates")
+async def list_script_templates():
+    """List available script templates"""
+    engine = get_script_engine()
+    return {
+        "status": "success",
+        "templates": engine.list_templates()
+    }
+
+
+@router.get("/scripts/template/{template_type}")
+async def get_script_template(template_type: str):
+    """Get a specific script template"""
+    engine = get_script_engine()
+    template = engine.get_template(template_type)
+    
+    return {
+        "status": "success",
+        "template_type": template_type,
+        "code": template
+    }
+
+
 @router.get("/capabilities")
 async def get_performance_capabilities():
     """Get complete list of performance testing capabilities"""
@@ -2053,10 +2384,27 @@ async def get_performance_capabilities():
                 "simulations": "Full parity"
             },
             "comparison_to_loadrunner": {
-                "correlation": "Full parity",
+                "correlation": "Advanced (boundary extraction, prebuilt rules, wizard)",
                 "parameterization": "Full parity",
                 "protocols": "Partial (HTTP, WebSocket, gRPC)",
-                "analysis": "Good (Lighthouse, SRM, trending)"
+                "analysis": "Good (Lighthouse, SRM, trending)",
+                "scripting": "Python-based (safer than C, more powerful than JS)"
+            },
+            "correlation_features": {
+                "extraction_types": ["boundary (LB/RB)", "jsonpath", "regex", "xpath", "header", "cookie", "html_form"],
+                "occurrence_handling": ["first", "last", "all (array)", "specific (ORD=N)"],
+                "prebuilt_rules": ["generic_web", "asp_net", "java_web", "php", "oauth2", "salesforce"],
+                "wizard_support": True,
+                "replay_detection": True,
+                "substring_extraction": True,
+                "value_conversion": ["url_encode", "url_decode", "base64_encode", "base64_decode"]
+            },
+            "scripting_features": {
+                "language": "Python",
+                "hook_types": ["pre_request", "post_response", "setup", "teardown", "vu_setup", "custom_check"],
+                "built_in_functions": ["random_*", "timestamp", "md5", "sha256", "base64_*", "url_*", "json_*", "regex_*"],
+                "safety": "Sandboxed execution (no imports, no file access)",
+                "templates": True
             }
         }
     }
