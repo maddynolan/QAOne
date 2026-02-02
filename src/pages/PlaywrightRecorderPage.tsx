@@ -5224,16 +5224,18 @@ Recorded Test
                         e.stopPropagation();
                         openEditSelectorModal(index);
                       }}
-                      title="Edit selector - Fix if playback fails"
+                      title="Edit step - Modify selector or value"
                     >
                       <Edit className="h-3 w-3" />
                     </Button>
+                    {/* DELETE BUTTON - Always visible for discoverability */}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
+                        const actionName = action.description || action.qword || 'step';
                         setActions(prev => prev.filter((_, i) => i !== index));
                         // Also remove from selection if multi-selected
                         if (selectedActionIndices.has(index)) {
@@ -5246,7 +5248,9 @@ Recorded Test
                             return adjusted;
                           });
                         }
+                        toast.success(`Deleted: ${actionName}`);
                       }}
+                      title="Delete step"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
