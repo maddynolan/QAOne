@@ -875,7 +875,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const selectorObj = resolvedStep.selectorObj || {};
           // Element index for duplicate elements (0 = first, 1 = second, etc.)
           const elementIndex = typeof resolvedStep.args?.[1] === 'number' ? resolvedStep.args[1] : 0;
+          
+          // DEBUG: Log full step data to understand what we're working with
           console.log(`[Executor] ClickText: "${clickText}"${elementIndex > 0 ? ` (index: ${elementIndex})` : ''}`);
+          console.log(`[Executor] DEBUG selectorObj:`, JSON.stringify({
+            manualOverride: selectorObj.manualOverride,
+            selector: selectorObj.selector,
+            playwright: selectorObj.playwright,
+            tag: selectorObj.tag,
+            role: selectorObj.role,
+            text: selectorObj.text,
+            ariaLabel: selectorObj.ariaLabel,
+            id: selectorObj.id,
+          }, null, 2));
           
           // Extract ID from fallbacks if not directly available
           // Test cases store ID in fallbacks array: selectorObj.fallbacks[{type: 'id', selector: '#button-cart'}]
@@ -925,14 +937,22 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // V2: TRY SMARTFINDER SECOND (recipe-based element finding)
           // This uses semantic identification (role, text, context) instead of brittle selectors
           if (this.useSmartFinder && !clickSuccess) {
+            console.log(`[Executor] Trying SmartFinder V2 for "${clickText}"...`);
             try {
               const v2Locator = await this.findElementV2(resolvedStep);
               if (v2Locator) {
+                // DEBUG: Log what we're about to click
+                const tagName = await v2Locator.evaluate(el => el.tagName).catch(() => 'unknown');
+                const textContent = await v2Locator.evaluate(el => el.textContent?.trim().substring(0, 50)).catch(() => 'unknown');
+                console.log(`[Executor] SmartFinder found: <${tagName}> with text: "${textContent}"`);
+                
                 await v2Locator.waitFor({ state: 'visible', timeout: 5000 });
                 await v2Locator.click({ timeout: 5000 });
                 clickSuccess = true;
                 clickLocator = v2Locator;
                 console.log(`[Executor] ✓ V2 SmartFinder click successful`);
+              } else {
+                console.log(`[Executor] SmartFinder V2 returned null locator`);
               }
             } catch (e) {
               console.log(`[Executor] V2 SmartFinder failed:`, e.message);
@@ -973,29 +993,41 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           
           // STRATEGY 2: Text-based selectors with multiple fallbacks
           const textStrategies = [
-            () => getAtIndex(this.page.getByText(clickText, { exact: false })),
-            () => getAtIndex(this.page.getByRole('button', { name: clickText })),
-            () => getAtIndex(this.page.getByRole('link', { name: clickText })),
-            () => getAtIndex(this.page.getByRole('checkbox', { name: clickText })),
-            () => getAtIndex(this.page.getByRole('radio', { name: clickText })),
-            () => getAtIndex(this.page.getByLabel(clickText)),
-            () => getAtIndex(this.page.locator(`label:has-text("${clickText}")`)),
-            () => getAtIndex(this.page.getByRole('menuitem', { name: clickText })),
-            () => getAtIndex(this.page.locator(`[aria-label*="${clickText}"], [title*="${clickText}"]`)),
+            { name: 'getByText(exact:false)', fn: () => getAtIndex(this.page.getByText(clickText, { exact: false })) },
+            { name: 'getByRole(button)', fn: () => getAtIndex(this.page.getByRole('button', { name: clickText })) },
+            { name: 'getByRole(link)', fn: () => getAtIndex(this.page.getByRole('link', { name: clickText })) },
+            { name: 'getByRole(checkbox)', fn: () => getAtIndex(this.page.getByRole('checkbox', { name: clickText })) },
+            { name: 'getByRole(radio)', fn: () => getAtIndex(this.page.getByRole('radio', { name: clickText })) },
+            { name: 'getByLabel', fn: () => getAtIndex(this.page.getByLabel(clickText)) },
+            { name: 'label:has-text', fn: () => getAtIndex(this.page.locator(`label:has-text("${clickText}")`)) },
+            { name: 'getByRole(menuitem)', fn: () => getAtIndex(this.page.getByRole('menuitem', { name: clickText })) },
+            { name: 'aria-label/title', fn: () => getAtIndex(this.page.locator(`[aria-label*="${clickText}"], [title*="${clickText}"]`)) },
             // Salesforce-specific: span with text inside checkbox container
-            () => this.page.locator(`.slds-checkbox span:has-text("${clickText}"), .slds-radio span:has-text("${clickText}")`).first(),
+            { name: 'slds-checkbox', fn: () => this.page.locator(`.slds-checkbox span:has-text("${clickText}"), .slds-radio span:has-text("${clickText}")`).first() },
             // Click the actual input near text
-            () => this.page.locator(`text="${clickText}" >> xpath=../preceding-sibling::input | text="${clickText}" >> xpath=../input`).first(),
+            { name: 'text-sibling-input', fn: () => this.page.locator(`text="${clickText}" >> xpath=../preceding-sibling::input | text="${clickText}" >> xpath=../input`).first() },
           ];
           
           if (!clickSuccess) {
-            for (const getLocator of textStrategies) {
+            console.log(`[Executor] Trying text-based strategies for "${clickText}"...`);
+            for (const strategy of textStrategies) {
               if (clickSuccess) break;
               
               for (let retry = 0; retry < 2 && !clickSuccess; retry++) {
                 try {
-                  clickLocator = getLocator();
+                  clickLocator = strategy.fn();
+                  const count = await clickLocator.count().catch(() => 0);
+                  if (count === 0) {
+                    if (retry === 0) console.log(`[Executor] Strategy "${strategy.name}" found 0 elements`);
+                    continue;
+                  }
+                  
                   await clickLocator.waitFor({ state: 'visible', timeout: retry === 0 ? 3000 : 5000 });
+                  
+                  // DEBUG: Log what we found
+                  const tagName = await clickLocator.evaluate(el => el.tagName).catch(() => 'unknown');
+                  const textContent = await clickLocator.evaluate(el => el.textContent?.trim().substring(0, 50)).catch(() => 'unknown');
+                  console.log(`[Executor] Strategy "${strategy.name}" found: <${tagName}> with text: "${textContent}"`);
                   
                   // For checkbox/radio roles, use check() method
                   const role = await clickLocator.getAttribute('role').catch(() => null);
@@ -1012,7 +1044,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                   }
                   
                   clickSuccess = true;
-                  console.log(`[Executor] ✓ Click succeeded with strategy`);
+                  console.log(`[Executor] ✓ Click succeeded with strategy "${strategy.name}"`);
                 } catch (e) {
                   // Try next strategy
                 }

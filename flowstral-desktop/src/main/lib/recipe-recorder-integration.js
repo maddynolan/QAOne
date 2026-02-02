@@ -1233,7 +1233,9 @@ function legacyActionToRecipe(legacyAction) {
     const actionType = legacyAction.type.toLowerCase();
     if (actionType.includes('click')) {
       // For click actions, try to infer role from tag or context
-      const tag = (element.tagName || selectorObj.tag || '').toLowerCase();
+      // NOTE: Recording stores tagName (capital N), also check tag for compatibility
+      const tag = (element.tagName || selectorObj.tagName || selectorObj.tag || '').toLowerCase();
+      console.log(`[legacyActionToRecipe] Inferred tag: "${tag}" from element.tagName=${element.tagName}, selectorObj.tagName=${selectorObj.tagName}, selectorObj.tag=${selectorObj.tag}`);
       if (tag === 'a') inferredRole = 'link';
       else if (tag === 'button') inferredRole = 'button';
       else if (tag === 'input' && element.type === 'submit') inferredRole = 'button';
@@ -1271,7 +1273,7 @@ function legacyActionToRecipe(legacyAction) {
     what: {
       role: inferredRole || null,
       text: elementText || '',
-      tag: element.tagName || selectorObj.tag || null,
+      tag: element.tagName || selectorObj.tagName || selectorObj.tag || null,
       type: element.type || selectorObj.type || null, // Input type
     },
     where: {
