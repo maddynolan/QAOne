@@ -7174,30 +7174,144 @@ function StepEditor({
       )}
 
       {step.type === 'db_query' && (
-        <>
-          <div className="space-y-2">
-            <Label>Database Type</Label>
-            <Select value={step.dbType || 'postgres'} onValueChange={(v) => onUpdate({ dbType: v as any })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="postgres">PostgreSQL</SelectItem>
-                <SelectItem value="mysql">MySQL</SelectItem>
-                <SelectItem value="mongodb">MongoDB</SelectItem>
-                <SelectItem value="salesforce_soql">Salesforce SOQL</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="space-y-4 border-l-4 border-orange-600 pl-4">
+          <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-medium">
+            <Database className="h-4 w-4" />
+            Database Query
           </div>
+          
+          {/* Connection Section */}
+          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+            <p className="text-xs font-medium text-orange-700 dark:text-orange-400 mb-2 flex items-center gap-1">
+              <Key className="h-3 w-3" />
+              Connection Settings
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Database Type</Label>
+                <Select value={step.dbType || 'postgres'} onValueChange={(v) => onUpdate({ dbType: v as any })}>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="postgres">PostgreSQL</SelectItem>
+                    <SelectItem value="mysql">MySQL</SelectItem>
+                    <SelectItem value="mongodb">MongoDB</SelectItem>
+                    <SelectItem value="mssql">SQL Server</SelectItem>
+                    <SelectItem value="oracle">Oracle</SelectItem>
+                    <SelectItem value="salesforce_soql">Salesforce SOQL</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Connection Name</Label>
+                <Select 
+                  value={(step as any).connectionName || 'default'} 
+                  onValueChange={(v) => onUpdate({ connectionName: v } as any)}
+                >
+                  <SelectTrigger className="h-8"><SelectValue placeholder="Select connection" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default (from env)</SelectItem>
+                    <SelectItem value="primary_db">Primary Database</SelectItem>
+                    <SelectItem value="replica_db">Read Replica</SelectItem>
+                    <SelectItem value="test_db">Test Database</SelectItem>
+                    <SelectItem value="custom">Custom Connection</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {(step as any).connectionName === 'custom' && (
+              <div className="mt-3 space-y-2">
+                <Label className="text-xs">Connection String (ENV Variable Name)</Label>
+                <Input
+                  value={(step as any).connectionEnvVar || ''}
+                  onChange={(e) => onUpdate({ connectionEnvVar: e.target.value } as any)}
+                  placeholder="DATABASE_URL or DB_CONNECTION_STRING"
+                  className="h-8 font-mono text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  🔒 Connection string is read from environment variable for security
+                </p>
+              </div>
+            )}
+            
+            <p className="text-[10px] text-muted-foreground mt-2">
+              💡 Configure database connections in Settings → Integrations → Databases
+            </p>
+          </div>
+
+          {/* Query Section */}
           <div className="space-y-2">
-            <Label>Query</Label>
+            <Label>SQL Query</Label>
             <Textarea
               value={step.query || ''}
               onChange={(e) => onUpdate({ query: e.target.value })}
-              placeholder="SELECT * FROM users WHERE id = $1"
-              className="font-mono text-sm"
-              rows={3}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder={step.dbType === 'mongodb' 
+                ? '{ "collection": "users", "filter": { "email": "${user_email}" } }'
+                : step.dbType === 'salesforce_soql'
+                ? "SELECT Id, Name FROM Account WHERE Name = '${account_name}'"
+                : "SELECT * FROM users WHERE email = '${user_email}'"
+              }
+              className="font-mono text-sm min-h-[80px]"
+              rows={4}
             />
+            <p className="text-xs text-muted-foreground">
+              Use <code className="bg-muted px-1 rounded">{'${variable_name}'}</code> to reference stored variables
+            </p>
           </div>
-        </>
+
+          {/* Store Results */}
+          <div className="space-y-2">
+            <Label>Store Results As Variable</Label>
+            <Input
+              value={(step as any).storeResultsAs || ''}
+              onChange={(e) => onUpdate({ storeResultsAs: e.target.value } as any)}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="query_results"
+              className="font-mono"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Access results: <code className="bg-muted px-1 rounded">{'${query_results[0].column_name}'}</code>
+            </p>
+          </div>
+
+          {/* Variable Reference Helper */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+            <p className="text-xs font-medium mb-2">📦 Available Variables in Test:</p>
+            <div className="flex flex-wrap gap-1">
+              {testCase.steps
+                .filter(s => s.id !== step.id && (
+                  (s as any).variableName || 
+                  (s as any).storeAs || 
+                  (s as any).storeResultsAs ||
+                  s.type === 'extract_variable' ||
+                  s.type === 'generate_data' ||
+                  s.type === 'api_extract'
+                ))
+                .slice(0, 8)
+                .map((s, i) => {
+                  const varName = (s as any).variableName || (s as any).storeAs || (s as any).storeResultsAs || 'value';
+                  return (
+                    <Badge 
+                      key={i} 
+                      variant="outline" 
+                      className="text-[10px] font-mono cursor-pointer hover:bg-primary/10"
+                      onClick={() => {
+                        const currentQuery = step.query || '';
+                        onUpdate({ query: currentQuery + '${' + varName + '}' });
+                      }}
+                    >
+                      {'${' + varName + '}'}
+                    </Badge>
+                  );
+                })
+              }
+              {testCase.steps.filter(s => (s as any).variableName || (s as any).storeAs).length === 0 && (
+                <span className="text-[10px] text-muted-foreground">No variables stored yet. Use Extract or Generate steps first.</span>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ========== MANUAL TESTING STEPS - Freeform Text ========== */}
