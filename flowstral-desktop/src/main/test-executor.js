@@ -2834,6 +2834,10 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     try {
       await this.initialize();
 
+      // Get flagged steps from test settings (for re-run at flagged step)
+      const flaggedStepIds = testData.settings?.flaggedSteps || [];
+      const stopAtFlagged = testData.settings?.stopAtFlaggedStep || false;
+      
       for (let i = 0; i < testData.steps.length; i++) {
         const step = testData.steps[i];
         
@@ -2841,6 +2845,28 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         if (step.enabled === false) {
           results.steps.push({ stepId: step.id, status: 'skipped' });
           continue;
+        }
+        
+        // Check if this step is flagged and we should stop
+        const isStepFlagged = step.flagged || flaggedStepIds.includes(step.id);
+        if (isStepFlagged && stopAtFlagged) {
+          console.log(`[Executor] 🚩 STOPPING at flagged step ${i + 1}: "${step.name || step.label}"`);
+          console.log(`[Executor] Browser is paused for user intervention. Step flagged for: ${step.flagReason || 'false positive / review'}`);
+          
+          results.stoppedAtFlaggedStep = {
+            stepIndex: i,
+            stepId: step.id,
+            stepName: step.name || step.label,
+            reason: step.flagReason || 'Flagged for review',
+            browserOpen: true
+          };
+          results.status = 'paused_at_flagged';
+          
+          // Emit event so frontend knows we're paused
+          this.onStepFlagged?.(i, step);
+          
+          // Don't execute this step, just pause here
+          break;
         }
 
         this.onStepStart(i, step);

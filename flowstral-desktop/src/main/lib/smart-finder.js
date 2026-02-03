@@ -518,6 +518,7 @@ class SmartFinder {
     // Handles: E-commerce products, Travel bookings, Food delivery, Table rows, etc.
     // If action has productContext (or similar), find the context first, then the button
     // ==========================================================================
+    const action = options.action || {}; // Get action from options if provided
     const contextText = action?.productContext;
     if (contextText && what?.text) {
       this.log(`[CONTEXT SEARCH] Looking for "${what.text}" within context: "${contextText}"`);
