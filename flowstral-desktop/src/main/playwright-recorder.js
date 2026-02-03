@@ -4441,18 +4441,22 @@ class PlaywrightRecorder extends EventEmitter {
           const stepInfo = await this._executeStepInternal(step, timeout);
           
           const duration = Date.now() - stepStart;
+          const workingSelector = stepInfo?.workingSelector || this._lastWorkingSelector || null;
+          const strategyType = stepInfo?.strategyType || this._lastStrategyType || null;
+          
           stepResults[i] = { 
             index: i, 
             status: 'passed', 
             duration,
             // SIMPLE: Store the actual selector that worked for Lock Locators
-            workingSelector: stepInfo?.workingSelector || null,
-            strategyType: stepInfo?.strategyType || null
+            workingSelector,
+            strategyType
           };
           passedSteps++;
           
-          this.emit('test-step-complete', { stepIndex: i, success: true });
-          this.emit('test-runner:step-complete', { index: i, status: 'passed', duration });
+          // Include workingSelector in event for frontend Lock Locators
+          this.emit('test-step-complete', { stepIndex: i, success: true, workingSelector, strategyType });
+          this.emit('test-runner:step-complete', { index: i, status: 'passed', duration, workingSelector, strategyType });
           
           // Brief pause between steps
           await this.page.waitForTimeout(500);

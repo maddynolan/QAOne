@@ -3892,7 +3892,7 @@ Recorded Test
       eventCleanups.push(unsubStepStart);
       
       // Listen for step complete events
-      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string }) => {
+      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string }) => {
         console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗');
         setTestExecutionResult(prev => {
           if (!prev) return prev;
@@ -3901,7 +3901,9 @@ Recorded Test
             index: data.stepIndex,
             status: data.success ? 'passed' : 'failed',
             error: data.error,
-            screenshot: data.screenshot
+            screenshot: data.screenshot,
+            workingSelector: data.workingSelector,
+            strategyType: data.strategyType
           };
           return {
             ...prev,
@@ -3909,6 +3911,30 @@ Recorded Test
             stepResults: newResults
           };
         });
+        
+        // =========== SMART SUGGESTIONS ON FAILURE ===========
+        // When a step fails, show Smart Suggestions first for quick fix
+        // This is BEFORE showing retry/skip options
+        if (!data.success) {
+          console.log('[Test] ❌ Step failed - showing Smart Suggestions for quick fix');
+          
+          // Set paused state so user can fix
+          setIsTestPaused(true);
+          setPausedAtStep(data.stepIndex);
+          setEditingActionIndex(data.stepIndex);
+          setRightPanelTab('suggestions');
+          
+          // Show suggestions overlay in browser
+          if (flowstral?.playwrightRecorder?.showSuggestionsOverlay) {
+            flowstral.playwrightRecorder.showSuggestionsOverlay();
+          }
+          handleRefreshSuggestions();
+          
+          toast.error(
+            `Step ${data.stepIndex + 1} failed. Click correct element in browser or use Smart Suggestions panel to fix.`,
+            { duration: 8000 }
+          );
+        }
         
         // Auto-scroll to current step
         setTimeout(() => {
@@ -3939,6 +3965,46 @@ Recorded Test
         });
       });
       eventCleanups.push(unsubPaused);
+      
+      // CRITICAL: Listen for test completion (especially after resume from pause)
+      const unsubComplete = flowstral.on('playwright-test-complete', (data: { 
+        success: boolean; 
+        passedSteps: number; 
+        totalSteps: number;
+        stepResults?: any[];
+        error?: string 
+      }) => {
+        console.log('[Test] ✅ Test complete event received:', data.success ? 'PASSED' : 'FAILED');
+        
+        // Build step results from event data or create default
+        const finalStepResults = data.stepResults?.map((s: any, i: number) => ({
+          index: i,
+          status: s.status || 'passed',
+          error: s.error,
+          screenshot: s.screenshot,
+          workingSelector: s.workingSelector,
+          strategyType: s.strategyType
+        })) || [];
+        
+        setTestExecutionResult({
+          status: data.success ? 'passed' : 'failed',
+          currentStep: data.totalSteps - 1,
+          stepResults: finalStepResults,
+          totalSteps: data.totalSteps,
+          error: data.success ? undefined : data.error
+        });
+        
+        setIsTestPaused(false);
+        setPausedAtStep(null);
+        setIsTestRunning(false);
+        
+        if (data.success) {
+          toast.success(`✅ Test Passed! (${data.passedSteps}/${data.totalSteps} steps)`, { duration: 3000 });
+        } else {
+          toast.error(`❌ Test Failed: ${data.error || 'Step failed'}`, { duration: 5000 });
+        }
+      });
+      eventCleanups.push(unsubComplete);
     }
     
     // Fallback: Poll-based progress tracking if no event listeners

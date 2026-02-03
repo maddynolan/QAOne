@@ -452,7 +452,7 @@ Layer 4: AI Vision Fallback (screenshot + GPT-4o)
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. Test runs → SmartFinder finds elements                       │
-│  2. For each step, backend returns workingSelector in results   │
+│  2. For each step, backend emits workingSelector in events      │
 │  3. Test passes → User clicks "🔒 Lock Locators"                │
 │  4. Frontend saves the ACTUAL working selector to each step     │
 │  5. On next run, locked selector tried FIRST (150ms timeout)    │
@@ -463,16 +463,18 @@ Layer 4: AI Vision Fallback (screenshot + GPT-4o)
 **Why This Is Simple:**
 - We save the EXACT selector that actually worked (not guessing)
 - Backend tracks `_lastWorkingSelector` and `_lastStrategyType`
-- stepResults include `{ workingSelector, strategyType }` for each step
+- Events include `{ workingSelector, strategyType }` for each step
 - Frontend just uses what the backend reports
 
 **Files Involved:**
 - `flowstral-desktop/src/main/playwright-recorder.js`:
   - `_lastWorkingSelector`, `_lastStrategyType` class properties
-  - `stepResults[i].workingSelector` in runTest results
+  - `test-step-complete` event includes workingSelector
+  - `test-complete` event includes stepResults with workingSelector
 - `flowstral-desktop/src/main/lib/smart-finder.js`:
   - `lastSuccessfulStrategy`, `lastSuccessfulSelector` exposed properties
 - `src/pages/PlaywrightRecorderPage.tsx`:
+  - Listens to `playwright-test-complete` for final status after resume
   - `handleLockLocators()` uses `stepResult.workingSelector`
 
 **Speed Impact:**
@@ -480,6 +482,34 @@ Layer 4: AI Vision Fallback (screenshot + GPT-4o)
 Without locked selectors: 30-45 seconds (full search each step)
 With locked selectors:    5-10 seconds (150ms check per step)
 ```
+
+### 4.6 Smart Suggestions on Failure (Simplified Repair)
+
+**Problem:** When a step fails, user has to manually figure out how to fix it.
+
+**Solution:** Show Smart Suggestions immediately when a step fails.
+
+**Flow:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. Step fails during test run                                   │
+│  2. Test pauses (browser stays open)                            │
+│  3. Smart Suggestions panel opens automatically                 │
+│  4. Suggestions overlay shows on browser                        │
+│  5. User clicks correct element → replaces failed step          │
+│  6. User resumes test                                           │
+│  7. If that fails too → show retry/skip/stop options            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why This Is Better:**
+- Same UX as "Flag" workflow (user already knows it)
+- One-click fix: click the element you want
+- No need to understand selectors or CSS
+
+**Files Involved:**
+- `src/pages/PlaywrightRecorderPage.tsx`:
+  - `playwright-test-step-complete` listener shows suggestions on failure
 
 ### 4.6 Reliability Layer
 
