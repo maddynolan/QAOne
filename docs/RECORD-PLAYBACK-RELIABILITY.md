@@ -797,6 +797,66 @@ if ((step.flagged || flaggedStepIds?.includes(step.id)) && stopAtFlagged) {
 
 **Impact:** Users can now flag steps, re-run tests, and the browser will stop at the flagged step for easy fixing.
 
+### 2026-01-31: Complete Flagged Step + Playback Speed Implementation
+
+**Files Changed:**
+- `flowstral-desktop/src/main/playwright-recorder.js`
+- `flowstral-desktop/src/main/lib/strategy-memory.js`
+- `src/pages/PlaywrightRecorderPage.tsx`
+
+**Changes:**
+
+1. **Flagged Step Handling in runTest():**
+   - Added `flaggedSteps` array parameter to identify steps marked as false positive
+   - Added `stopAtFlagged` boolean to enable pausing at flagged steps
+   - When test reaches a flagged step, it emits `test-paused` event and returns with `status: 'paused_at_flagged'`
+   - Browser stays open so user can use Smart Suggestions to fix
+
+2. **Playback Speed Control:**
+   - Added `slowMo` parameter (default 200ms) - controls delay between steps
+   - Speed mapping: 0 = 2x, 200 = 1x, 500 = 0.5x, 1000 = 0.25x
+   - Minimum 100ms delay for stability
+
+3. **Frontend Updates:**
+   - `handleRunTest()` now passes `flaggedSteps` (from `falsePositiveSteps` map) to backend
+   - `stopAtFlagged` is true when any steps are flagged
+   - `keepBrowserOpenOnFailure` auto-enabled when flagged steps exist
+   - When test returns `paused_at_flagged`, auto-opens Smart Suggestions panel
+
+4. **Strategy Memory Improvements:**
+   - Better logging when memory loads from disk
+   - Shows success rate and top strategies on startup
+   - Debug logging for fast path hits/misses
+
+**Flagged Step Flow:**
+```
+1. User flags step 5 as false positive
+2. User clicks "Run"
+3. Frontend passes flaggedSteps: ['step-5-id'], stopAtFlagged: true
+4. Backend runs steps 1-4 normally
+5. At step 5, backend detects it's flagged
+6. Backend returns { status: 'paused_at_flagged', stoppedAtFlaggedStep: {...} }
+7. Frontend auto-opens Smart Suggestions panel at step 5
+8. Browser is open - user can select correct element
+9. User clicks "Replace" on suggestion
+10. Step 5 is replaced, flag cleared
+```
+
+**Playback Speed Usage:**
+```javascript
+// Frontend calculates slowMo from playbackSpeed setting
+const slowMoDelay = playbackSpeed === '0.25x' ? 1000 : 
+                    playbackSpeed === '0.5x' ? 500 : 
+                    playbackSpeed === '2x' ? 0 : 200; // 1x = 200ms
+
+// Passed to runTest
+await runTest({ slowMo: slowMoDelay, ... });
+
+// Backend uses in step loop
+const stepDelay = Math.max(100, slowMo);
+await page.waitForTimeout(stepDelay);
+```
+
 ### 2026-01-31: Event Listener Reliability
 
 **Files Changed:**

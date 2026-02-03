@@ -135,19 +135,29 @@ class StrategyMemory {
    */
   getBestStrategy(fingerprint) {
     const entry = this.memory.get(fingerprint);
-    if (!entry) return null;
+    
+    if (!entry) {
+      // Only log occasionally to avoid spam (every 10th miss)
+      if (Math.random() < 0.1) {
+        console.log(`[StrategyMemory] No cached strategy for: ${fingerprint} (${this.memory.size} total entries)`);
+      }
+      return null;
+    }
     
     // Check if memory is still "fresh" (success rate > 80%)
     if (entry.successCount > 0) {
       const successRate = entry.successCount / (entry.successCount + entry.failCount);
       if (successRate >= 0.8) {
-        console.log(`[StrategyMemory] Fast path: Using remembered strategy "${entry.strategy}" (${Math.round(successRate * 100)}% success rate)`);
+        const avgTime = entry.avgExecutionTime ? `${Math.round(entry.avgExecutionTime)}ms avg` : '';
+        console.log(`[StrategyMemory] 🚀 Fast path: "${entry.strategy}" (${Math.round(successRate * 100)}% success, used ${entry.successCount}x) ${avgTime}`);
         return {
           strategy: entry.strategy,
           selector: entry.selector,
           confidence: successRate,
           timesUsed: entry.successCount + entry.failCount
         };
+      } else {
+        console.log(`[StrategyMemory] Entry found but low success rate: ${Math.round(successRate * 100)}% (${entry.failCount} failures)`);
       }
     }
     
@@ -373,13 +383,29 @@ class StrategyMemory {
   }
   
   _loadFromDisk() {
-    if (!this.persistPath || !fs.existsSync(this.persistPath)) return;
+    if (!this.persistPath) {
+      console.log('[StrategyMemory] No persist path configured - memory will not persist');
+      return;
+    }
+    
+    if (!fs.existsSync(this.persistPath)) {
+      console.log(`[StrategyMemory] No existing memory file at: ${this.persistPath}`);
+      console.log('[StrategyMemory] Will create new file when strategies are learned');
+      return;
+    }
     
     try {
       const data = JSON.parse(fs.readFileSync(this.persistPath, 'utf-8'));
       this.memory = new Map(data.memory || []);
       this.strategyStats = data.strategyStats || {};
-      console.log(`[StrategyMemory] Loaded ${this.memory.size} entries from disk`);
+      
+      // Log loaded stats for debugging
+      const stats = this.getStats();
+      console.log(`[StrategyMemory] ✅ Loaded ${this.memory.size} learned strategies from: ${this.persistPath}`);
+      console.log(`[StrategyMemory] Stats: ${stats.totalSuccesses} successes, ${Math.round(stats.overallSuccessRate * 100)}% success rate`);
+      if (stats.topStrategies.length > 0) {
+        console.log(`[StrategyMemory] Top strategy: ${stats.topStrategies[0]?.strategy} (${Math.round(stats.topStrategies[0]?.successRate * 100)}%)`);
+      }
     } catch (e) {
       console.error('[StrategyMemory] Failed to load:', e.message);
     }

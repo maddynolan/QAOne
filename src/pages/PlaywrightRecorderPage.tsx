@@ -3921,13 +3921,22 @@ Recorded Test
         // Use normalized actions for robust playback
         // freshBrowser: true = completely clean browser with no stored state
         // keepBrowserOpenOnFailure: true = don't close browser on failure (for debugging)
+        
+        // CRITICAL: Get flagged step IDs to pass to backend
+        // If any steps are flagged as false positives, backend will pause at those steps
+        const flaggedStepIds = Array.from(falsePositiveSteps.keys());
+        const hasAnyFlaggedSteps = flaggedStepIds.length > 0;
+        
         result = await flowstral.playwrightRecorder.runTest({
           steps: normalizedActions,
           url: url,
           freshBrowser: freshBrowser,
-          keepBrowserOpenOnFailure: keepBrowserOpenOnFailure,
+          keepBrowserOpenOnFailure: keepBrowserOpenOnFailure || hasAnyFlaggedSteps, // Keep browser open if we have flagged steps
           slowMo: slowMoDelay,
-          highlight: highlightElements
+          highlight: highlightElements,
+          // NEW: Pass flagged steps so backend can pause at them
+          flaggedSteps: flaggedStepIds,
+          stopAtFlagged: hasAnyFlaggedSteps // Stop at flagged steps if any exist
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
@@ -4017,6 +4026,39 @@ Recorded Test
       
       const stepResults = generateStepResults();
       const testPassed = result?.success !== false && result?.status !== 'failed';
+      
+      // Check if test was paused at a flagged step (not failed, but paused for repair)
+      const pausedAtFlagged = result?.status === 'paused_at_flagged' || result?.stoppedAtFlaggedStep;
+      
+      if (pausedAtFlagged) {
+        // Test paused at flagged step - show repair UI
+        const flaggedStepIndex = result.stoppedAtFlaggedStep?.index ?? result.failedStep;
+        console.log('[Test] 🚩 Test paused at flagged step:', flaggedStepIndex);
+        
+        setTestExecutionResult({
+          status: 'paused',
+          currentStep: flaggedStepIndex,
+          stepResults: stepResults.map((s, i) => ({
+            ...s,
+            status: i < flaggedStepIndex ? 'passed' : (i === flaggedStepIndex ? 'pending' : 'skipped')
+          })),
+          totalSteps: actions.length,
+        });
+        
+        setBrowserKeptOpen(true); // Browser is kept open for repair
+        setIsTestPaused(true);
+        setPausedAtStep(flaggedStepIndex);
+        
+        // Auto-open the Smart Suggestions panel for replacing the step
+        setEditingActionIndex(flaggedStepIndex);
+        setRightPanelTab('suggestions');
+        handleRefreshSuggestions();
+        
+        toast.info(`🚩 Paused at flagged step ${flaggedStepIndex + 1}. Use Smart Suggestions to fix this step.`, {
+          duration: 8000
+        });
+        return; // Don't process as normal pass/fail
+      }
       
       setTestExecutionResult({
         status: testPassed ? 'passed' : 'failed',

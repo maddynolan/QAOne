@@ -3323,11 +3323,22 @@ class PlaywrightRecorder extends EventEmitter {
       // NEW: Keep browser open on failure - allows visual debugging
       // When true: browser stays open, user can use Element Picker/Debug/AI
       // When false (default): browser closes, only Manual edit works
-      keepBrowserOpenOnFailure = false
+      keepBrowserOpenOnFailure = false,
+      // NEW: Playback speed control - slowMo delay in ms between steps
+      // 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
+      slowMo = 200,
+      // NEW: Highlight elements during playback (visual feedback)
+      highlight = true,
+      // NEW: Flagged steps for false positive handling
+      // Array of step IDs that user flagged as false positives
+      flaggedSteps = [],
+      // NEW: Stop at flagged step - when true, test pauses at flagged step for repair
+      stopAtFlagged = false
     } = options;
     
     console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps', 
-      isRetry ? '(RETRY)' : '', freshBrowser ? '(FRESH BROWSER)' : '(PERSISTENT)');
+      isRetry ? '(RETRY)' : '', freshBrowser ? '(FRESH BROWSER)' : '(PERSISTENT)',
+      `slowMo=${slowMo}ms`, flaggedSteps.length > 0 ? `flagged=${flaggedSteps.length}` : '');
     
     // Reset AI call counter for this test run
     this.aiCallsThisRun = 0;
@@ -3501,6 +3512,51 @@ class PlaywrightRecorder extends EventEmitter {
           break;
         }
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // FLAGGED STEP CHECK: Stop at steps marked as false positive for repair
+        // This allows users to fix steps using Smart Suggestions with browser open
+        // ═══════════════════════════════════════════════════════════════════════════
+        const isStepFlagged = step.flagged || 
+                              (step.id && flaggedSteps.includes(step.id)) ||
+                              (step.id && flaggedSteps.some(f => f === step.id || f.stepId === step.id));
+        
+        if (isStepFlagged && stopAtFlagged) {
+          console.log(`[PlaywrightRecorder] 🚩 STOPPING at flagged step ${i + 1}: "${step.description || step.qword}"`);
+          console.log(`[PlaywrightRecorder] Browser is PAUSED for user intervention - use Smart Suggestions to fix`);
+          
+          // Emit paused event so frontend can show repair UI
+          this.emit('test-paused', {
+            stepIndex: i,
+            step,
+            reason: 'flagged_step',
+            message: `Paused at flagged step ${i + 1} for repair. Use Smart Suggestions to replace this step.`,
+            browserOpen: true
+          });
+          
+          // Store pause state so we can potentially resume later
+          this._pausedAtFlaggedStep = {
+            stepIndex: i,
+            step,
+            passedSteps: passedSteps
+          };
+          
+          // Return partial results - test is PAUSED, not failed
+          return {
+            success: false,
+            status: 'paused_at_flagged',
+            passedSteps,
+            failedStep: -1,
+            error: null,
+            stoppedAtFlaggedStep: {
+              index: i,
+              step,
+              reason: 'User flagged this step as false positive'
+            },
+            // CRITICAL: Keep browser open for Smart Suggestions!
+            browserKeptOpen: true
+          };
+        }
+        
         console.log(`[PlaywrightRecorder] Executing step ${i + 1}: ${step.description || step.qword}`);
         
         // DEBUG: Log full step data for cross-origin steps
@@ -3625,8 +3681,10 @@ class PlaywrightRecorder extends EventEmitter {
           passedSteps++;
           this.emit('test-step-complete', { stepIndex: i, success: true });
           
-          // Wait between steps
-          await this.page.waitForTimeout(500);
+          // Wait between steps - use slowMo for playback speed control
+          // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
+          const stepDelay = Math.max(100, slowMo); // Minimum 100ms for stability
+          await this.page.waitForTimeout(stepDelay);
           
         } catch (stepError) {
           console.error(`[PlaywrightRecorder] Step ${i + 1} failed:`, stepError.message);
