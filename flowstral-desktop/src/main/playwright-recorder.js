@@ -7492,16 +7492,29 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // OPTIMIZED SELECTOR: User-locked selector from "Lock Locators" 
           // Try this FIRST with very short timeout - it should work instantly
           // This travels with the test case, works across environments
+          // Supports: CSS selectors, role=xxx[name="yyy"], aria-label, etc.
           // ═══════════════════════════════════════════════════════════════════
           const optimizedSelector = action.selectorObj?.optimizedSelector;
           if (optimizedSelector) {
             console.log(`[PlaywrightRecorder] ⚡ Trying LOCKED selector: ${optimizedSelector}`);
             try {
-              const locator = scope.locator(optimizedSelector);
-              // Quick 100ms check - locked selectors should work instantly
+              let locator;
+              
+              // Handle role=xxx[name="yyy"] format (from Lock Locators)
+              const roleMatch = optimizedSelector.match(/^role=(\w+)\[name="(.+)"\]$/);
+              if (roleMatch) {
+                const [, role, name] = roleMatch;
+                console.log(`[PlaywrightRecorder] ⚡ Using getByRole('${role}', { name: '${name}' })`);
+                locator = scope.getByRole(role, { name: name });
+              } else {
+                // Regular CSS selector
+                locator = scope.locator(optimizedSelector);
+              }
+              
+              // Quick 150ms check - locked selectors should work instantly
               const found = await Promise.race([
                 locator.count().then(c => c > 0),
-                new Promise(resolve => setTimeout(() => resolve(false), 100))
+                new Promise(resolve => setTimeout(() => resolve(false), 150))
               ]);
               
               if (found) {

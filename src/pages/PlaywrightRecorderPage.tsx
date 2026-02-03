@@ -3785,42 +3785,121 @@ Recorded Test
     navigate('/test-cases');
   };
 
-  // ============ LOCK LOCATORS - Save working selectors for instant playback ============
+  // ============ LOCK LOCATORS - Save RELIABLE selectors for instant playback ============
   // After a successful test run, users can "lock" the selectors that worked.
+  // IMPORTANT: Only lock HIGH-CONFIDENCE selectors to avoid wrong element matches.
   // Locked selectors are stored IN the test steps and travel with the test.
-  // On next run (anywhere - local, remote, Docker), locked selectors are tried first.
   const handleLockLocators = () => {
     if (!testExecutionResult || testExecutionResult.status !== 'passed') {
       toast.error('Can only lock locators after a successful test run');
       return;
     }
     
-    // Update each action with its optimizedSelector
+    let lockedCount = 0;
+    let skippedCount = 0;
+    
+    // Update each action with its optimizedSelector (ONLY if reliable)
     setActions(prev => prev.map((action, index) => {
-      // Get the selector that was used during this run
-      // Priority: manualOverride > playwright selector > css selector
-      const workingSelector = action.selectorObj?.manualOverride || 
-                              action.selectorObj?.playwright || 
-                              action.selectorObj?.selector;
+      const selectorObj = action.selectorObj || {};
       
-      if (!workingSelector) {
-        return action; // No selector to lock
+      // Build a RELIABLE selector from high-confidence attributes
+      // Priority order (highest first):
+      // 1. manualOverride (user explicitly set this)
+      // 2. data-testid (most reliable)
+      // 3. aria-label (accessibility, usually stable)
+      // 4. name attribute (form elements)
+      // 5. role + text combination (semantic)
+      // 6. Skip generic CSS selectors (too risky)
+      
+      let optimizedSelector: string | null = null;
+      let selectorSource = '';
+      
+      // 1. Manual override takes highest priority
+      if (selectorObj.manualOverride) {
+        optimizedSelector = selectorObj.manualOverride;
+        selectorSource = 'manualOverride';
       }
+      // 2. data-testid - most reliable
+      else if (selectorObj.testId) {
+        optimizedSelector = `[data-testid="${selectorObj.testId}"]`;
+        selectorSource = 'testId';
+      }
+      // 3. aria-label - accessibility attribute, usually stable
+      else if (selectorObj.ariaLabel && selectorObj.ariaLabel.length > 2) {
+        optimizedSelector = `[aria-label="${selectorObj.ariaLabel}"]`;
+        selectorSource = 'ariaLabel';
+      }
+      // 4. name attribute for form elements
+      else if (selectorObj.name && action.type !== 'click') {
+        optimizedSelector = `[name="${selectorObj.name}"]`;
+        selectorSource = 'name';
+      }
+      // 5. Stable ID (not dynamic/random)
+      else if (selectorObj.id && !isLikelyDynamicId(selectorObj.id)) {
+        optimizedSelector = `#${selectorObj.id}`;
+        selectorSource = 'id';
+      }
+      // 6. Role + exact text - good for buttons/links
+      else if (selectorObj.role && selectorObj.text && selectorObj.text.length > 1 && selectorObj.text.length < 50) {
+        // Use Playwright-style role selector
+        optimizedSelector = `role=${selectorObj.role}[name="${selectorObj.text}"]`;
+        selectorSource = 'role+text';
+      }
+      // 7. SKIP generic CSS selectors - they're too risky and cause wrong element matches
+      else {
+        console.log(`[LockLocators] Skipping step ${index + 1} - no reliable selector found`);
+        skippedCount++;
+        return action; // Don't lock this step
+      }
+      
+      console.log(`[LockLocators] Step ${index + 1}: Locked using ${selectorSource} → ${optimizedSelector}`);
+      lockedCount++;
       
       return {
         ...action,
         selectorObj: {
-          ...action.selectorObj,
-          optimizedSelector: workingSelector,
-          optimizedAt: new Date().toISOString()
+          ...selectorObj,
+          optimizedSelector,
+          optimizedAt: new Date().toISOString(),
+          optimizedSource: selectorSource
         }
       };
     }));
     
-    toast.success(`🔒 Locked ${actions.length} selectors! Future runs will be faster.`, {
-      duration: 4000,
-      icon: '⚡'
-    });
+    // Show feedback based on what was locked
+    if (lockedCount > 0) {
+      const message = skippedCount > 0
+        ? `🔒 Locked ${lockedCount} reliable selectors. Skipped ${skippedCount} steps (no reliable selector).`
+        : `🔒 Locked ${lockedCount} selectors! Future runs will be faster.`;
+      toast.success(message, { duration: 5000, icon: '⚡' });
+    } else {
+      toast.warning('No reliable selectors found to lock. Steps use generic selectors.', { duration: 5000 });
+    }
+  };
+  
+  // Helper: Check if an ID looks dynamic/random (shouldn't be locked)
+  const isLikelyDynamicId = (id: string): boolean => {
+    if (!id) return true;
+    // Dynamic ID patterns to skip
+    const dynamicPatterns = [
+      /^:r[a-z0-9]+:?$/i,           // Radix: :r0:, :r1a:
+      /^react-aria-?\d+/i,          // React Aria
+      /^headlessui-/i,              // Headless UI
+      /^radix-/i,                   // Radix
+      /^mui-/i,                     // MUI
+      /^chakra-/i,                  // Chakra UI
+      /^mantine-/i,                 // Mantine
+      /^aura\d+/i,                  // Salesforce Aura
+      /^lwc-/i,                     // Lightning Web Components
+      /^input-\d+$/i,               // Generic input-123
+      /^[a-f0-9]{8,}$/i,            // UUID-like
+      /^\d{6,}$/,                   // Pure numbers (6+ digits)
+      /^ember\d+/i,                 // Ember
+      /^ng-/i,                      // Angular
+      /^vue-/i,                     // Vue
+      /^[a-z]+-[a-f0-9-]{20,}/i,    // UUID with prefix
+    ];
+    return dynamicPatterns.some(p => p.test(id));
   };
 
   const handleRunTest = async (debugMode: boolean = false, freshBrowser: boolean = false) => {
@@ -4087,14 +4166,25 @@ Recorded Test
         setIsTestPaused(true);
         setPausedAtStep(flaggedStepIndex);
         
+        // CLOSE the modal so user can see Smart Suggestions panel
+        // The modal was blocking the suggestions - this fixes Issue 1
+        setShowTestResultModal(false);
+        
         // Auto-open the Smart Suggestions panel for replacing the step
         setEditingActionIndex(flaggedStepIndex);
         setRightPanelTab('suggestions');
+        
+        // Show the Smart Suggestions overlay on the browser
+        const flowstralAPI = (window as any).flowstral;
+        if (flowstralAPI?.playwrightRecorder?.showSuggestionsOverlay) {
+          flowstralAPI.playwrightRecorder.showSuggestionsOverlay();
+        }
         handleRefreshSuggestions();
         
-        toast.info(`🚩 Paused at flagged step ${flaggedStepIndex + 1}. Use Smart Suggestions to fix this step.`, {
-          duration: 8000
-        });
+        toast.info(
+          `🚩 Paused at step ${flaggedStepIndex + 1}. Use Smart Suggestions panel (right side) or click elements in browser to replace selector.`,
+          { duration: 10000 }
+        );
         return; // Don't process as normal pass/fail
       }
       
