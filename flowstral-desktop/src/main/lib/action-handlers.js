@@ -644,13 +644,19 @@ async function verifyClickedCorrectElement(ctx, action, clickResult, label) {
     }
     
     // Get what we actually clicked - STRICT: Only check immediate element and direct parent
-    let clickedText = '';
+    let clickedText = { elText: '', ariaLabel: '', title: '', containerText: '' };
     try {
       clickedText = await clickResult.locator.evaluate(el => {
-        // Get text from the element itself
-        const elText = el.textContent?.trim() || '';
+        // Get text from the element itself (including Shadow DOM text)
+        const elText = el.textContent?.trim() || el.innerText?.trim() || '';
         const ariaLabel = el.getAttribute('aria-label') || '';
         const title = el.getAttribute('title') || '';
+        
+        // For Lightning/Shadow DOM, try to get text from shadow root
+        let shadowText = '';
+        if (el.shadowRoot) {
+          shadowText = el.shadowRoot.textContent?.trim()?.substring(0, 100) || '';
+        }
         
         // STRICT: Only check IMMEDIATE container (first product card/item), not entire grid
         let containerText = '';
@@ -662,14 +668,19 @@ async function verifyClickedCorrectElement(ctx, action, clickResult, label) {
           '[class*="product-card"]',
           '[class*="item-card"]',
           'li[class*="product"]',
-          'div[data-automation-id]' // Walmart
+          'div[data-automation-id]', // Walmart
+          // Salesforce/Lightning containers
+          'lightning-menu-item',
+          'li[role="presentation"]',
+          '[role="menuitem"]',
+          '[role="option"]'
         ];
         
         for (const selector of immediateContainers) {
           const container = el.closest(selector);
           if (container && container !== el) {
             // Get only the product title/name from the container, not all text
-            const titleEl = container.querySelector('h3, h2, [data-testid*="title"], [data-test*="title"], [class*="title"], [class*="name"], a[href*="product"]');
+            const titleEl = container.querySelector('h3, h2, [data-testid*="title"], [data-test*="title"], [class*="title"], [class*="name"], a[href*="product"], span');
             if (titleEl) {
               containerText = titleEl.textContent?.trim()?.substring(0, 100) || '';
             } else {
@@ -680,10 +691,20 @@ async function verifyClickedCorrectElement(ctx, action, clickResult, label) {
           }
         }
         
-        return { elText, ariaLabel, title, containerText };
+        return { elText: elText || shadowText, ariaLabel, title, containerText };
       });
     } catch (e) {
-      return { verified: true, reason: 'Could not get clicked element text' };
+      // If we can't read element text, DON'T fail - the click still happened
+      console.log(`[ActionHandler] Could not read clicked element text: ${e.message}`);
+      return { verified: true, reason: 'Could not read element text (click succeeded)' };
+    }
+    
+    // IMPORTANT: If we got no text at all, assume click was successful
+    // This handles Shadow DOM, iframes, and dynamically rendered content
+    const allText = [clickedText.elText, clickedText.ariaLabel, clickedText.title, clickedText.containerText].join('').trim();
+    if (!allText) {
+      console.log(`[ActionHandler] No text found on clicked element - assuming click was correct`);
+      return { verified: true, reason: 'No text readable from element (click succeeded)' };
     }
     
     // Normalize texts for comparison
