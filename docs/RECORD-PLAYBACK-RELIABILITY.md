@@ -857,6 +857,72 @@ const stepDelay = Math.max(100, slowMo);
 await page.waitForTimeout(stepDelay);
 ```
 
+### 2026-01-31: Optimization Tiers + Flaky Detection (Strategy Memory v2.0)
+
+**Files Changed:**
+- `flowstral-desktop/src/main/lib/strategy-memory.js` (major update)
+- `flowstral-desktop/src/main/lib/smart-finder.js`
+
+**New Features:**
+
+1. **Optimization Tiers:**
+   - **Learning Mode**: Full search (5000ms timeout per strategy)
+   - **Optimized Mode**: After 3 consecutive successes → 50ms timeout!
+
+2. **Consecutive Tracking:**
+   - `consecutiveSuccesses`: Incremented on each success, reset on failure
+   - `consecutiveFailures`: Incremented on each failure, reset on success
+   - Promotion: 3 consecutive successes → `isOptimized = true`
+   - Demotion: 2 consecutive failures → `isOptimized = false`
+
+3. **Flaky Detection:**
+   - Tracks history of last 10 results (S=success, F=failure)
+   - Pattern like `SFSFSF` indicates unstable locator
+   - Flaky locators are flagged for attention
+   - `getFlakyLocators()` returns list for monitoring
+
+4. **Speed Improvement:**
+   ```
+   First run:  45 seconds (full search, learning)
+   After 3x:   15 seconds (optimized, 50ms timeouts)
+   Flaky step: Flagged for review
+   ```
+
+**Configuration (strategy-memory.js):**
+```javascript
+const OPTIMIZATION_CONFIG = {
+  CONSECUTIVE_SUCCESSES_TO_OPTIMIZE: 3,  // Successes to promote
+  CONSECUTIVE_FAILURES_TO_DEMOTE: 2,     // Failures to demote
+  FLAKY_FLIP_FLOP_THRESHOLD: 4,          // Transitions to mark flaky
+  OPTIMIZED_TIMEOUT_MS: 50,              // Fast path timeout
+  LEARNING_TIMEOUT_MS: 5000,             // Full search timeout
+};
+```
+
+**Console Output Example:**
+```
+[StrategyMemory] ✅ Loaded 15 learned strategies
+[StrategyMemory] ⚡ 8 optimized | 📚 5 learning | ⚠️ 2 flaky
+
+[FAST PATH] ⚡ Trying OPTIMIZED strategy: testId (50ms timeout)
+[FAST PATH] ✓ Success in 23ms using remembered strategy (OPTIMIZED)
+
+[FAST PATH] ⚠️ WARNING: This locator is marked as FLAKY - may be unstable
+[StrategyMemory] ⚠️ FLAKY DETECTED: fp_abc123 (5 transitions in 8 attempts)
+[StrategyMemory]   History: SFSFSFSF
+```
+
+**Flaky Locator Reporting:**
+```javascript
+// Get all flaky locators
+const flaky = strategyMemory.getFlakyLocators();
+// Returns: [{ fingerprint, strategy, selector, history: 'SFSFSF', successRate: 0.5 }]
+
+// Get optimization stats
+const stats = strategyMemory.getOptimizationStats();
+// Returns: { total: 15, optimized: 8, learning: 5, flaky: 2, optimizedPercent: 53 }
+```
+
 ### 2026-01-31: Event Listener Reliability
 
 **Files Changed:**

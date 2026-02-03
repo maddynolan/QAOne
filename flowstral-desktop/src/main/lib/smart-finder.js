@@ -733,22 +733,38 @@ class SmartFinder {
       const remembered = this.strategyMemory.getBestStrategy(fingerprint);
       
       if (remembered) {
-        this.log(`[FAST PATH] Trying remembered strategy: ${remembered.strategy}`);
+        // ═══════════════════════════════════════════════════════════════════════
+        // OPTIMIZED FAST PATH: Use 50ms timeout for optimized strategies
+        // This dramatically speeds up tests with stable, learned locators
+        // ═══════════════════════════════════════════════════════════════════════
+        const statusIcon = remembered.isOptimized ? '⚡' : (remembered.isFlaky ? '⚠️' : '🔍');
+        const timeoutInfo = remembered.isOptimized ? `(${remembered.recommendedTimeout}ms timeout)` : '';
+        this.log(`[FAST PATH] ${statusIcon} Trying ${remembered.isOptimized ? 'OPTIMIZED' : 'remembered'} strategy: ${remembered.strategy} ${timeoutInfo}`);
+        
+        // Warn about flaky locators
+        if (remembered.isFlaky) {
+          this.log(`[FAST PATH] ⚠️ WARNING: This locator is marked as FLAKY - may be unstable`);
+        }
         
         try {
-          const fastResult = await this._tryRememberedStrategy(remembered, recipe);
+          // Pass the recommended timeout to use shorter wait for optimized strategies
+          const fastResult = await this._tryRememberedStrategy(remembered, recipe, remembered.recommendedTimeout);
           if (fastResult.success) {
             const executionTime = Date.now() - this._executionStartTime;
             this.strategyMemory.recordSuccess(fingerprint, remembered.strategy, remembered.selector, executionTime);
             this.lastSuccessfulStrategy = remembered.strategy;
-            this.log(`[FAST PATH] ✓ Success in ${executionTime}ms using remembered strategy`);
+            
+            const speedNote = remembered.isOptimized ? '(OPTIMIZED)' : '';
+            this.log(`[FAST PATH] ✓ Success in ${executionTime}ms using remembered strategy ${speedNote}`);
             return fastResult.locator;
           } else {
             // Remembered strategy failed - record and continue to full search
             this.strategyMemory.recordFailure(fingerprint, remembered.strategy);
-            this.log(`[FAST PATH] Remembered strategy failed, falling back to full search`);
+            this.log(`[FAST PATH] ${remembered.isOptimized ? '⚡ Optimized' : 'Remembered'} strategy failed, falling back to full search`);
           }
         } catch (e) {
+          // Record failure for timeout errors too (important for flaky detection)
+          this.strategyMemory.recordFailure(fingerprint, remembered.strategy);
           this.log(`[FAST PATH] Error: ${e.message}, falling back to full search`);
         }
       }
@@ -2528,10 +2544,21 @@ class SmartFinder {
   /**
    * Try a remembered strategy from Strategy Memory
    * CRITICAL: Must verify text content for CSS-based strategies to avoid wrong element matches!
+   * 
+   * @param {Object} remembered - Strategy memory entry
+   * @param {Object} recipe - Element recipe
+   * @param {number} timeout - Timeout in ms (50ms for optimized, 5000ms for learning)
    */
-  async _tryRememberedStrategy(remembered, recipe) {
-    const { strategy, selector } = remembered;
+  async _tryRememberedStrategy(remembered, recipe, timeout = 5000) {
+    const { strategy, selector, isOptimized, isFlaky } = remembered;
     const { what, where, which, confirm } = recipe;
+    
+    // Use shorter timeout for optimized strategies (default 50ms)
+    const effectiveTimeout = timeout || (isOptimized ? 50 : 5000);
+    
+    if (isOptimized) {
+      this.log(`[FAST PATH] ⚡ Using optimized timeout: ${effectiveTimeout}ms`);
+    }
     
     // Determine expected text for verification
     // Can come from what.text, where.nearText, or which.ariaLabel
@@ -2608,10 +2635,32 @@ class SmartFinder {
       }
       
       if (locator) {
-        const count = await locator.count().catch(() => 0);
+        // Use Promise.race with timeout for optimized strategies (much faster!)
+        const countPromise = locator.count().catch(() => 0);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), effectiveTimeout)
+        );
+        
+        let count;
+        try {
+          count = await Promise.race([countPromise, timeoutPromise]);
+        } catch (e) {
+          if (e.message === 'Timeout') {
+            this.log(`[FAST PATH] ⏱️ Timeout after ${effectiveTimeout}ms - strategy too slow`);
+            return { success: false, reason: 'timeout' };
+          }
+          throw e;
+        }
+        
         if (count > 0) {
           const firstLocator = locator.first();
-          const isVisible = await firstLocator.isVisible().catch(() => false);
+          
+          // Also timeout on visibility check
+          const visibilityPromise = firstLocator.isVisible().catch(() => false);
+          const visibilityTimeoutPromise = new Promise((resolve) => 
+            setTimeout(() => resolve(false), effectiveTimeout)
+          );
+          const isVisible = await Promise.race([visibilityPromise, visibilityTimeoutPromise]);
           
           if (isVisible) {
             // ================================================================
