@@ -616,3 +616,202 @@ const ScreenshotPolicy = {
 - Persisted only for failures or flagged steps
 - Auto-cleared after successful re-run
 - Maximum 50MB memory limit (auto-evicts oldest)
+
+---
+
+## 12. Smart Suggestions Panel for Step Repair
+
+When a step fails or is flagged, users can use the **Smart Suggestions Panel** to easily find and select the correct element.
+
+### How It Works
+
+```
+1. Test runs and fails at step 5
+         ↓
+2. User sees "Test Failed" modal with failed step highlighted
+         ↓
+3. User clicks "Fix" button on the failed step
+         ↓
+4. Smart Suggestions Panel shows all clickable elements on current page
+         ↓
+5. User filters/searches for correct element
+         ↓
+6. User clicks "Replace" button on the suggestion
+         ↓
+7. Failed step is replaced with new element
+```
+
+### Smart Suggestions Panel Features
+
+| Feature | Description |
+|---------|-------------|
+| **Filter by Type** | buttons, links, inputs, headings |
+| **Search** | Free-text search across all elements |
+| **Execute** | Test-click element without saving |
+| **Add to Test** | Add as new step |
+| **Replace Step** | Replace failed/flagged step with this element |
+
+### Replace Flow
+
+```javascript
+// In PlaywrightRecorderPage.tsx
+const replaceStepWithSuggestion = (stepIndex: number, suggestion: Suggestion) => {
+  const newAction: RecordedAction = {
+    id: `action_${Date.now()}`,
+    qword: suggestion.qword,
+    args: suggestion.args,
+    description: suggestion.description,
+    timestamp: Date.now(),
+    selectorObj: suggestion.selectorObj
+  };
+  
+  // Replace the action at stepIndex
+  setActions(prev => {
+    const newActions = [...prev];
+    if (stepIndex >= 0 && stepIndex < newActions.length) {
+      newActions[stepIndex] = newAction;
+    }
+    return newActions;
+  });
+  
+  // Clear the false positive flag if set
+  const oldAction = actions[stepIndex];
+  if (oldAction?.id && falsePositiveSteps.has(oldAction.id)) {
+    setFalsePositiveSteps(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(oldAction.id!);
+      return newMap;
+    });
+  }
+  
+  // Close any open modals
+  setEditSelectorModalOpen(false);
+  setEditingActionIndex(null);
+  
+  toast.success(`Step ${stepIndex + 1} replaced with "${suggestion.element || suggestion.description}"`);
+};
+```
+
+### Replace Mode Banner
+
+When `editingActionIndex` is set (user clicked Fix on a step), the Smart Suggestions panel shows:
+
+1. **Orange Banner** - "Replace Mode: Click an element to replace Step X"
+2. **Replace Button** (orange) - Instead of the normal "Add" button
+3. **Cancel Button** - To exit replace mode without making changes
+
+### UI Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Test Failed Modal                           │
+│                                                                 │
+│  Step 5: Click "Service Console"  [Fix] [🚩 Flag]              │
+│  Error: Element not found                                       │
+│                                                                 │
+│  User clicks "Fix" →                                            │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Smart Suggestions Panel                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 🔄 Replace Mode: Click element to replace Step 5   [Cancel] ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  [Filters: All | Buttons | Links | Inputs]  🔍 Search...       │
+│                                                                 │
+│  📦 Service Console                                             │
+│     click                        [▶ Execute] [🔄 Replace]      │
+│                                                                 │
+│  📦 App Launcher                                                │
+│     click                        [▶ Execute] [🔄 Replace]      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. Changelog
+
+### 2026-01-31: Click Verification & Shadow DOM Support
+
+**Files Changed:**
+- `flowstral-desktop/src/main/lib/action-handlers.js`
+
+**Changes:**
+1. **Shadow DOM Text Extraction**: Added support for reading text from Shadow DOM (`el.shadowRoot.textContent`)
+2. **Lightning/Salesforce Containers**: Added menu items, options, and role-based containers to container detection
+3. **Graceful Failure**: If element text is unreadable, verification now PASSES (click already succeeded)
+4. **New Containers Recognized**:
+   - `lightning-menu-item`
+   - `li[role="presentation"]`
+   - `[role="menuitem"]`
+   - `[role="option"]`
+
+**Impact:** Eliminates false negatives where clicks succeed but verification fails due to Shadow DOM or custom elements.
+
+```javascript
+// BEFORE: If no text readable, FAIL the verification
+return { verified: false, reason: '...clicked "unknown"' };
+
+// AFTER: If no text readable, PASS the verification (click already succeeded)
+if (!allText) {
+  return { verified: true, reason: 'No text readable from element (click succeeded)' };
+}
+```
+
+### 2026-01-31: SmartFinder Action Variable Fix
+
+**Files Changed:**
+- `flowstral-desktop/src/main/lib/smart-finder.js`
+
+**Changes:**
+1. **Fixed `action is not defined` error**: The `find()` method was referencing `action?.productContext` but `action` was undefined
+2. **Proper Initialization**: Added `const action = options.action || {};` to initialize from options
+
+**Impact:** SmartFinder no longer throws errors and works correctly for all element finding operations.
+
+### 2026-01-31: Flagged Step Handling
+
+**Files Changed:**
+- `flowstral-desktop/src/main/test-executor.js`
+- `flowstral-desktop/src/main/index.js`
+
+**Changes:**
+1. **Stop at Flagged Steps**: Test execution now properly stops when reaching a step that was flagged as false positive
+2. **Event Emission**: New `test-paused` event emitted when stopping at flagged step
+3. **Reliable Event Listeners**: Event listeners are now ALWAYS set up before test execution (not conditionally)
+4. **Duplicate Prevention**: `removeAllListeners()` called before adding new listeners
+
+**Flagged Step Logic:**
+```javascript
+// In test-executor.js executeTest()
+if ((step.flagged || flaggedStepIds?.includes(step.id)) && stopAtFlagged) {
+  console.log(`[TestExecutor] STOPPING at flagged step ${i}: ${step.name || step.type}`);
+  results.status = 'paused_at_flagged';
+  results.stoppedAtFlaggedStep = { index: i, step };
+  this.onStepFlagged?.(i, step);
+  break;
+}
+```
+
+**Impact:** Users can now flag steps, re-run tests, and the browser will stop at the flagged step for easy fixing.
+
+### 2026-01-31: Event Listener Reliability
+
+**Files Changed:**
+- `flowstral-desktop/src/main/index.js`
+
+**Changes:**
+1. **Always Setup Events**: `setupRecorderEvents()` is now called on EVERY test run, not just when recorder is created
+2. **Prevent Duplicates**: All relevant event listeners are removed before being re-added
+3. **Events Covered**:
+   - `test-step-start`
+   - `test-step-complete`
+   - `test-complete`
+   - `test-paused`
+   - `test-resumed`
+   - `test-stopped`
+   - `test-runner:step-failed`
+
+**Impact:** Progress bar now updates correctly, step status shows accurately, and pause state is properly communicated to frontend.

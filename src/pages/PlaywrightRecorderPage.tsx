@@ -2750,6 +2750,43 @@ export default function PlaywrightRecorderPage() {
     }
   };
 
+  // Replace a failed/flagged step with a suggestion from Smart Suggestions panel
+  const replaceStepWithSuggestion = (stepIndex: number, suggestion: Suggestion) => {
+    const newAction: RecordedAction = {
+      id: `action_${Date.now()}`,
+      qword: suggestion.qword,
+      args: suggestion.args,
+      description: suggestion.description,
+      timestamp: Date.now(),
+      selectorObj: suggestion.selectorObj
+    };
+    
+    // Replace the action at stepIndex
+    setActions(prev => {
+      const newActions = [...prev];
+      if (stepIndex >= 0 && stepIndex < newActions.length) {
+        newActions[stepIndex] = newAction;
+      }
+      return newActions;
+    });
+    
+    // Clear the false positive flag if set
+    const oldAction = actions[stepIndex];
+    if (oldAction?.id && falsePositiveSteps.has(oldAction.id)) {
+      setFalsePositiveSteps(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(oldAction.id!);
+        return newMap;
+      });
+    }
+    
+    // Close any open modals
+    setEditSelectorModalOpen(false);
+    setEditingActionIndex(null);
+    
+    toast.success(`Step ${stepIndex + 1} replaced with "${suggestion.element || suggestion.description}"`, { duration: 3000 });
+  };
+
   const handleStartRecording = async () => {
     const flowstral = (window as any).flowstral;
     const electronAPI = (window as any).electronAPI;
@@ -5627,6 +5664,27 @@ Recorded Test
 
             {/* ========== SUGGESTIONS TAB ========== */}
             <TabsContent value="suggestions" className="flex-1 m-0 p-0 flex flex-col overflow-hidden data-[state=inactive]:hidden" style={{ minHeight: 0 }}>
+              {/* REPLACE MODE BANNER - shown when fixing a step */}
+              {editingActionIndex !== null && (
+                <div className="px-3 py-2 bg-orange-500/10 border-b border-orange-500/30 flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-orange-400" />
+                  <span className="text-sm font-medium text-orange-400">
+                    Replace Mode: Click an element to replace Step {editingActionIndex + 1}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-6 px-2 text-[10px] text-orange-400 hover:bg-orange-500/20"
+                    onClick={() => {
+                      setEditingActionIndex(null);
+                      setEditSelectorModalOpen(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              
               {/* Compact Header Row */}
               <div className="px-3 py-2 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
                 <div className="flex items-center gap-2">
@@ -5778,6 +5836,18 @@ Recorded Test
                           >
                             <Play className="h-3 w-3" />
                       </Button>
+                      {/* Show REPLACE button when fixing a step, otherwise show ADD button */}
+                      {editingActionIndex !== null ? (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                            onClick={() => replaceStepWithSuggestion(editingActionIndex, s)}
+                            title={`Replace step ${editingActionIndex + 1} with this element`}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                        </Button>
+                      ) : (
                       <Button
                             variant="ghost"
                             size="icon"
@@ -5787,6 +5857,7 @@ Recorded Test
                           >
                             <Plus className="h-3 w-3" />
                       </Button>
+                      )}
                         </div>
                       ))}
                     
@@ -8454,15 +8525,19 @@ Recorded Test
                             {/* Action buttons for FAILED steps - Fix + Flag */}
                             {isFailed && testExecutionResult?.status !== 'running' && (
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Fix button - opens step editor */}
+                                {/* Fix button - opens step editor AND switches to suggestions for Replace */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setEditingActionIndex(idx);
                                     setEditSelectorModalOpen(true);
+                                    // Also switch to suggestions tab so user can use Replace feature
+                                    setRightPanelTab('suggestions');
+                                    // Refresh suggestions to get current page elements
+                                    handleRefreshSuggestions();
                                   }}
                                   className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="Fix this step"
+                                  title="Fix this step - use Smart Suggestions to replace"
                                 >
                                   Fix
                                 </button>
@@ -8498,6 +8573,22 @@ Recorded Test
                             {/* A false positive = step PASSES but clicked wrong element */}
                             {stepResult?.status === 'passed' && testExecutionResult?.status !== 'running' && action.id && (
                               <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+                                {falsePositiveSteps.has(action.id) && (
+                                  /* Fix button for flagged passed steps - allows replacing with Smart Suggestions */
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingActionIndex(idx);
+                                      setRightPanelTab('suggestions');
+                                      handleRefreshSuggestions();
+                                      toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                    title="Fix this step - use Smart Suggestions to replace"
+                                  >
+                                    Fix
+                                  </button>
+                                )}
                                 {!falsePositiveSteps.has(action.id) ? (
                                   <button
                                     onClick={(e) => {
