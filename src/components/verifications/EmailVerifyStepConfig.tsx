@@ -87,30 +87,30 @@ export function EmailVerifyStepConfig({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
       {/* Provider & Inbox */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Email Provider</Label>
+          <Label className="text-sm font-medium">Email Provider</Label>
           <Select 
             value={config.provider} 
             onValueChange={(v) => updateConfig({ provider: v as 'microsoft_365' | 'gmail' })}
             disabled={readOnly}
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="microsoft_365">
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-blue-500" />
-                  Microsoft 365 / Outlook
+                  <span>Microsoft 365 / Outlook</span>
                 </div>
               </SelectItem>
               <SelectItem value="gmail">
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-red-500" />
-                  Gmail
+                  <span>Gmail</span>
                 </div>
               </SelectItem>
             </SelectContent>
@@ -118,42 +118,59 @@ export function EmailVerifyStepConfig({
         </div>
 
         <div className="space-y-2">
-          <Label>Inbox / Email Address</Label>
+          <Label className="text-sm font-medium">Inbox / Email Address</Label>
           <Input
-            value={config.inbox}
+            type="email"
+            value={config.inbox || ''}
             onChange={(e) => updateConfig({ inbox: e.target.value })}
+            onFocus={(e) => e.target.select()}
             placeholder="test@company.com"
             disabled={readOnly}
+            className="w-full"
           />
         </div>
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="flex items-center gap-1">
+          <Label className="text-sm font-medium flex items-center gap-1">
             <Filter className="h-3 w-3" />
             Subject Filter
           </Label>
           <Input
+            type="text"
             value={config.subjectFilter || ''}
-            onChange={(e) => updateConfig({ subjectFilter: e.target.value || undefined })}
+            onChange={(e) => {
+              e.stopPropagation();
+              updateConfig({ subjectFilter: e.target.value || undefined });
+            }}
+            onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="Welcome to..."
             disabled={readOnly}
+            className="w-full"
           />
           <p className="text-xs text-muted-foreground">Only check emails with this subject text</p>
         </div>
 
         <div className="space-y-2">
-          <Label className="flex items-center gap-1">
+          <Label className="text-sm font-medium flex items-center gap-1">
             <Filter className="h-3 w-3" />
             Sender Filter
           </Label>
           <Input
+            type="text"
             value={config.senderFilter || ''}
-            onChange={(e) => updateConfig({ senderFilter: e.target.value || undefined })}
+            onChange={(e) => {
+              e.stopPropagation();
+              updateConfig({ senderFilter: e.target.value || undefined });
+            }}
+            onFocus={(e) => e.target.select()}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="noreply@company.com"
             disabled={readOnly}
+            className="w-full"
           />
           <p className="text-xs text-muted-foreground">Only check emails from this sender</p>
         </div>
@@ -161,7 +178,7 @@ export function EmailVerifyStepConfig({
 
       {/* Timeout */}
       <div className="space-y-2">
-        <Label className="flex items-center gap-1">
+        <Label className="text-sm font-medium flex items-center gap-1">
           <Clock className="h-3 w-3" />
           Wait Timeout (seconds)
         </Label>
@@ -169,9 +186,14 @@ export function EmailVerifyStepConfig({
           type="number"
           min={5}
           max={300}
-          value={config.timeoutSeconds}
-          onChange={(e) => updateConfig({ timeoutSeconds: parseInt(e.target.value) || 60 })}
+          value={config.timeoutSeconds || 60}
+          onChange={(e) => {
+            e.stopPropagation();
+            updateConfig({ timeoutSeconds: parseInt(e.target.value) || 60 });
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
           disabled={readOnly}
+          className="w-full max-w-[200px]"
         />
         <p className="text-xs text-muted-foreground">Maximum time to wait for email to arrive</p>
       </div>
@@ -201,7 +223,8 @@ export function EmailVerifyStepConfig({
             config.assertions.map((assertion) => (
               <div 
                 key={assertion.id} 
-                className="flex items-center gap-2 p-2 bg-muted/50 rounded-md"
+                className="flex flex-wrap items-center gap-2 p-2 bg-muted/50 rounded-md"
+                onClick={(e) => e.stopPropagation()}
               >
                 <Switch
                   checked={assertion.enabled}
@@ -213,7 +236,7 @@ export function EmailVerifyStepConfig({
                   onValueChange={(v) => updateAssertion(assertion.id, { type: v as EmailAssertionType })}
                   disabled={readOnly}
                 >
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-[140px] sm:w-[180px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -225,10 +248,16 @@ export function EmailVerifyStepConfig({
                   </SelectContent>
                 </Select>
                 <Input
-                  value={assertion.expected}
-                  onChange={(e) => updateAssertion(assertion.id, { expected: e.target.value })}
-                  placeholder={EMAIL_ASSERTION_TYPES[assertion.type]?.description}
-                  className="flex-1"
+                  type="text"
+                  value={assertion.expected || ''}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    updateAssertion(assertion.id, { expected: e.target.value });
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder={EMAIL_ASSERTION_TYPES[assertion.type]?.description || 'Enter value...'}
+                  className="flex-1 min-w-[120px]"
                   disabled={readOnly}
                 />
                 {!readOnly && (
@@ -236,6 +265,7 @@ export function EmailVerifyStepConfig({
                     variant="ghost" 
                     size="sm"
                     onClick={() => removeAssertion(assertion.id)}
+                    className="shrink-0"
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -280,27 +310,41 @@ export function EmailVerifyStepConfig({
                 <span className="text-sm">Extract verification/reset link</span>
               </div>
               {config.extractLink && (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="space-y-1">
                     <Label className="text-xs">Pattern (regex, optional)</Label>
                     <Input
+                      type="text"
                       value={config.extractLink.pattern || ''}
-                      onChange={(e) => updateConfig({ 
-                        extractLink: { ...config.extractLink!, pattern: e.target.value || undefined }
-                      })}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateConfig({ 
+                          extractLink: { ...config.extractLink!, pattern: e.target.value || undefined }
+                        });
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => e.stopPropagation()}
                       placeholder="verify|confirm|reset"
                       disabled={readOnly}
+                      className="w-full"
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label className="text-xs">Store as variable</Label>
                     <Input
-                      value={config.extractLink.storeAs}
-                      onChange={(e) => updateConfig({ 
-                        extractLink: { ...config.extractLink!, storeAs: e.target.value }
-                      })}
+                      type="text"
+                      value={config.extractLink.storeAs || ''}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateConfig({ 
+                          extractLink: { ...config.extractLink!, storeAs: e.target.value }
+                        });
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => e.stopPropagation()}
                       placeholder="verifyUrl"
                       disabled={readOnly}
+                      className="w-full"
                     />
                   </div>
                 </div>
@@ -330,27 +374,41 @@ export function EmailVerifyStepConfig({
                 <span className="text-sm">Extract OTP/verification code (4-8 digits)</span>
               </div>
               {config.extractOTP && (
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="space-y-1">
                     <Label className="text-xs">Pattern (regex, optional)</Label>
                     <Input
+                      type="text"
                       value={config.extractOTP.pattern || ''}
-                      onChange={(e) => updateConfig({ 
-                        extractOTP: { ...config.extractOTP!, pattern: e.target.value || undefined }
-                      })}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateConfig({ 
+                          extractOTP: { ...config.extractOTP!, pattern: e.target.value || undefined }
+                        });
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => e.stopPropagation()}
                       placeholder="\d{6}"
                       disabled={readOnly}
+                      className="w-full"
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label className="text-xs">Store as variable</Label>
                     <Input
-                      value={config.extractOTP.storeAs}
-                      onChange={(e) => updateConfig({ 
-                        extractOTP: { ...config.extractOTP!, storeAs: e.target.value }
-                      })}
+                      type="text"
+                      value={config.extractOTP.storeAs || ''}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        updateConfig({ 
+                          extractOTP: { ...config.extractOTP!, storeAs: e.target.value }
+                        });
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => e.stopPropagation()}
                       placeholder="otpCode"
                       disabled={readOnly}
+                      className="w-full"
                     />
                   </div>
                 </div>
