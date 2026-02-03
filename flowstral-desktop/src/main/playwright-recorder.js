@@ -7488,6 +7488,35 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           await this.page.waitForLoadState('domcontentloaded').catch(() => {});
           await this.page.waitForTimeout(300);
           
+          // ═══════════════════════════════════════════════════════════════════
+          // OPTIMIZED SELECTOR: User-locked selector from "Lock Locators" 
+          // Try this FIRST with very short timeout - it should work instantly
+          // This travels with the test case, works across environments
+          // ═══════════════════════════════════════════════════════════════════
+          const optimizedSelector = action.selectorObj?.optimizedSelector;
+          if (optimizedSelector) {
+            console.log(`[PlaywrightRecorder] ⚡ Trying LOCKED selector: ${optimizedSelector}`);
+            try {
+              const locator = scope.locator(optimizedSelector);
+              // Quick 100ms check - locked selectors should work instantly
+              const found = await Promise.race([
+                locator.count().then(c => c > 0),
+                new Promise(resolve => setTimeout(() => resolve(false), 100))
+              ]);
+              
+              if (found) {
+                const isVisible = await locator.first().isVisible().catch(() => false);
+                if (isVisible) {
+                  console.log(`[PlaywrightRecorder] ⚡ LOCKED selector SUCCESS - instant find!`);
+                  return { locator: locator.first(), strategy: { type: 'LockedSelector' } };
+                }
+              }
+              console.log(`[PlaywrightRecorder] Locked selector not found, trying SmartFinder...`);
+            } catch (e) {
+              console.log(`[PlaywrightRecorder] Locked selector failed: ${e.message}, trying SmartFinder...`);
+            }
+          }
+          
           const recipe = legacyActionToRecipe(action);
           console.log('[PlaywrightRecorder] Recipe for SmartFinder:', JSON.stringify(recipe, null, 2));
           

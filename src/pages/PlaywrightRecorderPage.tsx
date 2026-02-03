@@ -3785,6 +3785,44 @@ Recorded Test
     navigate('/test-cases');
   };
 
+  // ============ LOCK LOCATORS - Save working selectors for instant playback ============
+  // After a successful test run, users can "lock" the selectors that worked.
+  // Locked selectors are stored IN the test steps and travel with the test.
+  // On next run (anywhere - local, remote, Docker), locked selectors are tried first.
+  const handleLockLocators = () => {
+    if (!testExecutionResult || testExecutionResult.status !== 'passed') {
+      toast.error('Can only lock locators after a successful test run');
+      return;
+    }
+    
+    // Update each action with its optimizedSelector
+    setActions(prev => prev.map((action, index) => {
+      // Get the selector that was used during this run
+      // Priority: manualOverride > playwright selector > css selector
+      const workingSelector = action.selectorObj?.manualOverride || 
+                              action.selectorObj?.playwright || 
+                              action.selectorObj?.selector;
+      
+      if (!workingSelector) {
+        return action; // No selector to lock
+      }
+      
+      return {
+        ...action,
+        selectorObj: {
+          ...action.selectorObj,
+          optimizedSelector: workingSelector,
+          optimizedAt: new Date().toISOString()
+        }
+      };
+    }));
+    
+    toast.success(`🔒 Locked ${actions.length} selectors! Future runs will be faster.`, {
+      duration: 4000,
+      icon: '⚡'
+    });
+  };
+
   const handleRunTest = async (debugMode: boolean = false, freshBrowser: boolean = false) => {
     if (actions.length === 0) {
       toast.error("No steps to run");
@@ -8726,6 +8764,17 @@ Recorded Test
                     >
                       <RefreshCw className="h-4 w-4 mr-1" />
                       Retry All
+                    </Button>
+                  )}
+                  {/* Lock Locators - Only show on successful test */}
+                  {testExecutionResult?.status === 'passed' && (
+                    <Button
+                      onClick={handleLockLocators}
+                      variant="outline"
+                      className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                      title="Save working selectors for faster future runs"
+                    >
+                      🔒 Lock Locators
                     </Button>
                   )}
                   <Button

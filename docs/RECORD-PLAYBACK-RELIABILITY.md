@@ -797,130 +797,85 @@ if ((step.flagged || flaggedStepIds?.includes(step.id)) && stopAtFlagged) {
 
 **Impact:** Users can now flag steps, re-run tests, and the browser will stop at the flagged step for easy fixing.
 
-### 2026-01-31: Complete Flagged Step + Playback Speed Implementation
+### 2026-01-31: Flagged Step Handling + Playback Speed
 
 **Files Changed:**
 - `flowstral-desktop/src/main/playwright-recorder.js`
-- `flowstral-desktop/src/main/lib/strategy-memory.js`
 - `src/pages/PlaywrightRecorderPage.tsx`
 
 **Changes:**
 
-1. **Flagged Step Handling in runTest():**
-   - Added `flaggedSteps` array parameter to identify steps marked as false positive
-   - Added `stopAtFlagged` boolean to enable pausing at flagged steps
-   - When test reaches a flagged step, it emits `test-paused` event and returns with `status: 'paused_at_flagged'`
-   - Browser stays open so user can use Smart Suggestions to fix
+1. **Flagged Step Handling:** Test pauses at steps marked as false positive
+2. **Playback Speed:** slowMo parameter controls delay between steps
 
-2. **Playback Speed Control:**
-   - Added `slowMo` parameter (default 200ms) - controls delay between steps
-   - Speed mapping: 0 = 2x, 200 = 1x, 500 = 0.5x, 1000 = 0.25x
-   - Minimum 100ms delay for stability
+### 2026-01-31: Lock Locators Feature (Simple & Cross-Environment)
 
-3. **Frontend Updates:**
-   - `handleRunTest()` now passes `flaggedSteps` (from `falsePositiveSteps` map) to backend
-   - `stopAtFlagged` is true when any steps are flagged
-   - `keepBrowserOpenOnFailure` auto-enabled when flagged steps exist
-   - When test returns `paused_at_flagged`, auto-opens Smart Suggestions panel
+**Problem Solved:** Complex auto-optimization doesn't work across environments (local → Docker grid).
 
-4. **Strategy Memory Improvements:**
-   - Better logging when memory loads from disk
-   - Shows success rate and top strategies on startup
-   - Debug logging for fast path hits/misses
-
-**Flagged Step Flow:**
-```
-1. User flags step 5 as false positive
-2. User clicks "Run"
-3. Frontend passes flaggedSteps: ['step-5-id'], stopAtFlagged: true
-4. Backend runs steps 1-4 normally
-5. At step 5, backend detects it's flagged
-6. Backend returns { status: 'paused_at_flagged', stoppedAtFlaggedStep: {...} }
-7. Frontend auto-opens Smart Suggestions panel at step 5
-8. Browser is open - user can select correct element
-9. User clicks "Replace" on suggestion
-10. Step 5 is replaced, flag cleared
-```
-
-**Playback Speed Usage:**
-```javascript
-// Frontend calculates slowMo from playbackSpeed setting
-const slowMoDelay = playbackSpeed === '0.25x' ? 1000 : 
-                    playbackSpeed === '0.5x' ? 500 : 
-                    playbackSpeed === '2x' ? 0 : 200; // 1x = 200ms
-
-// Passed to runTest
-await runTest({ slowMo: slowMoDelay, ... });
-
-// Backend uses in step loop
-const stepDelay = Math.max(100, slowMo);
-await page.waitForTimeout(stepDelay);
-```
-
-### 2026-01-31: Optimization Tiers + Flaky Detection (Strategy Memory v2.0)
+**Simple Solution:** "Lock Locators" button after successful test run.
 
 **Files Changed:**
-- `flowstral-desktop/src/main/lib/strategy-memory.js` (major update)
-- `flowstral-desktop/src/main/lib/smart-finder.js`
+- `flowstral-desktop/src/main/playwright-recorder.js`
+- `flowstral-desktop/src/main/lib/strategy-memory.js` (simplified)
+- `src/pages/PlaywrightRecorderPage.tsx`
 
-**New Features:**
+**How It Works:**
 
-1. **Optimization Tiers:**
-   - **Learning Mode**: Full search (5000ms timeout per strategy)
-   - **Optimized Mode**: After 3 consecutive successes → 50ms timeout!
+1. Run test → Test passes
+2. Click "🔒 Lock Locators" button
+3. Working selectors saved INTO each step as `optimizedSelector`
+4. On next run (anywhere), locked selectors tried FIRST with 100ms timeout
+5. If locked selector fails, falls back to normal SmartFinder
 
-2. **Consecutive Tracking:**
-   - `consecutiveSuccesses`: Incremented on each success, reset on failure
-   - `consecutiveFailures`: Incremented on each failure, reset on success
-   - Promotion: 3 consecutive successes → `isOptimized = true`
-   - Demotion: 2 consecutive failures → `isOptimized = false`
+**Why This Is Better:**
+- Works across environments (local, CI, Docker, remote grid)
+- No complex auto-promotion logic
+- User controls when to lock
+- Locked selectors travel WITH the test case
 
-3. **Flaky Detection:**
-   - Tracks history of last 10 results (S=success, F=failure)
-   - Pattern like `SFSFSF` indicates unstable locator
-   - Flaky locators are flagged for attention
-   - `getFlakyLocators()` returns list for monitoring
+**Usage:**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  ✅ Test Passed (8/8 steps)                                         │
+│                                                                      │
+│  [🔒 Lock Locators]  [Done]                                        │
+│                                                                      │
+│  💡 Locked selectors work everywhere - local, CI, Docker, etc.     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-4. **Speed Improvement:**
-   ```
-   First run:  45 seconds (full search, learning)
-   After 3x:   15 seconds (optimized, 50ms timeouts)
-   Flaky step: Flagged for review
-   ```
+**Technical Details:**
 
-**Configuration (strategy-memory.js):**
 ```javascript
-const OPTIMIZATION_CONFIG = {
-  CONSECUTIVE_SUCCESSES_TO_OPTIMIZE: 3,  // Successes to promote
-  CONSECUTIVE_FAILURES_TO_DEMOTE: 2,     // Failures to demote
-  FLAKY_FLIP_FLOP_THRESHOLD: 4,          // Transitions to mark flaky
-  OPTIMIZED_TIMEOUT_MS: 50,              // Fast path timeout
-  LEARNING_TIMEOUT_MS: 5000,             // Full search timeout
-};
+// Step with locked selector
+{
+  id: "step_1",
+  qword: "Click",
+  selectorObj: {
+    selector: "button[data-testid='submit']",  // Original
+    optimizedSelector: "button[data-testid='submit']",  // Locked!
+    optimizedAt: "2026-01-31T..."
+  }
+}
+
+// PlaywrightRecorder checks for locked selector FIRST
+if (optimizedSelector) {
+  // Try with 100ms timeout - should work instantly
+  const found = await Promise.race([
+    locator.count().then(c => c > 0),
+    new Promise(resolve => setTimeout(() => resolve(false), 100))
+  ]);
+  if (found && isVisible) {
+    return { locator, strategy: 'LockedSelector' }; // Instant!
+  }
+}
+// Fall back to normal SmartFinder search
 ```
 
-**Console Output Example:**
+**Speed Impact:**
 ```
-[StrategyMemory] ✅ Loaded 15 learned strategies
-[StrategyMemory] ⚡ 8 optimized | 📚 5 learning | ⚠️ 2 flaky
-
-[FAST PATH] ⚡ Trying OPTIMIZED strategy: testId (50ms timeout)
-[FAST PATH] ✓ Success in 23ms using remembered strategy (OPTIMIZED)
-
-[FAST PATH] ⚠️ WARNING: This locator is marked as FLAKY - may be unstable
-[StrategyMemory] ⚠️ FLAKY DETECTED: fp_abc123 (5 transitions in 8 attempts)
-[StrategyMemory]   History: SFSFSFSF
-```
-
-**Flaky Locator Reporting:**
-```javascript
-// Get all flaky locators
-const flaky = strategyMemory.getFlakyLocators();
-// Returns: [{ fingerprint, strategy, selector, history: 'SFSFSF', successRate: 0.5 }]
-
-// Get optimization stats
-const stats = strategyMemory.getOptimizationStats();
-// Returns: { total: 15, optimized: 8, learning: 5, flaky: 2, optimizedPercent: 53 }
+Without locked selectors: 30-45 seconds (full search each step)
+With locked selectors:    5-10 seconds (100ms check per step)
 ```
 
 ### 2026-01-31: Event Listener Reliability
