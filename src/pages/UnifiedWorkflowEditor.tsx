@@ -4711,6 +4711,7 @@ export default function UnifiedWorkflowEditor() {
                   onUpdate={(updates) => updateStep(selectedStep.id, updates)}
                   onClose={() => setSelectedStepId(null)}
                   onShowBlackbox={() => setShowBlackbox(true)}
+                  allSteps={testCase.steps}
                   domain={selectedDomain}
                   coveredValidations={coveredValidations}
                   onToggleValidation={(validationId) => {
@@ -6503,6 +6504,8 @@ interface StepEditorProps {
   onUpdate: (updates: Partial<TestStep>) => void;
   onClose: () => void;
   onShowBlackbox: () => void;
+  // All steps in test case (for variable references)
+  allSteps?: TestStep[];
   // Validation props
   domain?: DomainType;
   coveredValidations?: string[];
@@ -6516,6 +6519,7 @@ function StepEditor({
   onUpdate,
   onClose,
   onShowBlackbox,
+  allSteps = [],
   domain = 'general',
   coveredValidations = [],
   onToggleValidation,
@@ -7279,7 +7283,7 @@ function StepEditor({
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
             <p className="text-xs font-medium mb-2">📦 Available Variables in Test:</p>
             <div className="flex flex-wrap gap-1">
-              {testCase.steps
+              {allSteps
                 .filter(s => s.id !== step.id && (
                   (s as any).variableName || 
                   (s as any).storeAs || 
@@ -7306,7 +7310,7 @@ function StepEditor({
                   );
                 })
               }
-              {testCase.steps.filter(s => (s as any).variableName || (s as any).storeAs).length === 0 && (
+              {allSteps.filter(s => (s as any).variableName || (s as any).storeAs).length === 0 && (
                 <span className="text-[10px] text-muted-foreground">No variables stored yet. Use Extract or Generate steps first.</span>
               )}
             </div>
