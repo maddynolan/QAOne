@@ -869,8 +869,11 @@ ipcMain.handle('playwright-recorder-run-test', async (event, options) => {
   try {
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
-      setupRecorderEvents(playwrightRecorder);
     }
+    
+    // ALWAYS ensure test events are set up (even if recorder existed from recording)
+    // This ensures progress tracking works regardless of how recorder was created
+    setupRecorderEvents(playwrightRecorder);
     
     // Check if debug mode requested
     if (options.debugMode) {
@@ -885,33 +888,50 @@ ipcMain.handle('playwright-recorder-run-test', async (event, options) => {
 });
 
 // Helper to set up recorder events (including debug mode events)
+// Prevents duplicate listeners by removing existing ones first
 function setupRecorderEvents(recorder) {
-  // Test execution feedback
+  // Remove any existing listeners to prevent duplicates
+  recorder.removeAllListeners('test-step-start');
+  recorder.removeAllListeners('test-step-complete');
+  recorder.removeAllListeners('test-complete');
+  recorder.removeAllListeners('test-paused');
+  recorder.removeAllListeners('test-resumed');
+  recorder.removeAllListeners('test-stopped');
+  recorder.removeAllListeners('test-runner:step-failed');
+  
+  // Test execution feedback - sends events to frontend
   recorder.on('test-step-start', ({ stepIndex, step, isRetry }) => {
+    console.log(`[Events] Step ${stepIndex + 1} started`);
     webappView?.webContents.send('playwright-test-step-start', { stepIndex, step, isRetry });
     webappView?.webContents.send('test-runner:step-start', { index: stepIndex, step, isRetry });
   });
   
   recorder.on('test-step-complete', ({ stepIndex, success, error, isRetry }) => {
+    console.log(`[Events] Step ${stepIndex + 1} complete: ${success ? '✓' : '✗'}`);
     webappView?.webContents.send('playwright-test-step-complete', { stepIndex, success, error, isRetry });
     webappView?.webContents.send('test-runner:step-complete', { index: stepIndex, status: success ? 'passed' : 'failed', error, isRetry });
   });
   
   recorder.on('test-complete', ({ success, passedSteps, failedStep, error, stepResults }) => {
+    console.log(`[Events] Test complete: ${success ? 'PASSED' : 'FAILED'}`);
     webappView?.webContents.send('playwright-test-complete', { success, passedSteps, failedStep, error, stepResults });
     webappView?.webContents.send('test-runner:test-complete', { success, passedSteps, failedStep, error, stepResults });
   });
   
   // Debug mode events
   recorder.on('test-paused', ({ stepIndex, step, error }) => {
+    console.log(`[Events] Test paused at step ${stepIndex + 1}`);
+    webappView?.webContents.send('playwright-test-paused', { stepIndex, reason: 'debug', step, error });
     webappView?.webContents.send('test-runner:test-paused', { stepIndex, step, error });
   });
   
   recorder.on('test-resumed', ({ stepIndex }) => {
+    console.log(`[Events] Test resumed from step ${stepIndex + 1}`);
     webappView?.webContents.send('test-runner:test-resumed', { stepIndex });
   });
   
   recorder.on('test-stopped', ({ stepIndex }) => {
+    console.log(`[Events] Test stopped at step ${stepIndex + 1}`);
     webappView?.webContents.send('test-runner:test-stopped', { stepIndex });
   });
   
@@ -3391,6 +3411,33 @@ ipcMain.handle('execute-test', async (event, testData) => {
           success, 
           error: result?.error,
           screenshot: result?.screenshot 
+        });
+      },
+      onStepFlagged: (index, step) => {
+        // Send flagged step notification to frontend
+        console.log(`[Execute] 🚩 Step ${index + 1} flagged: "${step.name || step.label}"`);
+        mainWindow?.webContents.send('test-step-flagged', { 
+          index, 
+          step,
+          reason: step.flagReason || 'Flagged for review',
+          status: 'paused_at_flagged'
+        });
+        webappView?.webContents.send('test-step-flagged', { 
+          index, 
+          step,
+          reason: step.flagReason || 'Flagged for review',
+          status: 'paused_at_flagged'
+        });
+        // Also send to playwright-specific channel
+        mainWindow?.webContents.send('playwright-test-paused', { 
+          stepIndex: index, 
+          reason: 'flagged',
+          flagReason: step.flagReason || 'Flagged for review'
+        });
+        webappView?.webContents.send('playwright-test-paused', { 
+          stepIndex: index, 
+          reason: 'flagged',
+          flagReason: step.flagReason || 'Flagged for review'
         });
       },
       onTestComplete: (results) => {

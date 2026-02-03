@@ -3786,27 +3786,35 @@ Recorded Test
     });
     setShowTestResultModal(true);
     
-    // Real-time progress tracking via IPC events (not fake simulation)
-    // Set up step progress listener if available (electronAPI already declared above)
-    let stepProgressCleanup: (() => void) | null = null;
+    // Real-time progress tracking via IPC events
+    const eventCleanups: (() => void)[] = [];
     
-    // Listen for step progress events from the executor
-    if (electronAPI?.onStepProgress) {
-      stepProgressCleanup = electronAPI.onStepProgress((data: { step: number; status: string; error?: string; screenshot?: string }) => {
-        console.log('[Test] Step progress:', data);
+    // Listen for step start events
+    if (flowstral?.on) {
+      const unsubStepStart = flowstral.on('playwright-test-step-start', (data: { stepIndex: number; step: any }) => {
+        console.log('[Test] Step start:', data.stepIndex);
         setTestExecutionResult(prev => {
           if (!prev || prev.status !== 'running') return prev;
+          return { ...prev, currentStep: data.stepIndex };
+        });
+      });
+      eventCleanups.push(unsubStepStart);
+      
+      // Listen for step complete events
+      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string }) => {
+        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗');
+        setTestExecutionResult(prev => {
+          if (!prev) return prev;
           const newResults = [...prev.stepResults];
-          // Update the step result
-          newResults[data.step] = {
-            index: data.step,
-            status: data.status as any,
+          newResults[data.stepIndex] = {
+            index: data.stepIndex,
+            status: data.success ? 'passed' : 'failed',
             error: data.error,
             screenshot: data.screenshot
           };
           return {
             ...prev,
-            currentStep: data.step,
+            currentStep: data.stepIndex,
             stepResults: newResults
           };
         });
@@ -3814,22 +3822,39 @@ Recorded Test
         // Auto-scroll to current step
         setTimeout(() => {
           const container = document.getElementById('execution-steps-container');
-          const currentStepEl = container?.children[data.step] as HTMLElement;
+          const currentStepEl = container?.children[data.stepIndex] as HTMLElement;
           if (currentStepEl) {
             currentStepEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }, 100);
       });
+      eventCleanups.push(unsubStepComplete);
+      
+      // Listen for flagged step / pause events
+      const unsubPaused = flowstral.on('playwright-test-paused', (data: { stepIndex: number; reason: string; flagReason?: string }) => {
+        console.log('[Test] 🚩 Paused at flagged step:', data.stepIndex, data.flagReason);
+        setTestExecutionResult(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            status: 'paused',
+            currentStep: data.stepIndex,
+          };
+        });
+        setIsTestPaused(true);
+        setPausedAtStep(data.stepIndex);
+        toast.info(`🚩 Paused at flagged step ${data.stepIndex + 1}: ${data.flagReason || 'Review needed'}`, {
+          duration: 5000
+        });
+      });
+      eventCleanups.push(unsubPaused);
     }
     
-    // Fallback: Poll-based progress tracking with proper step identification
+    // Fallback: Poll-based progress tracking if no event listeners
     let progressInterval: NodeJS.Timeout | null = null;
-    if (!stepProgressCleanup) {
-      // Only use fallback if no IPC events available
-      console.log('[Test] Using fallback progress polling');
+    if (!flowstral?.on) {
+      console.log('[Test] Using fallback progress polling (no flowstral.on)');
       progressInterval = setInterval(async () => {
-        // Try to get actual test status from executor
-        const flowstral = (window as any).flowstral;
         if (flowstral?.playwrightRecorder?.getTestProgress) {
           const progress = await flowstral.playwrightRecorder.getTestProgress();
           if (progress && progress.currentStep !== undefined) {
@@ -3914,8 +3939,8 @@ Recorded Test
         });
       }
       
-      // Stop progress tracking (both IPC listener and interval)
-      if (stepProgressCleanup) stepProgressCleanup();
+      // Stop progress tracking (event listeners and interval)
+      eventCleanups.forEach(cleanup => cleanup());
       if (progressInterval) clearInterval(progressInterval);
       
       console.log('[Test] Result:', result);
@@ -4002,7 +4027,7 @@ Recorded Test
       }
     } catch (error: any) {
       // Cleanup progress tracking
-      if (stepProgressCleanup) stepProgressCleanup();
+      eventCleanups.forEach(cleanup => cleanup());
       if (progressInterval) clearInterval(progressInterval);
       
       setTestExecutionResult({

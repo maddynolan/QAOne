@@ -25,7 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Configuration
   getConfig: () => ipcRenderer.invoke('get-config'),
   setConfig: (config) => ipcRenderer.invoke('set-config', config),
-  
+
+  // Landing page optional plugins (API, Perf, A11y, Mobile)
+  getLandingPlugins: () => ipcRenderer.invoke('get-landing-plugins'),
+  setLandingPlugins: (plugins) => ipcRenderer.invoke('set-landing-plugins', plugins),
+
   // License
   activateLicense: (key) => ipcRenderer.invoke('activate-license', key),
   deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
@@ -360,8 +364,10 @@ contextBridge.exposeInMainWorld('flowstral', {
       'playwright-test-step-start',
       'playwright-test-step-complete',
       'playwright-test-complete',
+      'playwright-test-paused',
       'test-step-start',
       'test-step-complete',
+      'test-step-flagged',
       'test-complete',
       // Debug mode events
       'test-runner:step-start',
