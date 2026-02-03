@@ -1016,7 +1016,14 @@ export default function PlaywrightRecorderPage() {
   const [testExecutionResult, setTestExecutionResult] = useState<{
     status: 'running' | 'passed' | 'failed' | 'paused';
     currentStep: number;
-    stepResults: { index: number; status: string; error?: string; screenshot?: string }[];
+    stepResults: { 
+      index: number; 
+      status: string; 
+      error?: string; 
+      screenshot?: string;
+      workingSelector?: string;  // For Lock Locators
+      strategyType?: string;     // What strategy found the element
+    }[];
     totalSteps: number;
     error?: string;
     selectedScreenshot?: string;
@@ -3785,10 +3792,9 @@ Recorded Test
     navigate('/test-cases');
   };
 
-  // ============ LOCK LOCATORS - Save RELIABLE selectors for instant playback ============
-  // After a successful test run, users can "lock" the selectors that worked.
-  // IMPORTANT: Only lock HIGH-CONFIDENCE selectors to avoid wrong element matches.
-  // Locked selectors are stored IN the test steps and travel with the test.
+  // ============ LOCK LOCATORS - Save the ACTUAL working selector ============
+  // SIMPLE APPROACH: Use the selector that actually worked during the test run.
+  // The backend now returns workingSelector in stepResults for each passed step.
   const handleLockLocators = () => {
     if (!testExecutionResult || testExecutionResult.status !== 'passed') {
       toast.error('Can only lock locators after a successful test run');
@@ -3798,108 +3804,39 @@ Recorded Test
     let lockedCount = 0;
     let skippedCount = 0;
     
-    // Update each action with its optimizedSelector (ONLY if reliable)
+    // Update each action with the ACTUAL selector that worked
     setActions(prev => prev.map((action, index) => {
-      const selectorObj = action.selectorObj || {};
+      const stepResult = testExecutionResult.stepResults?.find(r => r.index === index);
+      const workingSelector = stepResult?.workingSelector;
       
-      // Build a RELIABLE selector from high-confidence attributes
-      // Priority order (highest first):
-      // 1. manualOverride (user explicitly set this)
-      // 2. data-testid (most reliable)
-      // 3. aria-label (accessibility, usually stable)
-      // 4. name attribute (form elements)
-      // 5. role + text combination (semantic)
-      // 6. Skip generic CSS selectors (too risky)
-      
-      let optimizedSelector: string | null = null;
-      let selectorSource = '';
-      
-      // 1. Manual override takes highest priority
-      if (selectorObj.manualOverride) {
-        optimizedSelector = selectorObj.manualOverride;
-        selectorSource = 'manualOverride';
-      }
-      // 2. data-testid - most reliable
-      else if (selectorObj.testId) {
-        optimizedSelector = `[data-testid="${selectorObj.testId}"]`;
-        selectorSource = 'testId';
-      }
-      // 3. aria-label - accessibility attribute, usually stable
-      else if (selectorObj.ariaLabel && selectorObj.ariaLabel.length > 2) {
-        optimizedSelector = `[aria-label="${selectorObj.ariaLabel}"]`;
-        selectorSource = 'ariaLabel';
-      }
-      // 4. name attribute for form elements
-      else if (selectorObj.name && action.type !== 'click') {
-        optimizedSelector = `[name="${selectorObj.name}"]`;
-        selectorSource = 'name';
-      }
-      // 5. Stable ID (not dynamic/random)
-      else if (selectorObj.id && !isLikelyDynamicId(selectorObj.id)) {
-        optimizedSelector = `#${selectorObj.id}`;
-        selectorSource = 'id';
-      }
-      // 6. Role + exact text - good for buttons/links
-      else if (selectorObj.role && selectorObj.text && selectorObj.text.length > 1 && selectorObj.text.length < 50) {
-        // Use Playwright-style role selector
-        optimizedSelector = `role=${selectorObj.role}[name="${selectorObj.text}"]`;
-        selectorSource = 'role+text';
-      }
-      // 7. SKIP generic CSS selectors - they're too risky and cause wrong element matches
-      else {
-        console.log(`[LockLocators] Skipping step ${index + 1} - no reliable selector found`);
+      if (!workingSelector) {
+        console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
         skippedCount++;
-        return action; // Don't lock this step
+        return action;
       }
       
-      console.log(`[LockLocators] Step ${index + 1}: Locked using ${selectorSource} → ${optimizedSelector}`);
+      console.log(`[LockLocators] Step ${index + 1}: Locking actual working selector → ${workingSelector}`);
       lockedCount++;
       
       return {
         ...action,
         selectorObj: {
-          ...selectorObj,
-          optimizedSelector,
+          ...action.selectorObj,
+          optimizedSelector: workingSelector,
           optimizedAt: new Date().toISOString(),
-          optimizedSource: selectorSource
+          optimizedSource: stepResult?.strategyType || 'unknown'
         }
       };
     }));
     
-    // Show feedback based on what was locked
     if (lockedCount > 0) {
       const message = skippedCount > 0
-        ? `🔒 Locked ${lockedCount} reliable selectors. Skipped ${skippedCount} steps (no reliable selector).`
+        ? `🔒 Locked ${lockedCount} selectors. Skipped ${skippedCount} (no selector info).`
         : `🔒 Locked ${lockedCount} selectors! Future runs will be faster.`;
-      toast.success(message, { duration: 5000, icon: '⚡' });
+      toast.success(message, { duration: 4000, icon: '⚡' });
     } else {
-      toast.warning('No reliable selectors found to lock. Steps use generic selectors.', { duration: 5000 });
+      toast.warning('No working selectors to lock. Try running the test again.', { duration: 4000 });
     }
-  };
-  
-  // Helper: Check if an ID looks dynamic/random (shouldn't be locked)
-  const isLikelyDynamicId = (id: string): boolean => {
-    if (!id) return true;
-    // Dynamic ID patterns to skip
-    const dynamicPatterns = [
-      /^:r[a-z0-9]+:?$/i,           // Radix: :r0:, :r1a:
-      /^react-aria-?\d+/i,          // React Aria
-      /^headlessui-/i,              // Headless UI
-      /^radix-/i,                   // Radix
-      /^mui-/i,                     // MUI
-      /^chakra-/i,                  // Chakra UI
-      /^mantine-/i,                 // Mantine
-      /^aura\d+/i,                  // Salesforce Aura
-      /^lwc-/i,                     // Lightning Web Components
-      /^input-\d+$/i,               // Generic input-123
-      /^[a-f0-9]{8,}$/i,            // UUID-like
-      /^\d{6,}$/,                   // Pure numbers (6+ digits)
-      /^ember\d+/i,                 // Ember
-      /^ng-/i,                      // Angular
-      /^vue-/i,                     // Vue
-      /^[a-z]+-[a-f0-9-]{20,}/i,    // UUID with prefix
-    ];
-    return dynamicPatterns.some(p => p.test(id));
   };
 
   const handleRunTest = async (debugMode: boolean = false, freshBrowser: boolean = false) => {

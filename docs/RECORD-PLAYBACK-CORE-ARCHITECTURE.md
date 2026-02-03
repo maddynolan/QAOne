@@ -445,33 +445,40 @@ Layer 4: AI Vision Fallback (screenshot + GPT-4o)
 
 **Problem:** Tests take a long time because SmartFinder tries multiple strategies.
 
-**Solution:** After a successful test run, users can "Lock" the selectors that worked.
+**Solution:** After a successful test run, users can "Lock" the ACTUAL selectors that worked.
 
-**How It Works:**
+**How It Works (SIMPLE):**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  1. Test passes                                                  │
-│  2. User clicks "🔒 Lock Locators" button                       │
-│  3. Working selectors saved INTO each step as optimizedSelector │
-│  4. On next run (anywhere), locked selectors tried FIRST        │
-│  5. If locked selector fails → falls back to normal SmartFinder │
+│  1. Test runs → SmartFinder finds elements                       │
+│  2. For each step, backend returns workingSelector in results   │
+│  3. Test passes → User clicks "🔒 Lock Locators"                │
+│  4. Frontend saves the ACTUAL working selector to each step     │
+│  5. On next run, locked selector tried FIRST (150ms timeout)    │
+│  6. If locked fails → falls back to normal SmartFinder          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Why This Works Cross-Environment:**
-- Locked selectors are stored IN the test case (not in a separate memory file)
-- Test can be run on local machine, Docker grid, CI/CD, or remote browser
-- User controls when to lock (not automatic promotion/demotion logic)
+**Why This Is Simple:**
+- We save the EXACT selector that actually worked (not guessing)
+- Backend tracks `_lastWorkingSelector` and `_lastStrategyType`
+- stepResults include `{ workingSelector, strategyType }` for each step
+- Frontend just uses what the backend reports
 
 **Files Involved:**
-- `src/pages/PlaywrightRecorderPage.tsx` - "Lock Locators" button and `handleLockLocators()`
-- `flowstral-desktop/src/main/playwright-recorder.js` - Checks `optimizedSelector` before SmartFinder
+- `flowstral-desktop/src/main/playwright-recorder.js`:
+  - `_lastWorkingSelector`, `_lastStrategyType` class properties
+  - `stepResults[i].workingSelector` in runTest results
+- `flowstral-desktop/src/main/lib/smart-finder.js`:
+  - `lastSuccessfulStrategy`, `lastSuccessfulSelector` exposed properties
+- `src/pages/PlaywrightRecorderPage.tsx`:
+  - `handleLockLocators()` uses `stepResult.workingSelector`
 
 **Speed Impact:**
 ```
 Without locked selectors: 30-45 seconds (full search each step)
-With locked selectors:    5-10 seconds (100ms check per step)
+With locked selectors:    5-10 seconds (150ms check per step)
 ```
 
 ### 4.6 Reliability Layer

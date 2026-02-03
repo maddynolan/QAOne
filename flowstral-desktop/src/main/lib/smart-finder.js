@@ -36,6 +36,7 @@ class SmartFinder {
     this.lastFailedAttempts = null;
     this.lastFailedRecipe = null;
     this.lastSuccessfulStrategy = null;  // For learning
+    this.lastSuccessfulSelector = null;  // For Lock Locators feature
     
     // Confidence tracking for each find operation
     this._lastFindResult = null;
@@ -2471,6 +2472,10 @@ class SmartFinder {
    */
   _recordLearningAndReturn(locator) {
     const executionTime = Date.now() - this._executionStartTime;
+    
+    // Expose the working strategy/selector for Lock Locators feature
+    this.lastSuccessfulStrategy = this._lastSuccessfulStrategy;
+    this.lastSuccessfulSelector = this._lastSuccessfulSelector;
     
     if (this.enableLearning && this._currentFingerprint && this._lastSuccessfulStrategy) {
       this.strategyMemory.recordSuccess(

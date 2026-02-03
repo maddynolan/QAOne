@@ -4438,10 +4438,17 @@ class PlaywrightRecorder extends EventEmitter {
         const stepStart = Date.now();
         
         try {
-          await this._executeStepInternal(step, timeout);
+          const stepInfo = await this._executeStepInternal(step, timeout);
           
           const duration = Date.now() - stepStart;
-          stepResults[i] = { index: i, status: 'passed', duration };
+          stepResults[i] = { 
+            index: i, 
+            status: 'passed', 
+            duration,
+            // SIMPLE: Store the actual selector that worked for Lock Locators
+            workingSelector: stepInfo?.workingSelector || null,
+            strategyType: stepInfo?.strategyType || null
+          };
           passedSteps++;
           
           this.emit('test-step-complete', { stepIndex: i, success: true });
@@ -4832,6 +4839,12 @@ class PlaywrightRecorder extends EventEmitter {
         throw new Error(`Assertion failed: ${assertionResult.error || step.assertion.expected}`);
       }
     }
+    
+    // Return the working selector info for Lock Locators feature
+    return {
+      workingSelector: result.workingSelector || null,
+      strategyType: result.strategyType || result.strategy?.type || null
+    };
   }
 
   // ============================================================================
@@ -7521,6 +7534,9 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 const isVisible = await locator.first().isVisible().catch(() => false);
                 if (isVisible) {
                   console.log(`[PlaywrightRecorder] ⚡ LOCKED selector SUCCESS - instant find!`);
+                  // Track working selector for Lock Locators feature
+                  this._lastWorkingSelector = optimizedSelector;
+                  this._lastStrategyType = 'LockedSelector';
                   return { locator: locator.first(), strategy: { type: 'LockedSelector' } };
                 }
               }
@@ -7580,7 +7596,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                     coords: locator.coords
                   };
                 }
-                return { locator, strategy: { type: 'SmartFinder' } };
+                // Track what SmartFinder used for Lock Locators
+                const sfStrategy = this.smartFinder?.lastSuccessfulStrategy || 'SmartFinder';
+                const sfSelector = this.smartFinder?.lastSuccessfulSelector || null;
+                this._lastWorkingSelector = sfSelector;
+                this._lastStrategyType = sfStrategy;
+                return { locator, strategy: { type: 'SmartFinder', value: sfStrategy } };
               }
             } catch (sfError) {
               console.error('[PlaywrightRecorder] SmartFinder threw error:', sfError.message);
@@ -7733,7 +7754,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       if (unifiedResult.success) {
         // Action handled successfully by unified handler
         console.log(`[PlaywrightRecorder] ✓ Unified handler succeeded for: ${action.type}`);
-        return { success: true, strategy: unifiedResult.strategy || 'unified' };
+        return { 
+          success: true, 
+          strategy: unifiedResult.strategy || 'unified',
+          workingSelector: unifiedResult.workingSelector || null,
+          strategyType: unifiedResult.strategyType || unifiedResult.strategy?.type || null
+        };
       } else if (!unifiedResult.delegateToContext && !unifiedResult.error?.includes('Unknown action')) {
         // Unified handler tried but failed - return error
         return { success: false, error: unifiedResult.error };
@@ -10442,7 +10468,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           return { success: false, error: `Unknown action type: ${action.type}` };
       }
 
-      return { success: true };
+      // Return success with the working selector info for Lock Locators feature
+      return { 
+        success: true, 
+        workingSelector: this._lastWorkingSelector || null,
+        strategyType: this._lastStrategyType || null 
+      };
     } catch (error) {
       console.error('[PlaywrightRecorder] Execute action failed:', error.message);
       return { success: false, error: error.message };
