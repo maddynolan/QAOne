@@ -3742,10 +3742,29 @@ class PlaywrightRecorder extends EventEmitter {
           const workingSelector = result.workingSelector || this._lastWorkingSelector || null;
           const strategyType = result.strategyType || this._lastStrategyType || null;
           
+          // Self-healing: locked selector failed but SmartFinder worked
+          const healed = result.healed || false;
+          const newSelector = result.newSelector || null;
+          
           passedSteps++;
           // Track step result with workingSelector for Lock Locators
-          stepResults[i] = { index: i, status: 'passed', workingSelector, strategyType };
-          this.emit('test-step-complete', { stepIndex: i, success: true, workingSelector, strategyType });
+          // Include healing info so frontend can auto-update locked selectors
+          stepResults[i] = { 
+            index: i, 
+            status: 'passed', 
+            workingSelector, 
+            strategyType,
+            healed,       // TRUE if locked selector failed but SmartFinder worked
+            newSelector   // The new selector to use (auto-update locked selector)
+          };
+          this.emit('test-step-complete', { 
+            stepIndex: i, 
+            success: true, 
+            workingSelector, 
+            strategyType,
+            healed,
+            newSelector
+          });
           
           // Wait between steps - use slowMo for playback speed control
           // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
@@ -7656,8 +7675,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 }
               }
               console.log(`[PlaywrightRecorder] Locked selector not found, trying SmartFinder...`);
+              // Flag that locked selector failed - we'll need to heal it
+              this._lockedSelectorFailed = true;
             } catch (e) {
               console.log(`[PlaywrightRecorder] Locked selector failed: ${e.message}, trying SmartFinder...`);
+              this._lockedSelectorFailed = true;
             }
           }
           
@@ -7716,7 +7738,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 const sfSelector = this.smartFinder?.lastSuccessfulSelector || null;
                 this._lastWorkingSelector = sfSelector;
                 this._lastStrategyType = sfStrategy;
-                return { locator, strategy: { type: 'SmartFinder', value: sfStrategy } };
+                
+                // SELF-HEALING: If locked selector failed but SmartFinder worked,
+                // flag this so frontend can auto-update the optimizedSelector
+                const needsHealing = this._lockedSelectorFailed && sfSelector;
+                this._lockedSelectorFailed = false; // Reset for next step
+                
+                return { 
+                  locator, 
+                  strategy: { type: 'SmartFinder', value: sfStrategy },
+                  // Self-healing data: frontend should update step's optimizedSelector
+                  healed: needsHealing,
+                  newSelector: needsHealing ? sfSelector : null
+                };
               }
             } catch (sfError) {
               console.error('[PlaywrightRecorder] SmartFinder threw error:', sfError.message);

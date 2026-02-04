@@ -1023,6 +1023,8 @@ export default function PlaywrightRecorderPage() {
       screenshot?: string;
       workingSelector?: string;  // For Lock Locators
       strategyType?: string;     // What strategy found the element
+      healed?: boolean;          // Self-healing: locked selector failed but SmartFinder worked
+      newSelector?: string;      // The new selector that worked (auto-update)
     }[];
     totalSteps: number;
     error?: string;
@@ -3892,7 +3894,7 @@ Recorded Test
       eventCleanups.push(unsubStepStart);
       
       // Listen for step complete events
-      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string }) => {
+      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; newSelector?: string }) => {
         console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗');
         setTestExecutionResult(prev => {
           if (!prev) return prev;
@@ -3911,6 +3913,28 @@ Recorded Test
             stepResults: newResults
           };
         });
+        
+        // =========== AUTO-HEAL LOCKED SELECTORS ===========
+        // If a locked selector failed but SmartFinder found the element,
+        // auto-update the step's optimizedSelector with the new working one
+        if (data.success && data.healed && data.newSelector) {
+          console.log(`[Test] 🔧 Auto-healing step ${data.stepIndex + 1}: ${data.newSelector}`);
+          setActions(prev => prev.map((action, idx) => {
+            if (idx === data.stepIndex) {
+              return {
+                ...action,
+                selectorObj: {
+                  ...action.selectorObj,
+                  optimizedSelector: data.newSelector,
+                  optimizedAt: new Date().toISOString(),
+                  optimizedSource: 'auto-healed'
+                }
+              };
+            }
+            return action;
+          }));
+          toast.info(`🔧 Auto-healed step ${data.stepIndex + 1} with new selector`, { duration: 2000 });
+        }
         
         // =========== SMART SUGGESTIONS ON FAILURE ===========
         // When a step fails, show Smart Suggestions first for quick fix
