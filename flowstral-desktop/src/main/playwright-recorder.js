@@ -3553,6 +3553,8 @@ class PlaywrightRecorder extends EventEmitter {
       let passedSteps = 0;
       let failedStep = -1;
       let failError = '';
+      // Track step results with workingSelector for Lock Locators feature
+      const stepResults = new Array(steps.length).fill(null).map((_, i) => ({ index: i, status: 'pending' }));
       
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
@@ -3594,12 +3596,15 @@ class PlaywrightRecorder extends EventEmitter {
           };
           
           // Return partial results - test is PAUSED, not failed
+          // Include stepResults with workingSelector for steps that passed
           return {
             success: false,
             status: 'paused_at_flagged',
             passedSteps,
             failedStep: -1,
             error: null,
+            totalSteps: steps.length,
+            stepResults,  // Include step results for Lock Locators
             stoppedAtFlaggedStep: {
               index: i,
               step,
@@ -3708,7 +3713,9 @@ class PlaywrightRecorder extends EventEmitter {
           if (i === 0 && ['navigate', 'goto'].includes(action.type) && url && action.url === url) {
             console.log('[PlaywrightRecorder] Skipping first navigate (already navigated)');
             passedSteps++;
-            this.emit('test-step-complete', { stepIndex: i, success: true });
+            // Track step result with null selector (navigate doesn't need one)
+            stepResults[i] = { index: i, status: 'passed', workingSelector: null, strategyType: 'navigate' };
+            this.emit('test-step-complete', { stepIndex: i, success: true, workingSelector: null, strategyType: 'navigate' });
             continue;
           }
           
@@ -3731,8 +3738,14 @@ class PlaywrightRecorder extends EventEmitter {
             throw new Error(result.error || 'Step failed');
           }
           
+          // Get the working selector from executeAction result
+          const workingSelector = result.workingSelector || this._lastWorkingSelector || null;
+          const strategyType = result.strategyType || this._lastStrategyType || null;
+          
           passedSteps++;
-          this.emit('test-step-complete', { stepIndex: i, success: true });
+          // Track step result with workingSelector for Lock Locators
+          stepResults[i] = { index: i, status: 'passed', workingSelector, strategyType };
+          this.emit('test-step-complete', { stepIndex: i, success: true, workingSelector, strategyType });
           
           // Wait between steps - use slowMo for playback speed control
           // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
@@ -3915,6 +3928,16 @@ class PlaywrightRecorder extends EventEmitter {
             scrolledToElement: !!elementLocation // Whether we successfully scrolled
           };
           
+          // Track failed step result
+          stepResults[i] = { 
+            index: i, 
+            status: 'failed', 
+            error: stepError.message, 
+            screenshot: failureScreenshot,
+            workingSelector: null,
+            strategyType: null
+          };
+          
           this.emit('test-step-complete', { 
             stepIndex: i, 
             success: false, 
@@ -3933,24 +3956,28 @@ class PlaywrightRecorder extends EventEmitter {
       // Store whether we should keep browser open
       this._keepBrowserOpenOnFailure = keepBrowserOpenOnFailure && !success;
       
+      // Update any remaining steps as skipped
+      for (let j = passedSteps; j < steps.length; j++) {
+        if (stepResults[j].status === 'pending') {
+          stepResults[j].status = j === failedStep ? 'failed' : 'skipped';
+          if (j === failedStep) {
+            stepResults[j].error = failError;
+            stepResults[j].screenshot = this._lastFailureState?.screenshot;
+          }
+        }
+      }
+      
+      // Emit test-complete with stepResults INCLUDING workingSelector for Lock Locators
       this.emit('test-complete', { 
         success, 
         passedSteps, 
         failedStep, 
         error: failError, 
         totalSteps: steps.length,
+        stepResults,  // CRITICAL: Include stepResults with workingSelector
         browserKeptOpen: this._keepBrowserOpenOnFailure,
         failureScreenshot: this._lastFailureState?.screenshot
       });
-      
-      // Collect step results for UI
-      const stepResults = steps.map((step, idx) => ({
-        step: idx + 1,
-        description: step.description || step.qword,
-        status: idx < passedSteps ? 'passed' : idx === failedStep ? 'failed' : 'skipped',
-        error: idx === failedStep ? failError : undefined,
-        screenshot: idx === failedStep ? this._lastFailureState?.screenshot : undefined
-      }));
       
       return {
         success,
@@ -3958,7 +3985,7 @@ class PlaywrightRecorder extends EventEmitter {
         failedStep,
         totalSteps: steps.length,
         error: failError || undefined,
-        stepResults,
+        stepResults,  // CRITICAL: Return stepResults with workingSelector
         browserKeptOpen: this._keepBrowserOpenOnFailure,
         failureState: !success ? this._lastFailureState : undefined
       };
