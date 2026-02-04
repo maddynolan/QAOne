@@ -2299,10 +2299,12 @@ class PlaywrightRecorder extends EventEmitter {
         
         // ============ INPUT CAPTURE USING composedPath ============
         // This captures inputs from Shadow DOM (like App Launcher search)
+        // Also captures contenteditable elements (like Salesforce Chatter rich text)
         window.addEventListener('input', function(e) {
           try {
             const path = e.composedPath ? e.composedPath() : [e.target];
             let input = null;
+            let isContentEditable = false;
             
             // Find the input element from composedPath
             for (const el of path) {
@@ -2312,14 +2314,38 @@ class PlaywrightRecorder extends EventEmitter {
                 input = el;
                 break;
               }
+              // Also capture contenteditable elements (rich text editors like Chatter)
+              if (el.getAttribute && el.getAttribute('contenteditable') === 'true') {
+                input = el;
+                isContentEditable = true;
+                break;
+              }
+              // Check for role="textbox" (Lightning components)
+              if (el.getAttribute && el.getAttribute('role') === 'textbox') {
+                input = el;
+                isContentEditable = true;
+                break;
+              }
+              // Salesforce Chatter rich text editor (ql-editor / Quill-based)
+              if (el.classList && (el.classList.contains('ql-editor') || el.classList.contains('slds-rich-text-area__content') || el.classList.contains('cke_editable'))) {
+                input = el;
+                isContentEditable = true;
+                break;
+              }
             }
             
             if (!input) return;
             
-            const type = (input.type || '').toLowerCase();
-            if (['checkbox','radio','submit','button','file','hidden'].includes(type)) return;
+            // For regular inputs, skip non-text types
+            if (!isContentEditable) {
+              const type = (input.type || '').toLowerCase();
+              if (['checkbox','radio','submit','button','file','hidden'].includes(type)) return;
+            }
             
-            const value = input.value || '';
+            // Get value - handle both regular inputs and contenteditable
+            const value = isContentEditable 
+              ? (input.textContent || input.innerText || '').trim()
+              : (input.value || '');
             if (!value) return;
             
             // Create unique key for this input
@@ -2375,16 +2401,18 @@ class PlaywrightRecorder extends EventEmitter {
             } catch(e) {}
             
             // Store/update pending input with enhanced context
+            const tagName = (input.tagName || '').toLowerCase();
             window.__flowstralCDPInputs[key] = {
               timestamp: Date.now(),
-              tag: 'input',
-              type: type,
+              tag: isContentEditable ? 'contenteditable' : tagName,
+              type: isContentEditable ? 'richtext' : (input.type || '').toLowerCase(),
               value: value,
               id: input.id || '',
               name: input.name || input.getAttribute('name') || '',
               placeholder: input.placeholder || input.getAttribute('placeholder') || '',
               ariaLabel: input.getAttribute('aria-label') || '',
               title: input.getAttribute('title') || '',
+              role: input.getAttribute('role') || '',
               // HIGHEST PRIORITY: data-testid for stable selectors
               testId: input.getAttribute('data-testid') || '',
               dataTestId: input.getAttribute('data-test-id') || input.getAttribute('data-testid') || '',
@@ -2392,6 +2420,7 @@ class PlaywrightRecorder extends EventEmitter {
               dataCy: input.getAttribute('data-cy') || '',
               fromShadow: path.some(p => p.nodeType === 11),
               key: key,
+              isContentEditable: isContentEditable,
               // NEW: Additional context for disambiguation
               label: associatedLabel,
               formId: formId,
@@ -2403,10 +2432,24 @@ class PlaywrightRecorder extends EventEmitter {
         
         // Helper to flush an input immediately
         function flushInput(input) {
-          if (!input || !input.value) return;
+          if (!input) return;
           
-          const type = (input.type || '').toLowerCase();
-          if (['checkbox','radio','submit','button','file','hidden'].includes(type)) return;
+          // Check if it's a contenteditable element
+          const isContentEditable = input.getAttribute && 
+            (input.getAttribute('contenteditable') === 'true' || input.getAttribute('role') === 'textbox');
+          
+          // Get value based on element type
+          const value = isContentEditable 
+            ? (input.textContent || input.innerText || '').trim()
+            : (input.value || '');
+          
+          if (!value) return;
+          
+          // For regular inputs, skip non-text types
+          if (!isContentEditable) {
+            const type = (input.type || '').toLowerCase();
+            if (['checkbox','radio','submit','button','file','hidden'].includes(type)) return;
+          }
           
           // ═══════════════════════════════════════════════════════════════
           // HONEYPOT DETECTION: Skip spam trap/bot detection fields
@@ -2497,7 +2540,7 @@ class PlaywrightRecorder extends EventEmitter {
           }
         }
         
-        // Capture on focusout to flush input
+        // Capture on focusout to flush input (including contenteditable)
         window.addEventListener('focusout', function(e) {
           try {
             const path = e.composedPath ? e.composedPath() : [e.target];
@@ -2507,6 +2550,11 @@ class PlaywrightRecorder extends EventEmitter {
               if (!el || !el.tagName) continue;
               const tag = el.tagName.toLowerCase();
               if (tag === 'input' || tag === 'textarea') {
+                input = el;
+                break;
+              }
+              // Also handle contenteditable elements (rich text editors)
+              if (el.getAttribute && (el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox')) {
                 input = el;
                 break;
               }
@@ -2526,6 +2574,11 @@ class PlaywrightRecorder extends EventEmitter {
               if (!el || !el.tagName) continue;
               const tag = el.tagName.toLowerCase();
               if (tag === 'input' || tag === 'textarea') {
+                input = el;
+                break;
+              }
+              // Also handle contenteditable elements
+              if (el.getAttribute && (el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox')) {
                 input = el;
                 break;
               }
@@ -5141,7 +5194,6 @@ class PlaywrightRecorder extends EventEmitter {
                   var key = (el.id || '') + '|' + (el.name || '') + '|' + (el.placeholder || '') + '|' + (el.getAttribute('aria-label') || '');
                   if (seenKeys.has(key)) continue; // Already captured
                   
-                  // Also scan Shadow DOM inputs
                   inputs.push({
                     timestamp: Date.now(),
                     tag: 'input',
@@ -5156,6 +5208,38 @@ class PlaywrightRecorder extends EventEmitter {
                     key: key,
                     scannedOnStop: true
                   });
+                }
+                
+                // CRITICAL: Scan contenteditable elements (Salesforce Chatter, rich text editors)
+                var contenteditables = document.querySelectorAll('[contenteditable="true"], [role="textbox"], .ql-editor, .slds-rich-text-area__content, .cke_editable');
+                for (var i = 0; i < contenteditables.length; i++) {
+                  var el = contenteditables[i];
+                  var value = (el.textContent || el.innerText || '').trim();
+                  if (!value || value.length === 0) continue;
+                  // Skip placeholder text like "Share an update..."
+                  if (value.toLowerCase().includes('share an update') || value.toLowerCase().includes('type a message')) continue;
+                  
+                  var ariaLabel = el.getAttribute('aria-label') || '';
+                  var placeholder = el.getAttribute('placeholder') || el.getAttribute('data-placeholder') || '';
+                  var key = 'ce|' + (el.id || '') + '|' + ariaLabel + '|' + placeholder;
+                  if (seenKeys.has(key)) continue;
+                  
+                  inputs.push({
+                    timestamp: Date.now(),
+                    tag: 'contenteditable',
+                    type: 'richtext',
+                    value: value,
+                    id: el.id || '',
+                    name: '',
+                    placeholder: placeholder,
+                    ariaLabel: ariaLabel,
+                    title: el.getAttribute('title') || '',
+                    fromShadow: false,
+                    key: key,
+                    scannedOnStop: true,
+                    isContentEditable: true
+                  });
+                  seenKeys.add(key);
                 }
                 
                 // Also scan Shadow DOM

@@ -510,6 +510,21 @@ With locked selectors:    5-10 seconds (150ms check per step)
 **Files Involved:**
 - `src/pages/PlaywrightRecorderPage.tsx`:
   - `playwright-test-step-complete` listener shows suggestions on failure
+  - Fix/Flag buttons updated to open Smart Suggestions panel
+
+### 4.7 Rich Text / Contenteditable Support
+
+**Problem:** Rich text editors (like Salesforce Chatter) use `contenteditable` divs, not `<input>` or `<textarea>`. These weren't being captured during recording.
+
+**Solution:** Extended input capture to handle:
+- `[contenteditable="true"]` elements
+- `[role="textbox"]` elements (Lightning components)
+
+**Files Modified:**
+- `flowstral-desktop/src/main/playwright-recorder.js`:
+  - `window.addEventListener('input', ...)` now detects contenteditable
+  - `flushInput()` helper handles contenteditable value extraction
+  - `focusout` and `change` handlers also check contenteditable
 
 ### 4.6 Reliability Layer
 

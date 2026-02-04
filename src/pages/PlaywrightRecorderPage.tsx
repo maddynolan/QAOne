@@ -8698,16 +8698,16 @@ Recorded Test
                             {/* Action buttons for FAILED steps - Fix + Flag */}
                             {isFailed && testExecutionResult?.status !== 'running' && (
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Fix button - opens step editor AND switches to suggestions for Replace */}
+                                {/* Fix button - CLOSE modal and open Smart Suggestions panel */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    // CLOSE the modal so user can see Smart Suggestions
+                                    setShowTestResultModal(false);
                                     setEditingActionIndex(idx);
-                                    setEditSelectorModalOpen(true);
-                                    // Also switch to suggestions tab so user can use Replace feature
                                     setRightPanelTab('suggestions');
-                                    // Refresh suggestions to get current page elements
                                     handleRefreshSuggestions();
+                                    toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
                                   }}
                                   className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
                                   title="Fix this step - use Smart Suggestions to replace"
@@ -8720,25 +8720,47 @@ Recorded Test
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       markStepAsFalsePositive(idx, stepResult?.screenshot || null);
+                                      // CLOSE modal and open suggestions for fixing
+                                      setShowTestResultModal(false);
+                                      setEditingActionIndex(idx);
+                                      setRightPanelTab('suggestions');
+                                      handleRefreshSuggestions();
+                                      toast.info('Step flagged! Select correct element from Smart Suggestions.', { duration: 4000 });
                                     }}
                                     className="px-2 py-0.5 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded border border-amber-500/30"
-                                    title="Mark as false positive - test will stop here on next run for fixing"
+                                    title="Flag and fix - opens Smart Suggestions to replace selector"
                                   >
                                     🚩 Flag
                                   </button>
                                 )}
-                                {/* Remove false positive flag */}
+                                {/* After flagging - show Fix button + Unflag option */}
                                 {action.id && falsePositiveSteps.has(action.id) && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      unmarkFalsePositive(action.id!);
-                                    }}
-                                    className="px-2 py-0.5 text-[10px] bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 rounded border border-gray-500/30"
-                                    title="Remove false positive flag"
-                                  >
-                                    Unflag
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowTestResultModal(false);
+                                        setEditingActionIndex(idx);
+                                        setRightPanelTab('suggestions');
+                                        handleRefreshSuggestions();
+                                        toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                      title="Fix this flagged step"
+                                    >
+                                      Fix
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        unmarkFalsePositive(action.id!);
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 rounded border border-gray-500/30"
+                                      title="Remove false positive flag"
+                                    >
+                                      Unflag
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             )}
