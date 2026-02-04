@@ -502,6 +502,11 @@ With locked selectors:    5-10 seconds (150ms check per step)
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Fix/Flag Button Behavior (Jan 2026 Fix):**
+- Fix button on FAILED step: **Closes modal** → Opens Smart Suggestions panel
+- Flag button on FAILED step: **Closes modal** → Marks as flagged → Opens Smart Suggestions
+- This ensures user can SEE the Smart Suggestions panel (modal was blocking it)
+
 **Why This Is Better:**
 - Same UX as "Flag" workflow (user already knows it)
 - One-click fix: click the element you want
@@ -510,6 +515,7 @@ With locked selectors:    5-10 seconds (150ms check per step)
 **Files Involved:**
 - `src/pages/PlaywrightRecorderPage.tsx`:
   - `playwright-test-step-complete` listener shows suggestions on failure
+  - Fix/Flag buttons call `setShowTestResultModal(false)` before opening suggestions
   - Fix/Flag buttons updated to open Smart Suggestions panel
 
 ### 4.7 Rich Text / Contenteditable Support
@@ -519,12 +525,23 @@ With locked selectors:    5-10 seconds (150ms check per step)
 **Solution:** Extended input capture to handle:
 - `[contenteditable="true"]` elements
 - `[role="textbox"]` elements (Lightning components)
+- `.ql-editor` (Quill-based editors)
+- `.slds-rich-text-area__content` (Salesforce SLDS)
+- `.cke_editable` (CKEditor)
 
 **Files Modified:**
 - `flowstral-desktop/src/main/playwright-recorder.js`:
   - `window.addEventListener('input', ...)` now detects contenteditable
   - `flushInput()` helper handles contenteditable value extraction
   - `focusout` and `change` handlers also check contenteditable
+  - **Jan 2026 Fix:** `stopRecording()` now scans contenteditable elements for any unflushed text:
+    ```javascript
+    // Scans for contenteditable on stop recording
+    var contenteditables = document.querySelectorAll(
+      '[contenteditable="true"], [role="textbox"], ' +
+      '.ql-editor, .slds-rich-text-area__content, .cke_editable'
+    );
+    ```
 
 ### 4.6 Reliability Layer
 
