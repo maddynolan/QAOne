@@ -938,10 +938,18 @@ async function handleFill(ctx, action, options = {}) {
           const verify = await verifyInputValue(smartLocator, value, ctx);
           if (verify.verified) {
             console.log(`[ActionHandler] ✓ SmartFinder contenteditable fill VERIFIED for "${label}"`);
+            if (ctx._lastWorkingSelector !== undefined) {
+              ctx._lastWorkingSelector = ctx.smartFinder?.lastSuccessfulSelector ?? null;
+              ctx._lastStrategyType = ctx.smartFinder?.lastSuccessfulStrategy ?? 'SmartFinder';
+            }
             return { success: true, strategy: 'SmartFinder-contenteditable-verified' };
           } else {
             console.log(`[ActionHandler] ⚠️ SmartFinder contenteditable fill NOT verified: expected "${value}", got "${verify.actual}"`);
             // Still return success for contenteditable - verification is tricky with rich text
+            if (ctx._lastWorkingSelector !== undefined) {
+              ctx._lastWorkingSelector = ctx.smartFinder?.lastSuccessfulSelector ?? null;
+              ctx._lastStrategyType = ctx.smartFinder?.lastSuccessfulStrategy ?? 'SmartFinder';
+            }
             return { success: true, strategy: 'SmartFinder-contenteditable', warning: 'Value verification uncertain' };
           }
         }
@@ -954,6 +962,11 @@ async function handleFill(ctx, action, options = {}) {
         const verify = await verifyInputValue(smartLocator, value, ctx);
         if (verify.verified) {
           console.log(`[ActionHandler] ✓ SmartFinder fill VERIFIED for "${label}": "${verify.actual}"`);
+          const sfSel = ctx.smartFinder?.lastSuccessfulSelector;
+          if (sfSel != null) {
+            ctx._lastWorkingSelector = sfSel;
+            ctx._lastStrategyType = ctx.smartFinder?.lastSuccessfulStrategy ?? 'SmartFinder';
+          }
           return { success: true, strategy: 'SmartFinder-verified' };
         } else {
           console.log(`[ActionHandler] ⚠️ SmartFinder fill NOT verified: expected "${value}", got "${verify.actual}"`);
@@ -968,6 +981,12 @@ async function handleFill(ctx, action, options = {}) {
   // Try legacy element finder
   const fillResult = await ctx._findElement(action);
   if (fillResult) {
+    // Set for Lock Locators: legacy path doesn't go through findElementWithRetry
+    const selectorUsed = fillResult.strategy?.value;
+    if (selectorUsed && typeof selectorUsed === 'string') {
+      ctx._lastWorkingSelector = selectorUsed;
+      ctx._lastStrategyType = fillResult.strategy?.type || 'legacy';
+    }
     // Check for contenteditable on legacy result too
     const isContentEditable = await fillResult.locator.evaluate(el => {
       return el.isContentEditable || el.getAttribute('contenteditable') === 'true';
@@ -2643,13 +2662,29 @@ async function handleCheckInstallability(ctx, action, options = {}) {
 // ============================================================
 
 /**
+ * Enrich successful result with workingSelector/strategyType from ctx for Lock Locators.
+ * When handlers use findElementWithRetry or set ctx._lastWorkingSelector, this passes it through.
+ */
+function enrichResult(ctx, result) {
+  if (!result || !result.success) return result;
+  if (result.workingSelector != null && result.strategyType != null) return result;
+  const ws = result.workingSelector ?? ctx._lastWorkingSelector ?? null;
+  const st = result.strategyType ?? ctx._lastStrategyType ?? (typeof result.strategy === 'string' ? result.strategy : result.strategy?.type) ?? null;
+  if (ws != null || st != null) {
+    result.workingSelector = result.workingSelector ?? ws;
+    result.strategyType = result.strategyType ?? st;
+  }
+  return result;
+}
+
+/**
  * Execute a single action - UNIFIED EXECUTION POINT
  * 
  * @param {Object} ctx - Execution context (PlaywrightRecorder or TestExecutor instance)
  *   Must provide: page, findElementWithRetry, enableAIFallback, findElementWithAI
  * @param {Object} action - The action to execute
  * @param {Object} options - Execution options (timeout, etc.)
- * @returns {Promise<{success: boolean, error?: string, strategy?: string}>}
+ * @returns {Promise<{success: boolean, error?: string, strategy?: string, workingSelector?: string, strategyType?: string}>}
  */
 async function executeAction(ctx, action, options = {}) {
   const { timeout = 30000 } = options;
@@ -2670,36 +2705,36 @@ async function executeAction(ctx, action, options = {}) {
       case 'salesforcenavigation':
         return await handleSalesforceNavigation(ctx, action, { timeout });
       
-      // Click actions
+      // Click actions (findElementWithRetry sets ctx._lastWorkingSelector)
       case 'click':
       case 'clicktext':
       case 'clickelement':
-        return await handleClick(ctx, action, { timeout });
+        return enrichResult(ctx, await handleClick(ctx, action, { timeout }));
       
       // Double-click actions
       case 'dblclick':
       case 'doubleclick':
-        return await handleDoubleClick(ctx, action, { timeout });
+        return enrichResult(ctx, await handleDoubleClick(ctx, action, { timeout }));
       
       // Right-click (context menu) actions
       case 'rightclick':
       case 'contextmenu':
-        return await handleRightClick(ctx, action, { timeout });
+        return enrichResult(ctx, await handleRightClick(ctx, action, { timeout }));
       
-      // Fill/Input actions
+      // Fill/Input actions (handleFill uses _findElement; we set ctx._lastWorkingSelector there)
       case 'fill':
       case 'type':
       case 'input':
-        return await handleFill(ctx, action, { timeout });
+        return enrichResult(ctx, await handleFill(ctx, action, { timeout }));
       
       // Select/Dropdown actions
       case 'select':
       case 'selectoption':
-        return await handleSelect(ctx, action, { timeout });
+        return enrichResult(ctx, await handleSelect(ctx, action, { timeout }));
       
       // Hover action (critical for flyout menus)
       case 'hover':
-        return await handleHover(ctx, action, { timeout });
+        return enrichResult(ctx, await handleHover(ctx, action, { timeout }));
       
       // Keyboard actions
       case 'press':
@@ -2817,13 +2852,13 @@ async function executeAction(ctx, action, options = {}) {
       // Clear input field
       case 'clear':
       case 'clearfield':
-        return await handleClear(ctx, action, { timeout });
+        return enrichResult(ctx, await handleClear(ctx, action, { timeout }));
       
       // Focus/Blur
       case 'focus':
-        return await handleFocus(ctx, action, { timeout });
+        return enrichResult(ctx, await handleFocus(ctx, action, { timeout }));
       case 'blur':
-        return await handleBlur(ctx, action, { timeout });
+        return enrichResult(ctx, await handleBlur(ctx, action, { timeout }));
       
       // Toggle switch
       case 'toggle':

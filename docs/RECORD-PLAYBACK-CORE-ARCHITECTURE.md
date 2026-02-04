@@ -8,7 +8,7 @@
 
 ---
 
-## CURRENT STATE SUMMARY (Last Updated: Jan 31, 2026)
+## CURRENT STATE SUMMARY (Last Updated: Feb 3, 2026)
 
 ### What's Working ✅
 
@@ -21,6 +21,11 @@
 | **Smart Suggestions** | ✅ Implemented | Shows on failure/flag → user picks fix |
 | **Contenteditable** | ✅ Fixed | Salesforce Chatter, rich text editors |
 | **Unified Execution** | ✅ All tabs same | Recorder, Builder, Tests tabs use same engine |
+| **Playback speed** | ✅ Implemented | 0.25x / 0.5x / 1x / 2x in Record tab |
+| **Step duration display** | ✅ Implemented | In test result modal (e.g. `stepResult.duration` ms) |
+| **Copy selector** | ✅ Implemented | Per-step copy in `PlaywrightRecorderPage.tsx` |
+| **Confidence badge** | ✅ Implemented | `ConfidenceBadge`, `StepConfidenceIndicator` |
+| **Cross-device (safe)** | ✅ Implemented | `deviceContext` on actions, skip coordinates when recordedOn ≠ target |
 
 ### Quick Reference: Core Files
 
@@ -55,6 +60,48 @@ src/pages/
 - **Section 4.5**: Lock Locators + Self-Healing
 - **Section 4.6**: Smart Suggestions on Failure  
 - **Section 4.4**: Fallback Layers (playback strategy order)
+
+### Audit & simplification (no implementation yet)
+
+- **`docs/RECORD-PLAYBACK-AUDIT-SIMPLIFICATION.md`** — Full audit of recording/playback flows, duplication (two playback engines, 6+ selector sources, two coalescers), and a **prioritized list of simplification opportunities** with suggested order of work.
+- **`docs/RECORD-PLAYBACK-IMPACT-AND-UX-BRAINSTORM.md`** — **Impact & UX brainstorm:** full testing lifecycle, day-in-the-life personas, robustness + UX ideas, high-impact combinations, north star directions (no implementation).
+
+### Fixing failures & false positives (no-code, no AI)
+
+- **`docs/RECORD-PLAYBACK-FAILURES-FALSE-POSITIVES-NO-CODE.md`** — **Single source of truth** for how a non-technical user fixes failed/flaky steps and false positives: failure taxonomy (user-facing types + messages), one-screen rule, fix paths (picker, suggestions, retry, skip, false positive, run from here), **full false positive flow** (mark → next run pause → “Is the page correct?”), flaky (Stabilize / Ask me), plain-language vocabulary, combinations matrix, edge cases, gap analysis, checklist.
+
+**Phase 1 (Product trust) — implemented Feb 2026:** Failure classification (`src/lib/failureClassification.ts`), one-screen failure card (step name, screenshot, plain-language message, primary "Click the correct one", Run from here), false positive pause card ("Is the page correct?" Yes / No fix), vocabulary pass (Target not Selector), Run from here in footer.
+
+### Not Yet Built (candidate next work)
+
+- **Section 6**: False positive + screenshot — **core flow built** (flag step, pause at step, "Is the page correct?" card); full spec in RECORD-PLAYBACK-FAILURES-FALSE-POSITIVES-NO-CODE.md
+- **Section 13.1**: Self-Healing 2.0 (auto-update saved test with healed selector + Accept/Revert UX)
+- **Section 13.2**: Visual regression testing (baseline capture, pixelmatch/SSIM, diff viewer)
+- **Section 13.3**: Network mocking (stub routes, HAR replay)
+- **Section 13.4**: Parallel test execution (workers / sharding)
+- **Section 13.5**: Debug playback (step highlight, step-by-step, execution timeline) — partial (speed + duration exist)
+- **Section 14**: Cross-device Phase 2+ (device-aware SmartFinder, responsive element mapping, mobile menu auto-open)
+
+### Best approach from here (recommended order)
+
+**1. Phase 2 — Consistency first (unify “find element”)**  
+The audit shows two playback engines with different strategy counts (Record ~114, Builder/Tests ~51) and duplicated override/locked checks. That directly causes “works in Record tab, fails in Builder/CI” and erodes trust. **Best next step:**  
+- **Quick win (done Feb 2026):** Manual-override and locked-selector checks are centralized in `lib/override-and-locked.js` (`getManualOverrideSelector`, `getLockedSelector`). Both PlaywrightRecorder and TestExecutor use it; same behavior, single implementation.  
+- **Big win (done Feb 2026):** Shared legacy find in `lib/shared-element-finder.js`: `runLegacyFindExecutor(page, action, options)` runs the Executor-style selector list (testId, ariaLabel, name, id, selector, text) with same order and visibility timeout (2000ms). TestExecutor._findElement delegates to it; behavior unchanged. PlaywrightRecorder is **unchanged** (keeps its 114-strategy _findElement) to avoid regression; it can adopt the shared runner later with a unified strategy list.  
+**Outcome:** “Record once, run everywhere with same result.”
+
+**2. Harden Phase 1 (no-code UX)**  
+Small, localized changes: ensure Smart Suggestions panel and overlay show **plain-language only** (no selectors in UI); add “Use for failed step” / “Replace step” in the overlay when a step has failed; keep panel and overlay in sync (same data source on refresh). Closes remaining gaps in RECORD-PLAYBACK-FAILURES-FALSE-POSITIVES-NO-CODE.md without touching playback logic.
+
+**3. Phase 3 — Proactive robustness**  
+After consistency is in place: **Stable vs fragile** badges (reuse confidence; show “Stable” / “Fragile” per step and “Stabilize this test” CTA). Then **flaky detection** (per-step pass/fail history, “This step has failed sometimes,” offer Stabilize or Ask me each time). Both are additive and build on existing Lock Locators and false-positive flow.
+
+**4. Defer (higher risk, do later)**  
+- **Single selector source for recording:** 6+ selector-generation locations; unifying requires careful fallbacks (injection can fail). Do after shared element finding is stable.  
+- **Single coalescer:** Two runtimes (desktop inject vs extension); share pattern definitions first, not a single implementation.  
+- **Merging the two run paths:** Record tab and Builder/Tests have different lifecycles and UX; keep both. Share logic (finder), not entry points.
+
+**Summary:** Unify element finding (quick win + shared finder) first for trust and consistency; then harden no-code UX and add stable/fragile and flaky signals. Defer single selector source and single coalescer until the shared finder is proven.
 
 ---
 
@@ -586,6 +633,26 @@ With locked selectors:    5-10 seconds (150ms check per step)
 - `flowstral-desktop/src/main/test-executor.js` - Builder/Tests tab execution
 - Both use `lib/smart-finder.js` for element finding
 - Both track `workingSelector`, `healed`, `newSelector`
+
+### 4.5.3 Lock Locators: workingSelector propagation (Feb 2026)
+
+**Problem (fixed):** "Lock Locators" showed "No working selectors to lock" after a passed test because `workingSelector` was not reaching the frontend for steps executed via the **unified** path (`ActionHandlers.executeAction`).
+
+**Root cause:**
+- Record tab playback uses `ActionHandlers.executeAction(ctx, action)` for click, fill, hover, select, etc.
+- Handlers returned only `{ success: true, strategy: '...' }` and did **not** include `workingSelector` or `strategyType`.
+- **Click** uses `ctx.findElementWithRetry()`, which sets `ctx._lastWorkingSelector` on the recorder, but that value was never attached to the handler’s return.
+- **Fill** uses `ctx._findElement(action)` directly (not `findElementWithRetry`), so `_lastWorkingSelector` was never set for fill steps.
+
+**Fix (Feb 2026):**
+1. **`enrichResult(ctx, result)`** in `lib/action-handlers.js`: after any successful element action, the handler result is enriched with `workingSelector` and `strategyType` from `ctx._lastWorkingSelector` / `ctx._lastStrategyType` when the handler did not already return them.
+2. **Fill (and SmartFinder fill)** now set `ctx._lastWorkingSelector` and `ctx._lastStrategyType` when they find an element (legacy path: from `fillResult.strategy?.value`; SmartFinder path: from `ctx.smartFinder?.lastSuccessfulSelector`).
+3. All element-interaction handlers (click, fill, select, hover, double-click, right-click, check, uncheck, clear, focus, blur) are wrapped with `enrichResult(ctx, await handleX(...))` so the recorder’s `runTest` receives `workingSelector` in the step result and can include it in `stepResults` for the frontend.
+
+**Files changed:**
+- `flowstral-desktop/src/main/lib/action-handlers.js`: `enrichResult()`, `executeAction()` wrapping, and `handleFill()` setting `ctx._lastWorkingSelector` / `ctx._lastStrategyType`.
+
+**Outcome:** "Lock Locators" now receives working selectors for all element steps (including Fill Password, Click Log In, etc.) and shows "Locked N selectors" instead of "No working selectors to lock."
 
 ### 4.6 Smart Suggestions on Failure (Simplified Repair)
 
@@ -1726,65 +1793,16 @@ class TestDataGenerator {
 
 ---
 
-## 15. Quick Wins (Implement This Week)
+## 15. Quick Wins — Implemented ✅
 
-### 15.1 Add Execution Speed Control
+All items below are **already built** in the codebase (verified Feb 2026).
 
-```typescript
-// In PlaywrightRecorderPage.tsx
-const [playbackSpeed, setPlaybackSpeed] = useState<'0.5x' | '1x' | '2x'>('1x');
-
-// Pass to test executor
-await electronAPI.testRunner.executeTest({
-  steps: normalizedActions,
-  settings: {
-    slowMo: playbackSpeed === '0.5x' ? 500 : playbackSpeed === '2x' ? 0 : 200,
-    highlight: true
-  }
-});
-```
-
-### 15.2 Add Step Duration Display
-
-```typescript
-// In execution result modal, show duration for each step
-{stepResult?.duration && (
-  <span className="text-xs text-muted-foreground ml-auto">
-    {stepResult.duration}ms
-  </span>
-)}
-```
-
-### 15.3 Add "Copy Selector" Button
-
-```typescript
-// In step list, add copy button for selector
-<Button
-  variant="ghost"
-  size="icon"
-  onClick={() => {
-    navigator.clipboard.writeText(action.selectorObj?.primary || '');
-    toast.success('Selector copied!');
-  }}
->
-  <Copy className="h-3 w-3" />
-</Button>
-```
-
-### 15.4 Add Confidence Badge to Steps
-
-```typescript
-// Show confidence indicator on each step
-{action.selectorObj?.confidence && (
-  <Badge className={cn(
-    action.selectorObj.confidence >= 90 ? 'bg-green-500/20 text-green-400' :
-    action.selectorObj.confidence >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
-    'bg-red-500/20 text-red-400'
-  )}>
-    {action.selectorObj.confidence}%
-  </Badge>
-)}
-```
+| Item | Where |
+|------|--------|
+| **Execution speed** | `PlaywrightRecorderPage.tsx`: `playbackSpeed` state (0.25x, 0.5x, 1x, 2x), `slowMo` passed to `executeTest` |
+| **Step duration** | Same page: `stepResult?.duration` shown in result modal (e.g. `{stepResult.duration}ms`) |
+| **Copy selector** | Same page: per-step "Copy selector" button → `navigator.clipboard.writeText(selector)` |
+| **Confidence badge** | `src/components/confidence/ConfidenceBadge.tsx`, `StepConfidenceIndicator.tsx`; used where step confidence is shown |
 
 ---
 
@@ -1800,8 +1818,8 @@ await electronAPI.testRunner.executeTest({
 | Viewport configuration | ✅ Working | Sets viewport, userAgent, touch, scale factor |
 | Network throttling | ✅ Working | 4G, 3G, Slow 3G, 2G presets |
 | Semantic selectors | ✅ Primary | testId, role+text, aria-label (device-agnostic) |
-| Coordinate fallback | ⚠️ Device-dependent | boundingBox stored, won't work cross-device |
-| Device context in recipe | ❌ Missing | No "recorded on device X" metadata |
+| Coordinate fallback | ✅ Skipped cross-device | `skipCoordinateFallback` when recordedOn ≠ target |
+| Device context in recipe | ✅ Implemented | `action.deviceContext.recordedOn` (and viewport, isMobile, userAgent) |
 | Responsive element handling | ❌ Missing | No hamburger menu ↔ nav bar mapping |
 
 ### 14.2 Why Current System MOSTLY Works Cross-Device
@@ -1942,23 +1960,11 @@ async handleResponsiveElement(recipe, sourceDevice, targetDevice) {
 
 ### 14.6 Safe Implementation Plan
 
-**DO FIRST (No Regression Risk):**
+**DO FIRST (No Regression Risk):** ✅ **Implemented**
 
-1. **Add deviceContext to recorded actions** - Pure addition, no existing code changes
-2. **Log cross-device playback** - Just logging, no behavior change
-3. **Skip coordinate strategies on cross-device** - If sourceDevice ≠ targetDevice, disable coordinate fallback
-
-```javascript
-// Safe change in test-executor.js
-const isCrossDevicePlay = (action.deviceContext?.recordedOn || 'desktop') !== 
-                          (this.mobileDevice?.name || 'desktop');
-
-if (isCrossDevicePlay) {
-  console.log(`[Executor] Cross-device playback: ${action.deviceContext?.recordedOn} → ${this.mobileDevice?.name || 'desktop'}`);
-  // Don't use coordinate fallback
-  this.skipCoordinateFallback = true;
-}
-```
+1. **Add deviceContext to recorded actions** — ✅ `playwright-recorder.js`: `deviceContext: { recordedOn, viewport, isMobile, userAgent }` added to actions
+2. **Log cross-device playback** — ✅ `test-executor.js`: logs when `sourceDevice !== targetDevice`
+3. **Skip coordinate strategies on cross-device** — ✅ `test-executor.js` sets `_skipCoordinateFallback`; `smart-finder.js` and `action-handlers.js` respect it
 
 **DO LATER (With Careful Testing):**
 
@@ -2022,6 +2028,8 @@ Played on iPhone:
 | 2026-02-01 | Claude | Added Rich Text / Contenteditable Support (Section 4.7) |
 | 2026-02-01 | Claude | Added Unified Execution (Section 4.5.2) - same engine across all tabs |
 | 2026-02-01 | Claude | Added Current State Summary at top for quick onboarding |
+| 2026-02-03 | — | Marked Quick Wins (Section 15) and cross-device DO FIRST (14.6) as implemented; added "Not Yet Built" list |
+| 2026-02-03 | — | Lock Locators fix: workingSelector propagation via action-handlers (Section 4.5.3) — enrichResult, fill setting _lastWorkingSelector |
 
 ---
 
