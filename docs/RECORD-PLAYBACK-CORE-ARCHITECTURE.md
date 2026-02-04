@@ -483,6 +483,35 @@ Without locked selectors: 30-45 seconds (full search each step)
 With locked selectors:    5-10 seconds (150ms check per step)
 ```
 
+### 4.5.1 Self-Healing (Auto-Recovery)
+
+**What happens when a locked selector breaks?**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SELF-HEALING FLOW                                               │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Locked selector tried (150ms) → FAILS                        │
+│  2. Falls back to SmartFinder (full robust search)              │
+│  3. SmartFinder finds element → Step PASSES                     │
+│  4. Backend returns: { healed: true, newSelector: "..." }       │
+│  5. Frontend auto-updates step's optimizedSelector              │
+│  6. Toast: "🔧 Auto-healed step X with new selector"            │
+│  7. Next run → New locked selector works instantly              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Files Involved:**
+- `flowstral-desktop/src/main/playwright-recorder.js`:
+  - `_lockedSelectorFailed` flag tracks when healing needed
+  - `findElementWithRetry()` returns `{ healed: true, newSelector }` 
+  - `test-step-complete` event includes healing data
+- `src/pages/PlaywrightRecorderPage.tsx`:
+  - Listens for `healed` flag in step-complete event
+  - Auto-updates `action.selectorObj.optimizedSelector`
+
+**No manual intervention needed** unless SmartFinder also fails.
+
 ### 4.6 Smart Suggestions on Failure (Simplified Repair)
 
 **Problem:** When a step fails, user has to manually figure out how to fix it.
