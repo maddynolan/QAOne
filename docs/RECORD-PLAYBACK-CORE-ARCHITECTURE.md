@@ -8,6 +8,56 @@
 
 ---
 
+## CURRENT STATE SUMMARY (Last Updated: Jan 31, 2026)
+
+### What's Working ✅
+
+| Feature | Status | Key Files |
+|---------|--------|-----------|
+| **Recording** | ✅ Stable | `playwright-recorder.js`, `action-coalescer.js` |
+| **Playback (SmartFinder)** | ✅ Stable | `smart-finder.js`, `strategy-memory.js` |
+| **Lock Locators** | ✅ Implemented | Saves working selector → instant replays |
+| **Self-Healing** | ✅ Implemented | Auto-updates selector if locked one fails |
+| **Smart Suggestions** | ✅ Implemented | Shows on failure/flag → user picks fix |
+| **Contenteditable** | ✅ Fixed | Salesforce Chatter, rich text editors |
+| **Unified Execution** | ✅ All tabs same | Recorder, Builder, Tests tabs use same engine |
+
+### Quick Reference: Core Files
+
+```
+flowstral-desktop/src/main/
+├── playwright-recorder.js     # Recording + playback (Record tab)
+├── test-executor.js           # Playback (Builder/Tests tabs)
+├── lib/
+│   ├── smart-finder.js        # Element finding strategies
+│   ├── smart-selector.js      # Selector generation during recording
+│   ├── strategy-memory.js     # Cache successful strategies
+│   └── action-coalescer.js    # Merge rapid events
+
+src/pages/
+├── PlaywrightRecorderPage.tsx # Record tab UI
+├── UnifiedWorkflowEditor.tsx  # Builder tab UI
+└── TestRuns.tsx               # Tests tab UI
+```
+
+### Key Concepts for New Conversations
+
+1. **Lock Locators**: After test passes, user clicks "Lock Locators" → saves actual working selector to `action.selectorObj.optimizedSelector` → next run is instant (150ms vs 2-5s)
+
+2. **Self-Healing**: If locked selector fails, SmartFinder searches → if found, auto-updates the locked selector → no manual intervention needed
+
+3. **Smart Suggestions**: On step failure OR flag (false positive), right panel shows DOM suggestions → user picks replacement → selector saved
+
+4. **Unified Execution**: All entry points (Record tab, Builder tab, Tests tab, CI) use the SAME playback engine with SAME features
+
+### What to Read First
+
+- **Section 4.5**: Lock Locators + Self-Healing
+- **Section 4.6**: Smart Suggestions on Failure  
+- **Section 4.4**: Fallback Layers (playback strategy order)
+
+---
+
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)
@@ -1967,6 +2017,11 @@ Played on iPhone:
 | 2026-02-01 | Claude | Added click flow audit, unit tests, confidence percentages |
 | 2026-02-01 | Claude | Added Cross-Device Testing analysis and implementation plan |
 | 2026-02-01 | Claude | Added Lock Locators feature (Section 4.5) - user-controlled optimization |
+| 2026-02-01 | Claude | Added Self-Healing (Section 4.5.1) - auto-recovery when locked selector fails |
+| 2026-02-01 | Claude | Added Smart Suggestions on Failure (Section 4.6) - Fix/Flag buttons |
+| 2026-02-01 | Claude | Added Rich Text / Contenteditable Support (Section 4.7) |
+| 2026-02-01 | Claude | Added Unified Execution (Section 4.5.2) - same engine across all tabs |
+| 2026-02-01 | Claude | Added Current State Summary at top for quick onboarding |
 
 ---
 
