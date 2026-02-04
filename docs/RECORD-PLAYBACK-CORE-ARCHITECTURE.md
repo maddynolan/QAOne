@@ -512,6 +512,31 @@ With locked selectors:    5-10 seconds (150ms check per step)
 
 **No manual intervention needed** unless SmartFinder also fails.
 
+### 4.5.2 Unified Execution Across All Entry Points
+
+**Question:** "Do tests from Builder/Tests tabs work the same as Recorder?"
+
+**Answer:** YES - now unified!
+
+| Entry Point | Backend | SmartFinder | Lock Locators | Self-Healing |
+|-------------|---------|-------------|---------------|--------------|
+| **Record Tab** | PlaywrightRecorder | ✅ | ✅ | ✅ |
+| **Builder Tab** | TestExecutor | ✅ | ✅ | ✅ |
+| **Tests Tab** | TestExecutor | ✅ | ✅ | ✅ |
+| **Headless/CI** | TestExecutor | ✅ | ✅ | ✅ |
+
+**What this means for regression suites:**
+- Tests saved and run from Tests tab use the SAME playback engine
+- Lock Locators work everywhere (selector saved IN the test case)
+- Self-healing auto-updates selectors during test runs
+- No need to "re-import to recorder" - just run from any tab
+
+**Files Involved:**
+- `flowstral-desktop/src/main/playwright-recorder.js` - Record tab execution
+- `flowstral-desktop/src/main/test-executor.js` - Builder/Tests tab execution
+- Both use `lib/smart-finder.js` for element finding
+- Both track `workingSelector`, `healed`, `newSelector`
+
 ### 4.6 Smart Suggestions on Failure (Simplified Repair)
 
 **Problem:** When a step fails, user has to manually figure out how to fix it.
