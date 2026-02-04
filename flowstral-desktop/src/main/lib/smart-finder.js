@@ -37,6 +37,7 @@ class SmartFinder {
     this.lastFailedRecipe = null;
     this.lastSuccessfulStrategy = null;  // For learning
     this.lastSuccessfulSelector = null;  // For Lock Locators feature
+    this._currentRecipe = null;          // Current recipe being searched
     
     // Confidence tracking for each find operation
     this._lastFindResult = null;
@@ -480,6 +481,9 @@ class SmartFinder {
   async find(recipe, options = {}) {
     this._executionStartTime = Date.now();
     this._resetTrackingState(); // Reset confidence tracking for new find
+    
+    // Store recipe for Lock Locators feature (used in _recordLearningAndReturn)
+    this._currentRecipe = recipe;
     
     // Store cross-device flag for coordinate strategy decisions
     this._skipCoordinateFallback = options.skipCoordinateFallback || false;
@@ -2473,9 +2477,17 @@ class SmartFinder {
   _recordLearningAndReturn(locator) {
     const executionTime = Date.now() - this._executionStartTime;
     
+    // Build selector string from the recipe for Lock Locators feature
+    // If strategy didn't return a selector, construct one from recipe data
+    if (!this._lastSuccessfulSelector && this._currentRecipe) {
+      this._lastSuccessfulSelector = this._buildSelectorFromRecipe(this._currentRecipe, this._lastSuccessfulStrategy);
+    }
+    
     // Expose the working strategy/selector for Lock Locators feature
     this.lastSuccessfulStrategy = this._lastSuccessfulStrategy;
     this.lastSuccessfulSelector = this._lastSuccessfulSelector;
+    
+    this.log(`[Lock Locators] Strategy: ${this.lastSuccessfulStrategy}, Selector: ${this.lastSuccessfulSelector || 'none'}`);
     
     if (this.enableLearning && this._currentFingerprint && this._lastSuccessfulStrategy) {
       this.strategyMemory.recordSuccess(
@@ -2495,7 +2507,8 @@ class SmartFinder {
       exactTextMatch: this._exactTextMatch,
       fallbacksUsed: this._fallbacksUsed || [],
       executionTime,
-      success: true
+      success: true,
+      selector: this._lastSuccessfulSelector
     };
     
     return locator;
@@ -2528,6 +2541,77 @@ class SmartFinder {
     this._exactTextMatch = null;
     this._fallbacksUsed = [];
     this._lastFindResult = null;
+  }
+  
+  /**
+   * Build a Playwright selector string from recipe data
+   * Used for Lock Locators feature - returns the BEST selector for this element
+   * @param {Object} recipe - The recipe that was used to find the element
+   * @param {string} strategy - The strategy that succeeded
+   * @returns {string|null} A Playwright-compatible selector string
+   */
+  _buildSelectorFromRecipe(recipe, strategy) {
+    if (!recipe) return null;
+    
+    const { what, where, which } = recipe;
+    
+    // Priority 1: data-testid (most stable)
+    if (which?.testId) {
+      return `[data-testid="${which.testId}"]`;
+    }
+    
+    // Priority 2: aria-label (accessibility, usually stable)
+    if (which?.ariaLabel && which.ariaLabel.length > 2) {
+      return `[aria-label="${which.ariaLabel}"]`;
+    }
+    
+    // Priority 3: role + text (Playwright-style selector)
+    if (which?.role && what?.text && what.text.length > 1 && what.text.length < 50) {
+      // Format: role=button[name="Click me"]
+      return `role=${which.role}[name="${what.text}"]`;
+    }
+    
+    // Priority 4: getByText for text-based strategies
+    if (strategy?.includes('text') && what?.text && what.text.length > 1 && what.text.length < 50) {
+      return `text="${what.text}"`;
+    }
+    
+    // Priority 5: ID (if not dynamic)
+    if (which?.id && !this._isLikelyDynamicId(which.id)) {
+      return `#${which.id}`;
+    }
+    
+    // Priority 6: name attribute (for form elements)
+    if (which?.name) {
+      return `[name="${which.name}"]`;
+    }
+    
+    // Fallback: Use the primary selector if it looks stable
+    if (which?.selector && !which.selector.includes(':nth') && which.selector.length < 100) {
+      return which.selector;
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Check if an ID looks dynamic/random (shouldn't be used for Lock Locators)
+   */
+  _isLikelyDynamicId(id) {
+    if (!id) return true;
+    const dynamicPatterns = [
+      /^:r[a-z0-9]+:?$/i,           // Radix
+      /^react-aria-?\d+/i,          // React Aria
+      /^headlessui-/i,              // Headless UI
+      /^radix-/i,                   // Radix
+      /^mui-/i,                     // MUI
+      /^aura\d+/i,                  // Salesforce Aura
+      /^lwc-/i,                     // Lightning Web Components
+      /^input-\d+$/i,               // Generic input-123
+      /^[a-f0-9]{8,}$/i,            // UUID-like
+      /^\d{6,}$/,                   // Pure numbers
+    ];
+    return dynamicPatterns.some(p => p.test(id));
   }
   
   /**
