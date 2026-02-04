@@ -3399,18 +3399,30 @@ ipcMain.handle('execute-test', async (event, testData) => {
         // Send to both old and new channels
         mainWindow?.webContents.send('test-step-complete', { index, step, result });
         webappView?.webContents.send('test-step-complete', { index, step, result });
-        // Also send to playwright-specific channels
+        // Also send to playwright-specific channels with Lock Locators data
         mainWindow?.webContents.send('playwright-test-step-complete', { 
           stepIndex: index, 
           success, 
           error: result?.error,
-          screenshot: result?.screenshot 
+          screenshot: result?.screenshot,
+          // Lock Locators data
+          workingSelector: result?.workingSelector,
+          strategyType: result?.strategyType,
+          // Self-healing data
+          healed: result?.healed,
+          newSelector: result?.newSelector
         });
         webappView?.webContents.send('playwright-test-step-complete', { 
           stepIndex: index, 
           success, 
           error: result?.error,
-          screenshot: result?.screenshot 
+          screenshot: result?.screenshot,
+          // Lock Locators data
+          workingSelector: result?.workingSelector,
+          strategyType: result?.strategyType,
+          // Self-healing data
+          healed: result?.healed,
+          newSelector: result?.newSelector
         });
       },
       onStepFlagged: (index, step) => {

@@ -37,6 +37,10 @@ class TestExecutor {
     this.useSmartFinder = options.useSmartFinder !== false; // Default: enabled
     this.smartFinder = null;
     
+    // Lock Locators tracking (for self-healing)
+    this._lastWorkingSelector = null;
+    this._lastStrategyType = null;
+    
     // AI Fallback: Enable AI vision for element finding as last resort
     this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
     this.aiCallsThisRun = 0;
@@ -257,6 +261,50 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     const maxRetries = 3;
     const baseDelay = 500;
     
+    // Track if locked selector failed (for self-healing)
+    let lockedSelectorFailed = false;
+    
+    // ============================================================
+    // LOCKED SELECTOR (optimizedSelector) - User-locked working selector
+    // From "Lock Locators" feature - should work instantly (150ms)
+    // ============================================================
+    const optimizedSelector = action.selectorObj?.optimizedSelector;
+    if (optimizedSelector) {
+      console.log(`[Executor] ⚡ Trying LOCKED selector: ${optimizedSelector}`);
+      try {
+        let locator;
+        // Handle role=xxx[name="yyy"] format
+        const roleMatch = optimizedSelector.match(/^role=(\w+)\[name="(.+)"\]$/);
+        if (roleMatch) {
+          const [, role, name] = roleMatch;
+          locator = this.page.getByRole(role, { name: name });
+        } else {
+          locator = this.page.locator(optimizedSelector);
+        }
+        
+        // Quick 150ms check
+        const found = await Promise.race([
+          locator.count().then(c => c > 0),
+          new Promise(resolve => setTimeout(() => resolve(false), 150))
+        ]);
+        
+        if (found) {
+          const isVisible = await locator.first().isVisible().catch(() => false);
+          if (isVisible) {
+            console.log(`[Executor] ⚡ LOCKED selector SUCCESS - instant find!`);
+            this._lastWorkingSelector = optimizedSelector;
+            this._lastStrategyType = 'LockedSelector';
+            return { locator: locator.first(), strategy: { type: 'LockedSelector' } };
+          }
+        }
+        console.log(`[Executor] Locked selector not found, trying SmartFinder...`);
+        lockedSelectorFailed = true;
+      } catch (e) {
+        console.log(`[Executor] Locked selector failed: ${e.message}, trying SmartFinder...`);
+        lockedSelectorFailed = true;
+      }
+    }
+    
     // ============================================================
     // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
     // When automation fails, users can specify exactly how to find the element
@@ -269,6 +317,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         const count = await manualLocator.count();
         if (count > 0) {
           console.log(`[Executor] ✅ Manual override found ${count} element(s)`);
+          this._lastWorkingSelector = manualOverride;
+          this._lastStrategyType = 'manualOverride';
           return { locator: manualLocator.first(), strategy: { type: 'manualOverride', value: manualOverride } };
         } else {
           console.log(`[Executor] ⚠️ Manual override selector found 0 elements, falling back to automatic strategies`);
@@ -283,7 +333,21 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         // Try SmartFinder first (V2)
         const v2Locator = await this.findElementV2(action);
         if (v2Locator) {
-          return { locator: v2Locator, strategy: { type: 'SmartFinder' } };
+          // Track what SmartFinder used for Lock Locators
+          const sfSelector = this.smartFinder?.lastSuccessfulSelector || null;
+          const sfStrategy = this.smartFinder?.lastSuccessfulStrategy || 'SmartFinder';
+          this._lastWorkingSelector = sfSelector;
+          this._lastStrategyType = sfStrategy;
+          
+          // SELF-HEALING: If locked selector failed but SmartFinder worked
+          const healed = lockedSelectorFailed && sfSelector;
+          
+          return { 
+            locator: v2Locator, 
+            strategy: { type: 'SmartFinder' },
+            healed,
+            newSelector: healed ? sfSelector : null
+          };
         }
         
         // Fallback to legacy selector-based finding
@@ -775,7 +839,13 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       status: 'passed',
       error: null,
       screenshot: null,
-      duration: 0
+      duration: 0,
+      // Lock Locators tracking
+      workingSelector: null,
+      strategyType: null,
+      // Self-healing tracking
+      healed: false,
+      newSelector: null
     };
 
     try {
@@ -2791,6 +2861,14 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
 
     result.duration = Date.now() - startTime;
     result.name = step.description || step.name || step.qword || `Step`;
+    
+    // Include Lock Locators / self-healing data
+    result.workingSelector = this._lastWorkingSelector;
+    result.strategyType = this._lastStrategyType;
+    // Reset for next step
+    this._lastWorkingSelector = null;
+    this._lastStrategyType = null;
+    
     return result;
   }
 
