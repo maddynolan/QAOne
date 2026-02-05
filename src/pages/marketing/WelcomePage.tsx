@@ -40,23 +40,23 @@ export default function WelcomePage() {
     // TODO: Call API to resend verification email
   };
 
-  // Download URLs - GitHub Releases or hosted storage
+  // Download URLs - GitHub Releases
   const DOWNLOAD_BASE = 'https://github.com/maddynolan/QAOne/releases/latest/download';
   
   const platforms = {
     windows: {
       name: 'Windows',
       icon: Monitor,
-      size: '~200 MB',
-      url: `${DOWNLOAD_BASE}/Flowstral-Setup-2.0.0.exe`,
-      filename: 'Flowstral-Setup-2.0.0.exe',
+      size: '~90 MB',
+      url: `${DOWNLOAD_BASE}/Flowstral.Setup.2.0.0.exe`,
+      filename: 'Flowstral Setup 2.0.0.exe',
     },
     mac: {
       name: 'macOS',
       icon: Apple,
-      size: '~210 MB',
-      url: `${DOWNLOAD_BASE}/Flowstral-2.0.0.dmg`,
-      filename: 'Flowstral-2.0.0.dmg',
+      size: 'Coming Soon',
+      url: '#',
+      filename: '',
     },
     web: {
       name: 'Web App',
