@@ -10,7 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 
 class CloudConnector {
   constructor(options = {}) {
-    this.serverUrl = options.serverUrl || 'https://app.flowstral.com';
+    this.serverUrl = options.serverUrl || 'https://qaone-production.up.railway.app';
     this.deviceId = options.deviceId;
     this.licenseKey = options.licenseKey;
     this.onMessage = options.onMessage || (() => {});

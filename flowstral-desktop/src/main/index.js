@@ -35,7 +35,7 @@ const store = new Store({
   name: 'flowstral-config',
   encryptionKey: 'flowstral-secure-key-2024',
   defaults: {
-    serverUrl: 'http://localhost:8000',
+    serverUrl: 'https://qaone-production.up.railway.app',
     licenseKey: '',
     deviceId: '',
     mode: 'personal', // personal, team, enterprise

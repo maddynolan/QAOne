@@ -11,7 +11,7 @@ const CryptoJS = require('crypto-js');
 
 class LicenseManager {
   constructor(options = {}) {
-    this.serverUrl = options.serverUrl || 'https://app.flowstral.com';
+    this.serverUrl = options.serverUrl || 'https://qaone-production.up.railway.app';
     this.deviceId = options.deviceId;
     this.store = options.store;
     
