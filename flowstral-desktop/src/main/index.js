@@ -16,6 +16,29 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const { v4: uuidv4 } = require('uuid');
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Single Instance Lock - Ensures only one instance runs at a time
+// This also helps the installer close the app cleanly during updates
+// ═══════════════════════════════════════════════════════════════════════════
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is running - quit this one
+  console.log('[App] Another instance is running, quitting...');
+  app.quit();
+} else {
+  // We got the lock - handle second instance attempts
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    console.log('[App] Second instance attempted, focusing existing window');
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 // Local modules
 const LicenseManager = require('./license');
 const BrowserController = require('./browser-controller');
@@ -251,7 +274,42 @@ function loadWebapp() {
     createWebappView();
   } else {
     // Load cloud webapp directly in main window
-    // First update preload script for cloud webapp
+    // Need to create a new BrowserWindow with webapp-preload for full API access
+    console.log('[App] Creating new window with webapp-preload for cloud webapp...');
+    
+    // Close the old main window (which has preload.js for license page)
+    const oldWindow = mainWindow;
+    
+    // Create new window with webapp-preload.js
+    mainWindow = new BrowserWindow({
+      width: 1400,
+      height: 900,
+      minWidth: 1000,
+      minHeight: 700,
+      title: 'Flowstral Desktop',
+      icon: path.join(__dirname, '../../assets/icon.png'),
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'webapp-preload.js') // Use webapp preload for full API access
+      },
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: '#0a0a0f',
+        symbolColor: '#ffffff',
+        height: 32
+      },
+      show: false // Don't show until ready
+    });
+    
+    // Close old window
+    oldWindow?.close();
+    
+    // Show when ready
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+    });
+    
     mainWindow.webContents.on('did-finish-load', () => {
       console.log('[App] Cloud webapp finished loading, will send license status...');
       
@@ -267,6 +325,7 @@ function loadWebapp() {
       // Initial delay for React to hydrate
       setTimeout(() => sendWithRetry(), 300);
     });
+    
     mainWindow.loadURL(webappUrl);
   }
 
@@ -621,10 +680,26 @@ async function initializeServices() {
 
   console.log('[Init] Services initialized');
 
-  // Validate license and track state
-  storedLicenseKey = licenseKey; // Store for sendLicenseStatusToWebapp
+  // Check for --reset-license flag (for testing fresh install experience)
+  const shouldResetLicense = process.argv.includes('--reset-license');
+  if (shouldResetLicense) {
+    console.log('[License] --reset-license flag detected, clearing stored license');
+    store.set('licenseKey', '');
+    store.delete('licenseCache');
+  }
   
-  if (licenseKey) {
+  // Validate license and track state
+  const effectiveLicenseKey = shouldResetLicense ? '' : licenseKey;
+  storedLicenseKey = effectiveLicenseKey; // Store for sendLicenseStatusToWebapp
+  
+  // DEBUG: Log license state
+  console.log('[License] ========================================');
+  console.log('[License] Stored license key:', licenseKey ? `${licenseKey.substring(0, 15)}...` : 'NONE');
+  console.log('[License] Effective license key:', effectiveLicenseKey ? `${effectiveLicenseKey.substring(0, 15)}...` : 'NONE');
+  console.log('[License] License cache:', store.get('licenseCache') ? 'EXISTS' : 'NONE');
+  console.log('[License] ========================================');
+  
+  if (effectiveLicenseKey) {
     const validationResult = await licenseManager.validate(licenseKey);
     isLicenseValid = validationResult.valid;
     licenseExpiresAt = validationResult.expiresAt;
@@ -645,8 +720,11 @@ async function initializeServices() {
     }
   } else {
     // No license key - user needs to activate, stay on license page
-    console.log('[License] No license key found - user needs to activate');
-    console.log('[License] Staying on license page');
+    console.log('[License] ========================================');
+    console.log('[License] NO LICENSE KEY - staying on license page');
+    console.log('[License] isLicenseValid:', isLicenseValid);
+    console.log('[License] showingLicensePage:', showingLicensePage);
+    console.log('[License] ========================================');
     isLicenseValid = false;
   }
 }
@@ -784,6 +862,16 @@ ipcMain.handle('deactivate-license', async () => {
   licenseType = null;
   licenseFeatures = null;
   console.log('[License] Deactivated');
+  return true;
+});
+
+// Debug: Force show license page (for testing)
+ipcMain.handle('debug-clear-license-and-restart', async () => {
+  console.log('[Debug] Clearing license and restarting app...');
+  store.set('licenseKey', '');
+  store.delete('licenseCache');
+  app.relaunch();
+  app.quit();
   return true;
 });
 

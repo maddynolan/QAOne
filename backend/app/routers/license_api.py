@@ -18,6 +18,9 @@ import os
 import jwt
 import time
 import logging
+import json
+from pathlib import Path
+import threading
 
 router = APIRouter(prefix="/license", tags=["License Management"])
 logger = logging.getLogger("license_admin")
@@ -25,9 +28,68 @@ logger = logging.getLogger("license_admin")
 # Security
 security = HTTPBearer(auto_error=False)
 
-# In-memory storage (replace with database in production)
-licenses_db = {}
-activations_db = {}
+# ═══════════════════════════════════════════════════════════════════════════
+# PERSISTENT STORAGE - Licenses are saved to disk and survive restarts
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Storage file path (in backend data directory)
+DATA_DIR = Path(os.getenv("LICENSE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+LICENSES_FILE = DATA_DIR / "licenses.json"
+AUDIT_FILE = DATA_DIR / "license_audit.json"
+
+# Thread lock for file operations
+_file_lock = threading.Lock()
+
+
+def _load_licenses() -> tuple[dict, dict]:
+    """Load licenses from persistent storage."""
+    if not LICENSES_FILE.exists():
+        return {}, {}
+    
+    try:
+        with open(LICENSES_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get("licenses", {}), data.get("activations", {})
+    except Exception as e:
+        logger.error(f"[License] Failed to load licenses: {e}")
+        return {}, {}
+
+
+def _save_licenses():
+    """Save licenses to persistent storage (atomic write)."""
+    with _file_lock:
+        try:
+            # Write to temp file first
+            temp_file = LICENSES_FILE.with_suffix('.tmp')
+            with open(temp_file, 'w') as f:
+                json.dump({
+                    "licenses": licenses_db,
+                    "activations": activations_db,
+                    "saved_at": datetime.utcnow().isoformat()
+                }, f, indent=2)
+            
+            # Atomic rename
+            temp_file.replace(LICENSES_FILE)
+            logger.info(f"[License] Saved {len(licenses_db)} licenses to disk")
+        except Exception as e:
+            logger.error(f"[License] Failed to save licenses: {e}")
+
+
+def _save_audit():
+    """Save audit log to persistent storage."""
+    with _file_lock:
+        try:
+            with open(AUDIT_FILE, 'w') as f:
+                json.dump(audit_log[-1000:], f, indent=2)  # Keep last 1000 entries
+        except Exception as e:
+            logger.error(f"[License] Failed to save audit log: {e}")
+
+
+# Load existing licenses on module import
+licenses_db, activations_db = _load_licenses()
+logger.info(f"[License] Loaded {len(licenses_db)} licenses from disk")
+
 audit_log: List[Dict] = []  # Audit trail for admin actions
 
 # Rate limiting for login attempts (IP -> {attempts, last_attempt, locked_until})
@@ -359,8 +421,10 @@ async def activate_license(request: LicenseActivateRequest):
             "expiresAt": validate_result["expiresAt"],
             "maxActivations": 5,
             "features": get_features_for_type(validate_result["type"]),
-            "createdAt": datetime.now().isoformat()
+            "createdAt": datetime.now().isoformat(),
+            "autoRegistered": True  # Mark as auto-registered
         }
+        _save_licenses()  # Persist new auto-registration
     
     license_data = licenses_db[request.licenseKey]
     
@@ -384,6 +448,7 @@ async def activate_license(request: LicenseActivateRequest):
             "deviceName": request.deviceName,
             "activatedAt": datetime.now().isoformat()
         })
+        _save_licenses()  # Persist to disk
     
     return {
         "success": True,
@@ -406,6 +471,7 @@ async def deactivate_license(request: LicenseValidateRequest):
         activations_db[request.licenseKey] = [
             a for a in activations if a["deviceId"] != request.deviceId
         ]
+        _save_licenses()  # Persist to disk
     
     return {"success": True}
 
@@ -533,6 +599,7 @@ async def create_license(
     
     licenses_db[license_key] = license_data
     activations_db[license_key] = []
+    _save_licenses()  # Persist to disk
     
     return LicenseInfo(
         key=license_key,
@@ -699,6 +766,9 @@ async def generate_licenses(
             "maxActivations": max_activations,
         })
     
+    # Save all generated licenses to disk
+    _save_licenses()
+    
     # Audit log the generation
     log_admin_action("licenses_generated", admin_email, {
         "count": len(keys_created),
@@ -732,6 +802,7 @@ async def revoke_license(license_key: str, admin_email: str = Depends(verify_adm
     # Store revocation info before deleting
     revoked_data = licenses_db.pop(license_key)
     activations_db.pop(license_key, None)
+    _save_licenses()  # Persist to disk
     
     # Audit log the revocation
     log_admin_action("license_revoked", admin_email, {
