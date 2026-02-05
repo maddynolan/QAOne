@@ -697,7 +697,22 @@ async function initializeServices() {
   console.log('[License] Stored license key:', licenseKey ? `${licenseKey.substring(0, 15)}...` : 'NONE');
   console.log('[License] Effective license key:', effectiveLicenseKey ? `${effectiveLicenseKey.substring(0, 15)}...` : 'NONE');
   console.log('[License] License cache:', store.get('licenseCache') ? 'EXISTS' : 'NONE');
+  console.log('[License] Config file path:', store.path);
   console.log('[License] ========================================');
+  
+  // IMPORTANT: If no license key, ensure all license state is cleared
+  if (!effectiveLicenseKey) {
+    console.log('[License] No license key - ensuring clean state');
+    store.delete('licenseCache');
+    isLicenseValid = false;
+    licenseExpiresAt = null;
+    licenseType = null;
+    licenseFeatures = null;
+    // Clear license manager state too
+    if (licenseManager) {
+      licenseManager.licenseInfo = null;
+    }
+  }
   
   if (effectiveLicenseKey) {
     const validationResult = await licenseManager.validate(licenseKey);
@@ -709,7 +724,16 @@ async function initializeServices() {
     console.log(`[License] Validation result: valid=${isLicenseValid}, type=${licenseType}, expires=${licenseExpiresAt}`);
     
     if (isLicenseValid) {
-      // License is valid - proceed to load webapp
+      // License is valid - also register activation with server
+      console.log('[License] Registering activation with server...');
+      try {
+        await licenseManager.activate(effectiveLicenseKey);
+        console.log('[License] Activation registered successfully');
+      } catch (activateErr) {
+        console.log('[License] Activation registration failed (will continue anyway):', activateErr.message);
+      }
+      
+      // Proceed to load webapp
       console.log('[License] Valid license found, loading webapp...');
       loadWebapp();
     } else {
@@ -876,7 +900,15 @@ ipcMain.handle('debug-clear-license-and-restart', async () => {
 });
 
 ipcMain.handle('get-license-info', async () => {
-  return licenseManager?.getInfo() || null;
+  // Only return license info if we have a valid license
+  if (!isLicenseValid) {
+    console.log('[License] get-license-info called but isLicenseValid=false');
+    return { valid: false, message: 'No valid license' };
+  }
+  
+  const info = licenseManager?.getInfo();
+  console.log('[License] get-license-info returning:', info ? `valid=${info.valid}` : 'null');
+  return info || { valid: false, message: 'No license info' };
 });
 
 // Handle successful license activation from license.html page

@@ -11,7 +11,7 @@ import { AIConfiguration } from "@/components/AIConfiguration";
 import { PluginManagement } from "@/components/PluginManagement";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Settings2, Puzzle, Brain, Bell, Database, Shield, Download, Monitor, Chrome } from "lucide-react";
+import { Loader2, Settings2, Puzzle, Brain, Bell, Database, Shield, Download, Monitor, Chrome, Key, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 
 const AI_TASKS = [
   { value: "jira-to-tests", label: "Jira to Test Cases" },
@@ -21,6 +21,252 @@ const AI_TASKS = [
   { value: "a11y-tests", label: "Accessibility Tests" },
   { value: "triage", label: "Test Failure Triage" },
 ];
+
+// License Settings Component - Shows license status and days remaining
+function LicenseSettings() {
+  const [licenseInfo, setLicenseInfo] = useState<{
+    valid: boolean;
+    key?: string;
+    type?: string;
+    expiresAt?: string;
+    features?: string[];
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newKey, setNewKey] = useState('');
+  const [isActivating, setIsActivating] = useState(false);
+  const [isElectron, setIsElectron] = useState(false);
+
+  useEffect(() => {
+    // Check if running in Electron
+    const flowstral = (window as any).flowstral;
+    const electronAPI = (window as any).electronAPI;
+    const hasElectron = !!(flowstral || electronAPI);
+    setIsElectron(hasElectron);
+    
+    if (hasElectron) {
+      // Get license info from Electron
+      const getLicense = async () => {
+        try {
+          const info = await (flowstral?.getLicenseInfo?.() || electronAPI?.getLicenseInfo?.());
+          setLicenseInfo(info || { valid: false });
+        } catch (e) {
+          setLicenseInfo({ valid: false });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      getLicense();
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const getDaysLeft = () => {
+    if (!licenseInfo?.expiresAt) return null;
+    const expires = new Date(licenseInfo.expiresAt);
+    const now = new Date();
+    const diffTime = expires.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  const handleActivate = async () => {
+    if (!newKey.trim()) {
+      toast.error('Please enter a license key');
+      return;
+    }
+    
+    setIsActivating(true);
+    try {
+      const flowstral = (window as any).flowstral;
+      const electronAPI = (window as any).electronAPI;
+      
+      const result = await (
+        flowstral?.activateLicense?.(newKey.trim()) || 
+        electronAPI?.activateLicense?.(newKey.trim())
+      );
+      
+      if (result?.valid) {
+        toast.success('License activated successfully!');
+        setLicenseInfo(result);
+        setNewKey('');
+      } else {
+        toast.error(result?.error || 'Invalid license key');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Activation failed');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    try {
+      const flowstral = (window as any).flowstral;
+      const electronAPI = (window as any).electronAPI;
+      
+      await (flowstral?.deactivateLicense?.() || electronAPI?.deactivateLicense?.());
+      toast.success('License deactivated');
+      setLicenseInfo({ valid: false });
+    } catch (e: any) {
+      toast.error('Failed to deactivate');
+    }
+  };
+
+  const daysLeft = getDaysLeft();
+  const isExpiringSoon = daysLeft !== null && daysLeft <= 7;
+  const isExpired = daysLeft !== null && daysLeft <= 0;
+
+  if (!isElectron) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="w-5 h-5" />
+            License Management
+          </CardTitle>
+          <CardDescription>
+            License management is only available in the desktop app
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Download the desktop app to manage your license.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* License Status Card */}
+      <Card className={isExpired ? 'border-red-500/50' : isExpiringSoon ? 'border-amber-500/50' : licenseInfo?.valid ? 'border-emerald-500/50' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {licenseInfo?.valid && !isExpired ? (
+              <CheckCircle className="w-5 h-5 text-emerald-500" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            )}
+            License Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {licenseInfo?.valid && !isExpired ? (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="font-medium text-emerald-500">Active</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Type</p>
+                  <p className="font-medium capitalize">{licenseInfo.type || 'Standard'}</p>
+                </div>
+                {licenseInfo.expiresAt && (
+                  <>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Expires</p>
+                      <p className="font-medium">{new Date(licenseInfo.expiresAt).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Days Remaining</p>
+                      <p className={`font-medium flex items-center gap-1 ${isExpiringSoon ? 'text-amber-500' : ''}`}>
+                        <Clock className="w-4 h-4" />
+                        {daysLeft} days
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {isExpiringSoon && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-sm text-amber-500 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Your license expires soon. Contact support to renew.
+                  </p>
+                </div>
+              )}
+
+              {licenseInfo.key && (
+                <div>
+                  <p className="text-sm text-muted-foreground">License Key</p>
+                  <p className="font-mono text-sm bg-muted px-2 py-1 rounded">{licenseInfo.key.substring(0, 20)}...</p>
+                </div>
+              )}
+
+              <Separator />
+              
+              <Button variant="outline" onClick={handleDeactivate} className="text-red-500 hover:text-red-600">
+                Deactivate License
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className={`p-4 rounded-lg ${isExpired ? 'bg-red-500/10 border border-red-500/30' : 'bg-amber-500/10 border border-amber-500/30'}`}>
+                <p className={`text-sm ${isExpired ? 'text-red-500' : 'text-amber-500'}`}>
+                  {isExpired ? 'Your license has expired. Please renew to continue using the app.' : 'No active license. Enter your license key to activate.'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="license-key">License Key</Label>
+                  <Input
+                    id="license-key"
+                    value={newKey}
+                    onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+                    placeholder="FLOWSTRAL-XXXXX-XXXXX-XXXXX-XXXXX"
+                    className="font-mono"
+                  />
+                </div>
+                <Button 
+                  onClick={handleActivate} 
+                  disabled={isActivating || !newKey.trim()}
+                  className="w-full"
+                >
+                  {isActivating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Activating...
+                    </>
+                  ) : (
+                    'Activate License'
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* License Info Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>About Licensing</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>• Trial licenses are valid for <strong>14 days</strong> from activation</p>
+          <p>• Each license can be activated on up to <strong>2 devices</strong></p>
+          <p>• Deactivate on one device to free up a slot for another</p>
+          <p>• Contact <a href="mailto:support@flowstral.com" className="text-primary hover:underline">support@flowstral.com</a> for renewals</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function Settings() {
   const [selectedTask, setSelectedTask] = useState("jira-to-tests");
@@ -82,7 +328,11 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="plugins" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
+          <TabsTrigger value="license" className="flex items-center gap-2">
+            <Key className="w-4 h-4" />
+            <span className="hidden sm:inline">License</span>
+          </TabsTrigger>
           <TabsTrigger value="plugins" className="flex items-center gap-2">
             <Puzzle className="w-4 h-4" />
             <span className="hidden sm:inline">Plugins</span>
@@ -108,6 +358,11 @@ export default function Settings() {
             <span className="hidden sm:inline">Downloads</span>
           </TabsTrigger>
         </TabsList>
+
+        {/* LICENSE TAB - Show license status and days remaining */}
+        <TabsContent value="license" className="space-y-6 max-w-2xl">
+          <LicenseSettings />
+        </TabsContent>
 
         {/* PLUGINS TAB - Primary entry point for plugin management */}
         <TabsContent value="plugins" className="space-y-6">

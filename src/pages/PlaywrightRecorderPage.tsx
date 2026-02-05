@@ -87,6 +87,8 @@ import ElementRepairWizard from "@/components/ElementRepairWizard";
 import SimpleStepEditor from "@/components/SimpleStepEditor";
 // Confidence System - Shows reliability of element identification
 import { StepConfidenceIndicator, ConfidenceLevel } from "@/components/confidence";
+// Failure classification — plain-language messages for no-code UX
+import { classifyFailure } from "@/lib/failureClassification";
 
 // Types
 interface StepConfidence {
@@ -4135,29 +4137,37 @@ Recorded Test
       
       console.log('[Test] Result:', result);
       
-      // Generate step results from the response
+      // Generate step results from the response (preserve workingSelector for Lock Locators)
       const generateStepResults = () => {
-        // If result has stepResults, use those
+        // If result has stepResults, use those (include workingSelector + strategyType for Lock Locators)
         if (result?.stepResults && Array.isArray(result.stepResults)) {
           return result.stepResults.map((s: any, i: number) => ({
-            index: i,
+            index: s.index ?? i,
             status: s.status || 'passed',
             error: s.error,
-            screenshot: s.screenshot
+            screenshot: s.screenshot,
+            workingSelector: s.workingSelector,
+            strategyType: s.strategyType,
+            healed: s.healed,
+            newSelector: s.newSelector
           }));
         }
         
         // If result has steps array, use that
         if (result?.steps && Array.isArray(result.steps)) {
           return result.steps.map((s: any, i: number) => ({
-            index: i,
+            index: s.index ?? i,
             status: s.status || 'passed',
             error: s.error,
-            screenshot: s.screenshot
+            screenshot: s.screenshot,
+            workingSelector: s.workingSelector,
+            strategyType: s.strategyType,
+            healed: s.healed,
+            newSelector: s.newSelector
           }));
         }
         
-        // If test passed, mark all steps as passed
+        // If test passed, mark all steps as passed (no workingSelector from backend)
         const testPassed = result?.success !== false && result?.status !== 'failed';
         const failedStep = result?.failedStep ?? (testPassed ? -1 : actions.length - 1);
         
@@ -4493,6 +4503,26 @@ Recorded Test
       });
     }
   }, [isTestPaused, pausedAtStep, editingPausedStep, actions]);
+
+  // Run from a specific step (e.g. after fixing the failed step). Works when browser is still open.
+  const handleRunFromStep = useCallback((stepIndex: number) => {
+    if (!browserKeptOpen) {
+      toast.info('Run from here works when the browser is kept open. Use Retry All to run the test again.', { duration: 4000 });
+      return;
+    }
+    const flowstral = (window as any).flowstral;
+    if (!flowstral?.playwrightRecorder?.resumeFromFailure) {
+      toast.info('Run from here is not available. Use Retry All to run the test again.', { duration: 3000 });
+      return;
+    }
+    setTestExecutionResult(prev => prev ? { ...prev, status: 'running', currentStep: stepIndex } : null);
+    flowstral.playwrightRecorder.resumeFromFailure({
+      fromStep: stepIndex,
+      steps: actions,
+      totalSteps: actions.length
+    });
+    toast.success(`Running from step ${stepIndex + 1}...`, { duration: 1500 });
+  }, [browserKeptOpen, actions]);
 
   // ============ FALSE POSITIVE HANDLERS ============
   // Mark a failed step as false positive (element not reliably found)
@@ -8521,9 +8551,88 @@ Recorded Test
                 )}
               </div>
             )}
+
+            {/* ONE-SCREEN FAILURE CARD — step name, screenshot, one sentence, primary CTA, secondaries */}
+            {testExecutionResult?.status === 'failed' && !isTestPaused && (() => {
+              const firstFailed = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
+              if (!firstFailed || firstFailed.index == null) return null;
+              const failedAction = actions[firstFailed.index];
+              const stepLabel = failedAction ? getDisplayLabel(failedAction) : null;
+              const classified = classifyFailure(firstFailed.error, stepLabel || undefined);
+              const stepName = failedAction ? getDisplayDescription(maskSensitiveAction(failedAction)) : `Step ${firstFailed.index + 1}`;
+              return (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-3">
+                  <div className="flex items-start gap-3">
+                    {firstFailed.screenshot && (
+                      <img src={firstFailed.screenshot} alt="Step" className="w-24 h-24 object-cover rounded border border-border shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-red-200">{stepName}</p>
+                      <p className="text-sm text-red-300/90 mt-1">{classified.message}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => {
+                        setShowTestResultModal(false);
+                        setEditingActionIndex(firstFailed.index);
+                        setRightPanelTab('suggestions');
+                        handleRefreshSuggestions();
+                        toast.info('Click the correct element in the browser or pick one from Smart Suggestions.', { duration: 4000 });
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <MousePointer className="h-4 w-4 mr-2" />
+                      Click the correct one
+                    </Button>
+                    <Button variant="outline" size="sm" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10" onClick={() => handleRunFromStep(firstFailed.index)}>
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Wait and retry
+                    </Button>
+                    {failedAction?.id && !falsePositiveSteps.has(failedAction.id) && (
+                      <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10" onClick={() => { markStepAsFalsePositive(firstFailed.index, firstFailed.screenshot || null); }}>
+                        Not a real failure
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="border-gray-500/30 text-gray-400 hover:bg-gray-500/10" onClick={() => handleRunFromStep(firstFailed.index)}>
+                      <Play className="h-4 w-4 mr-1" />
+                      Run from here
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* FALSE POSITIVE PAUSE CARD — "Is the page correct?" Yes / No fix */}
+            {isTestPaused && pausedAtStep !== null && actions[pausedAtStep]?.id && falsePositiveSteps.has(actions[pausedAtStep].id) && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-3">
+                <p className="text-sm font-medium text-amber-200">You said this step isn&apos;t a real failure.</p>
+                <p className="text-sm text-amber-300/90">Is the page correct now?</p>
+                <div className="flex gap-2">
+                  <Button onClick={handleResumeTest} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Check className="h-4 w-4 mr-2" />
+                    Yes, continue
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    onClick={() => {
+                      setShowTestResultModal(false);
+                      setEditingActionIndex(pausedAtStep);
+                      setRightPanelTab('suggestions');
+                      handleRefreshSuggestions();
+                      toast.info('Pick the correct element from Smart Suggestions or click it in the browser.', { duration: 4000 });
+                    }}
+                  >
+                    <MousePointer className="h-4 w-4 mr-2" />
+                    No, let me fix it
+                  </Button>
+                </div>
+              </div>
+            )}
             
-            {/* PAUSED STATE - Edit Step Panel */}
-            {isTestPaused && editingPausedStep && pausedAtStep !== null && (
+            {/* PAUSED STATE - Edit Step Panel (when not showing false-positive confirmation only) */}
+            {isTestPaused && editingPausedStep && pausedAtStep !== null && !(actions[pausedAtStep]?.id && falsePositiveSteps.has(actions[pausedAtStep].id)) && (
               <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -8546,9 +8655,9 @@ Recorded Test
                     />
                   </div>
                   
-                  {/* Selector */}
+                  {/* Target (plain-language; no "selector" in UI) */}
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Selector</Label>
+                    <Label className="text-xs text-muted-foreground">Target (optional)</Label>
                     <Input 
                       value={editingPausedStep.selectorObj?.selector || ''}
                       onChange={(e) => updatePausedStepField('selectorObj', { 
@@ -8556,7 +8665,7 @@ Recorded Test
                         selector: e.target.value 
                       })}
                       className="h-8 text-sm bg-background border-border font-mono text-[11px]"
-                      placeholder="CSS selector or XPath"
+                      placeholder="Optional: target on page"
                     />
                   </div>
                 </div>
@@ -8835,7 +8944,9 @@ Recorded Test
                             )}
                           </div>
                           {stepResult?.error && (
-                            <p className="text-xs text-red-400 mt-1 truncate">{stepResult.error}</p>
+                            <p className="text-xs text-red-400 mt-1 truncate">
+                              {classifyFailure(stepResult.error, getDisplayLabel(action)).message}
+                            </p>
                           )}
                         </div>
                         {/* Step Duration */}
@@ -8895,16 +9006,31 @@ Recorded Test
                   )}
                 </span>
                 <div className="flex items-center gap-2">
-                  {testExecutionResult?.status === 'failed' && (
-                    <Button
-                      onClick={() => handleRunTest(false)}
-                      variant="outline"
-                      className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Retry All
-                    </Button>
-                  )}
+                  {testExecutionResult?.status === 'failed' && (() => {
+                    const firstFailed = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
+                    const failedIdx = firstFailed?.index ?? 0;
+                    return (
+                      <>
+                        <Button
+                          onClick={() => handleRunFromStep(failedIdx)}
+                          variant="outline"
+                          className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                          title="Run from the failed step (browser must be open)"
+                        >
+                          <Play className="h-4 w-4 mr-1" />
+                          Run from here
+                        </Button>
+                        <Button
+                          onClick={() => handleRunTest(false)}
+                          variant="outline"
+                          className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Retry All
+                        </Button>
+                      </>
+                    );
+                  })()}
                   {/* Lock Locators - Only show on successful test */}
                   {testExecutionResult?.status === 'passed' && (
                     <Button

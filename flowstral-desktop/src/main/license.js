@@ -126,6 +126,12 @@ class LicenseManager {
    * Activate license on this device
    */
   async activate(licenseKey) {
+    console.log('[License] Calling activate endpoint...');
+    console.log('[License] Server URL:', this.serverUrl);
+    console.log('[License] Device ID:', this.deviceId);
+    console.log('[License] Device Name:', require('os').hostname());
+    console.log('[License] License Key:', licenseKey ? licenseKey.substring(0, 20) + '...' : 'NONE');
+    
     try {
       const response = await axios.post(`${this.serverUrl}/api/license/activate`, {
         licenseKey,
@@ -133,6 +139,8 @@ class LicenseManager {
         deviceName: require('os').hostname(),
         productId: 'flowstral-desktop'
       });
+
+      console.log('[License] Activate response:', JSON.stringify(response.data));
 
       if (response.data.success) {
         this.licenseInfo = response.data.license;
@@ -148,6 +156,10 @@ class LicenseManager {
 
       return response.data;
     } catch (error) {
+      console.log('[License] Activate error:', error.message);
+      if (error.response) {
+        console.log('[License] Activate error response:', JSON.stringify(error.response.data));
+      }
       return { success: false, error: error.message };
     }
   }

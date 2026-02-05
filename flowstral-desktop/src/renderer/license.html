@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flowstral - License Activation</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f1f5f9;
+      -webkit-app-region: drag;
+    }
+
+    .container {
+      -webkit-app-region: no-drag;
+      max-width: 420px;
+      width: 100%;
+      padding: 20px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-size: 40px;
+    }
+
+    .logo h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .logo p {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+    }
+
+    .alert {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding: 12px;
+      background: rgba(251, 191, 36, 0.1);
+      border-radius: 8px;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+
+    .alert-icon {
+      color: #fbbf24;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .alert-content h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fbbf24;
+      margin-bottom: 4px;
+    }
+
+    .alert-content p {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper .icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #64748b;
+      font-size: 18px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px 12px 12px 44px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #f1f5f9;
+      font-size: 14px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      letter-spacing: 1px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    input::placeholder {
+      color: #475569;
+      letter-spacing: 0;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-message {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      color: #f87171;
+      font-size: 13px;
+      display: none;
+    }
+
+    .success-message {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 8px;
+      color: #4ade80;
+      font-size: 13px;
+      display: none;
+    }
+
+    .help-text {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(71, 85, 105, 0.3);
+      text-align: center;
+    }
+
+    .help-text p {
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .help-text a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .help-text a:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      color: #475569;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <div class="logo-icon">🛡️</div>
+      <h1>Flowstral Desktop</h1>
+      <p>Test Automation Platform</p>
+    </div>
+
+    <div class="card">
+      <div class="alert">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-content">
+          <h3>License Required</h3>
+          <p>Enter your license key to unlock all features</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="licenseKey">License Key</label>
+        <div class="input-wrapper">
+          <span class="icon">🔑</span>
+          <input 
+            type="text" 
+            id="licenseKey" 
+            placeholder="FLOWSTRAL-XXXXX-XXXXX-XXXXX-XXXXX"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="activateBtn" onclick="activateLicense()">
+        <span id="btnText">✓ Activate License</span>
+        <div class="spinner" id="spinner" style="display: none;"></div>
+      </button>
+
+      <div class="error-message" id="errorMsg"></div>
+      <div class="success-message" id="successMsg"></div>
+
+      <div class="help-text">
+        <p>Don't have a license? <a href="https://flowstral.com/pricing" target="_blank">Get one here</a></p>
+      </div>
+    </div>
+
+    <div class="footer">
+      Trial licenses are valid for 14 days
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('licenseKey');
+    const btn = document.getElementById('activateBtn');
+    const btnText = document.getElementById('btnText');
+    const spinner = document.getElementById('spinner');
+    const errorMsg = document.getElementById('errorMsg');
+    const successMsg = document.getElementById('successMsg');
+
+    // Auto-uppercase input
+    input.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase();
+    });
+
+    // Enter key to submit
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        activateLicense();
+      }
+    });
+
+    async function activateLicense() {
+      const key = input.value.trim();
+      
+      if (!key) {
+        showError('Please enter a license key');
+        return;
+      }
+
+      // Show loading state
+      btn.disabled = true;
+      btnText.textContent = 'Activating...';
+      spinner.style.display = 'block';
+      errorMsg.style.display = 'none';
+      successMsg.style.display = 'none';
+
+      try {
+        // Call Electron IPC to activate
+        const result = await window.electronAPI.activateLicense(key);
+        
+        if (result && result.valid) {
+          showSuccess('License activated! Loading app...');
+          // Tell main process to proceed to webapp
+          setTimeout(() => {
+            window.electronAPI.invoke('license-activated');
+          }, 1000);
+        } else {
+          showError(result?.error || 'Invalid license key. Please check and try again.');
+        }
+      } catch (error) {
+        console.error('Activation error:', error);
+        showError(error.message || 'Failed to activate license. Please try again.');
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = '✓ Activate License';
+        spinner.style.display = 'none';
+      }
+    }
+
+    function showError(message) {
+      errorMsg.textContent = '❌ ' + message;
+      errorMsg.style.display = 'block';
+      successMsg.style.display = 'none';
+    }
+
+    function showSuccess(message) {
+      successMsg.textContent = '✓ ' + message;
+      successMsg.style.display = 'block';
+      errorMsg.style.display = 'none';
+    }
+
+    // Focus input on load
+    window.addEventListener('DOMContentLoaded', () => {
+      input.focus();
+    });
+  </script>
+</body>
+</html>

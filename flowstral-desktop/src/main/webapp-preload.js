@@ -62,7 +62,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Generic invoke for any IPC call
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-  exportToTestBuilder: (testName) => ipcRenderer.invoke('export-to-test-builder', testName),
+  exportToTestBuilder: (testCaseOrName) => ipcRenderer.invoke('export-to-test-builder', testCaseOrName),
   
   // Recorder (for Test Builder integration - legacy API)
   recorder: {
@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     flowstralTest: (testName) => ipcRenderer.invoke('export-flowstral-test', testName),
     robotFramework: (testName) => ipcRenderer.invoke('export-robot-framework', testName),
     playwright: () => ipcRenderer.invoke('export-playwright'),
-    toTestBuilder: (testName) => ipcRenderer.invoke('export-to-test-builder', testName),
+    toTestBuilder: (testCaseOrName) => ipcRenderer.invoke('export-to-test-builder', testCaseOrName),
   },
   
   // Local Storage (offline-capable data)
@@ -142,6 +142,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'step-status',
       'connection-status',
       'license-status',
+      'license-blocked',
+      'license-expiring-soon',
       'update-available',
       'update-downloaded',
       'view-changed',
@@ -345,7 +347,7 @@ contextBridge.exposeInMainWorld('flowstral', {
   
   // Export API
   export: {
-    toTestBuilder: (testName) => ipcRenderer.invoke('export-to-test-builder', testName),
+    toTestBuilder: (testCaseOrName) => ipcRenderer.invoke('export-to-test-builder', testCaseOrName),
     playwright: () => ipcRenderer.invoke('export-playwright'),
     robotFramework: (testName) => ipcRenderer.invoke('export-robot-framework', testName),
   },
@@ -390,6 +392,10 @@ contextBridge.exposeInMainWorld('flowstral', {
       'action-recorded',
       'recording-status',
       'execution-status',
+      // License events
+      'license-status',
+      'license-blocked',
+      'license-expiring-soon',
     ];
     
     if (validChannels.includes(channel)) {

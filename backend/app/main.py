@@ -25,15 +25,20 @@ log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
 log_file = log_dir / "app.log"
 
-# Configure root logger with file handler
+# Configure root logger with file handler and trace_id for issue tracking
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s trace_id=%(trace_id)s %(name)s %(levelname)s %(message)s',
     handlers=[
         RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5),  # 10MB per file, keep 5 backups
         logging.StreamHandler()  # Also log to console
     ]
 )
+# Add trace_id to all log records (set by TraceLoggingMiddleware per request)
+from app.middleware.trace_logging_middleware import TraceIdFilter
+_root_logger = logging.getLogger()
+for h in _root_logger.handlers:
+    h.addFilter(TraceIdFilter())
 
 # Load environment variables from .env file FIRST, before importing services
 try:
@@ -160,6 +165,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Trace logging (trace_id per request for issue tracking; add first so it runs last)
+from app.middleware.trace_logging_middleware import TraceLoggingMiddleware
+app.add_middleware(TraceLoggingMiddleware)
 
 # Tenant Context Middleware (for RLS enforcement)
 from app.middleware.tenant_middleware import TenantContextMiddleware
@@ -7020,9 +7029,9 @@ app.include_router(flowstral_engine_router)
 from app.routers.cdp_recorder_api import router as cdp_recorder_router
 app.include_router(cdp_recorder_router)
 
-# License Management API - Desktop Agent Licensing
+# License Management API - Desktop Agent Licensing (mount under /api for desktop client)
 from app.routers.license_api import router as license_router
-app.include_router(license_router)
+app.include_router(license_router, prefix="/api")
 
 # Agent WebSocket API - Real-time Desktop Agent Communication
 from app.routers.agent_websocket import router as agent_ws_router

@@ -48,7 +48,8 @@ contextBridge.exposeInMainWorld('flowstral', {
   // Opens a separate browser window for recording
   // Uses EXACT SAME recorder-engine.js as browser extension
   playwrightRecorder: {
-    start: (url) => ipcRenderer.invoke('playwright-recorder-start', url),
+    // Recording controls
+    start: (url, options) => ipcRenderer.invoke('playwright-recorder-start', url, options),
     stop: () => ipcRenderer.invoke('playwright-recorder-stop'),
     pause: () => ipcRenderer.invoke('playwright-recorder-pause'),
     resume: () => ipcRenderer.invoke('playwright-recorder-resume'),
@@ -58,7 +59,31 @@ contextBridge.exposeInMainWorld('flowstral', {
     isPaused: () => ipcRenderer.invoke('playwright-recorder-is-paused'),
     analyze: () => ipcRenderer.invoke('playwright-recorder-analyze'),
     executeAction: (action) => ipcRenderer.invoke('playwright-recorder-execute-action', action),
-    addManualAction: (action) => ipcRenderer.invoke('playwright-recorder-add-manual-action', action)
+    addManualAction: (action) => ipcRenderer.invoke('playwright-recorder-add-manual-action', action),
+    
+    // Test execution - Run mode
+    runTest: (options) => ipcRenderer.invoke('playwright-recorder-run-test', options),
+    
+    // Debug mode controls
+    pauseTest: () => ipcRenderer.invoke('playwright-recorder-pause-test'),
+    resumeTest: (options) => ipcRenderer.invoke('playwright-recorder-resume-test', options),
+    skipStep: (options) => ipcRenderer.invoke('playwright-recorder-skip-step', options),
+    retryStep: (options) => ipcRenderer.invoke('playwright-recorder-retry-step', options),
+    stopTest: (options) => ipcRenderer.invoke('playwright-recorder-stop-test', options),
+    
+    // Step-by-step execution
+    runSingleStep: (options) => ipcRenderer.invoke('playwright-recorder-run-single-step', options),
+    
+    // Status
+    getTestStatus: () => ipcRenderer.invoke('playwright-recorder-get-test-status'),
+    
+    // Failure repair API
+    getFailureState: () => ipcRenderer.invoke('playwright-recorder-get-failure-state'),
+    reopenToFailure: () => ipcRenderer.invoke('playwright-recorder-reopen-to-failure'),
+    retryFailedStep: (updatedAction) => ipcRenderer.invoke('playwright-recorder-retry-failed-step', updatedAction),
+    resumeFromFailure: (options) => ipcRenderer.invoke('playwright-recorder-resume-from-failure', options),
+    closeBrowser: () => ipcRenderer.invoke('playwright-recorder-close-browser'),
+    isBrowserOpen: () => ipcRenderer.invoke('playwright-recorder-is-browser-open'),
   },
   
   // Mobile Testing
@@ -89,7 +114,7 @@ contextBridge.exposeInMainWorld('flowstral', {
     flowstralTest: (testName) => ipcRenderer.invoke('export-flowstral-test', testName),
     robotFramework: (testName) => ipcRenderer.invoke('export-robot-framework', testName),
     playwright: () => ipcRenderer.invoke('export-playwright'),
-    toTestBuilder: (testName) => ipcRenderer.invoke('export-to-test-builder', testName)
+    toTestBuilder: (testCaseOrName) => ipcRenderer.invoke('export-to-test-builder', testCaseOrName)
   },
   
   // Updates
@@ -111,6 +136,8 @@ contextBridge.exposeInMainWorld('flowstral', {
       'step-result',
       'connection-status',
       'license-status',
+      'license-blocked',
+      'license-expiring-soon',
       'update-available',
       'update-downloaded',
       'update-error',
@@ -119,12 +146,31 @@ contextBridge.exposeInMainWorld('flowstral', {
       'view-changed',
       'webapp-url-changed',
       'browser-url-changed',
+      // Playwright recorder events
       'playwright-recorder-action',
       'playwright-recorder-stopped',
       'playwright-recorder-paused',
       'playwright-recorder-resumed',
       'playwright-recorder-suggestions',
       'playwright-recorder-navigation',
+      'playwright-recorder-cross-origin',
+      // Test execution events
+      'playwright-test-step-start',
+      'playwright-test-step-complete',
+      'playwright-test-complete',
+      'playwright-test-paused',
+      'test-step-start',
+      'test-step-complete',
+      'test-step-flagged',
+      'test-complete',
+      // Debug mode events
+      'test-runner:step-start',
+      'test-runner:step-complete',
+      'test-runner:step-failed',
+      'test-runner:test-paused',
+      'test-runner:test-resumed',
+      'test-runner:test-complete',
+      'test-runner:test-stopped',
       // AI Explorer Agent channels
       'ai-explorer-progress',
       'ai-explorer-action',
@@ -134,7 +180,12 @@ contextBridge.exposeInMainWorld('flowstral', {
       // Mobile testing channels
       'mobile-native-test-step',
       'mobile-native-test-progress',
-      'mobile-native-test-error'
+      'mobile-native-test-error',
+      // Network capture events
+      'network-request-start',
+      'network-request-complete',
+      'network-websocket-created',
+      'network-capture-complete',
     ];
     
     // Store listeners for explicit removal
@@ -175,4 +226,38 @@ contextBridge.exposeInMainWorld('platform', {
   version: process.versions.electron
 });
 
-console.log('[Shell Preload] APIs exposed');
+// Also expose as electronAPI for compatibility with license.html and webapp
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Generic invoke for any IPC call
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  
+  // License APIs
+  activateLicense: (key) => ipcRenderer.invoke('activate-license', key),
+  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
+  getLicenseInfo: () => ipcRenderer.invoke('get-license-info'),
+  
+  // Event listeners
+  on: (channel, callback) => {
+    const validChannels = [
+      'license-status',
+      'license-blocked',
+      'license-expiring-soon',
+      'playwright-recorder-action',
+      'playwright-recorder-stopped',
+      'playwright-recorder-paused',
+      'playwright-recorder-resumed',
+      'test-step-result',
+      'test-complete',
+      'test-error'
+    ];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => callback(...args));
+    }
+  },
+  
+  off: (channel, callback) => {
+    ipcRenderer.removeListener(channel, callback);
+  }
+});
+
+console.log('[Shell Preload] APIs exposed (flowstral, electronAPI, platform)');
