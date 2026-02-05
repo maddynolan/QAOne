@@ -40,24 +40,30 @@ export default function WelcomePage() {
     // TODO: Call API to resend verification email
   };
 
+  // Download URLs - GitHub Releases or hosted storage
+  const DOWNLOAD_BASE = 'https://github.com/maddynolan/QAOne/releases/latest/download';
+  
   const platforms = {
     windows: {
       name: 'Windows',
       icon: Monitor,
-      size: '145 MB',
-      url: '#', // Replace with actual download URL
+      size: '~200 MB',
+      url: `${DOWNLOAD_BASE}/Flowstral-Setup-2.0.0.exe`,
+      filename: 'Flowstral-Setup-2.0.0.exe',
     },
     mac: {
       name: 'macOS',
       icon: Apple,
-      size: '152 MB',
-      url: '#',
+      size: '~210 MB',
+      url: `${DOWNLOAD_BASE}/Flowstral-2.0.0.dmg`,
+      filename: 'Flowstral-2.0.0.dmg',
     },
     web: {
       name: 'Web App',
       icon: Globe,
       size: 'No download',
       url: '/dashboard',
+      filename: '',
     },
   };
 
@@ -209,10 +215,74 @@ export default function WelcomePage() {
             </p>
           </div>
 
+          {/* License Key Section */}
+          <div className="bg-white rounded-2xl shadow-lg border border-amber-200 p-6 mb-8">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <Shield className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-slate-900 mb-1">
+                  License Key Activation
+                </h2>
+                <p className="text-slate-600 mb-4">
+                  After installing the desktop app, you'll need to enter your license key:
+                </p>
+                <ol className="text-sm text-slate-600 space-y-2 mb-4">
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <span>Open the Flowstral Desktop app</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <span>Go to <strong>Settings</strong> → <strong>License</strong></span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <span>Enter your license key and click <strong>Activate</strong></span>
+                  </li>
+                </ol>
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-sm text-amber-800">
+                    <strong>Trial users:</strong> Your license key will be sent to your email, or contact your administrator.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Browser Extension */}
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 mb-8">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+                <Chrome className="w-6 h-6 text-violet-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Browser Extension
+                  </h2>
+                  <Badge className="bg-violet-100 text-violet-700 border-0 text-xs">Optional</Badge>
+                </div>
+                <p className="text-slate-600 mb-4">
+                  Install the Chrome extension for quick recording directly in your browser without the desktop app.
+                </p>
+                <Button
+                  variant="outline"
+                  className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                  onClick={() => window.open('https://chrome.google.com/webstore/detail/flowstral', '_blank')}
+                >
+                  <Chrome className="w-4 h-4 mr-2" />
+                  Add to Chrome
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Quick Start Steps */}
           <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-8 text-white">
-            <h2 className="text-xl font-bold mb-6 text-center">Get Started in 3 Easy Steps</h2>
-            <div className="grid md:grid-cols-3 gap-6">
+            <h2 className="text-xl font-bold mb-6 text-center">Get Started in 4 Easy Steps</h2>
+            <div className="grid md:grid-cols-4 gap-6">
               {[
                 {
                   step: 1,
@@ -228,9 +298,15 @@ export default function WelcomePage() {
                 },
                 {
                   step: 3,
+                  icon: Shield,
+                  title: 'Enter License',
+                  description: 'Activate with your license key in Settings',
+                },
+                {
+                  step: 4,
                   icon: Rocket,
                   title: 'Start Testing',
-                  description: 'Click Record and start capturing your first test!',
+                  description: 'Click Record and capture your first test!',
                 },
               ].map((item) => (
                 <div key={item.step} className="text-center">
