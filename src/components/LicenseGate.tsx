@@ -32,17 +32,17 @@ export function LicenseGate({ children }: LicenseGateProps) {
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
   const [isElectronApp, setIsElectronApp] = useState<boolean | null>(null);
 
-  // Detect if running in Electron
-  const detectElectron = useCallback(() => {
+  // Detect if running in Electron - check user agent first (always reliable)
+  const isElectronByUserAgent = useCallback(() => {
+    return navigator.userAgent.toLowerCase().includes('electron');
+  }, []);
+
+  // Check if Electron APIs are available
+  const hasElectronAPIs = useCallback(() => {
     const hasFlowstral = !!(window as any).flowstral;
     const hasElectronAPI = !!(window as any).electronAPI;
-    const hasElectronUserAgent = navigator.userAgent.toLowerCase().includes('electron');
     const hasPlatform = !!(window as any).platform?.isElectron;
-    
-    const detected = hasFlowstral || hasElectronAPI || hasElectronUserAgent || hasPlatform;
-    console.log('[LicenseGate] Electron detection:', { hasFlowstral, hasElectronAPI, hasElectronUserAgent, hasPlatform, detected });
-    
-    return detected;
+    return hasFlowstral || hasElectronAPI || hasPlatform;
   }, []);
 
   // Check license status from backend
@@ -77,37 +77,49 @@ export function LicenseGate({ children }: LicenseGateProps) {
   // Initialize - detect Electron and check license with retry
   useEffect(() => {
     let attempts = 0;
-    const maxAttempts = 10; // Try for up to 2 seconds
+    const maxAttempts = 25; // Try for up to 5 seconds (200ms * 25)
+    const isDefinitelyElectron = isElectronByUserAgent();
     
-    const tryDetectElectron = async () => {
+    console.log(`[LicenseGate] Initial check - userAgent says Electron: ${isDefinitelyElectron}`);
+    
+    // If NOT in Electron (web browser), allow immediately
+    if (!isDefinitelyElectron) {
+      console.log('[LicenseGate] Running in web browser, allowing access');
+      setIsElectronApp(false);
+      setLicenseStatus({ valid: true, type: 'web' });
+      setIsChecking(false);
+      return;
+    }
+    
+    // We ARE in Electron - must wait for APIs and check license
+    setIsElectronApp(true);
+    
+    const waitForAPIsAndCheck = async () => {
       attempts++;
       
-      const isElectron = detectElectron();
-      console.log(`[LicenseGate] Detection attempt ${attempts}/${maxAttempts}: isElectron=${isElectron}`);
+      const hasAPIs = hasElectronAPIs();
+      console.log(`[LicenseGate] Waiting for APIs, attempt ${attempts}/${maxAttempts}: hasAPIs=${hasAPIs}`);
       
-      if (isElectron) {
-        setIsElectronApp(true);
-        console.log('[LicenseGate] Electron detected, checking license...');
+      if (hasAPIs) {
+        console.log('[LicenseGate] Electron APIs ready, checking license...');
         await checkLicenseStatus();
-        return true;
+        return;
       }
       
       if (attempts < maxAttempts) {
         // Wait and retry - preload may not be ready yet
         await new Promise(resolve => setTimeout(resolve, 200));
-        return tryDetectElectron();
+        return waitForAPIsAndCheck();
       }
       
-      // After all attempts, assume web version
-      console.log('[LicenseGate] No Electron detected after retries, allowing web access');
-      setIsElectronApp(false);
-      setLicenseStatus({ valid: true, type: 'web' });
+      // After all attempts, APIs still not available - show error, don't allow access!
+      console.error('[LicenseGate] Electron APIs not available after 5 seconds');
+      setLicenseStatus({ valid: false, message: 'App initialization error. Please restart.' });
       setIsChecking(false);
-      return false;
     };
     
-    tryDetectElectron();
-  }, [detectElectron, checkLicenseStatus]);
+    waitForAPIsAndCheck();
+  }, [isElectronByUserAgent, hasElectronAPIs, checkLicenseStatus]);
 
   // Listen for license events
   useEffect(() => {
@@ -196,13 +208,18 @@ export function LicenseGate({ children }: LicenseGateProps) {
     }
   };
 
-  // Loading state
-  if (isChecking) {
+  // Loading state - ALWAYS show this until we have a definitive answer
+  // This prevents any flash of content before license is verified
+  if (isChecking || licenseStatus === null) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Checking license...</p>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mb-6">
+            <Shield className="w-10 h-10 text-white" />
+          </div>
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Verifying license...</p>
+          <p className="text-slate-500 text-sm mt-2">Please wait</p>
         </div>
       </div>
     );

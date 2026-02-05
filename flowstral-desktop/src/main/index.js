@@ -63,6 +63,113 @@ let currentView = 'webapp'; // 'webapp' or 'recorder'
 let lastNavigationTime = 0; // Debounce navigation
 const NAVIGATION_DEBOUNCE_MS = 1000; // 1 second debounce
 
+// License enforcement state
+let isLicenseValid = false;
+let licenseExpiresAt = null;
+let licenseType = null;
+let licenseFeatures = null;
+let storedLicenseKey = null;
+
+// Send current license status to webapp (called after webapp loads)
+function sendLicenseStatusToWebapp() {
+  if (!licenseManager) {
+    console.log('[License] No license manager, skipping status send');
+    return;
+  }
+  
+  const info = licenseManager.getInfo();
+  console.log('[License] Sending status to webapp:', info ? `valid=${info.valid}` : 'no info');
+  
+  if (info) {
+    sendToWebapp('license-status', {
+      valid: info.valid,
+      key: storedLicenseKey,
+      type: info.type,
+      expiresAt: info.expiresAt,
+      features: info.features,
+      message: info.valid ? null : 'License required'
+    });
+    
+    // If license is expiring soon (within 7 days), notify
+    if (info.valid && info.expiresAt) {
+      const daysLeft = Math.ceil((new Date(info.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 7 && daysLeft > 0) {
+        sendToWebapp('license-expiring-soon', { daysLeft });
+      }
+    }
+  } else {
+    // No license info - user needs to activate
+    sendToWebapp('license-status', { valid: false, key: null, message: 'Please enter a license key' });
+  }
+}
+
+// Check if license allows using the app
+function checkLicenseForFeature(feature = 'basic') {
+  // If no license manager, allow (development mode)
+  if (!licenseManager) return { allowed: true };
+  
+  const info = licenseManager.getInfo();
+  
+  // No license info at all
+  if (!info) {
+    return { 
+      allowed: false, 
+      reason: 'no_license',
+      message: 'Please enter a valid license key to use this feature.'
+    };
+  }
+  
+  // License explicitly invalid
+  if (!info.valid) {
+    return { 
+      allowed: false, 
+      reason: 'invalid_license',
+      message: 'Your license key is invalid. Please enter a valid license.'
+    };
+  }
+  
+  // Check expiry
+  if (info.expiresAt) {
+    const expiry = new Date(info.expiresAt);
+    const now = new Date();
+    if (now > expiry) {
+      return { 
+        allowed: false, 
+        reason: 'expired',
+        message: `Your license expired on ${expiry.toLocaleDateString()}. Please renew to continue using the app.`
+      };
+    }
+    
+    // Warn if expiring soon (within 3 days)
+    const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 3 && daysLeft > 0) {
+      console.log(`[License] Warning: License expires in ${daysLeft} day(s)`);
+    }
+  }
+  
+  // Check if feature is available for this license type
+  if (feature !== 'basic' && info.features && !info.features.includes(feature)) {
+    return {
+      allowed: false,
+      reason: 'feature_not_available',
+      message: `This feature requires a higher license tier.`
+    };
+  }
+  
+  return { allowed: true, daysLeft: info.expiresAt ? Math.ceil((new Date(info.expiresAt) - new Date()) / (1000 * 60 * 60 * 24)) : null };
+}
+
+// Helper to send IPC to webapp (handles both BrowserView and direct main window loading)
+function sendToWebapp(channel, ...args) {
+  const target = webappView?.webContents || mainWindow?.webContents;
+  if (target) {
+    console.log(`[IPC] Sending ${channel} to webapp (via ${webappView ? 'BrowserView' : 'mainWindow'})`);
+    target.send(channel, ...args);
+  } else {
+    console.warn(`[IPC] Cannot send ${channel} - no webapp target available (webappView: ${!!webappView}, mainWindow: ${!!mainWindow})`);
+  }
+}
+
 // Device ID for licensing
 function getDeviceId() {
   let deviceId = store.get('deviceId');
@@ -96,7 +203,10 @@ function getWebappUrl() {
   return 'https://flowstral.com';
 }
 
-// Create main window with navigation shell
+// Track if we're showing license page
+let showingLicensePage = false;
+
+// Create main window - may show license page first
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -108,7 +218,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js') // Always use preload.js initially
     },
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -119,11 +229,46 @@ function createWindow() {
     backgroundColor: '#0a0a0f'
   });
 
-  // Load the navigation shell
-  mainWindow.loadFile(path.join(__dirname, '../renderer/shell.html'));
+  // Initially load a simple loading screen while we check license
+  mainWindow.loadFile(path.join(__dirname, '../renderer/license.html'));
+  showingLicensePage = true;
+  console.log('[App] Showing license page - will check license validity');
+}
 
-  // Create webapp BrowserView (the React app)
-  createWebappView();
+// Load the main webapp after license is validated
+function loadWebapp() {
+  if (!mainWindow) return;
+  
+  showingLicensePage = false;
+  const webappUrl = getWebappUrl();
+  const isCloudWebapp = !webappUrl.startsWith('file://');
+  
+  console.log('[App] Loading webapp from:', webappUrl);
+  console.log('[App] Is cloud webapp:', isCloudWebapp);
+  
+  if (webappUrl.startsWith('file://')) {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/shell.html'));
+    createWebappView();
+  } else {
+    // Load cloud webapp directly in main window
+    // First update preload script for cloud webapp
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[App] Cloud webapp finished loading, will send license status...');
+      
+      // Send with retry to ensure React receives it
+      const sendWithRetry = (attempt = 1) => {
+        console.log(`[App] Sending license status to cloud webapp (attempt ${attempt})`);
+        sendLicenseStatusToWebapp();
+        if (attempt < 3) {
+          setTimeout(() => sendWithRetry(attempt + 1), 500);
+        }
+      };
+      
+      // Initial delay for React to hydrate
+      setTimeout(() => sendWithRetry(), 300);
+    });
+    mainWindow.loadURL(webappUrl);
+  }
 
   // Handle close to tray
   mainWindow.on('close', (event) => {
@@ -199,6 +344,23 @@ function createWebappView() {
         } catch (e) {}
       `).catch(() => {});
     }
+    
+    // Send license status after webapp loads with delay to ensure React has mounted
+    // React hydration takes time, so we wait a bit and also retry
+    console.log('[App] Webapp BrowserView finished loading, will send license status...');
+    
+    const sendWithRetry = (attempt = 1) => {
+      console.log(`[App] Sending license status to webapp (attempt ${attempt})`);
+      sendLicenseStatusToWebapp();
+      
+      // Retry a couple times to ensure React receives it
+      if (attempt < 3) {
+        setTimeout(() => sendWithRetry(attempt + 1), 500);
+      }
+    };
+    
+    // Initial delay for React to hydrate
+    setTimeout(() => sendWithRetry(), 300);
   });
   
   // Enable opening DevTools for webapp with Ctrl+Shift+I when focused on webapp
@@ -314,7 +476,12 @@ function showRecorderView() {
 
 // Navigate webapp to a specific route
 function navigateWebapp(route) {
-  if (!webappView) return;
+  // Get the target webContents (webappView for BrowserView, or mainWindow for cloud webapp)
+  const target = webappView?.webContents || mainWindow?.webContents;
+  if (!target) {
+    console.warn('[App] Cannot navigate - no webapp target');
+    return;
+  }
   
   // Debounce navigation to prevent rapid multiple navigations
   const now = Date.now();
@@ -329,7 +496,7 @@ function navigateWebapp(route) {
     : `${baseUrl}${route}`;
   
   // Prevent unnecessary navigation if already at this route
-  const currentUrl = webappView.webContents.getURL();
+  const currentUrl = target.getURL();
   if (currentUrl.includes(route)) {
     console.log('[App] Already at', route, '- skipping navigation');
     return;
@@ -337,7 +504,7 @@ function navigateWebapp(route) {
   
   lastNavigationTime = now;
   console.log('[App] Navigating webapp to:', fullUrl);
-  webappView.webContents.loadURL(fullUrl);
+  target.loadURL(fullUrl);
 }
 
 // Create system tray
@@ -454,10 +621,33 @@ async function initializeServices() {
 
   console.log('[Init] Services initialized');
 
-  // Validate license
+  // Validate license and track state
+  storedLicenseKey = licenseKey; // Store for sendLicenseStatusToWebapp
+  
   if (licenseKey) {
-    const isValid = await licenseManager.validate(licenseKey);
-    mainWindow?.webContents.send('license-status', { valid: isValid, key: licenseKey });
+    const validationResult = await licenseManager.validate(licenseKey);
+    isLicenseValid = validationResult.valid;
+    licenseExpiresAt = validationResult.expiresAt;
+    licenseType = validationResult.type;
+    licenseFeatures = validationResult.features;
+    
+    console.log(`[License] Validation result: valid=${isLicenseValid}, type=${licenseType}, expires=${licenseExpiresAt}`);
+    
+    if (isLicenseValid) {
+      // License is valid - proceed to load webapp
+      console.log('[License] Valid license found, loading webapp...');
+      loadWebapp();
+    } else {
+      // License exists but is invalid/expired - stay on license page
+      const reason = validationResult.error || 'Invalid license';
+      console.log('[License] Warning: License not valid -', reason);
+      console.log('[License] Staying on license page');
+    }
+  } else {
+    // No license key - user needs to activate, stay on license page
+    console.log('[License] No license key found - user needs to activate');
+    console.log('[License] Staying on license page');
+    isLicenseValid = false;
   }
 }
 
@@ -573,6 +763,13 @@ ipcMain.handle('activate-license', async (event, licenseKey) => {
   const result = await licenseManager.validate(licenseKey);
   if (result.valid) {
     await licenseManager.activate(licenseKey);
+    // Update global state
+    isLicenseValid = true;
+    storedLicenseKey = licenseKey;
+    licenseExpiresAt = result.expiresAt;
+    licenseType = result.type;
+    licenseFeatures = result.features;
+    console.log('[License] Activated successfully:', licenseType);
   }
   return result;
 });
@@ -580,11 +777,28 @@ ipcMain.handle('activate-license', async (event, licenseKey) => {
 ipcMain.handle('deactivate-license', async () => {
   await licenseManager.deactivate();
   store.set('licenseKey', '');
+  // Clear global state
+  isLicenseValid = false;
+  storedLicenseKey = null;
+  licenseExpiresAt = null;
+  licenseType = null;
+  licenseFeatures = null;
+  console.log('[License] Deactivated');
   return true;
 });
 
 ipcMain.handle('get-license-info', async () => {
   return licenseManager?.getInfo() || null;
+});
+
+// Handle successful license activation from license.html page
+ipcMain.handle('license-activated', async () => {
+  console.log('[License] License activated from license page, loading webapp...');
+  if (showingLicensePage && isLicenseValid) {
+    loadWebapp();
+    return true;
+  }
+  return false;
 });
 
 // Server connection handlers
@@ -611,7 +825,7 @@ ipcMain.handle('embedded-browser-show', async (event, bounds) => {
         mainWindow,
         onAction: (action) => {
           mainWindow?.webContents.send('action-recorded', action);
-          webappView?.webContents.send('action-recorded', action);
+          sendToWebapp('action-recorded', action);
         },
         onUrlChange: (url) => {
           mainWindow?.webContents.send('browser-url-changed', url);
@@ -711,6 +925,18 @@ ipcMain.handle('embedded-browser-get-zoom', () => {
 
 ipcMain.handle('playwright-recorder-start', async (event, arg) => {
   try {
+    // LICENSE CHECK - Recording requires valid license
+    const licenseCheck = checkLicenseForFeature('recording');
+    if (!licenseCheck.allowed) {
+      console.log('[PlaywrightRecorder] License check failed:', licenseCheck.reason);
+      sendToWebapp('license-blocked', { 
+        feature: 'recording', 
+        reason: licenseCheck.reason,
+        message: licenseCheck.message 
+      });
+      return { success: false, error: licenseCheck.message, licenseError: true };
+    }
+    
     // Handle both old (url-only string) and new (options object) call formats for backward compatibility
     let actualUrl, device, network;
     
@@ -734,44 +960,10 @@ ipcMain.handle('playwright-recorder-start', async (event, arg) => {
     
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
-      
-      // Forward events to webappView (where the React app runs), NOT mainWindow
-      playwrightRecorder.on('action', (action) => {
-        console.log('[PlaywrightRecorder] Forwarding action to webapp:', action.description);
-        webappView?.webContents.send('playwright-recorder-action', action);
-      });
-      
-      playwrightRecorder.on('stopped', ({ actions }) => {
-        console.log('[PlaywrightRecorder] Forwarding stopped event, actions:', actions?.length);
-        webappView?.webContents.send('playwright-recorder-stopped', { actions });
-      });
-      
-      playwrightRecorder.on('paused', () => {
-        console.log('[PlaywrightRecorder] Forwarding paused event');
-        webappView?.webContents.send('playwright-recorder-paused');
-      });
-      
-      // Forward cross-origin tab event so UI can prompt user
-      playwrightRecorder.on('crossOriginTab', (data) => {
-        console.log('[PlaywrightRecorder] Cross-origin tab detected:', data.url);
-        webappView?.webContents.send('playwright-recorder-cross-origin', data);
-      });
-      
-      playwrightRecorder.on('resumed', () => {
-        console.log('[PlaywrightRecorder] Forwarding resumed event');
-        webappView?.webContents.send('playwright-recorder-resumed');
-      });
-      
-      playwrightRecorder.on('suggestions', ({ suggestions }) => {
-        console.log('[PlaywrightRecorder] Auto-refresh suggestions:', suggestions?.length);
-        webappView?.webContents.send('playwright-recorder-suggestions', { suggestions });
-      });
-      
-      playwrightRecorder.on('navigation', ({ url }) => {
-        console.log('[PlaywrightRecorder] Navigation detected:', url);
-        webappView?.webContents.send('playwright-recorder-navigation', { url });
-      });
     }
+    
+    // ALWAYS set up recording event listeners (prevents stale listeners issue)
+    setupRecordingEvents(playwrightRecorder);
     
     // Configure mobile device if specified (backward compatible: no device = desktop mode)
     if (device) {
@@ -789,7 +981,7 @@ ipcMain.handle('playwright-recorder-start', async (event, arg) => {
     
     // Include mobile config in status for UI display
     const mobileConfig = playwrightRecorder.getMobileConfig();
-    webappView?.webContents.send('recording-status', { 
+    sendToWebapp('recording-status', { 
       recording: true, 
       mode: 'playwright',
       mobile: mobileConfig
@@ -806,7 +998,7 @@ ipcMain.handle('playwright-recorder-stop', async () => {
     if (!playwrightRecorder) return { success: false, actions: [] };
     
     const result = await playwrightRecorder.stop();
-    webappView?.webContents.send('recording-status', { recording: false, mode: 'playwright' });
+    sendToWebapp('recording-status', { recording: false, mode: 'playwright' });
     return { success: true, actions: result.actions };
   } catch (error) {
     console.error('[PlaywrightRecorder] Stop failed:', error.message);
@@ -867,6 +1059,18 @@ ipcMain.handle('playwright-recorder-execute-action', async (event, action) => {
 // Run test with steps (Playwright recorder) - uses existing browser if available
 ipcMain.handle('playwright-recorder-run-test', async (event, options) => {
   try {
+    // LICENSE CHECK - Playback requires valid license
+    const licenseCheck = checkLicenseForFeature('playback');
+    if (!licenseCheck.allowed) {
+      console.log('[PlaywrightRecorder] License check failed for playback:', licenseCheck.reason);
+      sendToWebapp('license-blocked', { 
+        feature: 'playback', 
+        reason: licenseCheck.reason,
+        message: licenseCheck.message 
+      });
+      return { success: false, error: licenseCheck.message, licenseError: true };
+    }
+    
     if (!playwrightRecorder) {
       playwrightRecorder = new PlaywrightRecorder();
     }
@@ -902,42 +1106,95 @@ function setupRecorderEvents(recorder) {
   // Test execution feedback - sends events to frontend
   recorder.on('test-step-start', ({ stepIndex, step, isRetry }) => {
     console.log(`[Events] Step ${stepIndex + 1} started`);
-    webappView?.webContents.send('playwright-test-step-start', { stepIndex, step, isRetry });
-    webappView?.webContents.send('test-runner:step-start', { index: stepIndex, step, isRetry });
+    sendToWebapp('playwright-test-step-start', { stepIndex, step, isRetry });
+    sendToWebapp('test-runner:step-start', { index: stepIndex, step, isRetry });
   });
   
-  recorder.on('test-step-complete', ({ stepIndex, success, error, isRetry }) => {
-    console.log(`[Events] Step ${stepIndex + 1} complete: ${success ? '✓' : '✗'}`);
-    webappView?.webContents.send('playwright-test-step-complete', { stepIndex, success, error, isRetry });
-    webappView?.webContents.send('test-runner:step-complete', { index: stepIndex, status: success ? 'passed' : 'failed', error, isRetry });
+  recorder.on('test-step-complete', ({ stepIndex, success, error, isRetry, workingSelector, strategyType, healed, newSelector }) => {
+    console.log(`[Events] Step ${stepIndex + 1} complete: ${success ? '✓' : '✗'}${workingSelector ? ` [${strategyType}]` : ''}`);
+    sendToWebapp('playwright-test-step-complete', { stepIndex, success, error, isRetry, workingSelector, strategyType, healed, newSelector });
+    sendToWebapp('test-runner:step-complete', { index: stepIndex, status: success ? 'passed' : 'failed', error, isRetry, workingSelector, strategyType, healed, newSelector });
   });
   
-  recorder.on('test-complete', ({ success, passedSteps, failedStep, error, stepResults }) => {
-    console.log(`[Events] Test complete: ${success ? 'PASSED' : 'FAILED'}`);
-    webappView?.webContents.send('playwright-test-complete', { success, passedSteps, failedStep, error, stepResults });
-    webappView?.webContents.send('test-runner:test-complete', { success, passedSteps, failedStep, error, stepResults });
+  recorder.on('test-complete', ({ success, passedSteps, failedStep, error, stepResults, totalSteps, browserKeptOpen, failureScreenshot }) => {
+    console.log(`[Events] Test complete: ${success ? 'PASSED' : 'FAILED'} (${passedSteps}/${totalSteps || stepResults?.length || 0} steps)`);
+    // CRITICAL: Include stepResults with workingSelector for Lock Locators feature
+    sendToWebapp('playwright-test-complete', { success, passedSteps, failedStep, error, stepResults, totalSteps, browserKeptOpen, failureScreenshot });
+    sendToWebapp('test-runner:test-complete', { success, passedSteps, failedStep, error, stepResults, totalSteps, browserKeptOpen, failureScreenshot });
   });
   
   // Debug mode events
   recorder.on('test-paused', ({ stepIndex, step, error }) => {
     console.log(`[Events] Test paused at step ${stepIndex + 1}`);
-    webappView?.webContents.send('playwright-test-paused', { stepIndex, reason: 'debug', step, error });
-    webappView?.webContents.send('test-runner:test-paused', { stepIndex, step, error });
+    sendToWebapp('playwright-test-paused', { stepIndex, reason: 'debug', step, error });
+    sendToWebapp('test-runner:test-paused', { stepIndex, step, error });
   });
   
   recorder.on('test-resumed', ({ stepIndex }) => {
     console.log(`[Events] Test resumed from step ${stepIndex + 1}`);
-    webappView?.webContents.send('test-runner:test-resumed', { stepIndex });
+    sendToWebapp('test-runner:test-resumed', { stepIndex });
   });
   
   recorder.on('test-stopped', ({ stepIndex }) => {
     console.log(`[Events] Test stopped at step ${stepIndex + 1}`);
-    webappView?.webContents.send('test-runner:test-stopped', { stepIndex });
+    sendToWebapp('test-runner:test-stopped', { stepIndex });
   });
   
   recorder.on('test-runner:step-failed', ({ index, error, screenshot, isRetry }) => {
-    webappView?.webContents.send('test-runner:step-failed', { index, error, screenshot, isRetry });
+    sendToWebapp('test-runner:step-failed', { index, error, screenshot, isRetry });
   });
+}
+
+// Helper to set up recording events (live action streaming during recording)
+// Prevents duplicate listeners by removing existing ones first
+function setupRecordingEvents(recorder) {
+  // Remove any existing listeners to prevent duplicates
+  recorder.removeAllListeners('action');
+  recorder.removeAllListeners('stopped');
+  recorder.removeAllListeners('paused');
+  recorder.removeAllListeners('resumed');
+  recorder.removeAllListeners('crossOriginTab');
+  recorder.removeAllListeners('suggestions');
+  recorder.removeAllListeners('navigation');
+  
+  // Forward recorded actions to webapp in real-time
+  recorder.on('action', (action) => {
+    console.log('[PlaywrightRecorder] Forwarding action to webapp:', action.description);
+    sendToWebapp('playwright-recorder-action', action);
+  });
+  
+  recorder.on('stopped', ({ actions }) => {
+    console.log('[PlaywrightRecorder] Forwarding stopped event, actions:', actions?.length);
+    sendToWebapp('playwright-recorder-stopped', { actions });
+  });
+  
+  recorder.on('paused', () => {
+    console.log('[PlaywrightRecorder] Forwarding paused event');
+    sendToWebapp('playwright-recorder-paused');
+  });
+  
+  // Forward cross-origin tab event so UI can prompt user
+  recorder.on('crossOriginTab', (data) => {
+    console.log('[PlaywrightRecorder] Cross-origin tab detected:', data.url);
+    sendToWebapp('playwright-recorder-cross-origin', data);
+  });
+  
+  recorder.on('resumed', () => {
+    console.log('[PlaywrightRecorder] Forwarding resumed event');
+    sendToWebapp('playwright-recorder-resumed');
+  });
+  
+  recorder.on('suggestions', ({ suggestions }) => {
+    console.log('[PlaywrightRecorder] Auto-refresh suggestions:', suggestions?.length);
+    sendToWebapp('playwright-recorder-suggestions', { suggestions });
+  });
+  
+  recorder.on('navigation', ({ url }) => {
+    console.log('[PlaywrightRecorder] Navigation detected:', url);
+    sendToWebapp('playwright-recorder-navigation', { url });
+  });
+  
+  console.log('[PlaywrightRecorder] Recording event listeners set up');
 }
 
 // Debug mode: Pause test
@@ -1094,7 +1351,7 @@ ipcMain.handle('element-picker-start', async () => {
             const elementInfo = JSON.parse(jsonStr);
             await elementPicker.stop();
             page.off('console', consoleHandler);
-            webappView?.webContents.send('element-picker:picked', elementInfo);
+            sendToWebapp('element-picker:picked', elementInfo);
             resolve({ success: true, elementInfo });
           } catch (e) {
             resolve({ success: false, error: 'Failed to parse element info' });
@@ -1102,7 +1359,7 @@ ipcMain.handle('element-picker-start', async () => {
         } else if (text === '__FLOWSTRAL_PICKER_CANCELLED__') {
           await elementPicker.stop();
           page.off('console', consoleHandler);
-          webappView?.webContents.send('element-picker:cancelled');
+          sendToWebapp('element-picker:cancelled');
           resolve({ success: false, cancelled: true });
         }
       };
@@ -1110,7 +1367,7 @@ ipcMain.handle('element-picker-start', async () => {
       page.on('console', consoleHandler);
       
       elementPicker.start().then(() => {
-        webappView?.webContents.send('element-picker:started');
+        sendToWebapp('element-picker:started');
       }).catch((err) => {
         page.off('console', consoleHandler);
         resolve({ success: false, error: err.message });
@@ -1413,13 +1670,13 @@ ipcMain.handle('mobile-run-native-test', async (event, { steps, appId, platform,
       deviceId,
       debug: true,
       onStep: (step) => {
-        webappView?.webContents.send('mobile-native-test-step', step);
+        sendToWebapp('mobile-native-test-step', step);
       },
       onProgress: (progress) => {
-        webappView?.webContents.send('mobile-native-test-progress', progress);
+        sendToWebapp('mobile-native-test-progress', progress);
       },
       onError: (error) => {
-        webappView?.webContents.send('mobile-native-test-error', error);
+        sendToWebapp('mobile-native-test-error', error);
       }
     });
     
@@ -1456,7 +1713,7 @@ ipcMain.handle('mobile-start-studio', async (event, { deviceId } = {}) => {
         deviceId,
         debug: true,
         onStudioOutput: (output) => {
-          webappView?.webContents.send('mobile-studio-output', output);
+          sendToWebapp('mobile-studio-output', output);
         }
       });
     }
@@ -1553,13 +1810,13 @@ ipcMain.handle('network-capture-start', async (event, sessionId) => {
     
     // Forward events to renderer
     networkCapture.on('request-start', (data) => {
-      webappView?.webContents.send('network-request-start', data);
+      sendToWebapp('network-request-start', data);
     });
     networkCapture.on('request-complete', (data) => {
-      webappView?.webContents.send('network-request-complete', data);
+      sendToWebapp('network-request-complete', data);
     });
     networkCapture.on('websocket-created', (data) => {
-      webappView?.webContents.send('network-websocket-created', data);
+      sendToWebapp('network-websocket-created', data);
     });
     
     return await networkCapture.start(webContents, sessionId);
@@ -1642,14 +1899,14 @@ ipcMain.handle('ai-generate-current-page', async (event, options = {}) => {
       onProgress: (progress) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-generator-progress', progress);
-          webappView?.webContents.send('ai-generator-progress', progress);
+          sendToWebapp('ai-generator-progress', progress);
         }
       },
       
       onTestGenerated: (test) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-generator-test', test);
-          webappView?.webContents.send('ai-generator-test', test);
+          sendToWebapp('ai-generator-test', test);
         }
       }
     });
@@ -1731,14 +1988,14 @@ ipcMain.handle('ai-generate-tests', async (event, options = {}) => {
       onProgress: (progress) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-generator-progress', progress);
-          webappView?.webContents.send('ai-generator-progress', progress);
+          sendToWebapp('ai-generator-progress', progress);
         }
       },
       
       onTestGenerated: (test) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-generator-test', test);
-          webappView?.webContents.send('ai-generator-test', test);
+          sendToWebapp('ai-generator-test', test);
         }
       }
     });
@@ -3021,11 +3278,16 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
       
       console.log('[Export] Navigating to builder with encoded data');
       
-      // Navigate with data in URL
-      await webappView?.webContents.loadURL(builderUrl);
-      
-      console.log('[Export] Successfully exported test case:', testCase.name);
-      return { success: true, testCase };
+      // Navigate with data in URL - use webappView if available, otherwise mainWindow
+      const target = webappView?.webContents || mainWindow?.webContents;
+      if (target) {
+        await target.loadURL(builderUrl);
+        console.log('[Export] Successfully exported test case:', testCase.name);
+        return { success: true, testCase };
+      } else {
+        console.error('[Export] No webapp target available');
+        return { success: false, error: 'No webapp target available' };
+      }
     }
     
     // Legacy path: Build test case from raw step data (embeddedBrowser format)
@@ -3389,16 +3651,16 @@ ipcMain.handle('execute-test', async (event, testData) => {
       onStepStart: (index, step) => {
         // Send to both old channel (index) and new channel (stepIndex) for compatibility
         mainWindow?.webContents.send('test-step-start', { index, step });
-        webappView?.webContents.send('test-step-start', { index, step });
+        sendToWebapp('test-step-start', { index, step });
         // Also send to playwright-specific channels with stepIndex
         mainWindow?.webContents.send('playwright-test-step-start', { stepIndex: index, step });
-        webappView?.webContents.send('playwright-test-step-start', { stepIndex: index, step });
+        sendToWebapp('playwright-test-step-start', { stepIndex: index, step });
       },
       onStepComplete: (index, step, result) => {
         const success = result?.status === 'passed';
         // Send to both old and new channels
         mainWindow?.webContents.send('test-step-complete', { index, step, result });
-        webappView?.webContents.send('test-step-complete', { index, step, result });
+        sendToWebapp('test-step-complete', { index, step, result });
         // Also send to playwright-specific channels with Lock Locators data
         mainWindow?.webContents.send('playwright-test-step-complete', { 
           stepIndex: index, 
@@ -3412,7 +3674,7 @@ ipcMain.handle('execute-test', async (event, testData) => {
           healed: result?.healed,
           newSelector: result?.newSelector
         });
-        webappView?.webContents.send('playwright-test-step-complete', { 
+        sendToWebapp('playwright-test-step-complete', { 
           stepIndex: index, 
           success, 
           error: result?.error,
@@ -3434,7 +3696,7 @@ ipcMain.handle('execute-test', async (event, testData) => {
           reason: step.flagReason || 'Flagged for review',
           status: 'paused_at_flagged'
         });
-        webappView?.webContents.send('test-step-flagged', { 
+        sendToWebapp('test-step-flagged', { 
           index, 
           step,
           reason: step.flagReason || 'Flagged for review',
@@ -3446,7 +3708,7 @@ ipcMain.handle('execute-test', async (event, testData) => {
           reason: 'flagged',
           flagReason: step.flagReason || 'Flagged for review'
         });
-        webappView?.webContents.send('playwright-test-paused', { 
+        sendToWebapp('playwright-test-paused', { 
           stepIndex: index, 
           reason: 'flagged',
           flagReason: step.flagReason || 'Flagged for review'
@@ -3454,13 +3716,13 @@ ipcMain.handle('execute-test', async (event, testData) => {
       },
       onTestComplete: (results) => {
         mainWindow?.webContents.send('test-complete', results);
-        webappView?.webContents.send('test-complete', results);
+        sendToWebapp('test-complete', results);
         // Also send to playwright-specific channel
         mainWindow?.webContents.send('playwright-test-complete', { 
           success: results.status === 'passed',
           steps: results.steps 
         });
-        webappView?.webContents.send('playwright-test-complete', { 
+        sendToWebapp('playwright-test-complete', { 
           success: results.status === 'passed',
           steps: results.steps 
         });
