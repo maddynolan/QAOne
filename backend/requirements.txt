@@ -17,7 +17,8 @@ sentence-transformers>=2.2.0
 numpy>=1.24.0
 boto3>=1.28.0
 pyyaml>=6.0.1
-k6>=0.0.0  # Note: k6 is installed separately, not via pip
+# k6 is installed separately (system binary), not via pip
+requests>=2.31.0  # HTTP requests library
 PyJWT>=2.8.0  # JWT token handling
 anthropic>=0.40.0  # Claude API with prompt caching
 openai>=1.0.0  # OpenAI API for AI features
