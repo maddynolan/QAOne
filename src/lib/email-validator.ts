@@ -138,6 +138,13 @@ export function isBusinessEmail(email: string): boolean {
   return !isPersonalEmail(email);
 }
 
+// Whitelisted domains (always allowed)
+const WHITELISTED_DOMAINS = [
+  'flowstral.com',
+  'qaone.com',
+  'testautomation.com',
+];
+
 /**
  * Full email validation for signup
  */
@@ -155,6 +162,15 @@ export function validateBusinessEmail(email: string): EmailValidationResult {
   }
   
   const domain = getEmailDomain(normalizedEmail);
+  
+  // Allow whitelisted domains
+  if (WHITELISTED_DOMAINS.includes(domain)) {
+    return {
+      isValid: true,
+      isBusinessEmail: true,
+      domain,
+    };
+  }
   
   // Check if personal email
   if (isPersonalEmail(normalizedEmail)) {
