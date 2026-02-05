@@ -5,23 +5,166 @@ Handles license validation, activation, and management for Flowstral Desktop.
 Supports both SaaS (cloud) and On-Premise deployments.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header, Query, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, timedelta
+from collections import defaultdict
 import hashlib
 import hmac
 import secrets
 import os
+import jwt
+import time
+import logging
 
 router = APIRouter(prefix="/license", tags=["License Management"])
+logger = logging.getLogger("license_admin")
+
+# Security
+security = HTTPBearer(auto_error=False)
 
 # In-memory storage (replace with database in production)
 licenses_db = {}
 activations_db = {}
+audit_log: List[Dict] = []  # Audit trail for admin actions
+
+# Rate limiting for login attempts (IP -> {attempts, last_attempt, locked_until})
+login_attempts: Dict[str, Dict] = defaultdict(lambda: {"attempts": 0, "last_attempt": 0, "locked_until": 0})
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION = 300  # 5 minutes
 
 # Secret for license generation (use env var in production)
 LICENSE_SECRET = os.getenv("LICENSE_SECRET", "flowstral-offline-2024")
+JWT_SECRET = os.getenv("JWT_SECRET", "flowstral-jwt-secret-2024")
+
+# Admin whitelist - only these emails can access admin endpoints
+ADMIN_EMAILS = [
+    "sales@flowstral.com",
+    "admin@flowstral.com",
+    "janum@flowstral.com",  # Add more as needed
+]
+
+# Optional: IP whitelist for admin access (empty = allow all)
+# Set ADMIN_IP_WHITELIST env var as comma-separated IPs, e.g., "1.2.3.4,5.6.7.8"
+ADMIN_IP_WHITELIST = [ip.strip() for ip in os.getenv("ADMIN_IP_WHITELIST", "").split(",") if ip.strip()]
+
+
+def log_admin_action(action: str, admin_email: str, details: dict = None, ip: str = None):
+    """Log admin actions for audit trail."""
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "action": action,
+        "admin": admin_email,
+        "ip": ip,
+        "details": details or {}
+    }
+    audit_log.append(entry)
+    # Keep last 1000 entries in memory (use database in production)
+    if len(audit_log) > 1000:
+        audit_log.pop(0)
+    logger.info(f"[AUDIT] {action} by {admin_email} from {ip}: {details}")
+
+
+def check_ip_whitelist(request: Request) -> str:
+    """Check if request IP is whitelisted (if whitelist is configured)."""
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # If whitelist is configured, enforce it
+    if ADMIN_IP_WHITELIST and client_ip not in ADMIN_IP_WHITELIST:
+        logger.warning(f"[SECURITY] Admin access denied from non-whitelisted IP: {client_ip}")
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return client_ip
+
+
+def check_rate_limit(ip: str) -> None:
+    """Check and enforce rate limiting for login attempts."""
+    now = time.time()
+    record = login_attempts[ip]
+    
+    # Check if currently locked out
+    if record["locked_until"] > now:
+        wait_time = int(record["locked_until"] - now)
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Too many login attempts. Try again in {wait_time} seconds."
+        )
+    
+    # Reset attempts if last attempt was more than lockout duration ago
+    if now - record["last_attempt"] > LOCKOUT_DURATION:
+        record["attempts"] = 0
+
+
+def record_login_attempt(ip: str, success: bool) -> None:
+    """Record a login attempt for rate limiting."""
+    now = time.time()
+    record = login_attempts[ip]
+    
+    if success:
+        # Reset on successful login
+        record["attempts"] = 0
+        record["locked_until"] = 0
+    else:
+        record["attempts"] += 1
+        record["last_attempt"] = now
+        
+        if record["attempts"] >= MAX_LOGIN_ATTEMPTS:
+            record["locked_until"] = now + LOCKOUT_DURATION
+            logger.warning(f"[SECURITY] IP {ip} locked out after {MAX_LOGIN_ATTEMPTS} failed login attempts")
+
+
+async def verify_admin(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    x_admin_email: Optional[str] = Header(None)
+) -> str:
+    """
+    Verify admin access. Accepts either:
+    1. JWT token with admin email claim
+    2. X-Admin-Email header (for simple auth during development)
+    
+    Also enforces IP whitelist if configured.
+    """
+    # Check IP whitelist first
+    client_ip = check_ip_whitelist(request)
+    
+    # Try JWT first
+    if credentials:
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+            email = payload.get("email", "").lower()
+            if email in [e.lower() for e in ADMIN_EMAILS]:
+                return email
+            raise HTTPException(status_code=403, detail="Not authorized as admin")
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            pass  # Fall through to header check
+    
+    # Check header (development/simple auth)
+    if x_admin_email:
+        email = x_admin_email.lower()
+        if email in [e.lower() for e in ADMIN_EMAILS]:
+            return email
+        raise HTTPException(status_code=403, detail="Not authorized as admin")
+    
+    raise HTTPException(status_code=401, detail="Admin authentication required")
+
+
+def generate_admin_token(email: str, expires_hours: int = 24) -> str:
+    """Generate a JWT token for admin access."""
+    if email.lower() not in [e.lower() for e in ADMIN_EMAILS]:
+        raise ValueError("Email not in admin whitelist")
+    
+    payload = {
+        "email": email,
+        "exp": datetime.utcnow() + timedelta(hours=expires_hours),
+        "iat": datetime.utcnow(),
+        "type": "admin"
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 
 class LicenseValidateRequest(BaseModel):
@@ -267,12 +410,105 @@ async def deactivate_license(request: LicenseValidateRequest):
     return {"success": True}
 
 
+@router.post("/admin/login")
+async def admin_login(
+    request: Request,
+    email: str = Query(...), 
+    password: str = Query(...)
+):
+    """
+    Admin login endpoint with rate limiting and audit logging.
+    
+    For production, integrate with your auth provider (Supabase, Auth0, etc.)
+    For now, uses a simple password check.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Check IP whitelist
+    check_ip_whitelist(request)
+    
+    # Check rate limiting
+    check_rate_limit(client_ip)
+    
+    # Validate email is in admin list
+    if email.lower() not in [e.lower() for e in ADMIN_EMAILS]:
+        record_login_attempt(client_ip, success=False)
+        log_admin_action("login_failed", email, {"reason": "email_not_authorized"}, client_ip)
+        raise HTTPException(status_code=403, detail="Email not authorized as admin")
+    
+    # Check password
+    admin_password = os.getenv("ADMIN_PASSWORD", "Inception@123")
+    if password != admin_password:
+        record_login_attempt(client_ip, success=False)
+        log_admin_action("login_failed", email, {"reason": "invalid_password"}, client_ip)
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    # Success - generate token
+    record_login_attempt(client_ip, success=True)
+    token = generate_admin_token(email)
+    
+    log_admin_action("login_success", email, {}, client_ip)
+    
+    return {
+        "success": True,
+        "email": email,
+        "token": token,
+        "expiresIn": 24 * 60 * 60  # 24 hours in seconds
+    }
+
+
+@router.get("/admin/me")
+async def admin_me(admin_email: str = Depends(verify_admin)):
+    """Get current admin info."""
+    return {
+        "email": admin_email,
+        "authorized": True
+    }
+
+
+@router.get("/admin/audit-log")
+async def get_audit_log(
+    limit: int = Query(100, ge=1, le=500),
+    admin_email: str = Depends(verify_admin)
+):
+    """
+    Get recent admin audit log entries.
+    """
+    return {
+        "entries": audit_log[-limit:],
+        "total": len(audit_log)
+    }
+
+
+@router.get("/admin/security-status")
+async def get_security_status(admin_email: str = Depends(verify_admin)):
+    """
+    Get current security configuration status.
+    """
+    locked_ips = [
+        ip for ip, record in login_attempts.items() 
+        if record["locked_until"] > time.time()
+    ]
+    
+    return {
+        "ip_whitelist_enabled": len(ADMIN_IP_WHITELIST) > 0,
+        "ip_whitelist": ADMIN_IP_WHITELIST if ADMIN_IP_WHITELIST else "disabled",
+        "max_login_attempts": MAX_LOGIN_ATTEMPTS,
+        "lockout_duration_seconds": LOCKOUT_DURATION,
+        "currently_locked_ips": locked_ips,
+        "admin_emails": ADMIN_EMAILS
+    }
+
+
 @router.post("/create", response_model=LicenseInfo)
-async def create_license(request: LicenseCreateRequest):
+async def create_license(
+    request: LicenseCreateRequest,
+    admin_email: str = Depends(verify_admin)
+):
     """
     Create a new license key.
     
-    Admin endpoint for generating licenses.
+    Admin endpoint for generating licenses. Requires admin authentication.
     """
     # Calculate expiry date
     expiry_date = datetime.now() + timedelta(days=request.validDays)
@@ -311,26 +547,93 @@ async def create_license(request: LicenseCreateRequest):
     )
 
 
-@router.get("/list")
-async def list_licenses():
+@router.get("/admin/list")
+async def list_licenses(admin_email: str = Depends(verify_admin)):
     """
-    List all licenses (admin endpoint).
+    List all licenses with tracking info (admin endpoint).
+    
+    Returns detailed information about each license including:
+    - License key and type
+    - Expiration date and days remaining
+    - Activation status and device details
+    - Usage history
     """
     result = []
+    now = datetime.now()
+    
     for key, data in licenses_db.items():
         activations = activations_db.get(key, [])
+        expires_at = datetime.fromisoformat(data["expiresAt"])
+        days_left = (expires_at - now).days
+        
         result.append({
             **data,
+            "daysLeft": max(0, days_left),
+            "isExpired": days_left < 0,
+            "isExpiringSoon": 0 < days_left <= 14,
             "currentActivations": len(activations),
-            "activations": activations
+            "activations": activations,
+            "status": "expired" if days_left < 0 else "expiring_soon" if days_left <= 14 else "active"
         })
-    return result
+    
+    # Sort by days left (expiring soonest first)
+    result.sort(key=lambda x: x["daysLeft"])
+    
+    return {
+        "total": len(result),
+        "active": len([l for l in result if l["status"] == "active"]),
+        "expiring_soon": len([l for l in result if l["status"] == "expiring_soon"]),
+        "expired": len([l for l in result if l["status"] == "expired"]),
+        "licenses": result
+    }
 
 
-@router.get("/generate-sample")
-async def generate_sample_licenses():
+@router.get("/admin/stats")
+async def license_stats(admin_email: str = Depends(verify_admin)):
     """
-    Generate sample license keys for testing.
+    Get license statistics dashboard data.
+    """
+    now = datetime.now()
+    
+    total_licenses = len(licenses_db)
+    total_activations = sum(len(a) for a in activations_db.values())
+    
+    # Count by type
+    by_type = {"trial": 0, "professional": 0, "enterprise": 0, "unlimited": 0}
+    active_count = 0
+    expired_count = 0
+    expiring_soon_count = 0
+    
+    for key, data in licenses_db.items():
+        license_type = data.get("type", "trial")
+        by_type[license_type] = by_type.get(license_type, 0) + 1
+        
+        expires_at = datetime.fromisoformat(data["expiresAt"])
+        days_left = (expires_at - now).days
+        
+        if days_left < 0:
+            expired_count += 1
+        elif days_left <= 14:
+            expiring_soon_count += 1
+        else:
+            active_count += 1
+    
+    return {
+        "totalLicenses": total_licenses,
+        "totalActivations": total_activations,
+        "byType": by_type,
+        "byStatus": {
+            "active": active_count,
+            "expiring_soon": expiring_soon_count,
+            "expired": expired_count
+        }
+    }
+
+
+@router.get("/admin/generate-sample")
+async def generate_sample_licenses(admin_email: str = Depends(verify_admin)):
+    """
+    Generate sample license keys for testing (admin only).
     """
     samples = []
     
@@ -346,4 +649,120 @@ async def generate_sample_licenses():
         })
     
     return samples
+
+
+@router.post("/admin/generate")
+async def generate_licenses(
+    license_type: str = Query("trial", description="License type: trial, professional, enterprise, unlimited"),
+    count: int = Query(1, ge=1, le=100, description="Number of licenses to generate"),
+    days: int = Query(14, ge=1, le=365, description="Validity period in days"),
+    max_activations: int = Query(1, ge=1, le=100, description="Max device activations per license"),
+    email: Optional[str] = Query(None, description="Optional email to associate with license"),
+    company: Optional[str] = Query(None, description="Optional company name"),
+    admin_email: str = Depends(verify_admin)
+):
+    """
+    Generate license keys with customizable parameters (admin only).
+    
+    This is the main license generation endpoint for sales/admin use.
+    """
+    if license_type not in ["trial", "professional", "enterprise", "unlimited"]:
+        raise HTTPException(status_code=400, detail="Invalid license type")
+    
+    expiry = datetime.now() + timedelta(days=days)
+    keys_created = []
+    
+    for i in range(count):
+        license_key = generate_license_key(license_type, expiry)
+        features = get_features_for_type(license_type)
+        
+        license_data = {
+            "key": license_key,
+            "type": license_type,
+            "email": email or f"generated-{i+1}@flowstral.com",
+            "company": company,
+            "expiresAt": expiry.isoformat(),
+            "maxActivations": max_activations,
+            "features": features,
+            "createdAt": datetime.now().isoformat(),
+            "createdBy": admin_email,  # Track who created the license
+        }
+        
+        licenses_db[license_key] = license_data
+        activations_db[license_key] = []
+        
+        keys_created.append({
+            "key": license_key,
+            "type": license_type,
+            "expiresAt": expiry.isoformat(),
+            "validDays": days,
+            "maxActivations": max_activations,
+        })
+    
+    # Audit log the generation
+    log_admin_action("licenses_generated", admin_email, {
+        "count": len(keys_created),
+        "type": license_type,
+        "days": days,
+        "email": email,
+        "company": company
+    })
+    
+    return {
+        "success": True,
+        "count": len(keys_created),
+        "type": license_type,
+        "validDays": days,
+        "expiresAt": expiry.isoformat(),
+        "licenses": keys_created,
+        "createdBy": admin_email
+    }
+
+
+@router.delete("/admin/revoke/{license_key}")
+async def revoke_license(license_key: str, admin_email: str = Depends(verify_admin)):
+    """
+    Revoke a license (admin only).
+    
+    This removes the license from the database, invalidating it.
+    """
+    if license_key not in licenses_db:
+        raise HTTPException(status_code=404, detail="License not found")
+    
+    # Store revocation info before deleting
+    revoked_data = licenses_db.pop(license_key)
+    activations_db.pop(license_key, None)
+    
+    # Audit log the revocation
+    log_admin_action("license_revoked", admin_email, {
+        "license_key": license_key[:20] + "...",
+        "type": revoked_data.get("type"),
+        "email": revoked_data.get("email")
+    })
+    
+    return {
+        "success": True,
+        "message": f"License {license_key} has been revoked",
+        "revokedBy": admin_email,
+        "revokedLicense": revoked_data
+    }
+
+
+# Legacy endpoint - redirect to new admin endpoint
+@router.get("/list")
+async def list_licenses_legacy():
+    """Legacy endpoint - use /admin/list instead."""
+    raise HTTPException(
+        status_code=401, 
+        detail="This endpoint requires admin authentication. Use /admin/list with proper auth."
+    )
+
+
+@router.get("/generate-trials")
+async def generate_trial_licenses_legacy(count: int = 20, days: int = 14):
+    """Legacy endpoint - use /admin/generate instead."""
+    raise HTTPException(
+        status_code=401,
+        detail="This endpoint requires admin authentication. Use /admin/generate with proper auth."
+    )
 

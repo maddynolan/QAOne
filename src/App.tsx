@@ -28,6 +28,9 @@ import { useEffect, useMemo } from "react";
 // Layout
 import { StreamlinedLayout } from "./components/StreamlinedLayout";
 
+// License Gate - Blocks app without valid license (Electron only)
+import { LicenseGate } from "./components/LicenseGate";
+
 // Theme Provider
 import { ThemeProvider } from "./contexts/ThemeContext";
 
@@ -82,6 +85,7 @@ import TestPlayground from "./pages/TestPlayground";
 import APICoverageMap from "./pages/APICoverageMap";
 import DataDependencyGraph from "./pages/DataDependencyGraph";
 import APMConfig from "./pages/APMConfig";
+import LicenseAdminPage from "./pages/LicenseAdminPage";
 
 // Auth (keep for future)
 import { AuthProvider } from "./contexts/AuthContext";
@@ -190,10 +194,14 @@ const App = () => {
                 <Route path="/resources/:page" element={<PlaceholderPage />} />
                 <Route path="/company/:page" element={<PlaceholderPage />} />
                 
+                {/* License Admin Dashboard (restricted to admin emails) */}
+                <Route path="/admin/licenses" element={<LicenseAdminPage />} />
+                
                 {/* ═══════════════════════════════════════════════════════════
                     MAIN APPLICATION - Streamlined Layout
+                    Protected by License Gate (Electron app requires valid license)
                     ═══════════════════════════════════════════════════════════ */}
-                <Route element={<StreamlinedLayout />}>
+                <Route element={<LicenseGate><StreamlinedLayout /></LicenseGate>}>
                   
                   {/* Default App Home: Redirect to Recorder */}
                   <Route path="/app" element={<Navigate to="/recorder" replace />} />
