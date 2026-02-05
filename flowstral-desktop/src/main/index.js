@@ -73,7 +73,7 @@ function getDeviceId() {
   return deviceId;
 }
 
-// Get webapp path (bundled or dev server)
+// Get webapp path (bundled, dev server, or cloud)
 function getWebappUrl() {
   const isDev = process.argv.includes('--dev');
   
@@ -85,15 +85,15 @@ function getWebappUrl() {
     return `http://localhost:${devPort}`;
   }
   
-  // In production, load from bundled webapp
+  // In production, first try bundled webapp
   const webappPath = path.join(__dirname, '../../webapp/index.html');
   if (fs.existsSync(webappPath)) {
     return `file://${webappPath}`;
   }
   
-  // Fallback to dev server if no bundled webapp
-  console.log('[App] No bundled webapp found, trying dev server...');
-  return `http://localhost:${devPort}`;
+  // No bundled webapp - load from cloud (flowstral.com)
+  console.log('[App] No bundled webapp found, loading from flowstral.com...');
+  return 'https://flowstral.com';
 }
 
 // Create main window with navigation shell
