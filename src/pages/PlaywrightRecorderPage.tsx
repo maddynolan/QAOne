@@ -4138,7 +4138,8 @@ Recorded Test
         
         setIsTestPaused(false);
         setPausedAtStep(null);
-        setIsTestRunning(false);
+        // Note: Running state is tracked via testExecutionResult.status, not a separate flag.
+        // setIsTestRunning was removed — do NOT re-add it.
         
         if (data.success) {
           toast.success(`✅ Test Passed! (${data.passedSteps}/${data.totalSteps} steps)`, { duration: 3000 });
