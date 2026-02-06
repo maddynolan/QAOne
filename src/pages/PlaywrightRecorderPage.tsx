@@ -3865,6 +3865,13 @@ Recorded Test
       return;
     }
     
+    // Diagnostic: Log what stepResults look like BEFORE locking
+    console.log('[LockLocators] stepResults:', JSON.stringify(
+      testExecutionResult.stepResults?.map((r: any) => ({
+        idx: r.index, status: r.status, ws: r.workingSelector || 'NONE', st: r.strategyType || '-'
+      })), null, 2
+    ));
+    
     let lockedCount = 0;
     let skippedCount = 0;
     

@@ -85,6 +85,49 @@ Steps like "Click Show Navigation Menu", "Click Change Requests", "Hover Navigat
 
 ---
 
+## 2b. Lock Locators — Inconsistent Counts (Sometimes 2, Sometimes 6)
+
+### Problem
+Running the same test multiple times and clicking Lock Locators gave different counts each time — sometimes 2 locked, sometimes 6.
+
+### Root Cause: TWO Stale-State Bugs
+
+**Bug 1: `_lastWorkingSelector` never reset in `playwright-recorder.js`**
+
+In `test-executor.js`, `_lastWorkingSelector` is explicitly reset to `null` after each step (line 2947). But `playwright-recorder.js` had NO such reset. Result: if step 4 set `_lastWorkingSelector = 'text="Log In"'` and step 5's SmartFinder was slow, step 5 would inherit step 4's stale selector:
+
+```javascript
+// Line 3782 — this._lastWorkingSelector is STALE from step 4!
+let workingSelector = result.workingSelector || this._lastWorkingSelector || null;
+```
+
+**Bug 2: SmartFinder `_resetTrackingState()` didn't reset `_lastSuccessfulSelector`**
+
+`SmartFinder.find()` calls `_resetTrackingState()` at the start, but that function only reset matchCount, fallbacksUsed, etc. — NOT `_lastSuccessfulSelector` or `_lastSuccessfulStrategy`. A selector from a previous `find()` call could leak into the current one.
+
+### Why Inconsistent?
+SmartFinder uses strategy memory and the DOM load timing varies between runs. On faster runs, more strategies succeed and produce selectors (6 locked). On slower runs, fewer strategies succeed, stale selectors leak through (2 locked with potentially WRONG selectors).
+
+### Fixes Applied
+
+#### `flowstral-desktop/src/main/playwright-recorder.js`
+- Added `_lastWorkingSelector = null` and `_lastStrategyType = null` reset at the START of each step in the test loop
+- Added diagnostic log file: writes Lock Locators summary to `<userData>/lock-locators-log.txt`
+
+#### `flowstral-desktop/src/main/lib/smart-finder.js`
+- Added `_lastSuccessfulStrategy = null` and `_lastSuccessfulSelector = null` to `_resetTrackingState()`
+
+#### `src/pages/PlaywrightRecorderPage.tsx`
+- Added console.log diagnostic in handleLockLocators showing all stepResults before locking
+
+### Diagnostic Log Location
+After each test run, a log is written to: `<Electron userData>/lock-locators-log.txt`
+- Shows each step's workingSelector and strategyType
+- Append mode — accumulates across runs for comparison
+- Check Electron console for exact path
+
+---
+
 ## 3. Health Diagnostic Improvements
 
 ### Changes

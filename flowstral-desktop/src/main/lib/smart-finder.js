@@ -2614,6 +2614,10 @@ class SmartFinder {
     this._exactTextMatch = null;
     this._fallbacksUsed = [];
     this._lastFindResult = null;
+    // CRITICAL: Reset selector tracking to prevent stale selectors from
+    // a previous find() call leaking into the current one.
+    this._lastSuccessfulStrategy = null;
+    this._lastSuccessfulSelector = null;
   }
   
   /**

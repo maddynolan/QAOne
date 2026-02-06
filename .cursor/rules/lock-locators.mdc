@@ -69,6 +69,17 @@ The Lock Locators feature saves the CSS/text selector that was used to find an e
 2. **Text too long**: `_extractSelectorFromLocator` had 40-char limit. FIX: Raised to 80 chars.
 3. **_buildSelectorFromRecipe only uses text for text-strategy**: FIX: Added `text=` fallback for ALL strategies.
 4. **Salesforce Lightning shadow DOM**: Elements have dynamic IDs, no data-testid, no aria-label. FIX: Last-resort `text=` selector from action description.
+5. **Inconsistent lock counts (sometimes 2, sometimes 6)**: TWO stale-state bugs:
+   - `_lastWorkingSelector` was NEVER reset between steps in `playwright-recorder.js` → stale selector from step N leaked into step N+1. FIX: Reset at start of each step.
+   - SmartFinder `_resetTrackingState()` didn't reset `_lastSuccessfulSelector` → stale selector from previous `find()` call could leak. FIX: Added reset.
+
+## Diagnostic Logging
+
+- **Lock Locators log file**: Written after each test to `<Electron userData>/lock-locators-log.txt`
+- Shows every step, its workingSelector, and strategyType
+- Append mode — accumulates across runs for comparison
+- Path logged to Electron console: `[PlaywrightRecorder] Lock Locators log written to: <path>`
+- **Frontend console**: `[LockLocators] stepResults: [...]` logged when Lock Locators button is clicked
 
 ## Rules for Future Edits
 
@@ -78,3 +89,5 @@ The Lock Locators feature saves the CSS/text selector that was used to find an e
 - The `workingSelector` field **MUST** be included in ALL IPC events (`test-step-complete`, `test-complete`)
 - The `stepResults` array in `playwright-test-complete` event **MUST** include `workingSelector` per step
 - When adding new element-finding strategies, **ALWAYS** set `ctx._lastWorkingSelector` on success
+- **ALWAYS** reset `_lastWorkingSelector` and `_lastStrategyType` to null at the START of each step
+- SmartFinder's `_resetTrackingState()` **MUST** reset `_lastSuccessfulSelector` and `_lastSuccessfulStrategy`

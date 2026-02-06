@@ -3749,6 +3749,16 @@ class PlaywrightRecorder extends EventEmitter {
           
           console.log(`[PlaywrightRecorder] Step ${i + 1} action:`, { type: action.type, label: action.label, value: action.value ? '***' : '(empty)' });
           
+          // ═══════════════════════════════════════════════════════════════════
+          // CRITICAL: Reset selector tracking for each step to prevent stale
+          // selectors from a previous step leaking into the current one.
+          // Without this, step N's _lastWorkingSelector can be incorrectly
+          // attributed to step N+1, causing inconsistent Lock Locators counts.
+          // ═══════════════════════════════════════════════════════════════════
+          this._lastWorkingSelector = null;
+          this._lastStrategyType = null;
+          this._lockedSelectorFailed = false;
+          
           // Skip first navigate if we already navigated
           if (i === 0 && ['navigate', 'goto'].includes(action.type) && url && action.url === url) {
             console.log('[PlaywrightRecorder] Skipping first navigate (already navigated)');
@@ -4057,6 +4067,46 @@ class PlaywrightRecorder extends EventEmitter {
         browserKeptOpen: this._keepBrowserOpenOnFailure,
         failureScreenshot: this._lastFailureState?.screenshot
       });
+      
+      // ═══════════════════════════════════════════════════════════════════
+      // DIAGNOSTIC LOG: Write Lock Locators summary to file for debugging
+      // File: <userData>/lock-locators-log.txt (append mode)
+      // ═══════════════════════════════════════════════════════════════════
+      try {
+        const { app } = require('electron');
+        const logPath = path.join(app.getPath('userData'), 'lock-locators-log.txt');
+        const timestamp = new Date().toISOString();
+        const lockable = stepResults.filter(s => {
+          const t = (steps[s.index]?.type || steps[s.index]?.action || '').toLowerCase();
+          return t !== 'navigate' && t !== 'goto' && t !== 'navigation';
+        });
+        const locked = lockable.filter(s => s.workingSelector);
+        const unlocked = lockable.filter(s => !s.workingSelector);
+        
+        let logEntry = `\n${'='.repeat(70)}\n`;
+        logEntry += `[${timestamp}] Test ${success ? 'PASSED' : 'FAILED'} — ${passedSteps}/${steps.length} steps\n`;
+        logEntry += `Lock Locators: ${locked.length} lockable, ${unlocked.length} could NOT lock\n\n`;
+        
+        for (const sr of stepResults) {
+          const step = steps[sr.index] || {};
+          const desc = step.description || step.name || step.label || step.text || `Step ${sr.index + 1}`;
+          const type = step.type || step.action || step.qword || '?';
+          logEntry += `  Step ${sr.index + 1} [${type}] "${desc.substring(0, 50)}"\n`;
+          logEntry += `    status: ${sr.status}`;
+          if (sr.workingSelector) {
+            logEntry += ` | selector: ${sr.workingSelector} (${sr.strategyType})`;
+          } else {
+            logEntry += ` | selector: NONE`;
+          }
+          logEntry += `\n`;
+        }
+        logEntry += `${'='.repeat(70)}\n`;
+        
+        fs.appendFileSync(logPath, logEntry, 'utf8');
+        console.log(`[PlaywrightRecorder] Lock Locators log written to: ${logPath}`);
+      } catch (logErr) {
+        console.warn('[PlaywrightRecorder] Could not write lock-locators-log:', logErr.message);
+      }
       
       return {
         success,
