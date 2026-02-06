@@ -2570,7 +2570,7 @@ class SmartFinder {
       if (attrs.title && attrs.title.length < 60) {
         return `[title="${attrs.title}"]`;
       }
-      if (attrs.text && attrs.text.length > 1 && attrs.text.length < 40) {
+      if (attrs.text && attrs.text.length > 1 && attrs.text.length < 80) {
         return `text="${attrs.text}"`;
       }
       // Last resort: tag + type (for inputs/buttons)
@@ -2645,7 +2645,12 @@ class SmartFinder {
     }
     
     // Priority 4: getByText for text-based strategies
-    if (strategy?.includes('text') && what?.text && what.text.length > 1 && what.text.length < 50) {
+    if (strategy?.includes('text') && what?.text && what.text.length > 1 && what.text.length < 80) {
+      return `text="${what.text}"`;
+    }
+    
+    // Priority 4b: ANY strategy with text — if we have text and no better selector, use it
+    if (what?.text && what.text.length > 1 && what.text.length < 80) {
       return `text="${what.text}"`;
     }
     

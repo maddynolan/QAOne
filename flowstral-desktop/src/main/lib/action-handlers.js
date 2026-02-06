@@ -2779,6 +2779,19 @@ function enrichResult(ctx, result, action) {
     }
   }
   
+  // LAST RESORT: Use the action label/description as a text= selector.
+  // getActionLabel() pulls from action.label, action.text, selectorObj.text,
+  // recipe.what.text, args[0], and description — the SAME label used to
+  // successfully find and interact with the element.  If we got this far
+  // without a selector, this text IS the best identifier we have.
+  if (ws == null) {
+    const actionLabel = getActionLabel(action);
+    if (actionLabel && actionLabel.length > 1 && actionLabel.length < 80) {
+      ws = `text="${actionLabel}"`;
+      console.log(`[enrichResult] Using action label as text selector: ${ws}`);
+    }
+  }
+  
   if (ws != null || st != null) {
     result.workingSelector = result.workingSelector ?? ws;
     result.strategyType = result.strategyType ?? st ?? 'selectorObj-fallback';

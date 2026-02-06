@@ -110,6 +110,7 @@ const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
 
 // Refactored handler modules (extracted for maintainability)
 const ActionHandlers = require('./lib/action-handlers');
+const { getManualOverrideSelector, getLockedSelector } = require('./lib/override-and-locked');
 const TabManager = require('./lib/tab-manager');
 const SalesforceHandlers = require('./lib/salesforce-handlers');
 const { executeAssertion: executeAssertionHandler } = require('./lib/assertion-handlers');
@@ -121,6 +122,42 @@ const { ScreenshotManager } = require('./lib/screenshots');
 
 // Mobile testing support (Phase 1: Emulation, Phase 2: Maestro)
 const { MOBILE_DEVICES, getDevice, getDeviceCategories, NETWORK_PRESETS, getNetworkPreset } = require('./lib/mobile-devices');
+
+// ============================================================
+// BROWSER LAUNCH HELPER - Tries Playwright browsers, then system Chrome/Edge
+// Required because packaged app may not have Playwright browsers bundled
+// ============================================================
+async function launchBrowserWithFallback(launchOptions, userDataDir = null) {
+  const channels = [null, 'chrome', 'msedge', 'chromium'];
+  let lastError = null;
+  
+  for (const channel of channels) {
+    try {
+      const opts = { ...launchOptions };
+      if (channel) {
+        console.log(`[PlaywrightRecorder] Trying to launch with channel: ${channel}`);
+        opts.channel = channel;
+      }
+      
+      let context;
+      if (userDataDir) {
+        context = await chromium.launchPersistentContext(userDataDir, opts);
+      } else {
+        const browser = await chromium.launch(opts);
+        context = await browser.newContext(launchOptions);
+        context._browser = browser;
+      }
+      
+      console.log(`[PlaywrightRecorder] Successfully launched browser${channel ? ` with channel: ${channel}` : ''}`);
+      return context;
+    } catch (error) {
+      lastError = error;
+      console.log(`[PlaywrightRecorder] Failed to launch${channel ? ` with channel ${channel}` : ''}: ${error.message}`);
+    }
+  }
+  
+  throw new Error(`Failed to launch browser. Please install Chrome or Edge. Last error: ${lastError?.message}`);
+}
 
 class PlaywrightRecorder extends EventEmitter {
   constructor(options = {}) {
@@ -929,7 +966,8 @@ class PlaywrightRecorder extends EventEmitter {
     
     // Launch browser with PERSISTENT context (keeps cookies, localStorage, auth)
     // MOBILE SUPPORT: Merges mobile options when configured, otherwise uses desktop defaults
-    this.context = await chromium.launchPersistentContext(userDataDir, {
+    // Uses fallback to system Chrome/Edge if Playwright browsers not available
+    this.context = await launchBrowserWithFallback({
       headless: false,
       // Mobile: use device viewport, Desktop: full window
       viewport: isMobile ? mobileOptions.viewport : null,
@@ -946,7 +984,7 @@ class PlaywrightRecorder extends EventEmitter {
       }),
       // Ignore HTTPS errors for dev environments
       ignoreHTTPSErrors: true,
-    });
+    }, userDataDir);
     
     // ═══════════════════════════════════════════════════════════════════
     // STEALTH SCRIPT: Patch navigator.webdriver and other detection vectors
@@ -3431,11 +3469,6 @@ class PlaywrightRecorder extends EventEmitter {
             '--disable-setuid-sandbox',
           ];
           
-          this.browser = await chromium.launch({
-            headless,
-            args: stealthArgs
-          });
-          
           // Get mobile emulation options (backward compatible)
           const mobileOptions = this.getMobileContextOptions();
           const isMobile = this.isInMobileMode();
@@ -3444,8 +3477,11 @@ class PlaywrightRecorder extends EventEmitter {
             console.log(`[PlaywrightRecorder] Fresh browser in mobile mode: ${this.mobileDevice.name}`);
           }
           
-          // Create a brand new context with no stored data
-          this.context = await this.browser.newContext({
+          // Launch browser with fallback to system Chrome/Edge
+          // Uses helper that tries Playwright browsers first, then falls back
+          const launchOpts = {
+            headless,
+            args: stealthArgs,
             // Mobile: use device viewport, Desktop: full window
             viewport: isMobile ? mobileOptions.viewport : null,
             userAgent: isMobile ? mobileOptions.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -3456,7 +3492,10 @@ class PlaywrightRecorder extends EventEmitter {
               hasTouch: mobileOptions.hasTouch
             }),
             ignoreHTTPSErrors: true,
-          });
+          };
+          
+          this.context = await launchBrowserWithFallback(launchOpts, null);
+          this.browser = this.context._browser || null;
           
           // STEALTH: Add anti-detection script
           await this.context.addInitScript(() => {
@@ -3497,7 +3536,8 @@ class PlaywrightRecorder extends EventEmitter {
             '--no-sandbox',
           ];
           
-          this.context = await chromium.launchPersistentContext(userDataDir, {
+          // Use fallback helper for system Chrome/Edge when Playwright browsers not bundled
+          this.context = await launchBrowserWithFallback({
             headless,
             // Mobile: use device viewport, Desktop: full window
             viewport: isMobile ? mobileOptions.viewport : null,
@@ -3511,7 +3551,7 @@ class PlaywrightRecorder extends EventEmitter {
               hasTouch: mobileOptions.hasTouch
             }),
             ignoreHTTPSErrors: true,
-          });
+          }, userDataDir);
           
           // STEALTH: Add anti-detection script
           await this.context.addInitScript(() => {
@@ -3739,8 +3779,28 @@ class PlaywrightRecorder extends EventEmitter {
           }
           
           // Get the working selector from executeAction result
-          const workingSelector = result.workingSelector || this._lastWorkingSelector || null;
-          const strategyType = result.strategyType || this._lastStrategyType || null;
+          let workingSelector = result.workingSelector || this._lastWorkingSelector || null;
+          let strategyType = result.strategyType || this._lastStrategyType || null;
+          
+          // LAST RESORT: If no selector was captured, build one from the step's label/description.
+          // This catches Salesforce Lightning elements and other shadow DOM components
+          // where DOM attributes are inaccessible but the action label matches the visible text.
+          if (!workingSelector) {
+            const so = action.selectorObj || step.selectorObj || {};
+            const stepLabel = action.label || action.text || so.text || action.args?.[0] || step.description || step.name || '';
+            const actionType = (action.type || action.qword || '').toLowerCase();
+            const isNavStep = actionType === 'navigate' || actionType === 'goto' || actionType === 'navigation';
+            if (!isNavStep && stepLabel.length > 1 && stepLabel.length < 80) {
+              // Try to extract quoted text first (e.g. 'Click "Accounts"' → 'Accounts')
+              const quotedMatch = stepLabel.match(/[""](.+?)[""]|'(.+?)'/);
+              const cleanLabel = quotedMatch ? (quotedMatch[1] || quotedMatch[2]) : stepLabel;
+              if (cleanLabel && cleanLabel.length > 1) {
+                workingSelector = `text="${cleanLabel}"`;
+                strategyType = 'description-text';
+                console.log(`[PlaywrightRecorder] Lock Locators last-resort: text="${cleanLabel}"`);
+              }
+            }
+          }
           
           // Self-healing: locked selector failed but SmartFinder worked
           const healed = result.healed || false;
@@ -4211,16 +4271,16 @@ class PlaywrightRecorder extends EventEmitter {
     try {
       // Launch browser if needed
       if (!this.page || this.page.isClosed()) {
-        const { chromium } = require('playwright');
         const { app } = require('electron');
         const path = require('path');
         const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
         
-        this.context = await chromium.launchPersistentContext(userDataDir, {
+        // Use fallback helper for system Chrome/Edge when Playwright browsers not bundled
+        this.context = await launchBrowserWithFallback({
           headless: false,
           args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
           ignoreHTTPSErrors: true,
-        });
+        }, userDataDir);
         
         const pages = this.context.pages();
         this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
@@ -4461,7 +4521,6 @@ class PlaywrightRecorder extends EventEmitter {
       
       if (needsNewBrowser) {
         console.log('[PlaywrightRecorder] Launching browser for debug mode...');
-        const { chromium } = require('playwright');
         const { app } = require('electron');
         const path = require('path');
         const userDataDir = path.join(app.getPath('userData'), 'playwright-browser-data');
@@ -4470,7 +4529,8 @@ class PlaywrightRecorder extends EventEmitter {
         const mobileOptions = this.getMobileContextOptions();
         const isMobile = this.isInMobileMode();
         
-        this.context = await chromium.launchPersistentContext(userDataDir, {
+        // Use fallback helper for system Chrome/Edge when Playwright browsers not bundled
+        this.context = await launchBrowserWithFallback({
           headless,
           viewport: isMobile ? mobileOptions.viewport : null,
           args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
@@ -4481,7 +4541,7 @@ class PlaywrightRecorder extends EventEmitter {
             hasTouch: mobileOptions.hasTouch
           }),
           ignoreHTTPSErrors: true,
-        });
+        }, userDataDir);
         
         const pages = this.context.pages();
         this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
@@ -6821,7 +6881,7 @@ class PlaywrightRecorder extends EventEmitter {
     // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
     // When automation fails, users can specify exactly how to find the element
     // ============================================================
-    const manualOverride = action.manualOverride || action.selectorObj?.manualOverride;
+    const manualOverride = getManualOverrideSelector(action);
     if (manualOverride) {
       console.log(`[PlaywrightRecorder] 🎯 MANUAL OVERRIDE: Using user-specified selector: "${manualOverride}"`);
       try {
@@ -7641,7 +7701,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // This travels with the test case, works across environments
           // Supports: CSS selectors, role=xxx[name="yyy"], aria-label, etc.
           // ═══════════════════════════════════════════════════════════════════
-          const optimizedSelector = action.selectorObj?.optimizedSelector;
+          const optimizedSelector = getLockedSelector(action);
           if (optimizedSelector) {
             console.log(`[PlaywrightRecorder] ⚡ Trying LOCKED selector: ${optimizedSelector}`);
             try {
@@ -7763,7 +7823,15 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         // Fallback to legacy finder
         console.log('[PlaywrightRecorder] SmartFinder failed, trying legacy _findElement...');
         const result = await this._findElement(action, scope);
-        if (result) return result;
+        if (result) {
+          // Set for Lock Locators: legacy find doesn't set _lastWorkingSelector elsewhere
+          const selectorUsed = result.strategy?.value;
+          if (selectorUsed && typeof selectorUsed === 'string') {
+            this._lastWorkingSelector = selectorUsed;
+            this._lastStrategyType = result.strategy?.type || 'legacy';
+          }
+          return result;
+        }
         
         throw new Error(`Element not found: "${label}"`);
       }, { maxRetries: 3, description: `Find "${label}"` });

@@ -2918,6 +2918,26 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         result.workingSelector = step.selector;
         result.strategyType = 'original-selector';
       }
+      // LAST RESORT: Use step description/label as text= selector
+      // The step description (e.g. "Show Navigation Menu", "Accounts")
+      // is the same text used to find the element, so it's a valid selector.
+      if (!result.workingSelector) {
+        const descLabel = step.description || step.name || step.label || step.text || step.args?.[0] || '';
+        const actionType = (step.type || step.action || step.qword || '').toLowerCase();
+        const isNavStep = actionType === 'navigate' || actionType === 'goto' || actionType === 'navigation';
+        if (!isNavStep && descLabel.length > 1 && descLabel.length < 80) {
+          // Clean common prefixes like 'Click "X"', 'Hover over "X"' → X
+          let cleanLabel = descLabel;
+          const quotedMatch = descLabel.match(/[""](.+?)[""]|'(.+?)'/);
+          if (quotedMatch) {
+            cleanLabel = quotedMatch[1] || quotedMatch[2];
+          }
+          if (cleanLabel && cleanLabel.length > 1) {
+            result.workingSelector = `text="${cleanLabel}"`;
+            result.strategyType = 'description-text';
+          }
+        }
+      }
       if (result.workingSelector) {
         console.log(`[Executor] Lock Locators fallback: ${result.strategyType} → ${result.workingSelector}`);
       }
