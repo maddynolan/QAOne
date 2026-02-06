@@ -49,26 +49,55 @@ _file_lock = threading.Lock()
 # This ensures licenses persist on Railway even if the rest of the app uses SQLite.
 
 _pg_conn_string_raw = os.getenv("DATABASE_URL", "")
-# Supabase requires SSL — append sslmode=require if not already specified
-if _pg_conn_string_raw and "sslmode" not in _pg_conn_string_raw:
-    _pg_conn_string = _pg_conn_string_raw + ("&" if "?" in _pg_conn_string_raw else "?") + "sslmode=require"
-else:
-    _pg_conn_string = _pg_conn_string_raw or None
-
 _license_pg_available = None  # Cached after first check
+_license_pg_conn_string = None  # The connection string that actually works
 
 
 def _get_pg_connection():
-    """Get a direct psycopg2 connection using DATABASE_URL (with SSL for Supabase)."""
-    if not _pg_conn_string:
+    """Get a psycopg2 connection. Tries multiple SSL modes to handle Supabase/Railway/local."""
+    global _license_pg_conn_string
+    
+    if not _pg_conn_string_raw:
         return None
+    
     try:
         import psycopg2
-        conn = psycopg2.connect(_pg_conn_string)
-        return conn
-    except Exception as e:
-        logger.warning(f"[License] PostgreSQL connection failed: {e}")
+    except ImportError:
         return None
+    
+    # If we already know what works, use it
+    if _license_pg_conn_string:
+        try:
+            conn = psycopg2.connect(_license_pg_conn_string, connect_timeout=5)
+            return conn
+        except Exception:
+            _license_pg_conn_string = None  # Reset and retry all methods
+    
+    # Try multiple connection methods (first success wins and gets cached)
+    base = _pg_conn_string_raw
+    sep = "&" if "?" in base else "?"
+    attempts = [
+        ("sslmode=require", base + sep + "sslmode=require"),
+        ("sslmode=prefer", base + sep + "sslmode=prefer"),
+        ("sslmode=disable", base + sep + "sslmode=disable"),
+        ("as-is", base),
+    ]
+    
+    for label, conn_str in attempts:
+        try:
+            conn = psycopg2.connect(conn_str, connect_timeout=5)
+            # Test the connection actually works
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            _license_pg_conn_string = conn_str  # Cache what works
+            logger.info(f"[License] PostgreSQL connected OK ({label})")
+            return conn
+        except Exception as e:
+            logger.info(f"[License] Connection attempt ({label}) failed: {str(e)[:100]}")
+            continue
+    
+    logger.warning(f"[License] All PostgreSQL connection methods failed for {_pg_conn_string_raw.split('@')[-1] if '@' in _pg_conn_string_raw else 'unknown'}")
+    return None
 
 
 def _is_postgres_available() -> bool:

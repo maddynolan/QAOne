@@ -323,17 +323,29 @@ def run_auto_migrations(database_url: str):
         logger.warning("[AutoMigrate] psycopg2 not installed, skipping")
         return
 
-    # Supabase requires SSL — append sslmode=require if not already specified
-    conn_str = database_url
-    if conn_str and "sslmode" not in conn_str:
-        conn_str = conn_str + ("&" if "?" in conn_str else "?") + "sslmode=require"
-
-    try:
-        conn = psycopg2.connect(conn_str)
-        conn.autocommit = False
-        logger.info("[AutoMigrate] Connected to PostgreSQL")
-    except Exception as e:
-        logger.warning(f"[AutoMigrate] Cannot connect to PostgreSQL: {e}")
+    # Try multiple SSL modes to handle Supabase/Railway/local PostgreSQL
+    conn = None
+    base = database_url
+    sep = "&" if "?" in base else "?"
+    attempts = [
+        ("sslmode=require", base + sep + "sslmode=require"),
+        ("sslmode=prefer", base + sep + "sslmode=prefer"),
+        ("sslmode=disable", base + sep + "sslmode=disable"),
+        ("as-is", base),
+    ]
+    
+    for label, conn_str in attempts:
+        try:
+            conn = psycopg2.connect(conn_str, connect_timeout=5)
+            conn.autocommit = False
+            logger.info(f"[AutoMigrate] Connected to PostgreSQL ({label})")
+            break
+        except Exception as e:
+            logger.info(f"[AutoMigrate] Connection ({label}) failed: {str(e)[:100]}")
+            continue
+    
+    if not conn:
+        logger.warning(f"[AutoMigrate] All connection methods failed")
         return
 
     try:

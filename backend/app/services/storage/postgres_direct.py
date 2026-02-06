@@ -115,9 +115,8 @@ def get_postgres_pool() -> Optional["ThreadedConnectionPool"]:
                 
                 for attempt in range(max_retries):
                     try:
-                        # Detect Supabase/cloud PostgreSQL that requires SSL
-                        _needs_ssl = parsed.hostname and ('.supabase.' in parsed.hostname or '.neon.' in parsed.hostname or '.railway.' in parsed.hostname)
-                        _pool = ThreadedConnectionPool(
+                        # Try with sslmode=require first (Supabase/cloud), fallback to prefer
+                        _conn_kwargs = dict(
                             minconn=1,
                             maxconn=5,
                             host=parsed.hostname,
@@ -125,9 +124,14 @@ def get_postgres_pool() -> Optional["ThreadedConnectionPool"]:
                             database=parsed.path[1:] if parsed.path else "qaai",
                             user=parsed.username,
                             password=parsed.password,
-                            sslmode='require' if _needs_ssl else 'prefer',
-                            options="-c search_path=public"  # Explicitly set search path
+                            options="-c search_path=public",
+                            connect_timeout=5,
                         )
+                        try:
+                            _pool = ThreadedConnectionPool(**_conn_kwargs, sslmode='require')
+                        except Exception as _ssl_err:
+                            logger.info(f"sslmode=require failed ({_ssl_err}), trying sslmode=prefer")
+                            _pool = ThreadedConnectionPool(**_conn_kwargs, sslmode='prefer')
                         logger.info("PostgreSQL connection pool created successfully")
                         print(f"[OK] POSTGRES_POOL - Connection pool created")
                         _pool_initialized = True

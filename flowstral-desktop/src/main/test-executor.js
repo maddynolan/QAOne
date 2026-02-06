@@ -2881,6 +2881,48 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     // Include Lock Locators / self-healing data
     result.workingSelector = this._lastWorkingSelector;
     result.strategyType = this._lastStrategyType;
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // FINAL FALLBACK: If step passed but no workingSelector was captured,
+    // build one from selectorObj. This catches ALL paths (SmartFinder,
+    // legacy, fallbacks, hover, etc.) that find elements without storing
+    // a CSS selector string.
+    // ═══════════════════════════════════════════════════════════════════
+    if (result.status === 'passed' && !result.workingSelector) {
+      const so = step.selectorObj || {};
+      if (so.optimizedSelector) {
+        result.workingSelector = so.optimizedSelector;
+        result.strategyType = 'already-locked';
+      } else if (so.testId) {
+        result.workingSelector = `[data-testid="${so.testId}"]`;
+        result.strategyType = 'selectorObj-testId';
+      } else if (so.id) {
+        result.workingSelector = `#${so.id}`;
+        result.strategyType = 'selectorObj-id';
+      } else if (so.ariaLabel) {
+        result.workingSelector = `[aria-label="${so.ariaLabel}"]`;
+        result.strategyType = 'selectorObj-ariaLabel';
+      } else if (so.role && so.text) {
+        result.workingSelector = `role=${so.role}[name="${so.text}"]`;
+        result.strategyType = 'selectorObj-role';
+      } else if (so.name && so.tag) {
+        result.workingSelector = `${so.tag}[name="${so.name}"]`;
+        result.strategyType = 'selectorObj-name';
+      } else if (so.text) {
+        result.workingSelector = `text="${so.text}"`;
+        result.strategyType = 'selectorObj-text';
+      } else if (so.css) {
+        result.workingSelector = so.css;
+        result.strategyType = 'selectorObj-css';
+      } else if (step.selector) {
+        result.workingSelector = step.selector;
+        result.strategyType = 'original-selector';
+      }
+      if (result.workingSelector) {
+        console.log(`[Executor] Lock Locators fallback: ${result.strategyType} → ${result.workingSelector}`);
+      }
+    }
+    
     // Reset for next step
     this._lastWorkingSelector = null;
     this._lastStrategyType = null;
