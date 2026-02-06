@@ -167,8 +167,8 @@ async def db_connection_test():
     
     # Test 2: License module connection
     try:
-        from app.routers.license_api import _is_postgres_available, _pg_conn_string
-        results["tests"]["6_license_conn_string"] = (_pg_conn_string or "NONE").split("@")[-1] if _pg_conn_string else "NONE"
+        from app.routers.license_api import _is_postgres_available, _pg_conn_string_raw
+        results["tests"]["6_license_conn_string"] = (_pg_conn_string_raw or "NONE").split("@")[-1] if _pg_conn_string_raw else "NONE"
         results["tests"]["7_license_pg_available"] = _is_postgres_available()
     except Exception as e:
         results["tests"]["6_license_error"] = str(e)
