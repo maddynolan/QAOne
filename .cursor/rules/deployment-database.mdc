@@ -1,0 +1,75 @@
+---
+description: Railway deployment and Supabase PostgreSQL database architecture
+globs:
+  - backend/**
+  - Dockerfile.frontend
+  - docker-compose*.yml
+  - helm/**
+alwaysApply: false
+---
+
+# Railway + Supabase Deployment Architecture
+
+## Environment
+
+- **Hosting**: Railway (Docker-based deployment from GitHub main branch)
+- **Database**: Supabase PostgreSQL (external, persistent across redeploys)
+- **URL**: https://qaone-production.up.railway.app
+- **Supabase pooler**: aws-0-us-west-2.pooler.supabase.com:5432/postgres
+
+## Critical Environment Variables (Railway)
+
+- `DATABASE_URL`: Must point to Supabase pooler URL with `?sslmode=require`
+- `PORT`: Set by Railway automatically
+- `ADMIN_PASSWORD`: For license admin API
+
+## Database Connection Architecture
+
+### Three connection paths (ALL must work):
+
+1. **Raw psycopg2** (health checks): `psycopg2.connect(DATABASE_URL + sslmode=require)`
+2. **License module** (`backend/app/routers/license_api.py`):
+   - Variable: `_pg_conn_string_raw` (NOT `_pg_conn_string` — was renamed)
+   - Function: `_is_postgres_available()`
+   - Storage: `license_store` table (JSONB with licenses and activations)
+3. **CRUD pool** (`backend/app/services/storage/postgres_direct.py`):
+   - `get_postgres_pool()` returns a connection pool
+   - `POSTGRES_ENABLED` flag
+   - Used by all CRUD operations
+
+### Health Check Endpoint
+
+`GET /health/db-test` — tests ALL three connection paths:
+- Tests 1-5: Raw connection, table creation, read, table listing
+- Tests 6-7: License module connection (imports `_pg_conn_string_raw`, `_is_postgres_available`)
+- Tests 8-9: CRUD pool
+
+### Database Tables (15 total)
+
+artifacts, defects, license_audit_log, license_store, migration_history,
+organizations, projects, requirements, test_case_requirements, test_cases,
+test_comments, test_plans, test_run_steps, test_runs, users
+
+## License Persistence
+
+- Licenses stored in `license_store` table as JSONB in the `licenses` column
+- Row ID: 'singleton' (single row stores all licenses)
+- Survives Railway redeploys because Supabase is external
+- Verified: 3 licenses survive redeploy (tested 2026-02-04)
+
+## Rules for Future Edits
+
+- NEVER rename `_pg_conn_string_raw` without updating `health_api.py` diagnostic imports
+- NEVER remove `?sslmode=require` from connection strings — Supabase requires SSL
+- NEVER use in-memory storage for licenses — must use PostgreSQL
+- The `health/db-test` endpoint must test ALL three connection paths
+- When adding new database tables, add migration in `supabase/` folder
+- Backend Dockerfile must install `psycopg2-binary` for PostgreSQL support
+- Railway auto-deploys on push to main — test locally first when possible
+
+## Common Issues and Fixes
+
+1. **NameError on `_pg_conn_string`**: Variable was renamed to `_pg_conn_string_raw`. Update ALL imports.
+2. **SSL connection refused**: Add `?sslmode=require` to DATABASE_URL
+3. **Licenses lost on redeploy**: Means storage is using in-memory dict instead of PostgreSQL. Check `_is_postgres_available()` returns True.
+4. **Health check shows "pool is None"**: POSTGRES_ENABLED is False. Check DATABASE_URL is set in Railway env vars.

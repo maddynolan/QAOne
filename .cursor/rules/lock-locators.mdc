@@ -1,0 +1,80 @@
+---
+description: Lock Locators feature architecture - element finding, selector locking, and self-healing pipeline
+globs:
+  - flowstral-desktop/src/main/playwright-recorder.js
+  - flowstral-desktop/src/main/test-executor.js
+  - flowstral-desktop/src/main/lib/action-handlers.js
+  - flowstral-desktop/src/main/lib/smart-finder.js
+  - flowstral-desktop/src/main/index.js
+  - src/pages/PlaywrightRecorderPage.tsx
+alwaysApply: false
+---
+
+# Lock Locators / Element-Finding Pipeline
+
+## Architecture
+
+The Lock Locators feature saves the CSS/text selector that was used to find an element during a successful test run. On re-runs, these "locked" selectors are tried first (150ms fast path) for instant element finding.
+
+## Full Data Flow
+
+### 1. Test Execution (Desktop app)
+
+- `playwright-recorder.js` `executeAction()` (line ~7907) calls `ActionHandlers.executeAction(this, action, { timeout })`
+- ActionHandlers delegates to handler functions: `handleClick`, `handleFill`, `handleHover`, etc.
+- Each handler calls `ctx.findElementWithRetry(action)` which sets `ctx._lastWorkingSelector`
+- `enrichResult(ctx, result, action)` wraps every handler return to attach `workingSelector`
+
+### 2. Element Finding (`findElementWithRetry` in `playwright-recorder.js` line ~7639)
+
+- **Layer 1**: Try LOCKED selector (`optimizedSelector` from `selectorObj`) — 150ms timeout
+- **Layer 2**: `SmartFinder.find(recipe)` — sets `lastSuccessfulSelector` via `_recordLearningAndReturn`
+- **Layer 3**: Legacy `_findElement` fallback
+- Each layer sets `this._lastWorkingSelector` on success
+
+### 3. Selector Generation (when SmartFinder finds element but no CSS string)
+
+- `_buildSelectorFromRecipe()` — constructs from recipe data (testId, ariaLabel, role+text, text, id, name)
+- `_extractSelectorFromLocator()` — queries actual DOM element attributes
+- `enrichResult()` — fallback from `action.selectorObj` fields
+- **LAST RESORT**: `getActionLabel(action)` → `text="label"` selector
+
+### 4. IPC to Frontend
+
+- `recorder.emit('test-step-complete', { stepIndex, workingSelector, strategyType, healed, newSelector })`
+- `recorder.emit('test-complete', { stepResults })` — includes `workingSelector` per step
+- `index.js` forwards via `sendToWebapp('playwright-test-complete', ...)`
+
+### 5. Frontend Lock (`PlaywrightRecorderPage.tsx` `handleLockLocators` line ~3862)
+
+- Iterates `actions[]`, matches with `testExecutionResult.stepResults` by index
+- Writes `action.selectorObj.optimizedSelector = workingSelector`
+- Persists to localStorage (`test_cases`, `flowstral_test_cases`, `unified_test_case_{id}`)
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `flowstral-desktop/src/main/playwright-recorder.js` | Desktop test runner, findElementWithRetry, executeAction |
+| `flowstral-desktop/src/main/test-executor.js` | Alternative executor (Builder/Tests tab), has own fallback chain |
+| `flowstral-desktop/src/main/lib/action-handlers.js` | Unified action handlers: handleClick, handleFill, handleHover, enrichResult |
+| `flowstral-desktop/src/main/lib/smart-finder.js` | SmartFinder: find(), _buildSelectorFromRecipe, _extractSelectorFromLocator |
+| `flowstral-desktop/src/main/lib/override-and-locked.js` | getLockedSelector() helper |
+| `flowstral-desktop/src/main/index.js` | Electron IPC bridge, forwards events to webapp |
+| `src/pages/PlaywrightRecorderPage.tsx` | Frontend: handleLockLocators, test result modal, Lock Locators button |
+
+## Common Failure Modes (and fixes applied)
+
+1. **workingSelector is null after successful step**: enrichResult chain doesn't reach the element's text label. FIX: Added `getActionLabel()` last-resort fallback in enrichResult.
+2. **Text too long**: `_extractSelectorFromLocator` had 40-char limit. FIX: Raised to 80 chars.
+3. **_buildSelectorFromRecipe only uses text for text-strategy**: FIX: Added `text=` fallback for ALL strategies.
+4. **Salesforce Lightning shadow DOM**: Elements have dynamic IDs, no data-testid, no aria-label. FIX: Last-resort `text=` selector from action description.
+
+## Rules for Future Edits
+
+- **NEVER** remove the `enrichResult()` wrapper from any handler in `action-handlers.js`
+- **NEVER** remove `_lastWorkingSelector` tracking from `findElementWithRetry`
+- Every new handler added to `ActionHandlers.executeAction` **MUST** be wrapped with `enrichResult()`
+- The `workingSelector` field **MUST** be included in ALL IPC events (`test-step-complete`, `test-complete`)
+- The `stepResults` array in `playwright-test-complete` event **MUST** include `workingSelector` per step
+- When adding new element-finding strategies, **ALWAYS** set `ctx._lastWorkingSelector` on success
