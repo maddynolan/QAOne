@@ -597,10 +597,10 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
                   <p className="font-medium">Flowstral Desktop for Windows</p>
-                  <p className="text-sm text-muted-foreground">Version 2.0.0 • ~90 MB</p>
+                  <p className="text-sm text-muted-foreground">Version 3.1.0 • ~90 MB</p>
                 </div>
                 <Button 
-                  onClick={() => window.open('https://github.com/maddynolan/QAOne/releases/latest/download/Flowstral.Setup.3.0.0.exe', '_blank')}
+                  onClick={() => window.open('https://github.com/maddynolan/QAOne/releases/latest/download/Flowstral.Setup.3.1.0.exe', '_blank')}
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Download
