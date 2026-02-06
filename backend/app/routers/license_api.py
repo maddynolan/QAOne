@@ -48,12 +48,18 @@ _file_lock = threading.Lock()
 # Uses DATABASE_URL directly — does NOT require ENABLE_POSTGRES=true.
 # This ensures licenses persist on Railway even if the rest of the app uses SQLite.
 
-_pg_conn_string = os.getenv("DATABASE_URL")
+_pg_conn_string_raw = os.getenv("DATABASE_URL", "")
+# Supabase requires SSL — append sslmode=require if not already specified
+if _pg_conn_string_raw and "sslmode" not in _pg_conn_string_raw:
+    _pg_conn_string = _pg_conn_string_raw + ("&" if "?" in _pg_conn_string_raw else "?") + "sslmode=require"
+else:
+    _pg_conn_string = _pg_conn_string_raw or None
+
 _license_pg_available = None  # Cached after first check
 
 
 def _get_pg_connection():
-    """Get a direct psycopg2 connection using DATABASE_URL."""
+    """Get a direct psycopg2 connection using DATABASE_URL (with SSL for Supabase)."""
     if not _pg_conn_string:
         return None
     try:
