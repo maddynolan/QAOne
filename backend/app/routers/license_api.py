@@ -106,7 +106,7 @@ def _is_postgres_available() -> bool:
     if _license_pg_available is not None:
         return _license_pg_available
 
-    if not _pg_conn_string:
+    if not _pg_conn_string_raw:
         _license_pg_available = False
         return False
 
