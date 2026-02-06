@@ -1055,11 +1055,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 await v2Locator.click({ timeout: 5000 });
                 clickSuccess = true;
                 clickLocator = v2Locator;
-                // FIX: Capture working selector from SmartFinder for Lock Locators
-                // Previously this path never set _lastWorkingSelector, so Lock Locators skipped these steps
+                // Capture working selector from SmartFinder for Lock Locators
                 if (this.smartFinder) {
                   this._lastWorkingSelector = this.smartFinder.lastSuccessfulSelector || this._lastWorkingSelector;
                   this._lastStrategyType = this.smartFinder.lastSuccessfulStrategy || this._lastStrategyType;
+                }
+                // FALLBACK: If SmartFinder didn't provide a CSS selector, build one from selectorObj
+                if (!this._lastWorkingSelector && selectorObj) {
+                  if (selectorObj.testId) this._lastWorkingSelector = `[data-testid="${selectorObj.testId}"]`;
+                  else if (selectorObj.id) this._lastWorkingSelector = `#${selectorObj.id}`;
+                  else if (selectorObj.ariaLabel) this._lastWorkingSelector = `[aria-label="${selectorObj.ariaLabel}"]`;
+                  else if (selectorObj.role && selectorObj.text) this._lastWorkingSelector = `role=${selectorObj.role}[name="${selectorObj.text}"]`;
+                  else if (selectorObj.text) this._lastWorkingSelector = `text="${selectorObj.text}"`;
+                  if (this._lastWorkingSelector) this._lastStrategyType = 'selectorObj-fallback';
                 }
                 console.log(`[Executor] ✓ V2 SmartFinder click successful (selector: ${this._lastWorkingSelector || 'none'})`);
               } else {

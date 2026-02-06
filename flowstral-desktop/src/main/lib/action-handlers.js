@@ -1656,7 +1656,12 @@ async function handleHover(ctx, action, options = {}) {
         const locator = ctx.page.locator(sel);
         const count = await locator.count();
         if (count > 0) {
-          hoverResult = { locator: locator.first(), strategy: { type: 'selector-fallback' } };
+          hoverResult = { locator: locator.first(), strategy: { type: 'selector-fallback', value: sel } };
+          // Capture for Lock Locators (was missing — hover fallbacks couldn't be locked)
+          if (ctx._lastWorkingSelector !== undefined) {
+            ctx._lastWorkingSelector = sel;
+            ctx._lastStrategyType = 'selector-fallback';
+          }
           console.log(`[ActionHandler] Hover: Found with fallback selector: ${sel}`);
           break;
         }
@@ -2743,14 +2748,40 @@ async function handleCheckInstallability(ctx, action, options = {}) {
  * Enrich successful result with workingSelector/strategyType from ctx for Lock Locators.
  * When handlers use findElementWithRetry or set ctx._lastWorkingSelector, this passes it through.
  */
-function enrichResult(ctx, result) {
+function enrichResult(ctx, result, action) {
   if (!result || !result.success) return result;
   if (result.workingSelector != null && result.strategyType != null) return result;
-  const ws = result.workingSelector ?? ctx._lastWorkingSelector ?? null;
+  let ws = result.workingSelector ?? ctx._lastWorkingSelector ?? null;
   const st = result.strategyType ?? ctx._lastStrategyType ?? (typeof result.strategy === 'string' ? result.strategy : result.strategy?.type) ?? null;
+  
+  // FALLBACK: If SmartFinder found the element but didn't set a CSS selector,
+  // construct one from the action's selectorObj data (id, name, testId, ariaLabel, text).
+  // This ensures Lock Locators can lock ALL steps that pass, not just ones with CSS selectors.
+  if (ws == null && action?.selectorObj) {
+    const so = action.selectorObj;
+    if (so.testId) {
+      ws = `[data-testid="${so.testId}"]`;
+    } else if (so.id) {
+      ws = `#${so.id}`;
+    } else if (so.ariaLabel) {
+      ws = `[aria-label="${so.ariaLabel}"]`;
+    } else if (so.name && so.tag) {
+      ws = `${so.tag}[name="${so.name}"]`;
+    } else if (so.role && so.text) {
+      ws = `role=${so.role}[name="${so.text}"]`;
+    } else if (so.text) {
+      ws = `text="${so.text}"`;
+    } else if (so.css) {
+      ws = so.css;
+    }
+    if (ws) {
+      console.log(`[enrichResult] Constructed fallback selector from selectorObj: ${ws}`);
+    }
+  }
+  
   if (ws != null || st != null) {
     result.workingSelector = result.workingSelector ?? ws;
-    result.strategyType = result.strategyType ?? st;
+    result.strategyType = result.strategyType ?? st ?? 'selectorObj-fallback';
   }
   return result;
 }
@@ -2787,32 +2818,32 @@ async function executeAction(ctx, action, options = {}) {
       case 'click':
       case 'clicktext':
       case 'clickelement':
-        return enrichResult(ctx, await handleClick(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleClick(ctx, action, { timeout }), action);
       
       // Double-click actions
       case 'dblclick':
       case 'doubleclick':
-        return enrichResult(ctx, await handleDoubleClick(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleDoubleClick(ctx, action, { timeout }), action);
       
       // Right-click (context menu) actions
       case 'rightclick':
       case 'contextmenu':
-        return enrichResult(ctx, await handleRightClick(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleRightClick(ctx, action, { timeout }), action);
       
       // Fill/Input actions (handleFill uses _findElement; we set ctx._lastWorkingSelector there)
       case 'fill':
       case 'type':
       case 'input':
-        return enrichResult(ctx, await handleFill(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleFill(ctx, action, { timeout }), action);
       
       // Select/Dropdown actions
       case 'select':
       case 'selectoption':
-        return enrichResult(ctx, await handleSelect(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleSelect(ctx, action, { timeout }), action);
       
       // Hover action (critical for flyout menus)
       case 'hover':
-        return enrichResult(ctx, await handleHover(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleHover(ctx, action, { timeout }), action);
       
       // Keyboard actions
       case 'press':
@@ -2930,13 +2961,13 @@ async function executeAction(ctx, action, options = {}) {
       // Clear input field
       case 'clear':
       case 'clearfield':
-        return enrichResult(ctx, await handleClear(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleClear(ctx, action, { timeout }), action);
       
       // Focus/Blur
       case 'focus':
-        return enrichResult(ctx, await handleFocus(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleFocus(ctx, action, { timeout }), action);
       case 'blur':
-        return enrichResult(ctx, await handleBlur(ctx, action, { timeout }));
+        return enrichResult(ctx, await handleBlur(ctx, action, { timeout }), action);
       
       // Toggle switch
       case 'toggle':
