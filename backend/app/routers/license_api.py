@@ -29,10 +29,13 @@ logger = logging.getLogger("license_admin")
 security = HTTPBearer(auto_error=False)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PERSISTENT STORAGE - Licenses are saved to disk and survive restarts
+# PERSISTENT STORAGE - PostgreSQL (Railway/production) with JSON file fallback
 # ═══════════════════════════════════════════════════════════════════════════
+#
+# Problem: JSON file storage is ephemeral in Docker (Railway deletes data/ on redeploy).
+# Solution: Use PostgreSQL (via Supabase/DATABASE_URL) as primary, JSON file as fallback.
 
-# Storage file path (in backend data directory)
+# JSON file fallback (for local dev or when PostgreSQL is unavailable)
 DATA_DIR = Path(os.getenv("LICENSE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 LICENSES_FILE = DATA_DIR / "licenses.json"
@@ -41,26 +44,177 @@ AUDIT_FILE = DATA_DIR / "license_audit.json"
 # Thread lock for file operations
 _file_lock = threading.Lock()
 
+# ─── PostgreSQL helpers (direct connection via DATABASE_URL) ──────────────
+# Uses DATABASE_URL directly — does NOT require ENABLE_POSTGRES=true.
+# This ensures licenses persist on Railway even if the rest of the app uses SQLite.
+
+_pg_conn_string = os.getenv("DATABASE_URL")
+_license_pg_available = None  # Cached after first check
+
+
+def _get_pg_connection():
+    """Get a direct psycopg2 connection using DATABASE_URL."""
+    if not _pg_conn_string:
+        return None
+    try:
+        import psycopg2
+        conn = psycopg2.connect(_pg_conn_string)
+        return conn
+    except Exception as e:
+        logger.warning(f"[License] PostgreSQL connection failed: {e}")
+        return None
+
+
+def _is_postgres_available() -> bool:
+    """Check if PostgreSQL is available for license storage."""
+    global _license_pg_available
+    if _license_pg_available is not None:
+        return _license_pg_available
+
+    if not _pg_conn_string:
+        _license_pg_available = False
+        return False
+
+    conn = _get_pg_connection()
+    if conn:
+        conn.close()
+        _license_pg_available = True
+        return True
+    _license_pg_available = False
+    return False
+
+
+def _init_license_table():
+    """Create the licenses table in PostgreSQL if it doesn't exist."""
+    conn = _get_pg_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS license_store (
+                    id TEXT PRIMARY KEY DEFAULT 'singleton',
+                    licenses JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    activations JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    saved_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS license_audit_log (
+                    id SERIAL PRIMARY KEY,
+                    entry JSONB NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            conn.commit()
+        logger.info("[License] PostgreSQL license tables ready")
+        return True
+    except Exception as e:
+        logger.warning(f"[License] PostgreSQL table init failed: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def _pg_load_licenses() -> tuple:
+    """Load licenses from PostgreSQL. Returns (licenses_dict, activations_dict) or None on failure."""
+    conn = _get_pg_connection()
+    if not conn:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT licenses, activations FROM license_store WHERE id = 'singleton'")
+            row = cur.fetchone()
+            if row:
+                lic = row[0] if isinstance(row[0], dict) else json.loads(row[0]) if row[0] else {}
+                act = row[1] if isinstance(row[1], dict) else json.loads(row[1]) if row[1] else {}
+                return lic, act
+            return {}, {}
+    except Exception as e:
+        logger.warning(f"[License] PostgreSQL load failed: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def _pg_save_licenses():
+    """Save licenses to PostgreSQL (upsert)."""
+    conn = _get_pg_connection()
+    if not conn:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO license_store (id, licenses, activations, saved_at)
+                VALUES ('singleton', %s::jsonb, %s::jsonb, NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    licenses = EXCLUDED.licenses,
+                    activations = EXCLUDED.activations,
+                    saved_at = NOW()
+            """, (json.dumps(licenses_db), json.dumps(activations_db)))
+            conn.commit()
+        logger.info(f"[License] Saved {len(licenses_db)} licenses to PostgreSQL")
+        return True
+    except Exception as e:
+        logger.warning(f"[License] PostgreSQL save failed: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def _pg_save_audit_entry(entry: dict):
+    """Append a single audit entry to PostgreSQL."""
+    conn = _get_pg_connection()
+    if not conn:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO license_audit_log (entry) VALUES (%s::jsonb)",
+                (json.dumps(entry),)
+            )
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"[License] PostgreSQL audit save failed: {e}")
+    finally:
+        conn.close()
+
+
+# ─── Unified load / save (PostgreSQL primary, JSON fallback) ─────────────
 
 def _load_licenses() -> tuple[dict, dict]:
-    """Load licenses from persistent storage."""
+    """Load licenses: try PostgreSQL first, fall back to JSON file."""
+    # Try PostgreSQL (production / Railway)
+    if _is_postgres_available():
+        _init_license_table()
+        pg_result = _pg_load_licenses()
+        if pg_result is not None:
+            lic, act = pg_result
+            logger.info(f"[License] Loaded {len(lic)} licenses from PostgreSQL")
+            return lic, act
+
+    # Fallback: JSON file (local dev)
     if not LICENSES_FILE.exists():
         return {}, {}
-    
     try:
         with open(LICENSES_FILE, 'r') as f:
             data = json.load(f)
             return data.get("licenses", {}), data.get("activations", {})
     except Exception as e:
-        logger.error(f"[License] Failed to load licenses: {e}")
+        logger.error(f"[License] Failed to load licenses from file: {e}")
         return {}, {}
 
 
 def _save_licenses():
-    """Save licenses to persistent storage (atomic write)."""
+    """Save licenses: try PostgreSQL first, always write JSON file as backup."""
+    # Try PostgreSQL (production / Railway)
+    if _is_postgres_available():
+        if _pg_save_licenses():
+            return  # Success — PostgreSQL is the source of truth
+
+    # Fallback: JSON file
     with _file_lock:
         try:
-            # Write to temp file first
             temp_file = LICENSES_FILE.with_suffix('.tmp')
             with open(temp_file, 'w') as f:
                 json.dump({
@@ -68,27 +222,29 @@ def _save_licenses():
                     "activations": activations_db,
                     "saved_at": datetime.utcnow().isoformat()
                 }, f, indent=2)
-            
-            # Atomic rename
             temp_file.replace(LICENSES_FILE)
-            logger.info(f"[License] Saved {len(licenses_db)} licenses to disk")
+            logger.info(f"[License] Saved {len(licenses_db)} licenses to file (fallback)")
         except Exception as e:
-            logger.error(f"[License] Failed to save licenses: {e}")
+            logger.error(f"[License] Failed to save licenses to file: {e}")
 
 
 def _save_audit():
-    """Save audit log to persistent storage."""
+    """Save audit log: PostgreSQL if available, else JSON file."""
+    if _is_postgres_available():
+        # Individual entries are saved via _pg_save_audit_entry() at log time
+        return
+
     with _file_lock:
         try:
             with open(AUDIT_FILE, 'w') as f:
-                json.dump(audit_log[-1000:], f, indent=2)  # Keep last 1000 entries
+                json.dump(audit_log[-1000:], f, indent=2)
         except Exception as e:
             logger.error(f"[License] Failed to save audit log: {e}")
 
 
 # Load existing licenses on module import
 licenses_db, activations_db = _load_licenses()
-logger.info(f"[License] Loaded {len(licenses_db)} licenses from disk")
+logger.info(f"[License] Loaded {len(licenses_db)} licenses ({('PostgreSQL' if _is_postgres_available() else 'JSON file')})")
 
 audit_log: List[Dict] = []  # Audit trail for admin actions
 
@@ -114,7 +270,7 @@ ADMIN_IP_WHITELIST = [ip.strip() for ip in os.getenv("ADMIN_IP_WHITELIST", "").s
 
 
 def log_admin_action(action: str, admin_email: str, details: dict = None, ip: str = None):
-    """Log admin actions for audit trail."""
+    """Log admin actions for audit trail (PostgreSQL + in-memory)."""
     entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "action": action,
@@ -123,9 +279,12 @@ def log_admin_action(action: str, admin_email: str, details: dict = None, ip: st
         "details": details or {}
     }
     audit_log.append(entry)
-    # Keep last 1000 entries in memory (use database in production)
+    # Keep last 1000 entries in memory
     if len(audit_log) > 1000:
         audit_log.pop(0)
+    # Persist to PostgreSQL if available
+    if _is_postgres_available():
+        _pg_save_audit_entry(entry)
     logger.info(f"[AUDIT] {action} by {admin_email} from {ip}: {details}")
 
 
