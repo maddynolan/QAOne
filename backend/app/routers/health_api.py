@@ -154,7 +154,15 @@ async def db_connection_test():
         # Test read
         cur.execute("SELECT licenses FROM license_store WHERE id = 'singleton'")
         row = cur.fetchone()
-        results["tests"]["4_read"] = f"OK: {'has data' if row else 'empty (no row yet)'}"
+        if row and row[0]:
+            import json
+            lic_data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            count = len(lic_data)
+            keys_preview = list(lic_data.keys())[:5]
+            results["tests"]["4_read"] = f"OK: {count} license(s) stored"
+            results["tests"]["4b_license_keys"] = keys_preview
+        else:
+            results["tests"]["4_read"] = f"OK: {'has data' if row else 'empty (no row yet)'}"
         
         # List tables
         cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
