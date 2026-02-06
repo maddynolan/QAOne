@@ -52,7 +52,9 @@ interface GeneratedLicense {
   maxActivations: number;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://qaone-production.up.railway.app/api';
+// Ensure API_BASE always ends with /api
+const rawApiUrl = import.meta.env.VITE_API_URL || 'https://qaone-production.up.railway.app';
+const API_BASE = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
 export default function LicenseAdminPage() {
   // Auth state
