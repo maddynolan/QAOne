@@ -22,7 +22,16 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
+
+// Use HashRouter in Electron (file:// protocol) since BrowserRouter needs a real server.
+// BrowserRouter uses /path URLs; HashRouter uses #/path URLs which work with file://.
+const _isFileProtocol = typeof window !== 'undefined' && (
+  window.location.protocol === 'file:' || 
+  !!(window as any).electronAPI || 
+  !!(window as any).flowstral
+);
+const Router = _isFileProtocol ? HashRouter : BrowserRouter;
 import { useEffect, useMemo } from "react";
 
 // Layout
@@ -45,6 +54,7 @@ import VirtualUserGenerator from "./pages/VirtualUserGenerator";
 import SalesforceToolsPage from "./pages/SalesforceToolsPage";
 import MobileTestingPage from "./pages/MobileTestingPage";
 import FlowpilotPage from "./pages/FlowpilotPage";
+import AITestingPage from "./pages/AITestingPage";
 
 // Test Cases related pages
 import TestCases from "./pages/TestCases";
@@ -165,7 +175,7 @@ const App = () => {
             <Toaster />
             <Sonner />
             <AuthProvider>
-              <BrowserRouter>
+              <Router>
               <Routes>
                 {/* ═══════════════════════════════════════════════════════════
                     PUBLIC ROUTES
@@ -291,6 +301,12 @@ const App = () => {
                   <Route path="/flowpilot/generator" element={<FlowpilotPage />} />
                   <Route path="/flowpilot/self-healer" element={<FlowpilotPage />} />
 
+                  {/* ─────────────────────────────────────────────────────────
+                      8. AI TESTING MODULE - REVOLUTIONARY
+                      Plain English → Comprehensive Tests (World's Simplest)
+                      ───────────────────────────────────────────────────────── */}
+                  <Route path="/ai-testing" element={<AITestingPage />} />
+
                   {/* ═══════════════════════════════════════════════════════════
                       WEB-ONLY ADDITIONAL FEATURES
                       These are available on web but not shown in desktop nav
@@ -376,7 +392,7 @@ const App = () => {
                     ═══════════════════════════════════════════════════════════ */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
-              </BrowserRouter>
+              </Router>
             </AuthProvider>
           </TooltipProvider>
         </AIProvider>
