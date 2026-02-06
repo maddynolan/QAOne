@@ -204,6 +204,7 @@ function getDeviceId() {
 }
 
 // Get webapp path (bundled, dev server, or cloud)
+// Returns { url, filePath } — use filePath with loadFile() for local, url with loadURL() for remote
 function getWebappUrl() {
   const isDev = process.argv.includes('--dev');
   
@@ -212,18 +213,19 @@ function getWebappUrl() {
   
   if (isDev) {
     // In dev mode, load from Vite dev server
-    return `http://localhost:${devPort}`;
+    return { url: `http://localhost:${devPort}`, filePath: null };
   }
   
   // In production, first try bundled webapp
   const webappPath = path.join(__dirname, '../../webapp/index.html');
   if (fs.existsSync(webappPath)) {
-    return `file://${webappPath}`;
+    console.log('[App] Found bundled webapp at:', webappPath);
+    return { url: null, filePath: webappPath };
   }
   
   // No bundled webapp - load from cloud (flowstral.com)
   console.log('[App] No bundled webapp found, loading from flowstral.com...');
-  return 'https://flowstral.com';
+  return { url: 'https://flowstral.com', filePath: null };
 }
 
 // Track if we're showing license page
@@ -263,13 +265,13 @@ function loadWebapp() {
   if (!mainWindow) return;
   
   showingLicensePage = false;
-  const webappUrl = getWebappUrl();
-  const isCloudWebapp = !webappUrl.startsWith('file://');
+  const webapp = getWebappUrl();
+  const isLocalWebapp = !!webapp.filePath;
   
-  console.log('[App] Loading webapp from:', webappUrl);
-  console.log('[App] Is cloud webapp:', isCloudWebapp);
+  console.log('[App] Loading webapp:', isLocalWebapp ? webapp.filePath : webapp.url);
+  console.log('[App] Is local webapp:', isLocalWebapp);
   
-  if (webappUrl.startsWith('file://')) {
+  if (isLocalWebapp) {
     mainWindow.loadFile(path.join(__dirname, '../renderer/shell.html'));
     createWebappView();
   } else {
@@ -326,7 +328,7 @@ function loadWebapp() {
       setTimeout(() => sendWithRetry(), 300);
     });
     
-    mainWindow.loadURL(webappUrl);
+    mainWindow.loadURL(webapp.url);
   }
 
   // Handle close to tray
@@ -369,10 +371,15 @@ function createWebappView() {
   // Set initial bounds (below navigation bar)
   updateViewBounds();
 
-  // Load webapp
-  const webappUrl = getWebappUrl();
-  console.log('[App] Loading webapp from:', webappUrl);
-  webappView.webContents.loadURL(webappUrl);
+  // Load webapp — use loadFile for local, loadURL for remote
+  const webapp = getWebappUrl();
+  if (webapp.filePath) {
+    console.log('[App] Loading webapp via loadFile:', webapp.filePath);
+    webappView.webContents.loadFile(webapp.filePath);
+  } else {
+    console.log('[App] Loading webapp via loadURL:', webapp.url);
+    webappView.webContents.loadURL(webapp.url);
+  }
 
   // Handle webapp navigation
   webappView.webContents.on('did-navigate', (event, url) => {
@@ -549,10 +556,7 @@ function navigateWebapp(route) {
     return;
   }
   
-  const baseUrl = getWebappUrl().replace('/index.html', '');
-  const fullUrl = baseUrl.startsWith('file://') 
-    ? `${baseUrl}/index.html#${route}`
-    : `${baseUrl}${route}`;
+  const webapp = getWebappUrl();
   
   // Prevent unnecessary navigation if already at this route
   const currentUrl = target.getURL();
@@ -562,8 +566,16 @@ function navigateWebapp(route) {
   }
   
   lastNavigationTime = now;
-  console.log('[App] Navigating webapp to:', fullUrl);
-  target.loadURL(fullUrl);
+  if (webapp.filePath) {
+    const basePath = webapp.filePath.replace(/index\.html$/, '');
+    const fullPath = path.join(basePath, 'index.html');
+    console.log('[App] Navigating webapp to:', fullPath, '#', route);
+    target.loadFile(fullPath, { hash: route });
+  } else {
+    const fullUrl = `${webapp.url}${route}`;
+    console.log('[App] Navigating webapp to:', fullUrl);
+    target.loadURL(fullUrl);
+  }
 }
 
 // Create system tray
@@ -3393,15 +3405,22 @@ ipcMain.handle('export-to-test-builder', async (event, testNameOrData) => {
       const dataToInject = JSON.stringify(testCase);
       const encodedData = Buffer.from(dataToInject).toString('base64');
       
-      const baseUrl = getWebappUrl().replace('/index.html', '');
-      const builderUrl = `${baseUrl}/test-cases/builder?data=${encodeURIComponent(encodedData)}`;
+      const webapp = getWebappUrl();
+      const dataParam = encodeURIComponent(encodedData);
       
       console.log('[Export] Navigating to builder with encoded data');
       
       // Navigate with data in URL - use webappView if available, otherwise mainWindow
       const target = webappView?.webContents || mainWindow?.webContents;
       if (target) {
-        await target.loadURL(builderUrl);
+        if (webapp.filePath) {
+          const basePath = webapp.filePath.replace(/index\.html$/, '');
+          await target.loadFile(path.join(basePath, 'index.html'), { 
+            hash: `/test-cases/builder?data=${dataParam}` 
+          });
+        } else {
+          await target.loadURL(`${webapp.url}/test-cases/builder?data=${dataParam}`);
+        }
         console.log('[Export] Successfully exported test case:', testCase.name);
         return { success: true, testCase };
       } else {
