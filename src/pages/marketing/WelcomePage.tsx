@@ -48,8 +48,8 @@ export default function WelcomePage() {
       name: 'Windows',
       icon: Monitor,
       size: '~90 MB',
-      url: `${DOWNLOAD_BASE}/Flowstral.Setup.2.0.0.exe`,
-      filename: 'Flowstral Setup 2.0.0.exe',
+      url: `${DOWNLOAD_BASE}/Flowstral.Setup.3.0.0.exe`,
+      filename: 'Flowstral Setup 3.0.0.exe',
     },
     mac: {
       name: 'macOS',
