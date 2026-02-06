@@ -92,10 +92,20 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown gracefully"""
     # Startup
     try:
-        # Initialize SQLite database
+        # Initialize SQLite database (local fallback)
         from app.services.storage.database_service import init_database
         await init_database()
         logger.info("QA AI Backend started (SQLite ready)")
+        
+        # Auto-run PostgreSQL migrations if DATABASE_URL is set (Railway/production)
+        try:
+            import os as _os
+            _db_url = _os.getenv("DATABASE_URL")
+            if _db_url:
+                from app.services.storage.auto_migrate import run_auto_migrations
+                run_auto_migrations(_db_url)
+        except Exception as e:
+            logger.warning(f"Auto-migration skipped (non-critical): {e}")
         
         # Auto-connect to Salesforce if credentials are saved
         try:

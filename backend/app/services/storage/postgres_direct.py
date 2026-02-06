@@ -2,8 +2,8 @@
 Direct PostgreSQL connection service (alternative to Supabase)
 Uses psycopg2 for direct database connections
 
-NOTE: PostgreSQL is DISABLED by default. Set ENABLE_POSTGRES=true to enable.
-The app uses SQLite/in-memory storage by default.
+Auto-enables when DATABASE_URL is set (e.g. on Railway/Heroku).
+Can also be explicitly enabled via ENABLE_POSTGRES=true.
 """
 
 import os
@@ -17,8 +17,16 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from psycopg2.pool import ThreadedConnectionPool
 
-# Check if PostgreSQL is explicitly enabled
-POSTGRES_ENABLED = os.getenv("ENABLE_POSTGRES", "false").lower() == "true"
+# Auto-enable PostgreSQL when DATABASE_URL is present (Railway, Heroku, etc.)
+# Can also be explicitly enabled/disabled via ENABLE_POSTGRES env var.
+_explicit_setting = os.getenv("ENABLE_POSTGRES", "").lower()
+if _explicit_setting in ("true", "false"):
+    POSTGRES_ENABLED = _explicit_setting == "true"
+else:
+    # Auto-detect: enable if DATABASE_URL is set
+    POSTGRES_ENABLED = bool(os.getenv("DATABASE_URL"))
+    if POSTGRES_ENABLED:
+        logger.info("PostgreSQL auto-enabled (DATABASE_URL detected)")
 
 # Placeholder for when psycopg2 is not available
 ThreadedConnectionPool = None  # type: ignore
