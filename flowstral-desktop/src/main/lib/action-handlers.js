@@ -898,6 +898,50 @@ async function handleFill(ctx, action, options = {}) {
   const value = action.value;
   const label = getActionLabel(action);
   
+  // ============================================================
+  // LOCKED SELECTOR FAST PATH - Try locked selector first (instant 150ms)
+  // handleFill was previously skipping findElementWithRetry entirely,
+  // so locked selectors from "Lock Locators" were never used for fill steps.
+  // ============================================================
+  if (ctx.findElementWithRetry && action.selectorObj?.optimizedSelector) {
+    console.log(`[ActionHandler] ⚡ Fill: Trying LOCKED selector fast path for "${label}"`);
+    try {
+      const lockedResult = await ctx.findElementWithRetry(action);
+      if (lockedResult) {
+        const locator = lockedResult.locator;
+        
+        // Check if element is contenteditable
+        const isContentEditable = await locator.evaluate(el => {
+          return el.isContentEditable || el.getAttribute('contenteditable') === 'true';
+        }).catch(() => false);
+        
+        if (isContentEditable) {
+          await locator.click({ timeout: 3000 });
+          await ctx.page.waitForTimeout(100);
+          await locator.evaluate(el => { el.innerHTML = ''; el.textContent = ''; }).catch(() => {});
+          await ctx.page.keyboard.type(value || '', { delay: 10 });
+          const verify = await verifyInputValue(locator, value, ctx);
+          console.log(`[ActionHandler] ⚡ LOCKED fill (contenteditable) ${verify.verified ? 'VERIFIED' : 'unverified'} for "${label}"`);
+          return { success: true, strategy: 'LockedSelector-contenteditable' };
+        }
+        
+        // Standard input/textarea fill
+        await locator.clear().catch(() => {});
+        await locator.fill(value || '', { timeout });
+        
+        const verify = await verifyInputValue(locator, value, ctx);
+        if (verify.verified) {
+          console.log(`[ActionHandler] ⚡ LOCKED fill VERIFIED for "${label}": "${verify.actual}"`);
+          return { success: true, strategy: 'LockedSelector-verified' };
+        } else {
+          console.log(`[ActionHandler] ⚡ LOCKED fill value mismatch: expected "${value}", got "${verify.actual}" - continuing to SmartFinder`);
+        }
+      }
+    } catch (e) {
+      console.log(`[ActionHandler] Locked selector fill failed: ${e.message}, falling through to SmartFinder`);
+    }
+  }
+  
   // Try SmartFinder first (best for modern frameworks)
   if (ctx.useSmartFinderForPlayback && ctx.smartFinder && action.recipe) {
     try {
@@ -1819,6 +1863,23 @@ async function handleCheck(ctx, action, options = {}) {
   console.log(`[ActionHandler] Check action: label="${label}"`);
   console.log(`[ActionHandler] ═══════════════════════════════════════`);
   
+  // LOCKED SELECTOR FAST PATH
+  if (ctx.findElementWithRetry && action.selectorObj?.optimizedSelector) {
+    console.log(`[ActionHandler] ⚡ Check: Trying LOCKED selector fast path for "${label}"`);
+    try {
+      const lockedResult = await ctx.findElementWithRetry(action);
+      if (lockedResult) {
+        const verified = await findAndCheckWithVerification(ctx, lockedResult.locator, 'LockedSelector');
+        if (verified.success) {
+          console.log(`[ActionHandler] ⚡ LOCKED check VERIFIED for "${label}"`);
+          return { success: true, strategy: 'LockedSelector-check-verified' };
+        }
+      }
+    } catch (e) {
+      console.log(`[ActionHandler] Locked selector check failed: ${e.message}, falling through`);
+    }
+  }
+  
   // STRATEGY 1: EXACT label match using Playwright's getByLabel with exact: true
   if (label) {
     try {
@@ -1994,6 +2055,23 @@ async function handleUncheck(ctx, action, options = {}) {
   console.log(`[ActionHandler] ═══════════════════════════════════════`);
   console.log(`[ActionHandler] Uncheck action: label="${label}"`);
   console.log(`[ActionHandler] ═══════════════════════════════════════`);
+  
+  // LOCKED SELECTOR FAST PATH
+  if (ctx.findElementWithRetry && action.selectorObj?.optimizedSelector) {
+    console.log(`[ActionHandler] ⚡ Uncheck: Trying LOCKED selector fast path for "${label}"`);
+    try {
+      const lockedResult = await ctx.findElementWithRetry(action);
+      if (lockedResult) {
+        const verified = await findAndUncheckWithVerification(ctx, lockedResult.locator, 'LockedSelector');
+        if (verified.success) {
+          console.log(`[ActionHandler] ⚡ LOCKED uncheck VERIFIED for "${label}"`);
+          return { success: true, strategy: 'LockedSelector-uncheck-verified' };
+        }
+      }
+    } catch (e) {
+      console.log(`[ActionHandler] Locked selector uncheck failed: ${e.message}, falling through`);
+    }
+  }
   
   // STRATEGY 1: EXACT label match using Playwright's getByLabel with exact: true
   if (label) {

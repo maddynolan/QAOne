@@ -3875,8 +3875,15 @@ Recorded Test
         const workingSelector = stepResult?.workingSelector;
         
         if (!workingSelector) {
-          console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
-          skippedCount++;
+          // Navigate/goto steps naturally have no element selector - don't count as "skipped"
+          const actionType = (action.type || action.action || '').toLowerCase();
+          const isNavStep = actionType === 'navigate' || actionType === 'goto' || actionType === 'navigation';
+          if (isNavStep) {
+            console.log(`[LockLocators] Step ${index + 1}: Navigate step (no selector needed)`);
+          } else {
+            console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
+            skippedCount++;
+          }
           return action;
         }
         
@@ -3937,8 +3944,8 @@ Recorded Test
     
     if (lockedCount > 0) {
       const message = skippedCount > 0
-        ? `Locked ${lockedCount} selectors (${skippedCount} steps had no selector info). Auto-saved.`
-        : `Locked ${lockedCount} selectors! Future runs will be faster. Auto-saved.`;
+        ? `Locked ${lockedCount} selectors (${skippedCount} could not be locked). Auto-saved.`
+        : `Locked all ${lockedCount} selectors! Re-runs will be faster. Auto-saved.`;
       toast.success(message, { duration: 4000, icon: '⚡' });
     } else {
       toast.warning('No working selectors to lock. Try running the test again.', { duration: 4000 });

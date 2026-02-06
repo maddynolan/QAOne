@@ -1,0 +1,358 @@
+"""
+AI Testing API Router
+
+Provides streaming endpoint for AI-driven testing.
+Takes plain English instructions and returns real-time test execution events.
+
+@version 1.0.0
+"""
+
+import json
+import logging
+from typing import Optional
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+from app.services.ai_testing import create_orchestrator
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/ai-testing", tags=["AI Testing"])
+
+
+class StartTestingRequest(BaseModel):
+    """Request to start AI testing"""
+    instruction: str
+    project_id: Optional[str] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "instruction": "Test login on https://example.com with valid and invalid credentials",
+                "project_id": "proj_123"
+            }
+        }
+
+
+class TestingStatusResponse(BaseModel):
+    """Response for testing status check"""
+    status: str
+    message: str
+
+
+@router.post("/start")
+async def start_testing(request: StartTestingRequest):
+    """
+    Start AI-driven testing with plain English instruction.
+    
+    Returns a streaming response with real-time test events:
+    - phase: Current testing phase (understanding, preparing, exploring, planning, executing, complete)
+    - step: Current step being performed
+    - screenshot: Live screenshot (base64)
+    - test_complete: Individual test result
+    - complete: Final results and summary
+    - error: Error message if something fails
+    
+    Event format (Server-Sent Events):
+    ```
+    data: {"type": "phase", "phase": "understanding", "message": "Analyzing your request..."}
+    
+    data: {"type": "step", "message": "Found login form with email and password fields"}
+    
+    data: {"type": "test_complete", "result": {...}}
+    ```
+    """
+    if not request.instruction or len(request.instruction.strip()) < 5:
+        raise HTTPException(status_code=400, detail="Instruction must be at least 5 characters")
+    
+    async def event_stream():
+        """Generate SSE events from orchestrator"""
+        orchestrator = create_orchestrator()
+        
+        try:
+            async for event in orchestrator.run_testing(request.instruction):
+                # Format as Server-Sent Event
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            logger.exception(f"AI Testing error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
+
+@router.get("/status")
+async def get_status() -> TestingStatusResponse:
+    """Check if AI testing service is available"""
+    return TestingStatusResponse(
+        status="ready",
+        message="AI Testing service is ready. Send a POST request to /start with your testing instruction."
+    )
+
+
+class ExplainFailureRequest(BaseModel):
+    """Request to explain a test failure"""
+    test_name: str
+    failed_step: Optional[dict] = None
+    all_steps: Optional[list] = None
+    screenshot: Optional[str] = None
+
+
+@router.post("/explain")
+async def explain_failure(request: ExplainFailureRequest):
+    """
+    Ask AI to explain why a test failed and suggest fixes.
+    """
+    import os
+    
+    failed_step = request.failed_step or {}
+    action = failed_step.get("action", "unknown")
+    target = failed_step.get("target", "unknown")
+    error = failed_step.get("error", "Element not found")
+    
+    # Try to use AI for analysis
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key and api_key.startswith("sk-"):
+        try:
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            
+            prompt = f"""Analyze this test failure and provide actionable fixes.
+
+Test: {request.test_name}
+Failed Step: {action} "{target}"
+Error: {error}
+All Steps: {request.all_steps}
+
+Provide:
+1. A clear explanation of why it failed
+2. 3-4 possible causes
+3. 3-4 specific fixes (with code/selector examples if relevant)
+
+Be specific to the actual selectors and actions shown."""
+
+            response = client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000
+            )
+            
+            analysis = response.choices[0].message.content
+            
+            return {
+                "explanation": f"The step '{action} {target}' failed with error: {error}",
+                "possible_causes": [
+                    "Selector doesn't match the actual DOM structure",
+                    "Element not loaded when action was attempted",
+                    "Security/CAPTCHA blocking automated access",
+                    "Page redirected or element is in a different frame"
+                ],
+                "suggested_fixes": [
+                    f"Try alternative selector: input[name='username'], #username, [data-aura-class*='input']",
+                    "Add explicit wait: wait for element to be visible before interacting",
+                    "Check if Salesforce is blocking: verify IP whitelist in Setup",
+                    "Use Salesforce API authentication instead of UI login"
+                ],
+                "ai_analysis": analysis
+            }
+        except Exception as e:
+            logger.warning(f"AI analysis failed: {e}")
+    
+    # Fallback analysis based on error type
+    causes = []
+    fixes = []
+    
+    if "not found" in error.lower():
+        causes = [
+            "The CSS selector doesn't match any element on the page",
+            "The element hasn't loaded yet (page still loading)",
+            "The element is inside an iframe or shadow DOM",
+            "The page structure changed since test was created"
+        ]
+        fixes = [
+            f"Try more generic selector: [type='email'], [type='text'], input[name*='user']",
+            "Add wait: await page.waitForSelector('{target}', {{timeout: 10000}})",
+            "Check for iframes: await page.frameLocator('iframe').locator('{target}')",
+            "Use data-testid if available: [data-testid='login-email']"
+        ]
+    elif "timeout" in error.lower():
+        causes = [
+            "Page is loading slowly",
+            "Element is hidden or not rendered",
+            "Network request is blocking",
+            "JavaScript hasn't finished executing"
+        ]
+        fixes = [
+            "Increase timeout: {{timeout: 30000}}",
+            "Wait for network idle: await page.waitForLoadState('networkidle')",
+            "Check element visibility: await expect(element).toBeVisible()",
+            "Add retry logic with exponential backoff"
+        ]
+    elif "access denied" in error.lower() or "blocked" in error.lower():
+        causes = [
+            "Cloudflare or security challenge detected",
+            "IP address is blocked or rate-limited",
+            "Bot detection triggered",
+            "Session/authentication expired"
+        ]
+        fixes = [
+            "Use a stealth browser: playwright-extra with stealth plugin",
+            "Whitelist IP in Salesforce Setup > Network Access",
+            "Use Salesforce Connected App with API authentication",
+            "Add delays between actions to appear more human-like"
+        ]
+    else:
+        causes = [
+            "The selector may have changed",
+            "The page may not have loaded completely",
+            "The element may be dynamically rendered",
+            "There may be a timing issue"
+        ]
+        fixes = [
+            "Update the selector to match current DOM",
+            "Add wait for element visibility",
+            "Check if element is in an iframe",
+            "Try using text-based selectors"
+        ]
+    
+    return {
+        "explanation": f"The step '{action} {target}' failed with error: {error}",
+        "possible_causes": causes,
+        "suggested_fixes": fixes
+    }
+
+
+class RerunWithFixRequest(BaseModel):
+    """Request to re-run a failed test with AI fixes"""
+    original_instruction: str
+    failed_test: dict
+
+
+@router.post("/rerun-with-fix")
+async def rerun_with_fix(request: RerunWithFixRequest):
+    """
+    Re-run a failed test with AI-applied fixes.
+    
+    The AI will:
+    1. Analyze the failure
+    2. Generate alternative selectors
+    3. Re-run with improved strategies
+    """
+    import os
+    
+    async def event_stream():
+        failed_test = request.failed_test
+        failed_steps = [s for s in failed_test.get('steps', []) if not s.get('success', True)]
+        
+        if not failed_steps:
+            yield f"data: {json.dumps({'type': 'error', 'error': 'No failed steps found'})}\n\n"
+            return
+        
+        failed_step = failed_steps[0]
+        
+        # Step 1: Generate fix using AI
+        api_key = os.getenv("OPENAI_API_KEY")
+        improved_selectors = []
+        
+        if api_key and api_key.startswith("sk-"):
+            try:
+                import openai
+                client = openai.OpenAI(api_key=api_key)
+                
+                prompt = f"""A Playwright test failed. Generate ALTERNATIVE selectors for this element.
+
+Failed action: {failed_step.get('action')}
+Failed selector: {failed_step.get('target')}
+Error: {failed_step.get('error')}
+
+Generate 5 alternative CSS/XPath selectors that might work better.
+Consider:
+- Salesforce Lightning components use data-aura-class, data-component-id
+- Login forms often have: #username, #password, input[type="email"], input[type="password"]
+- Try aria-label, placeholder, name attributes
+- Try text-based: text=, :has-text()
+
+Return ONLY a JSON array of alternative selectors, nothing else:
+["selector1", "selector2", ...]"""
+
+                response = client.chat.completions.create(
+                    model="gpt-4-turbo-preview",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=500
+                )
+                
+                import re
+                content = response.choices[0].message.content
+                json_match = re.search(r'\[.*\]', content, re.DOTALL)
+                if json_match:
+                    improved_selectors = json.loads(json_match.group(0))
+                    
+            except Exception as e:
+                logger.warning(f"AI selector generation failed: {e}")
+        
+        # Fallback selectors based on common patterns
+        if not improved_selectors:
+            action = failed_step.get('action', '').lower()
+            target = failed_step.get('target', '')
+            
+            if 'username' in target.lower() or 'email' in target.lower() or 'user' in target.lower():
+                improved_selectors = [
+                    '#username', '#email', '#user', 
+                    'input[type="email"]', 'input[type="text"][name*="user"]',
+                    'input[placeholder*="Username"]', 'input[placeholder*="Email"]',
+                    '[data-aura-class*="input"]', 'input[aria-label*="Username"]'
+                ]
+            elif 'password' in target.lower():
+                improved_selectors = [
+                    '#password', 'input[type="password"]',
+                    'input[placeholder*="Password"]', 'input[name="pw"]',
+                    '[data-aura-class*="input"][type="password"]'
+                ]
+            elif 'login' in target.lower() or 'submit' in target.lower() or 'button' in target.lower():
+                improved_selectors = [
+                    '#Login', 'button[type="submit"]', 'input[type="submit"]',
+                    'button:has-text("Log In")', 'button:has-text("Sign In")',
+                    '[data-aura-class*="button"]', '.slds-button'
+                ]
+            else:
+                improved_selectors = [
+                    target,  # Original
+                    f'[data-testid*="{target}"]',
+                    f'[aria-label*="{target}"]'
+                ]
+        
+        yield f"data: {json.dumps({'type': 'fix_applied', 'message': f'Generated {len(improved_selectors)} alternative selectors'})}\n\n"
+        
+        # Step 2: Re-run with improved selectors
+        orchestrator = create_orchestrator()
+        
+        # Modify the instruction to include fix hints
+        enhanced_instruction = f"""{request.original_instruction}
+
+IMPORTANT: For element "{failed_step.get('target')}", try these selectors in order:
+{', '.join(improved_selectors[:5])}
+"""
+        
+        try:
+            async for event in orchestrator.run_testing(enhanced_instruction):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            logger.exception(f"Re-run failed: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )

@@ -7236,8 +7236,12 @@ from app.routers.leads_api import router as leads_router
 app.include_router(leads_router)
 
 # AI Testing API - Revolutionary plain-English testing
-from app.routers.ai_testing import router as ai_testing_router
-app.include_router(ai_testing_router)
+try:
+    from app.routers.ai_testing import router as ai_testing_router
+    app.include_router(ai_testing_router)
+    logger.info("AI Testing API registered")
+except Exception as e:
+    logger.warning(f"AI Testing API not loaded (non-critical): {e}")
 
 # AI Enhancements API - False positive persistence, flaky step detection, AI failure explainer
 # Independent module: works with or without AI keys, never blocks existing flows
