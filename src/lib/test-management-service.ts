@@ -82,7 +82,7 @@ class TestManagementService {
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private pendingRequests: Map<string, Promise<any>> = new Map();
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = 'https://qaone-production.up.railway.app') {
     this.baseUrl = baseUrl;
     this.loadFromLocalStorage();
   }

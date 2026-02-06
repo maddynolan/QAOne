@@ -35,7 +35,7 @@ export class TestExecutionService {
   private baseUrl: string;
   private testRuns: TestRun[] = [];
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = 'https://qaone-production.up.railway.app') {
     this.baseUrl = baseUrl;
   }
 

@@ -139,7 +139,7 @@ export interface Defect {
 class DataStorageService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = 'https://qaone-production.up.railway.app') {
     this.baseUrl = baseUrl;
   }
 

@@ -1,7 +1,7 @@
 // Central API configuration
 // Change this to update all API calls at once
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://qaone-production.up.railway.app';
 
 // Helper function to get the API base URL
 export function getApiBaseUrl(): string {
