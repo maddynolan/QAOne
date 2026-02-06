@@ -103,52 +103,84 @@ async def diagnostic_check():
 
 @router.get("/health/db-test")
 async def db_connection_test():
-    """Quick test: verify PostgreSQL connection, license table, and CRUD router DB access."""
+    """Quick test: verify PostgreSQL connection with detailed error reporting."""
     import os
-    results = {
-        "database_url_set": bool(os.getenv("DATABASE_URL")),
-        "postgres_enabled": False,
-        "license_pg_connected": False,
-        "license_table_exists": False,
-        "license_count": 0,
-        "crud_pool_connected": False,
-        "auto_migrate_ran": False,
-        "core_tables": [],
-    }
+    import json as _json
     
     db_url = os.getenv("DATABASE_URL", "")
+    # Mask password for display
+    display_url = db_url
+    if "@" in db_url and "://" in db_url:
+        prefix = db_url.split("://")[0] + "://"
+        after_proto = db_url.split("://")[1]
+        if "@" in after_proto:
+            user_pass = after_proto.split("@")[0]
+            host_part = after_proto.split("@")[1]
+            user = user_pass.split(":")[0] if ":" in user_pass else user_pass
+            display_url = f"{prefix}{user}:****@{host_part}"
     
-    # Test 1: License direct connection (uses DATABASE_URL + sslmode)
+    results = {
+        "database_url_set": bool(db_url),
+        "database_url_display": display_url,
+        "tests": {}
+    }
+    
+    # Test 1: Raw psycopg2 connection (most basic test)
     try:
-        from app.routers.license_api import _is_postgres_available, _pg_load_licenses
-        results["license_pg_connected"] = _is_postgres_available()
-        if results["license_pg_connected"]:
-            pg_result = _pg_load_licenses()
-            if pg_result is not None:
-                results["license_table_exists"] = True
-                results["license_count"] = len(pg_result[0])
+        import psycopg2
+        conn_str = db_url
+        if conn_str and "sslmode" not in conn_str:
+            conn_str += ("&" if "?" in conn_str else "?") + "sslmode=require"
+        results["tests"]["1_conn_string_used"] = conn_str.split("@")[-1] if "@" in conn_str else "no-url"
+        
+        conn = psycopg2.connect(conn_str, connect_timeout=5)
+        cur = conn.cursor()
+        cur.execute("SELECT version()")
+        version = cur.fetchone()[0]
+        results["tests"]["2_raw_connection"] = f"OK: {version[:60]}"
+        
+        # Test table creation
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS license_store (
+                id TEXT PRIMARY KEY DEFAULT 'singleton',
+                licenses JSONB NOT NULL DEFAULT '{}'::jsonb,
+                activations JSONB NOT NULL DEFAULT '{}'::jsonb,
+                saved_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        results["tests"]["3_create_table"] = "OK"
+        
+        # Test read
+        cur.execute("SELECT licenses FROM license_store WHERE id = 'singleton'")
+        row = cur.fetchone()
+        results["tests"]["4_read"] = f"OK: {'has data' if row else 'empty (no row yet)'}"
+        
+        # List tables
+        cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
+        tables = [r[0] for r in cur.fetchall()]
+        results["tests"]["5_tables"] = tables
+        
+        conn.close()
     except Exception as e:
-        results["license_error"] = str(e)
+        results["tests"]["FAILED"] = f"{type(e).__name__}: {str(e)[:300]}"
     
-    # Test 2: CRUD router pool (postgres_direct.py)
+    # Test 2: License module connection
+    try:
+        from app.routers.license_api import _is_postgres_available, _pg_conn_string
+        results["tests"]["6_license_conn_string"] = (_pg_conn_string or "NONE").split("@")[-1] if _pg_conn_string else "NONE"
+        results["tests"]["7_license_pg_available"] = _is_postgres_available()
+    except Exception as e:
+        results["tests"]["6_license_error"] = str(e)
+    
+    # Test 3: CRUD pool
     try:
         from app.services.storage.postgres_direct import get_postgres_pool, POSTGRES_ENABLED
-        results["postgres_enabled"] = POSTGRES_ENABLED
+        results["tests"]["8_postgres_enabled"] = POSTGRES_ENABLED
         pool = get_postgres_pool()
-        if pool:
-            conn = pool.getconn()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    results["crud_pool_connected"] = True
-                    # Check which tables exist
-                    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
-                    results["core_tables"] = [row[0] for row in cur.fetchall()]
-                    results["auto_migrate_ran"] = "migration_history" in results["core_tables"]
-            finally:
-                pool.putconn(conn)
+        results["tests"]["9_crud_pool"] = "OK" if pool else "pool is None"
     except Exception as e:
-        results["crud_pool_error"] = str(e)
+        results["tests"]["8_crud_pool_error"] = str(e)
     
     return results
 
