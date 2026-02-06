@@ -7235,6 +7235,19 @@ app.include_router(visual_testing_router)
 from app.routers.leads_api import router as leads_router
 app.include_router(leads_router)
 
+# AI Testing API - Revolutionary plain-English testing
+from app.routers.ai_testing import router as ai_testing_router
+app.include_router(ai_testing_router)
+
+# AI Enhancements API - False positive persistence, flaky step detection, AI failure explainer
+# Independent module: works with or without AI keys, never blocks existing flows
+try:
+    from app.routers.ai_enhancements_api import router as ai_enhancements_router
+    app.include_router(ai_enhancements_router)
+    logger.info("AI Enhancements API registered")
+except Exception as e:
+    logger.warning(f"AI Enhancements API not loaded (non-critical): {e}")
+
 if __name__ == "__main__":
     # On Windows, set event loop policy for Playwright compatibility
     import sys

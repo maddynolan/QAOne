@@ -709,7 +709,7 @@ class SmartFinder {
       }, attempts);
       
       if (contextResult.success) {
-        return this._recordLearningAndReturn(contextResult.locator);
+        return await this._recordLearningAndReturn(contextResult.locator);
       }
       
       this.log(`[CONTEXT SEARCH] All strategies failed, falling back to normal search...`);
@@ -783,7 +783,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'testId');
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -901,7 +901,7 @@ class SmartFinder {
           scope = componentResult.scope;
         } else if (componentResult.locator) {
           // Direct locator match from bounding box - return immediately
-          return this._recordLearningAndReturn(componentResult.locator);
+          return await this._recordLearningAndReturn(componentResult.locator);
         }
       }
     }
@@ -1113,7 +1113,7 @@ class SmartFinder {
         
         if (sfResult.success) {
           this.log(`✓ Found Salesforce list view button via: ${selector}`);
-          return this._recordLearningAndReturn(sfResult.locator);
+          return await this._recordLearningAndReturn(sfResult.locator);
         }
       }
       
@@ -1131,7 +1131,7 @@ class SmartFinder {
         return await this.resolveMultiple(locator, which, 'role+text');
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
       
       // APOSTROPHE FIX: Try with flexible apostrophe matching
       // e.g., recorded "Saver's" vs page "Saver's" (curly vs straight apostrophe)
@@ -1234,7 +1234,7 @@ class SmartFinder {
         return { success: false };
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -1335,7 +1335,7 @@ class SmartFinder {
           const marker = { __directClickComplete: true };
           return marker;
         }
-        return this._recordLearningAndReturn(sfNewResult.locator);
+        return await this._recordLearningAndReturn(sfNewResult.locator);
       }
     }
     
@@ -1472,7 +1472,7 @@ class SmartFinder {
       
       if (nearTextResult.success) {
         this.log(`[near-text] Successfully found checkbox near "${where.nearText}"`);
-        return this._recordLearningAndReturn(nearTextResult.locator);
+        return await this._recordLearningAndReturn(nearTextResult.locator);
       }
       
       this.log(`[near-text] No checkbox found near "${where.nearText}", continuing to other strategies`);
@@ -1500,7 +1500,7 @@ class SmartFinder {
         return validated;
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
       
       // APOSTROPHE FIX: Try with flexible apostrophe matching for text
       const flexibleTextRegex = this.createFlexibleTextRegex(what.text);
@@ -1716,7 +1716,7 @@ class SmartFinder {
         return { success: false, count: 0 };
       }, attempts);
       
-      if (nearTextResult.success) return this._recordLearningAndReturn(nearTextResult.locator);
+      if (nearTextResult.success) return await this._recordLearningAndReturn(nearTextResult.locator);
     }
     
     // ==========================================================================
@@ -1740,7 +1740,7 @@ class SmartFinder {
         return validated;
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
       
       // Strategy 2: Partial match (contains) - handles minor text differences
       const partialResult = await this.tryStrategy('aria-label-contains', async () => {
@@ -1795,7 +1795,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'name');
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -1808,7 +1808,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'id');
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -1837,7 +1837,7 @@ class SmartFinder {
         return { success: false, count: 0 };
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
     }
     
     // ==========================================================================
@@ -1850,7 +1850,7 @@ class SmartFinder {
         return await this.validateLocator(locator, 'css-fallback');
       }, attempts);
       
-      if (result.success) return this._recordLearningAndReturn(result.locator);
+      if (result.success) return await this._recordLearningAndReturn(result.locator);
       
       // If full selector failed, try just the parent (without child selectors)
       const parentSelector = confirm.cssSelector.split('>')[0].trim();
@@ -1980,7 +1980,7 @@ class SmartFinder {
           if (textVariant !== what.text) {
             this.log(`Found element using stripped text: "${textVariant}" (original: "${what.text}")`);
           }
-          return this._recordLearningAndReturn(result.locator);
+          return await this._recordLearningAndReturn(result.locator);
         }
       }
       
@@ -2076,7 +2076,7 @@ class SmartFinder {
       return await this.findInShadowDOM(what, which);
     }, attempts);
     
-    if (shadowResult.success) return this._recordLearningAndReturn(shadowResult.locator);
+    if (shadowResult.success) return await this._recordLearningAndReturn(shadowResult.locator);
     
     // ==========================================================================
     // PHASE 10: COORDINATE-BASED FALLBACK (for edge cases)
@@ -2220,7 +2220,7 @@ class SmartFinder {
           // Return a dummy locator, the click handler will use coordinates
           return { __useDirectClick: true, coords: bboxResult.useCoordinates };
         }
-        return this._recordLearningAndReturn(bboxResult.locator);
+        return await this._recordLearningAndReturn(bboxResult.locator);
       }
     }
     
@@ -2474,13 +2474,27 @@ class SmartFinder {
    * Record learning and return the locator
    * This is called when we successfully find an element
    */
-  _recordLearningAndReturn(locator) {
+  async _recordLearningAndReturn(locator) {
     const executionTime = Date.now() - this._executionStartTime;
     
     // Build selector string from the recipe for Lock Locators feature
     // If strategy didn't return a selector, construct one from recipe data
     if (!this._lastSuccessfulSelector && this._currentRecipe) {
       this._lastSuccessfulSelector = this._buildSelectorFromRecipe(this._currentRecipe, this._lastSuccessfulStrategy);
+    }
+    
+    // CRITICAL FIX: If we STILL don't have a selector, extract one from the actual DOM element.
+    // This ensures Lock Locators always has something to save, even when
+    // _buildSelectorFromRecipe returns null (e.g., elements without testId/ariaLabel/role).
+    if (!this._lastSuccessfulSelector && locator) {
+      try {
+        this._lastSuccessfulSelector = await this._extractSelectorFromLocator(locator);
+        if (this._lastSuccessfulSelector) {
+          this.log(`[Lock Locators] Extracted selector from DOM: ${this._lastSuccessfulSelector}`);
+        }
+      } catch (e) {
+        this.log(`[Lock Locators] Could not extract selector from locator: ${e.message}`);
+      }
     }
     
     // Expose the working strategy/selector for Lock Locators feature
@@ -2512,6 +2526,65 @@ class SmartFinder {
     };
     
     return locator;
+  }
+
+  /**
+   * Extract the best Playwright selector by querying the actual DOM element.
+   * Called as a LAST RESORT when _buildSelectorFromRecipe returns null.
+   * Evaluates the found element's attributes and builds a reliable selector.
+   */
+  async _extractSelectorFromLocator(locator) {
+    try {
+      const attrs = await locator.evaluate(el => {
+        return {
+          tagName: el.tagName?.toLowerCase() || '',
+          id: el.id || '',
+          name: el.getAttribute('name') || '',
+          type: el.getAttribute('type') || '',
+          role: el.getAttribute('role') || '',
+          ariaLabel: el.getAttribute('aria-label') || '',
+          testId: el.getAttribute('data-testid') || el.getAttribute('data-test-id') || '',
+          placeholder: el.getAttribute('placeholder') || '',
+          text: (el.textContent || '').trim().substring(0, 60),
+          classes: el.className || '',
+          href: el.getAttribute('href') || '',
+          title: el.getAttribute('title') || '',
+        };
+      });
+
+      // Priority order: most stable → least stable
+      if (attrs.testId) return `[data-testid="${attrs.testId}"]`;
+      if (attrs.ariaLabel && attrs.ariaLabel.length > 1 && attrs.ariaLabel.length < 80) {
+        return `[aria-label="${attrs.ariaLabel}"]`;
+      }
+      if (attrs.role && attrs.text && attrs.text.length > 0 && attrs.text.length < 50) {
+        return `role=${attrs.role}[name="${attrs.text}"]`;
+      }
+      if (attrs.id && !this._isLikelyDynamicId(attrs.id)) {
+        return `#${attrs.id}`;
+      }
+      if (attrs.name) return `[name="${attrs.name}"]`;
+      if (attrs.placeholder && attrs.placeholder.length < 60) {
+        return `[placeholder="${attrs.placeholder}"]`;
+      }
+      if (attrs.title && attrs.title.length < 60) {
+        return `[title="${attrs.title}"]`;
+      }
+      if (attrs.text && attrs.text.length > 1 && attrs.text.length < 40) {
+        return `text="${attrs.text}"`;
+      }
+      // Last resort: tag + type (for inputs/buttons)
+      if (attrs.tagName === 'input' && attrs.type) {
+        return `${attrs.tagName}[type="${attrs.type}"]`;
+      }
+      if (attrs.href && attrs.tagName === 'a' && attrs.href.length < 100) {
+        return `a[href="${attrs.href}"]`;
+      }
+      
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   /**

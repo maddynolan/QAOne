@@ -88,7 +88,22 @@ import SimpleStepEditor from "@/components/SimpleStepEditor";
 // Confidence System - Shows reliability of element identification
 import { StepConfidenceIndicator, ConfidenceLevel } from "@/components/confidence";
 // Failure classification — plain-language messages for no-code UX
-import { classifyFailure } from "@/lib/failureClassification";
+import { classifyFailure, flakyLabel, flakyScoreColor } from "@/lib/failureClassification";
+// AI Enhancements — independent module for persistence, flaky detection, AI multi-fix
+// All methods are fail-safe: returns defaults if backend unreachable
+import {
+  saveFalsePositive as saveFalsePositiveApi,
+  getFalsePositives as getFalsePositivesApi,
+  removeFalsePositive as removeFalsePositiveApi,
+  resolveFalsePositive as resolveFalsePositiveApi,
+  recordStepResults as recordStepResultsApi,
+  getFlakySteps as getFlakyStepsApi,
+  explainFailure as explainFailureApi,
+  type FalsePositiveFlag as ApiFalsePositiveFlag,
+  type FlakyStepInfo,
+  type FailureExplanation,
+  type FixOption as ApiFixOption,
+} from "@/lib/aiEnhancements";
 
 // Types
 interface StepConfidence {
@@ -1093,6 +1108,51 @@ export default function PlaywrightRecorderPage() {
     actionId: string;
     screenshot: string | null;
   } | null>(null);
+  
+  // ============ AI ENHANCEMENTS STATE ============
+  // AI-enhanced failure explanation (loaded on-demand when user clicks "Why?")
+  const [aiExplanation, setAiExplanation] = useState<FailureExplanation | null>(null);
+  const [aiExplanationLoading, setAiExplanationLoading] = useState(false);
+  // Flaky step IDs for the current test (loaded after test run)
+  const [flakyStepIds, setFlakyStepIds] = useState<Set<string>>(new Set());
+  
+  // ============ LOAD PERSISTED FALSE POSITIVES ON MOUNT ============
+  // Restore false-positive flags from backend (survives page refresh)
+  // Non-blocking: if backend is unavailable, existing in-memory flow works fine
+  useEffect(() => {
+    const testId = (actions as any)?._testId || 'current';
+    if (!testId) return;
+    
+    getFalsePositivesApi(testId).then((flags) => {
+      if (flags && flags.length > 0) {
+        setFalsePositiveSteps(prev => {
+          const merged = new Map(prev);
+          for (const flag of flags) {
+            if (flag.step_id && !flag.resolved) {
+              merged.set(flag.step_id, {
+                stepIndex: flag.step_index,
+                screenshot: null,
+                markedAt: new Date(flag.flagged_at).getTime(),
+                reason: flag.reason || undefined,
+              });
+            }
+          }
+          return merged;
+        });
+      }
+    }).catch(() => {
+      // Silent fail — in-memory flow still works
+    });
+    
+    // Also load flaky step data
+    getFlakyStepsApi(testId).then((flakySteps) => {
+      if (flakySteps && flakySteps.length > 0) {
+        const ids = new Set(flakySteps.filter(s => s.is_flaky).map(s => s.step_id));
+        setFlakyStepIds(ids);
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // Run once on mount
   
   // Export dropdown
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -3809,34 +3869,76 @@ Recorded Test
     let skippedCount = 0;
     
     // Update each action with the ACTUAL selector that worked
-    setActions(prev => prev.map((action, index) => {
-      const stepResult = testExecutionResult.stepResults?.find(r => r.index === index);
-      const workingSelector = stepResult?.workingSelector;
+    setActions(prev => {
+      const updatedActions = prev.map((action, index) => {
+        const stepResult = testExecutionResult.stepResults?.find((r: any) => r.index === index);
+        const workingSelector = stepResult?.workingSelector;
+        
+        if (!workingSelector) {
+          console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
+          skippedCount++;
+          return action;
+        }
+        
+        console.log(`[LockLocators] Step ${index + 1}: Locking actual working selector → ${workingSelector}`);
+        lockedCount++;
+        
+        return {
+          ...action,
+          selectorObj: {
+            ...action.selectorObj,
+            optimizedSelector: workingSelector,
+            optimizedAt: new Date().toISOString(),
+            optimizedSource: stepResult?.strategyType || 'unknown'
+          }
+        };
+      });
       
-      if (!workingSelector) {
-        console.log(`[LockLocators] Step ${index + 1}: No working selector returned, skipping`);
-        skippedCount++;
-        return action;
+      // AUTO-PERSIST: Save locked selectors to localStorage so they survive page refresh.
+      // This was previously missing — locked selectors were lost on refresh.
+      if (lockedCount > 0 && selectedTestCase?.id) {
+        try {
+          // Update the test case in localStorage with locked actions
+          const tcId = selectedTestCase.id;
+          const updatedSteps = updatedActions.map((action: any, idx: number) => ({
+            ...((selectedTestCase as any)?.steps?.[idx] || {}),
+            selectorObj: action.selectorObj,
+            qword: action.qword,
+            args: action.args,
+          }));
+          
+          const updatedTC = {
+            ...selectedTestCase,
+            steps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+          };
+          
+          // Persist to all localStorage keys used by the app
+          const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
+          const cleanedLocal = localCases.filter((tc: any) => tc.id !== tcId);
+          cleanedLocal.push(updatedTC);
+          localStorage.setItem('test_cases', JSON.stringify(cleanedLocal));
+          
+          const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
+          const cleanedFlowstral = flowstralCases.filter((tc: any) => tc.id !== tcId);
+          cleanedFlowstral.push(updatedTC);
+          localStorage.setItem('flowstral_test_cases', JSON.stringify(cleanedFlowstral));
+          
+          localStorage.setItem(`unified_test_case_${tcId}`, JSON.stringify(updatedTC));
+          
+          console.log(`[LockLocators] Auto-saved ${lockedCount} locked selectors to localStorage`);
+        } catch (e) {
+          console.warn('[LockLocators] Auto-save failed (non-critical):', e);
+        }
       }
       
-      console.log(`[LockLocators] Step ${index + 1}: Locking actual working selector → ${workingSelector}`);
-      lockedCount++;
-      
-      return {
-        ...action,
-        selectorObj: {
-          ...action.selectorObj,
-          optimizedSelector: workingSelector,
-          optimizedAt: new Date().toISOString(),
-          optimizedSource: stepResult?.strategyType || 'unknown'
-        }
-      };
-    }));
+      return updatedActions;
+    });
     
     if (lockedCount > 0) {
       const message = skippedCount > 0
-        ? `🔒 Locked ${lockedCount} selectors. Skipped ${skippedCount} (no selector info).`
-        : `🔒 Locked ${lockedCount} selectors! Future runs will be faster.`;
+        ? `Locked ${lockedCount} selectors (${skippedCount} steps had no selector info). Auto-saved.`
+        : `Locked ${lockedCount} selectors! Future runs will be faster. Auto-saved.`;
       toast.success(message, { duration: 4000, icon: '⚡' });
     } else {
       toast.warning('No working selectors to lock. Try running the test again.', { duration: 4000 });
@@ -4263,6 +4365,36 @@ Recorded Test
         }
       }
       
+      // ============ RECORD STEP RESULTS FOR FLAKY DETECTION ============
+      // Fire-and-forget: send step outcomes to backend for per-step flaky analysis
+      // This runs after EVERY test completion (pass or fail) to build history
+      try {
+        const testId = (actions as any)._testId || 'current';
+        const stepsForFlaky = stepResults.map((sr: any, idx: number) => ({
+          step_id: actions[sr.index]?.id || String(sr.index),
+          actionId: actions[sr.index]?.id,
+          index: sr.index,
+          label: actions[sr.index]?.description || actions[sr.index]?.type || `Step ${sr.index + 1}`,
+          status: sr.status || 'unknown',
+          error: sr.error || '',
+          duration_ms: sr.duration || 0,
+          healed: sr.healed || false,
+        }));
+        recordStepResultsApi({
+          test_id: testId,
+          run_id: `run_${Date.now()}`,
+          step_results: stepsForFlaky,
+        }).then(() => {
+          // After recording, refresh flaky step info
+          getFlakyStepsApi(testId).then(flakySteps => {
+            const ids = new Set(flakySteps.filter(s => s.is_flaky).map(s => s.step_id));
+            setFlakyStepIds(ids);
+          }).catch(() => {});
+        }).catch(() => {});
+      } catch (e) {
+        // Non-critical — flaky detection is additive
+      }
+      
       if (testPassed) {
         toast.success(`✅ Test Passed! (${actions.length} steps)`, { id: 'run' });
       } else {
@@ -4526,6 +4658,7 @@ Recorded Test
 
   // ============ FALSE POSITIVE HANDLERS ============
   // Mark a failed step as false positive (element not reliably found)
+  // Now persists to backend so flags survive across sessions
   const markStepAsFalsePositive = useCallback((stepIndex: number, screenshot: string | null, reason?: string) => {
     const action = actions[stepIndex];
     if (!action || !action.id) return;
@@ -4541,6 +4674,17 @@ Recorded Test
       return newMap;
     });
     
+    // Persist to backend (fire-and-forget, non-blocking)
+    const testId = (actions as any)._testId || 'current';
+    saveFalsePositiveApi({
+      test_id: testId,
+      step_id: action.id!,
+      step_index: stepIndex,
+      step_label: action.description || action.type || `Step ${stepIndex + 1}`,
+      screenshot: null, // Don't send screenshots to backend (too large)
+      reason: reason || null,
+    }).catch(() => {}); // Silent fail — in-memory still works
+    
     toast.success(
       `🚩 Step ${stepIndex + 1} marked as false positive. On next run, test will stop here for you to fix.`,
       { duration: 4000 }
@@ -4548,14 +4692,20 @@ Recorded Test
   }, [actions]);
   
   // Remove false positive flag from a step
+  // Now also removes from backend persistence
   const unmarkFalsePositive = useCallback((actionId: string) => {
     setFalsePositiveSteps(prev => {
       const newMap = new Map(prev);
       newMap.delete(actionId);
       return newMap;
     });
+    
+    // Remove from backend (fire-and-forget)
+    const testId = (actions as any)._testId || 'current';
+    removeFalsePositiveApi(testId, actionId).catch(() => {});
+    
     toast.info('False positive flag removed');
-  }, []);
+  }, [actions]);
   
   // Handle when test stops at a false positive step - auto-open element picker
   const handleFalsePositiveStop = useCallback((stepIndex: number, actionId: string, screenshot: string | null) => {
@@ -8553,6 +8703,7 @@ Recorded Test
             )}
 
             {/* ONE-SCREEN FAILURE CARD — step name, screenshot, one sentence, primary CTA, secondaries */}
+            {/* Enhanced with AI explanation + multiple fix options (additive — existing buttons unchanged) */}
             {testExecutionResult?.status === 'failed' && !isTestPaused && (() => {
               const firstFailed = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
               if (!firstFailed || firstFailed.index == null) return null;
@@ -8560,6 +8711,7 @@ Recorded Test
               const stepLabel = failedAction ? getDisplayLabel(failedAction) : null;
               const classified = classifyFailure(firstFailed.error, stepLabel || undefined);
               const stepName = failedAction ? getDisplayDescription(maskSensitiveAction(failedAction)) : `Step ${firstFailed.index + 1}`;
+              const isStepFlaky = failedAction?.id ? flakyStepIds.has(failedAction.id) : false;
               return (
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-3">
                   <div className="flex items-start gap-3">
@@ -8567,10 +8719,26 @@ Recorded Test
                       <img src={firstFailed.screenshot} alt="Step" className="w-24 h-24 object-cover rounded border border-border shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-red-200">{stepName}</p>
-                      <p className="text-sm text-red-300/90 mt-1">{classified.message}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-red-200">{stepName}</p>
+                        {isStepFlaky && (
+                          <span className="px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">
+                            Flaky
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-red-300/90 mt-1">
+                        {aiExplanation ? aiExplanation.plain_explanation : classified.message}
+                      </p>
+                      {aiExplanation?.root_cause && aiExplanation.root_cause !== 'unknown' && aiExplanation.root_cause !== aiExplanation.failure_type && (
+                        <p className="text-xs text-red-400/60 mt-0.5">
+                          Root cause: {aiExplanation.root_cause.replace(/_/g, ' ')}
+                          {aiExplanation.confidence > 0 && ` (${Math.round(aiExplanation.confidence * 100)}% confidence)`}
+                        </p>
+                      )}
                     </div>
                   </div>
+                  {/* Primary fix buttons — SAME as before, always available */}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       onClick={() => {
@@ -8598,6 +8766,111 @@ Recorded Test
                       <Play className="h-4 w-4 mr-1" />
                       Run from here
                     </Button>
+                  </div>
+                  {/* AI MULTI-FIX — "Why did this fail?" expandable section */}
+                  {/* Loads on-demand when clicked — no AI cost until user asks */}
+                  <div className="border-t border-red-500/20 pt-2">
+                    {!aiExplanation && !aiExplanationLoading && (
+                      <button
+                        onClick={async () => {
+                          setAiExplanationLoading(true);
+                          try {
+                            const testId = (actions as any)._testId || 'current';
+                            const result = await explainFailureApi({
+                              test_id: testId,
+                              step_id: failedAction?.id || 'unknown',
+                              step_index: firstFailed.index,
+                              step_label: stepLabel || '',
+                              error_message: firstFailed.error || 'Unknown error',
+                              step_info: {
+                                action: failedAction?.type || 'unknown',
+                                label: stepLabel || '',
+                                selector: failedAction?.selectorObj?.selector || failedAction?.selector || '',
+                                description: failedAction?.description || '',
+                                element: failedAction?.element || {},
+                              },
+                              screenshot_b64: null, // Don't send screenshots (too large for API call)
+                            });
+                            setAiExplanation(result);
+                          } catch (e) {
+                            console.warn('AI explanation failed:', e);
+                          } finally {
+                            setAiExplanationLoading(false);
+                          }
+                        }}
+                        className="text-xs text-red-300/70 hover:text-red-200 transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                        Why did this fail? (More fix options)
+                      </button>
+                    )}
+                    {aiExplanationLoading && (
+                      <div className="flex items-center gap-2 text-xs text-red-300/60">
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        Analyzing failure...
+                      </div>
+                    )}
+                    {aiExplanation && aiExplanation.fix_options.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-red-300/70 font-medium">Fix options (ranked by likelihood):</p>
+                        <div className="space-y-1.5">
+                          {aiExplanation.fix_options.slice(0, 5).map((fix: ApiFixOption, i: number) => (
+                            <button
+                              key={fix.fix_id}
+                              onClick={() => {
+                                // Route each fix option to the appropriate handler
+                                if (fix.fix_type === 'update_selector') {
+                                  setShowTestResultModal(false);
+                                  setEditingActionIndex(firstFailed.index);
+                                  setRightPanelTab('suggestions');
+                                  handleRefreshSuggestions();
+                                } else if (fix.fix_type === 'add_wait' || fix.fix_type === 'retry') {
+                                  handleRunFromStep(firstFailed.index);
+                                } else if (fix.fix_type === 'skip_step') {
+                                  // Skip = run from next step
+                                  if (firstFailed.index + 1 < actions.length) {
+                                    handleRunFromStep(firstFailed.index + 1);
+                                  }
+                                } else if (fix.fix_type === 'mark_false_positive') {
+                                  markStepAsFalsePositive(firstFailed.index, firstFailed.screenshot || null);
+                                } else if (fix.fix_type === 'quarantine') {
+                                  toast.info('Step quarantined — it will be skipped in future runs until stabilized.', { duration: 4000 });
+                                } else if (fix.fix_type === 'investigate') {
+                                  toast.info(fix.description, { duration: 6000 });
+                                } else {
+                                  toast.info(fix.description, { duration: 4000 });
+                                }
+                              }}
+                              className="w-full flex items-start gap-2 p-2 rounded-md text-left text-xs hover:bg-red-500/10 transition-colors group"
+                            >
+                              <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border border-red-400/30 text-red-300/70 group-hover:border-red-400/60 group-hover:text-red-200">
+                                {i + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-red-200 group-hover:text-red-100">{fix.title}</span>
+                                <p className="text-red-300/60 mt-0.5 leading-tight">{fix.description}</p>
+                              </div>
+                              {fix.confidence >= 0.7 && (
+                                <span className="shrink-0 px-1 py-0.5 text-[9px] bg-green-500/20 text-green-400 rounded border border-green-500/30">
+                                  likely fix
+                                </span>
+                              )}
+                              {fix.auto_applicable && (
+                                <span className="shrink-0 px-1 py-0.5 text-[9px] bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">
+                                  auto
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        {aiExplanation.ai_enhanced && (
+                          <p className="text-[10px] text-red-400/40 mt-1">AI-enhanced analysis</p>
+                        )}
+                        {!aiExplanation.ai_enhanced && (
+                          <p className="text-[10px] text-red-400/40 mt-1">Pattern-based analysis (add OpenAI key for AI-enhanced)</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

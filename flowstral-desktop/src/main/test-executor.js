@@ -14,6 +14,11 @@ const { legacyActionToRecipe } = require('./lib/recipe-recorder-integration');
 // UNIFIED EXECUTION: Import shared ActionHandlers for consistent behavior with PlaywrightRecorder
 const ActionHandlers = require('./lib/action-handlers');
 
+// Override + locked selector: single source of truth (used by both Executor and PlaywrightRecorder)
+const { getManualOverrideSelector, getLockedSelector } = require('./lib/override-and-locked');
+// Shared legacy element find (same order, same timeouts)
+const { runLegacyFindExecutor } = require('./lib/shared-element-finder');
+
 // SALESFORCE: Import shared Salesforce handlers
 const SalesforceHandlers = require('./lib/salesforce-handlers');
 
@@ -232,9 +237,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         recipe.what?.role || recipe.what?.tag, 
         recipe.what?.text || recipe.which?.testId);
       
-      // Pass cross-device flag to SmartFinder to skip coordinate strategies
+      // Pass cross-device flag and the full action to SmartFinder
+      // FIX Gap 4: Pass action so SmartFinder has access to productContext, type, etc.
       const findOptions = {
-        skipCoordinateFallback: this._skipCoordinateFallback || false
+        skipCoordinateFallback: this._skipCoordinateFallback || false,
+        action: step  // Forward full action for context-aware strategies
       };
       
       const locator = await this.smartFinder.find(recipe, findOptions);
@@ -309,7 +316,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
     // When automation fails, users can specify exactly how to find the element
     // ============================================================
-    const manualOverride = action.manualOverride || action.selectorObj?.manualOverride;
+    const manualOverride = getManualOverrideSelector(action);
     if (manualOverride) {
       console.log(`[Executor] 🎯 MANUAL OVERRIDE: Using user-specified selector: "${manualOverride}"`);
       try {
@@ -385,19 +392,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
    * 7. Text content
    */
   async _findElement(action) {
-    const selectorObj = action.selectorObj || {};
-    const text = action.args?.[0] || selectorObj.text || '';
     const elementIndex = action.args?.[1] || 0;
-    
-    const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
-    
+
     // ============================================================
     // MANUAL OVERRIDE - User-specified selector takes HIGHEST priority
     // ============================================================
-    const manualOverride = action.manualOverride || selectorObj.manualOverride;
+    const manualOverride = getManualOverrideSelector(action);
     if (manualOverride) {
       console.log(`[Executor._findElement] 🎯 Trying manual override: "${manualOverride}"`);
       try {
+        const getAtIndex = (locator) => elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
         const manualLocator = getAtIndex(this.page.locator(manualOverride));
         const count = await manualLocator.count().catch(() => 0);
         if (count > 0) {
@@ -411,38 +415,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         console.log(`[Executor._findElement] ⚠️ Manual override failed: ${e.message}`);
       }
     }
-    
-    const selectorsToTry = [];
-    
-    // Build selector list in priority order
-    if (selectorObj.testId) selectorsToTry.push(`[data-testid="${selectorObj.testId}"]`);
-    if (selectorObj.ariaLabel) selectorsToTry.push(`[aria-label="${selectorObj.ariaLabel}"]`);
-    if (selectorObj.name) selectorsToTry.push(`[name="${selectorObj.name}"]`);
-    if (selectorObj.id && !/^[a-f0-9]{8,}|^\d{6,}|^:r/.test(selectorObj.id)) {
-      selectorsToTry.push(`#${selectorObj.id}`);
-    }
-    if (selectorObj.selector) selectorsToTry.push(selectorObj.selector);
-    if (action.selector) selectorsToTry.push(this.normalizeSelector(action.selector));
-    if (text) {
-      selectorsToTry.push(`text="${text}"`);
-    }
-    
-    for (const selector of selectorsToTry) {
-      try {
-        const locator = getAtIndex(this.page.locator(selector));
-        const count = await locator.count().catch(() => 0);
-        if (count > 0) {
-          const isVisible = await locator.isVisible({ timeout: 2000 }).catch(() => false);
-          if (isVisible) {
-            return { locator, strategy: { type: 'legacy-selector', value: selector } };
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    return null;
+
+    // Shared legacy find (same order, same timeouts as before)
+    return runLegacyFindExecutor(this.page, action, {
+      elementIndex,
+      visibilityTimeout: 2000,
+    });
   }
 
   /**
@@ -515,8 +493,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
     
     console.log('[Executor] Using persistent browser context:', userDataDir);
     
-    // Use launchPersistentContext to maintain sessions across runs
-    this.context = await browserClass.launchPersistentContext(userDataDir, {
+    // Try to use system Chrome/Edge if Playwright browsers not available
+    let launchOptions = {
       headless: this.headless,
       viewport: this.viewport,
       args: [
@@ -526,7 +504,31 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       ],
       ignoreHTTPSErrors: true,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
+    };
+    
+    // Try launching with different channels if default fails
+    const channels = [null, 'chrome', 'msedge', 'chromium'];
+    let lastError = null;
+    
+    for (const channel of channels) {
+      try {
+        if (channel) {
+          console.log(`[Executor] Trying to launch with channel: ${channel}`);
+          launchOptions.channel = channel;
+        }
+        this.context = await browserClass.launchPersistentContext(userDataDir, launchOptions);
+        console.log(`[Executor] Successfully launched browser${channel ? ` with channel: ${channel}` : ''}`);
+        break;
+      } catch (error) {
+        lastError = error;
+        console.log(`[Executor] Failed to launch${channel ? ` with channel ${channel}` : ''}: ${error.message}`);
+        delete launchOptions.channel; // Reset for next attempt
+      }
+    }
+    
+    if (!this.context) {
+      throw new Error(`Failed to launch browser. Please install Chrome or Edge. Last error: ${lastError?.message}`);
+    }
     
     // With persistent context, browser is part of context
     this.browser = null; // Not needed with persistent context
@@ -1017,7 +1019,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           // ============================================================
           // MANUAL OVERRIDE - CHECK FIRST! User-specified selector takes HIGHEST priority
           // ============================================================
-          const manualOverride = resolvedStep.manualOverride || selectorObj.manualOverride;
+          const manualOverride = getManualOverrideSelector(resolvedStep);
           if (manualOverride && !clickSuccess) {
             console.log(`[Executor] 🎯 ClickText MANUAL OVERRIDE: Trying "${manualOverride}"`);
             try {
@@ -1053,7 +1055,13 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 await v2Locator.click({ timeout: 5000 });
                 clickSuccess = true;
                 clickLocator = v2Locator;
-                console.log(`[Executor] ✓ V2 SmartFinder click successful`);
+                // FIX: Capture working selector from SmartFinder for Lock Locators
+                // Previously this path never set _lastWorkingSelector, so Lock Locators skipped these steps
+                if (this.smartFinder) {
+                  this._lastWorkingSelector = this.smartFinder.lastSuccessfulSelector || this._lastWorkingSelector;
+                  this._lastStrategyType = this.smartFinder.lastSuccessfulStrategy || this._lastStrategyType;
+                }
+                console.log(`[Executor] ✓ V2 SmartFinder click successful (selector: ${this._lastWorkingSelector || 'none'})`);
               } else {
                 console.log(`[Executor] SmartFinder V2 returned null locator`);
               }

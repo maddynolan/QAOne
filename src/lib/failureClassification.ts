@@ -96,3 +96,86 @@ export function classifyFailure(
     primaryAction: 'click_correct_one',
   };
 }
+
+
+// ============================================================================
+// AI-ENHANCED CLASSIFICATION (additive — existing classifyFailure unchanged)
+// ============================================================================
+// These utilities pair with the aiEnhancements.ts API client.
+// Import from here so failure classification stays the single source of truth.
+
+/**
+ * Map a FixOption.fix_type to a Lucide icon name.
+ * Used by the failure card UI to render appropriate icons per fix option.
+ */
+export function fixTypeIcon(fixType: string): string {
+  const icons: Record<string, string> = {
+    update_selector: 'mouse-pointer-click',  // Click the correct element / new selector
+    add_wait: 'clock',                       // Wait and retry
+    retry: 'refresh-cw',                     // Retry this step
+    skip_step: 'skip-forward',               // Skip this step
+    mark_false_positive: 'flag',             // Not a real failure
+    quarantine: 'shield-alert',              // Quarantine flaky step
+    investigate: 'search',                   // Needs investigation
+    update_assertion: 'check-circle',        // Fix assertion
+    config_change: 'settings',               // Configuration change
+  };
+  return icons[fixType] || 'wrench';
+}
+
+/**
+ * Map a FixOption.fix_type to a button variant for shadcn/ui.
+ */
+export function fixTypeVariant(fixType: string): 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' {
+  switch (fixType) {
+    case 'update_selector':
+      return 'default';       // Primary — most common fix
+    case 'add_wait':
+    case 'retry':
+      return 'secondary';
+    case 'quarantine':
+    case 'investigate':
+    case 'update_assertion':
+    case 'config_change':
+      return 'outline';
+    case 'skip_step':
+    case 'mark_false_positive':
+      return 'ghost';
+    default:
+      return 'outline';
+  }
+}
+
+/**
+ * Get a background color class for a flakiness score.
+ */
+export function flakyScoreColor(score: number): string {
+  if (score >= 0.5) return 'bg-red-500/20 text-red-400 border-red-500/30';
+  if (score >= 0.25) return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+  if (score > 0) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+  return 'bg-green-500/20 text-green-400 border-green-500/30';
+}
+
+/**
+ * Human-readable flaky label.
+ */
+export function flakyLabel(score: number, isFlaky: boolean): string {
+  if (!isFlaky) return '';
+  if (score >= 0.5) return 'Very Flaky';
+  if (score >= 0.25) return 'Flaky';
+  return 'Slightly Unstable';
+}
+
+/**
+ * Map FailureExplanation.root_cause to a user-facing badge label + color.
+ */
+export function rootCauseBadge(rootCause: string): { label: string; className: string } {
+  const badges: Record<string, { label: string; className: string }> = {
+    element_changed: { label: 'Element Changed', className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+    timing_issue: { label: 'Timing Issue', className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    app_bug: { label: 'App Bug', className: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    env_issue: { label: 'Environment', className: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+    test_issue: { label: 'Test Issue', className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  };
+  return badges[rootCause] || { label: rootCause, className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
+}
