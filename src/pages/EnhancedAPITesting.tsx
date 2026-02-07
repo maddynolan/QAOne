@@ -2110,6 +2110,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Execute Tab */}
         <TabsContent value="execute" className="space-y-4">
+          <TabErrorBoundary tabName="Execute">
           {!testSuite && (
             <Card className="border-dashed border-2 border-muted-foreground/25">
               <CardContent className="flex flex-col items-center justify-center py-16">
@@ -2158,7 +2159,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </SelectTrigger>
                   <SelectContent>
                     {environments.length === 0 ? (
-                      <SelectItem value="" disabled>No environments. Create one in Environments tab.</SelectItem>
+                      <SelectItem value="__no_env__" disabled>No environments. Create one in Env tab.</SelectItem>
                     ) : (
                       environments.map((env) => (
                         <SelectItem key={env.environment_id} value={env.environment_id}>
@@ -2420,6 +2421,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               )}
             </CardContent>
           </Card>
+          </TabErrorBoundary>
         </TabsContent>
 
         {/* Security Tab - OWASP API Security Testing */}
