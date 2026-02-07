@@ -45,6 +45,7 @@ class TestExecutor {
     // Lock Locators tracking (for self-healing)
     this._lastWorkingSelector = null;
     this._lastStrategyType = null;
+    this._lastStepUsedLockedSelector = false; // Track if last step used locked fast path
     
     // AI Fallback: Enable AI vision for element finding as last resort
     this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
@@ -375,6 +376,56 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       }
     }
     
+    return null;
+  }
+
+  /**
+   * LOCKED SELECTOR FAST PATH - Used by Click/Fill/ClickElement handlers
+   * Returns a locator if the locked selector (optimizedSelector) works, null otherwise.
+   * This is the #1 priority in all action handlers when locators are locked.
+   * Timeout: 150ms - if the locked selector doesn't resolve instantly, fall through.
+   */
+  async _tryLockedSelector(step) {
+    const optimizedSelector = step?.selectorObj?.optimizedSelector;
+    if (!optimizedSelector) return null;
+    
+    const elementIndex = step.elementIndex || 0;
+    
+    console.log(`[Executor] ⚡ FAST PATH: Trying LOCKED selector: ${optimizedSelector}`);
+    try {
+      let locator;
+      // Handle role=xxx[name="yyy"] format
+      const roleMatch = optimizedSelector.match(/^role=(\w+)\[name="(.+)"\]$/);
+      if (roleMatch) {
+        const [, role, name] = roleMatch;
+        locator = this.page.getByRole(role, { name });
+      } else {
+        locator = this.page.locator(optimizedSelector);
+      }
+      
+      // Apply element index
+      locator = elementIndex === 0 ? locator.first() : locator.nth(elementIndex);
+      
+      // Quick 150ms check - if locked selector doesn't resolve near-instantly, skip it
+      const found = await Promise.race([
+        locator.count().then(c => c > 0),
+        new Promise(resolve => setTimeout(() => resolve(false), 150))
+      ]);
+      
+      if (found) {
+        const isVisible = await locator.isVisible().catch(() => false);
+        if (isVisible) {
+          console.log(`[Executor] ⚡ LOCKED selector SUCCESS - instant find!`);
+          this._lastWorkingSelector = optimizedSelector;
+          this._lastStrategyType = 'LockedSelector';
+          this._lastStepUsedLockedSelector = true;
+          return locator;
+        }
+      }
+      console.log(`[Executor] Locked selector not visible, falling through to other strategies...`);
+    } catch (e) {
+      console.log(`[Executor] Locked selector error: ${e.message}, falling through...`);
+    }
     return null;
   }
 
@@ -1017,6 +1068,24 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const maxRetries = 3;
           
           // ============================================================
+          // LOCKED SELECTOR FAST PATH - Skip ALL strategies if locked selector works
+          // From "Lock Locators" feature - resolves in ~150ms vs seconds
+          // ============================================================
+          this._lastStepUsedLockedSelector = false;
+          const lockedLocator = await this._tryLockedSelector(resolvedStep);
+          if (lockedLocator) {
+            try {
+              await lockedLocator.click({ timeout: 3000 });
+              clickSuccess = true;
+              clickLocator = lockedLocator;
+              console.log(`[Executor] ⚡ FAST PATH: ClickText succeeded with locked selector!`);
+            } catch (e) {
+              console.log(`[Executor] Locked selector found but click failed: ${e.message}, trying other strategies...`);
+              this._lastStepUsedLockedSelector = false;
+            }
+          }
+          
+          // ============================================================
           // MANUAL OVERRIDE - CHECK FIRST! User-specified selector takes HIGHEST priority
           // ============================================================
           const manualOverride = getManualOverrideSelector(resolvedStep);
@@ -1237,15 +1306,19 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             throw new Error(`Could not click "${clickText}" after trying all strategies including AI fallback`);
           }
           
-          // Wait for UI to settle - longer for form elements
-          const isFormElement = isCheckboxRadio || 
-            (clickText && clickText.length < 30 && clickText.split(' ').length <= 3);
-          
-          if (isFormElement) {
-            console.log('[Executor] Form element click, waiting for state change...');
-            await this.page.waitForTimeout(500);
+          // Wait for UI to settle - minimal when locked selector succeeded (reliable, fast path)
+          if (this._lastStepUsedLockedSelector) {
+            await this.page.waitForTimeout(50); // Minimal wait for locked selector fast path
           } else {
-            await this.page.waitForTimeout(300);
+            const isFormElement = isCheckboxRadio || 
+              (clickText && clickText.length < 30 && clickText.split(' ').length <= 3);
+            
+            if (isFormElement) {
+              console.log('[Executor] Form element click, waiting for state change...');
+              await this.page.waitForTimeout(500);
+            } else {
+              await this.page.waitForTimeout(300);
+            }
           }
           
           // If this looks like a login/submit button, wait for page update
@@ -1266,6 +1339,23 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         case 'ClickElement': {
           const clickSelectorObj = resolvedStep.selectorObj || {};
           const clickText = clickSelectorObj.text || resolvedStep.args?.[0] || '';
+          
+          // ============================================================
+          // LOCKED SELECTOR FAST PATH for ClickElement
+          // ============================================================
+          this._lastStepUsedLockedSelector = false;
+          const lockedClickElLocator = await this._tryLockedSelector(resolvedStep);
+          if (lockedClickElLocator) {
+            try {
+              await lockedClickElLocator.click({ timeout: 3000 });
+              console.log(`[Executor] ⚡ FAST PATH: ClickElement succeeded with locked selector!`);
+              await this.page.waitForTimeout(50); // Minimal post-click wait for locked selector
+              break; // Skip all other strategies
+            } catch (e) {
+              console.log(`[Executor] Locked selector ClickElement failed: ${e.message}, trying other strategies...`);
+              this._lastStepUsedLockedSelector = false;
+            }
+          }
           
           // Normalize text: strip trailing numbers and emojis (badge counts, etc.)
           // CRITICAL: Don't strip ALL non-ASCII - preserve apostrophes, accented chars, quotes
@@ -1422,6 +1512,25 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const fieldName = resolvedStep.args?.[0] || '';
           const inputValue = resolvedStep.args?.[1] || resolvedStep.value || '';
           const fillSelectorObj = resolvedStep.selectorObj || {};
+          
+          // ============================================================
+          // LOCKED SELECTOR FAST PATH for Fill
+          // ============================================================
+          this._lastStepUsedLockedSelector = false;
+          const lockedFillLocator = await this._tryLockedSelector(resolvedStep);
+          if (lockedFillLocator) {
+            try {
+              await lockedFillLocator.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+              await lockedFillLocator.click({ timeout: 2000 }).catch(() => {});
+              await this.page.waitForTimeout(20); // Minimal focus delay for locked selector
+              await lockedFillLocator.fill(inputValue);
+              console.log(`[Executor] ⚡ FAST PATH: Fill succeeded with locked selector!`);
+              break; // Skip all other fill strategies
+            } catch (e) {
+              console.log(`[Executor] Locked selector Fill failed: ${e.message}, trying other strategies...`);
+              this._lastStepUsedLockedSelector = false;
+            }
+          }
           
           // Get additional context for disambiguation
           const formId = fillSelectorObj.formId || '';
@@ -3081,8 +3190,10 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         
         // Add delay between steps to prevent skipping fast clicks
         // This gives the UI time to settle before the next action
+        // OPTIMIZATION: Minimal delay when locked selector was used (element found instantly, UI settled from post-action wait)
         if (i < testData.steps.length - 1 && this.stepDelay > 0) {
-          await this.page.waitForTimeout(this.stepDelay);
+          const delay = this._lastStepUsedLockedSelector ? Math.min(this.stepDelay, 30) : this.stepDelay;
+          await this.page.waitForTimeout(delay);
         }
 
         // Stop on failure (unless soft assert)

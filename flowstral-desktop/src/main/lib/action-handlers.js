@@ -1688,12 +1688,15 @@ async function handleHover(ctx, action, options = {}) {
   }
   
   await hoverResult.locator.hover({ timeout });
-  console.log(`[ActionHandler] ✓ Hover succeeded using ${hoverResult.strategy?.type || 'SmartFinder'}`);
+  const hoverStrategy = hoverResult.strategy?.type || 'SmartFinder';
+  console.log(`[ActionHandler] ✓ Hover succeeded using ${hoverStrategy}`);
   
   // Wait for flyout menus to appear after hover
-  await ctx.page.waitForTimeout(300);
+  // OPTIMIZATION: Shorter wait when locked selector was used (reliable find, less variance)
+  const hoverSettleTime = hoverStrategy === 'LockedSelector' ? 100 : 300;
+  await ctx.page.waitForTimeout(hoverSettleTime);
   
-  return { success: true, strategy: hoverResult.strategy?.type || 'SmartFinder' };
+  return { success: true, strategy: hoverStrategy };
 }
 
 /**
