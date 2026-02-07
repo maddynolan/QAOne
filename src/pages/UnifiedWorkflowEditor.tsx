@@ -1633,7 +1633,67 @@ export default function UnifiedWorkflowEditor() {
     const importSource = searchParams.get('import');
     const sessionId = searchParams.get('sessionId');
     
-    // Handle base64-encoded import from Flowstral Desktop
+    // Handle base64-encoded data from Electron export (priority)
+    if (data) {
+      try {
+        const decoded = atob(decodeURIComponent(data));
+        const importedTestCase = JSON.parse(decoded);
+        console.log('[Builder] Loading from URL data param:', importedTestCase);
+        console.log('[Builder] Steps count:', importedTestCase.steps?.length);
+        
+        // Convert steps to our format - handle qword from recorder
+        const steps: TestStep[] = (importedTestCase.steps || []).map((step: any, idx: number) => {
+          // Use qword if available, then type, then default to 'click'
+          const rawType = step.qword || step.type || 'click';
+          const mappedType = mapEventType(rawType);
+          
+          // Mask password values
+          const isPasswordStep = /password|passwd|pwd|["']pw["']|\bpw\b/i.test(step.name || step.description || '');
+          const value = isPasswordStep ? '••••••••' : (step.value || '');
+          
+          return {
+            id: step.id || `step_${Date.now()}_${idx}`,
+            type: mappedType,
+            name: step.name || step.description || `Step ${idx + 1}`,
+            selector: step.selector || step.selectorObj?.selector || '',
+            selectorObj: step.selectorObj,
+            value,
+            url: step.url || (mappedType === 'navigate' ? step.args?.[0] : '') || '',
+            qword: step.qword,  // Preserve qword for execution
+            args: step.args,    // Preserve args for execution
+            enabled: step.enabled !== false,
+            expectedResult: step.expectedResult || '',
+            isSensitive: isPasswordStep || step.isSensitive,
+          };
+        });
+        
+        setTestCase(prev => ({
+          ...prev,
+          id: importedTestCase.id || `tc_${Date.now()}`,
+          name: importedTestCase.name || 'Imported Test Case',
+          description: importedTestCase.description || 'Imported from Recorder',
+          tags: importedTestCase.tags || [],
+          steps,
+          settings: {
+            ...prev.settings,
+            baseUrl: importedTestCase.settings?.baseUrl || '',
+            timeout: importedTestCase.settings?.timeout || 30000,
+          },
+          metadata: {
+            ...prev.metadata,
+            ...importedTestCase.metadata,
+            source: importedTestCase.metadata?.source || 'flowstral-desktop',
+          },
+        }));
+        
+        toast.success(`Loaded "${importedTestCase.name}" with ${steps.length} steps`);
+        return; // Don't continue to other sources
+      } catch (err) {
+        console.error('[Builder] Error parsing URL data:', err);
+      }
+    }
+    
+    // Handle base64-encoded import from Flowstral Desktop (legacy)
     if (importSource && importSource !== 'trace') {
       try {
         // Decode base64 test case from desktop app

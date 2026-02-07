@@ -3584,7 +3584,7 @@ class PlaywrightRecorder extends EventEmitter {
       // Wait for page to be stable before executing steps
       try {
         await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-        await this.page.waitForTimeout(500); // Let React/Vue fully render after storage clear
+        await this.page.waitForTimeout(150); // Brief settle after DOM ready
       } catch (e) {
         console.log('[PlaywrightRecorder] Page stability wait skipped:', e.message);
       }
@@ -3840,7 +3840,8 @@ class PlaywrightRecorder extends EventEmitter {
           // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
           // FAST PATH: Minimal delay when locked selector was used (proven reliable, less variance)
           const usedLockedSelector = (strategyType === 'LockedSelector' || strategyType === 'already-locked');
-          const minDelay = usedLockedSelector ? 20 : 100;
+          const usedQuickScan = strategyType && strategyType.startsWith('QuickScan-');
+          const minDelay = (usedLockedSelector || usedQuickScan) ? 20 : 50;
           const stepDelay = Math.max(minDelay, slowMo);
           await this.page.waitForTimeout(stepDelay);
           
@@ -4478,7 +4479,7 @@ class PlaywrightRecorder extends EventEmitter {
           await this._executeStepInternal(step, 30000);
           passedSteps++;
           this.emit('test-step-complete', { stepIndex: i, success: true });
-          await this.page.waitForTimeout(500);
+          await this.page.waitForTimeout(150); // Reduced from 500ms
         } catch (stepError) {
           console.error(`[PlaywrightRecorder] Resume: Step ${i + 1} failed:`, stepError.message);
           failedStep = i;
@@ -4670,8 +4671,9 @@ class PlaywrightRecorder extends EventEmitter {
           this.emit('test-step-complete', { stepIndex: i, success: true, workingSelector, strategyType });
           this.emit('test-runner:step-complete', { index: i, status: 'passed', duration, workingSelector, strategyType });
           
-          // Brief pause between steps
-          await this.page.waitForTimeout(500);
+          // Brief pause between steps (reduced from 500ms)
+          const debugStepDelay = (strategyType === 'LockedSelector' || strategyType === 'already-locked') ? 30 : 150;
+          await this.page.waitForTimeout(debugStepDelay);
           
         } catch (stepError) {
           console.error(`[PlaywrightRecorder] Debug: Step ${i + 1} failed:`, stepError.message);
@@ -6966,8 +6968,10 @@ class PlaywrightRecorder extends EventEmitter {
     return dynamicPatterns.some(pattern => pattern.test(id));
   }
   
-  async _findElement(action) {
+  async _findElement(action, scope) {
     const timeout = 5000;
+    // Use the provided scope (page or iframe) - fallback to this.page for backwards compat
+    const searchScope = scope || this.page;
     const strategies = [];
     // FIXED: Use comprehensive label extraction with normalization
     const label = getActionLabel(action);
@@ -6984,7 +6988,7 @@ class PlaywrightRecorder extends EventEmitter {
     if (manualOverride) {
       console.log(`[PlaywrightRecorder] 🎯 MANUAL OVERRIDE: Using user-specified selector: "${manualOverride}"`);
       try {
-        const manualLocator = this.page.locator(manualOverride);
+        const manualLocator = searchScope.locator(manualOverride);
         const count = await manualLocator.count();
         if (count > 0) {
           console.log(`[PlaywrightRecorder] ✅ Manual override found ${count} element(s)`);
@@ -7312,75 +7316,76 @@ class PlaywrightRecorder extends EventEmitter {
         if (strategy.value.startsWith('getByTestId:')) {
           // HIGHEST PRIORITY: data-testid - most reliable selector
           const testIdValue = strategy.value.replace('getByTestId:', '');
-          baseLocator = this.page.getByTestId(testIdValue);
+          baseLocator = searchScope.getByTestId(testIdValue);
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRoleRegex:')) {
           // APOSTROPHE FIX: Use regex for role name that matches any apostrophe variant
           const parts = strategy.value.replace('getByRoleRegex:', '').split(':');
           if (parts.length === 2) {
             const flexRegex = createApostropheFlexRegex(parts[1]);
-            baseLocator = this.page.getByRole(parts[0], { name: flexRegex });
+            baseLocator = searchScope.getByRole(parts[0], { name: flexRegex });
             locator = getAtIndex(baseLocator);
           }
         } else if (strategy.value.startsWith('getByTextRegex:')) {
           // APOSTROPHE FIX: Use regex that matches any apostrophe variant
           const text = strategy.value.replace('getByTextRegex:', '');
           const flexRegex = createApostropheFlexRegex(text);
-          baseLocator = this.page.getByText(flexRegex);
+          baseLocator = searchScope.getByText(flexRegex);
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByText:')) {
           const text = strategy.value.replace('getByText:', '');
-          baseLocator = this.page.getByText(text, { exact: true });
+          baseLocator = searchScope.getByText(text, { exact: true });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByLabel:')) {
           const labelText = strategy.value.replace('getByLabel:', '');
-          baseLocator = this.page.getByLabel(labelText);
+          baseLocator = searchScope.getByLabel(labelText);
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:textbox:')) {
           const name = strategy.value.replace('getByRole:textbox:', '');
-          baseLocator = this.page.getByRole('textbox', { name });
+          baseLocator = searchScope.getByRole('textbox', { name });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:button:')) {
           const name = strategy.value.replace('getByRole:button:', '');
-          baseLocator = this.page.getByRole('button', { name });
+          baseLocator = searchScope.getByRole('button', { name });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:link:')) {
           const name = strategy.value.replace('getByRole:link:', '');
-          baseLocator = this.page.getByRole('link', { name });
+          baseLocator = searchScope.getByRole('link', { name });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:tab:')) {
           const name = strategy.value.replace('getByRole:tab:', '');
-          baseLocator = this.page.getByRole('tab', { name });
+          baseLocator = searchScope.getByRole('tab', { name });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:menuitem:')) {
           const name = strategy.value.replace('getByRole:menuitem:', '');
-          baseLocator = this.page.getByRole('menuitem', { name });
+          baseLocator = searchScope.getByRole('menuitem', { name });
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByRole:')) {
           // Generic getByRole handler for role-name strategies
           const parts = strategy.value.replace('getByRole:', '').split(':');
           if (parts.length === 2) {
-            baseLocator = this.page.getByRole(parts[0], { name: parts[1] });
+            baseLocator = searchScope.getByRole(parts[0], { name: parts[1] });
           } else {
-            baseLocator = this.page.getByRole(parts[0]);
+            baseLocator = searchScope.getByRole(parts[0]);
           }
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByPlaceholder:')) {
           const placeholder = strategy.value.replace('getByPlaceholder:', '');
-          baseLocator = this.page.getByPlaceholder(placeholder);
+          baseLocator = searchScope.getByPlaceholder(placeholder);
           locator = getAtIndex(baseLocator);
         } else if (strategy.value.startsWith('getByTitle:')) {
           const title = strategy.value.replace('getByTitle:', '');
-          baseLocator = this.page.getByTitle(title);
+          baseLocator = searchScope.getByTitle(title);
           locator = getAtIndex(baseLocator);
         } else {
-          baseLocator = this.page.locator(strategy.value);
+          baseLocator = searchScope.locator(strategy.value);
           locator = getAtIndex(baseLocator);
         }
         
         const count = await locator.count().catch(() => 0);
         if (count > 0) {
-          const isVisible = await locator.isVisible({ timeout: 5000 }).catch(() => false);
+          // isVisible() is an instant boolean check - no timeout needed
+          const isVisible = await locator.isVisible().catch(() => false);
           if (isVisible) {
             // For fill actions, validate that the element is actually fillable
             if (isFillAction) {
@@ -7537,15 +7542,15 @@ class PlaywrightRecorder extends EventEmitter {
         // Use getAtIndex to respect elementIndex for duplicate elements
         let locator;
         if (found.id && !/^(lwc|aura)-/i.test(found.id)) {
-          locator = getAtIndex(this.page.locator(`#${cssEscape(found.id)}`));
+          locator = getAtIndex(searchScope.locator(`#${cssEscape(found.id)}`));
         } else if (found.ariaLabel) {
-          locator = getAtIndex(this.page.getByLabel(found.ariaLabel));
+          locator = getAtIndex(searchScope.getByLabel(found.ariaLabel));
         } else if (found.placeholder) {
-          locator = getAtIndex(this.page.getByPlaceholder(found.placeholder));
+          locator = getAtIndex(searchScope.getByPlaceholder(found.placeholder));
         } else if (found.title) {
-          locator = getAtIndex(this.page.getByTitle(found.title));
+          locator = getAtIndex(searchScope.getByTitle(found.title));
         } else if (found.name) {
-          locator = getAtIndex(this.page.locator(`[name="${found.name}"]`));
+          locator = getAtIndex(searchScope.locator(`[name="${found.name}"]`));
         }
         
         if (locator) {
@@ -7720,8 +7725,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
   async retryWithBackoff(fn, options = {}) {
     const { 
       maxRetries = 3, 
-      baseDelay = 500, 
-      maxDelay = 5000,
+      baseDelay = 200, 
+      maxDelay = 2000,
       description = 'action'
     } = options;
     
@@ -7788,7 +7793,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         if (this.useSmartFinderForPlayback) {
           if (!this.smartFinder) {
             // Pass scope instead of page for iframe support
-            this.smartFinder = new SmartFinder(isIframe ? scope : this.page, { debug: true, timeout: 15000 });
+            this.smartFinder = new SmartFinder(isIframe ? scope : this.page, { debug: true, timeout: 5000 });
           }
           
           // FAST PATH: Skip heavy waits when a locked selector is available
@@ -7796,7 +7801,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const _hasLockedSelector = !!(getLockedSelector(action));
           if (!_hasLockedSelector) {
             await this.page.waitForLoadState('domcontentloaded').catch(() => {});
-            await this.page.waitForTimeout(300);
+            // domcontentloaded guarantees DOM is parsed - minimal extra settle time
+            await this.page.waitForTimeout(50);
           } else {
             // Minimal wait for locked selectors - just ensure page isn't mid-navigation
             await this.page.waitForTimeout(30);
@@ -7841,13 +7847,89 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                   return { locator: locator.first(), strategy: { type: 'LockedSelector' } };
                 }
               }
-              console.log(`[PlaywrightRecorder] Locked selector not found, trying SmartFinder...`);
+              console.log(`[PlaywrightRecorder] Locked selector not found, trying Quick Scan...`);
               // Flag that locked selector failed - we'll need to heal it
               this._lockedSelectorFailed = true;
             } catch (e) {
-              console.log(`[PlaywrightRecorder] Locked selector failed: ${e.message}, trying SmartFinder...`);
+              console.log(`[PlaywrightRecorder] Locked selector failed: ${e.message}, trying Quick Scan...`);
               this._lockedSelectorFailed = true;
             }
+          }
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // QUICK SCAN: Fast text/role/aria-label checks BEFORE heavy SmartFinder
+          // These use Playwright's built-in locators (auto-pierce shadow DOM)
+          // Each check takes <100ms - total ~500ms vs SmartFinder's 5-15s
+          // ═══════════════════════════════════════════════════════════════════
+          const quickScanLabel = label || action.text || action.selectorObj?.text || action.args?.[0] || '';
+          if (quickScanLabel && !isIframe) {
+            console.log(`[PlaywrightRecorder] 🔍 Quick Scan for: "${quickScanLabel}"`);
+            const quickScanStart = Date.now();
+            
+            // Build quick scan strategies based on action type
+            const isFillAction = ['fill', 'type', 'input'].includes((action.type || '').toLowerCase());
+            const quickStrategies = [];
+            
+            if (isFillAction) {
+              // For fill actions: try input-specific locators
+              quickStrategies.push({ name: 'getByLabel', fn: () => scope.getByLabel(quickScanLabel) });
+              quickStrategies.push({ name: 'getByPlaceholder', fn: () => scope.getByPlaceholder(quickScanLabel) });
+              quickStrategies.push({ name: 'getByRole-textbox', fn: () => scope.getByRole('textbox', { name: quickScanLabel }) });
+              quickStrategies.push({ name: 'aria-label-input', fn: () => scope.locator(`input[aria-label="${quickScanLabel}"]`) });
+              quickStrategies.push({ name: 'name-input', fn: () => scope.locator(`input[name="${quickScanLabel}"]`) });
+            } else {
+              // For click actions: try common interactive element locators
+              quickStrategies.push({ name: 'getByRole-button', fn: () => scope.getByRole('button', { name: quickScanLabel }) });
+              quickStrategies.push({ name: 'getByRole-link', fn: () => scope.getByRole('link', { name: quickScanLabel }) });
+              quickStrategies.push({ name: 'getByRole-menuitem', fn: () => scope.getByRole('menuitem', { name: quickScanLabel }) });
+              quickStrategies.push({ name: 'getByRole-tab', fn: () => scope.getByRole('tab', { name: quickScanLabel }) });
+              quickStrategies.push({ name: 'getByText', fn: () => scope.getByText(quickScanLabel, { exact: false }) });
+              quickStrategies.push({ name: 'getByTitle', fn: () => scope.getByTitle(quickScanLabel) });
+              quickStrategies.push({ name: 'aria-label', fn: () => scope.locator(`[aria-label="${quickScanLabel}"]`) });
+              quickStrategies.push({ name: 'title-attr', fn: () => scope.locator(`[title="${quickScanLabel}"]`) });
+            }
+            
+            for (const qs of quickStrategies) {
+              try {
+                const qsLocator = qs.fn();
+                const qsFound = await Promise.race([
+                  qsLocator.count().then(c => c > 0),
+                  new Promise(resolve => setTimeout(() => resolve(false), 150))
+                ]);
+                if (qsFound) {
+                  const qsVisible = await qsLocator.first().isVisible().catch(() => false);
+                  if (qsVisible) {
+                    const quickMs = Date.now() - quickScanStart;
+                    console.log(`[PlaywrightRecorder] 🔍 Quick Scan HIT: "${qs.name}" in ${quickMs}ms`);
+                    // Track for Lock Locators
+                    const qsSelectorStr = qs.name.startsWith('getByRole-')
+                      ? `role=${qs.name.replace('getByRole-', '')}[name="${quickScanLabel}"]`
+                      : qs.name === 'getByText' ? `text="${quickScanLabel}"`
+                      : qs.name === 'getByTitle' ? `[title="${quickScanLabel}"]`
+                      : qs.name === 'getByLabel' ? `getByLabel:${quickScanLabel}`
+                      : qs.name === 'getByPlaceholder' ? `getByPlaceholder:${quickScanLabel}`
+                      : `[aria-label="${quickScanLabel}"]`;
+                    this._lastWorkingSelector = qsSelectorStr;
+                    this._lastStrategyType = `QuickScan-${qs.name}`;
+                    
+                    // Self-healing: if locked selector failed, report for auto-update
+                    const needsHealing = this._lockedSelectorFailed && qsSelectorStr;
+                    this._lockedSelectorFailed = false;
+                    
+                    return { 
+                      locator: qsLocator.first(), 
+                      strategy: { type: `QuickScan-${qs.name}`, value: qsSelectorStr },
+                      healed: needsHealing,
+                      newSelector: needsHealing ? qsSelectorStr : null
+                    };
+                  }
+                }
+              } catch (e) {
+                // Quick scan strategy failed - try next one
+              }
+            }
+            const quickMs = Date.now() - quickScanStart;
+            console.log(`[PlaywrightRecorder] 🔍 Quick Scan MISS (${quickMs}ms), falling through to SmartFinder...`);
           }
           
           const recipe = legacyActionToRecipe(action);
@@ -7941,7 +8023,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         }
         
         throw new Error(`Element not found: "${label}"`);
-      }, { maxRetries: 3, description: `Find "${label}"` });
+      }, { maxRetries: 2, description: `Find "${label}"` });
     } catch (e) {
       console.log(`[PlaywrightRecorder] findElementWithRetry failed:`, e.message);
       return null; // All retries failed
@@ -8343,11 +8425,14 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             }
           }
           
-          // Check if this click opened a NEW TAB
-          // FAST PATH: Shorter wait for locked selectors (most locked steps don't open new tabs)
+          // Check if this click opened a NEW TAB (event-driven, no fixed wait)
           const pagesBefore = this.context.pages().length;
-          const newTabWait = (clickResult.strategy?.type === 'LockedSelector') ? 50 : 500;
-          await this.page.waitForTimeout(newTabWait);
+          let newTabPage = null;
+          try {
+            newTabPage = await this.context.waitForEvent('page', { timeout: 200 });
+          } catch (e) {
+            // No new tab opened - this is the normal case, no delay wasted
+          }
           const pagesAfter = this.context.pages();
           
           if (pagesAfter.length > pagesBefore) {
@@ -8363,11 +8448,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             
             // Reinitialize SmartFinder for new page
             if (this.useSmartFinderForPlayback) {
-              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 15000 });
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 5000 });
             }
             
             console.log(`[PlaywrightRecorder] Now on new tab: ${this.page.url()}`);
-            await this.page.waitForTimeout(1000); // Let page stabilize
+            await this.page.waitForTimeout(300); // Brief stabilize
           }
           
           // Check if this is a link click that should navigate
@@ -8385,13 +8470,18 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               console.log('[PlaywrightRecorder] Link href:', linkHref);
             } catch (e) {}
             
-            // Wait a moment and check if URL actually changed
-            await this.page.waitForTimeout(2000);
-            const urlAfter = this.page.url();
-            const didNavigate = urlAfter !== urlBefore;
+            // Event-driven: wait for URL change (fast) instead of fixed 2000ms polling
+            let didNavigate = false;
+            try {
+              await this.page.waitForURL(url => url.toString() !== urlBefore, { timeout: 3000 });
+              didNavigate = true;
+            } catch (e) {
+              // URL didn't change within 3s - check manually
+              didNavigate = this.page.url() !== urlBefore;
+            }
             
             console.log('[PlaywrightRecorder] URL before:', urlBefore);
-            console.log('[PlaywrightRecorder] URL after:', urlAfter);
+            console.log('[PlaywrightRecorder] URL after:', this.page.url());
             console.log('[PlaywrightRecorder] Did navigate:', didNavigate);
             
             if (!didNavigate && linkHref) {
@@ -8407,7 +8497,6 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 // Last resort: Try clicking with dispatchEvent
                 try {
                   await clickResult.locator.evaluate(el => {
-                    // Try dispatching a real click event
                     const event = new MouseEvent('click', {
                       view: window,
                       bubbles: true,
@@ -8415,23 +8504,24 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                     });
                     el.dispatchEvent(event);
                   });
-                  await this.page.waitForTimeout(2000);
+                  await this.page.waitForTimeout(500);
                 } catch (e2) {}
               }
             }
             
-            // Wait for Salesforce Lightning page to fully load
+            // Wait for page to stabilize after navigation
             console.log('[PlaywrightRecorder] Waiting for page to stabilize...');
             try {
-              await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+              await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 });
             } catch (e) {
-              console.log('[PlaywrightRecorder] Network did not go idle, using fallback');
+              console.log('[PlaywrightRecorder] DOM load wait skipped');
             }
-            await this.page.waitForTimeout(2000);
+            // Brief settle time (reduced from 2000ms)
+            await this.page.waitForTimeout(300);
             console.log('[PlaywrightRecorder] Page should be loaded now');
           } else {
-            // Regular wait for UI update
-            await this.page.waitForTimeout(500);
+            // Regular wait for UI update (reduced from 500ms)
+            await this.page.waitForTimeout(100);
           }
           
           // Remove highlight
@@ -8454,16 +8544,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           console.log(`[PlaywrightRecorder] Fill action - Current page URL: ${this.page?.url()}`);
           console.log(`[PlaywrightRecorder] Fill action - action.tabIndex: ${action.tabIndex}, total pages: ${this.context?.pages()?.length || 0}`);
           
-          // CRITICAL: Wait for page to be ready before finding input
-          // This is especially important for cross-origin tabs that may still be loading
-          try {
-            await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-            // Also wait a moment for dynamic content
-            await this.page.waitForTimeout(500);
-          } catch (e) {
-            console.log('[PlaywrightRecorder] Page load wait skipped:', e.message);
-          }
-          
+          // NOTE: Stability wait removed - findElementWithRetry already handles domcontentloaded + stability
           // Find input element using multiple strategies
           let fillResult = await this._findElement(action);
           

@@ -4,6 +4,8 @@ This document walks you through **deploying one of our websites to AWS** (e.g. F
 
 **Reference:** See [PERFORMANCE_PLATFORM_SINGLE_DOC.md](./PERFORMANCE_PLATFORM_SINGLE_DOC.md) for architecture, APIs, and concepts.
 
+**Full AWS + 1-hour enterprise test:** For **connecting to AWS**, **purchasing EC2**, and running a **full 1-hour test with scenario mix and all observability** (Lighthouse, SRM, correlation), see [PERFORMANCE-AWS-ENTERPRISE-1HR-GUIDE.md](./PERFORMANCE-AWS-ENTERPRISE-1HR-GUIDE.md).
+
 **Flowstral.com-specific:** For what to test on flowstral.com, how to record it, and a **2000+ VU, 1-hour run with ramp-up** (plus cost), see [FLOWSTRAL-COM-LOAD-TEST-PLAN.md](./FLOWSTRAL-COM-LOAD-TEST-PLAN.md).
 
 ---

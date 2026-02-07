@@ -22,6 +22,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import traceLogger from '@/lib/trace-logger';
 
 const STORAGE_KEY = 'flowstral_plugins';
 const LICENSE_STORAGE_KEY = 'flowstral_license_info';
@@ -325,7 +326,7 @@ export function LandingPluginsProvider({ children }: { children: React.ReactNode
   const setPlugin = useCallback((key: PluginKey, value: boolean) => {
     // Only allow enabling if licensed
     if (value && !isLicensed(key)) {
-      console.warn(`Cannot enable plugin "${key}" - not licensed`);
+      traceLogger.warn(`Cannot enable plugin "${key}" - not licensed`);
       return;
     }
     

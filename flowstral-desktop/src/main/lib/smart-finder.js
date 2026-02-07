@@ -2442,9 +2442,23 @@ class SmartFinder {
    * Try a finding strategy and record the attempt
    */
   async tryStrategy(name, fn, attempts) {
+    // TIME BUDGET: Skip remaining strategies if we've been searching too long
+    if (this._executionStartTime) {
+      const elapsed = Date.now() - this._executionStartTime;
+      if (elapsed > this.timeout) {
+        this.log(`TIME BUDGET EXCEEDED (${elapsed}ms > ${this.timeout}ms), skipping strategy: ${name}`);
+        attempts.push({ strategy: name, success: false, skipped: true, reason: 'time-budget' });
+        return { success: false, error: 'time-budget-exceeded' };
+      }
+    }
     try {
       this.log(`Trying strategy: ${name}`);
-      const result = await fn();
+      // Wrap strategy with per-strategy timeout (max 3s per individual strategy)
+      const strategyTimeout = Math.min(3000, Math.max(500, this.timeout - (Date.now() - (this._executionStartTime || Date.now()))));
+      const result = await Promise.race([
+        fn(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`Strategy ${name} timed out after ${strategyTimeout}ms`)), strategyTimeout))
+      ]);
       
       attempts.push({
         strategy: name,
@@ -2995,10 +3009,11 @@ class SmartFinder {
     }
     
     // Multiple matches - try to find one that's visible and in viewport
+    // PERF: Check max 5 candidates with instant isVisible (no timeout) to avoid 10×500ms stall
     try {
-      for (let i = 0; i < Math.min(count, 10); i++) { // Check first 10 matches
+      for (let i = 0; i < Math.min(count, 5); i++) {
         const candidate = locator.nth(i);
-        const isVisible = await candidate.isVisible({ timeout: 500 }).catch(() => false);
+        const isVisible = await candidate.isVisible().catch(() => false);
         if (isVisible) {
           const box = await candidate.boundingBox().catch(() => null);
           if (box && box.y >= 0 && box.y < 1000) { // Visible in viewport

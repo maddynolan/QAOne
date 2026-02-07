@@ -6,6 +6,7 @@
 - `DEPLOYMENT-RECOMMENDATION-AND-CONTROL-PLANE.md` — control plane vs client, SaaS/PaaS rationale  
 - `DEPLOYMENT-STATUS-AND-STEPS.md` — what's done vs pending, key file locations  
 - `DEPLOYMENT-AND-PACKAGING-REFERENCE.md` — full options, recorder parity, packaging  
+- **`SAAS-DEPLOYMENT-OPTIMIZATIONS-TONIGHT.md`** — cost-optimized structure, desktop/extension, traceable logs, 20-trial licenses  
 
 ---
 
@@ -130,6 +131,12 @@ Run workers with same `DATABASE_URL`, `REDIS_URL`, and backend URL.
 - **Desktop:** Build from `flowstral-desktop` (see § 5). Set `serverUrl` to `https://api.yourdomain.com`.  
 - **Extension:** Package from `flowstral-extension`; publish to Chrome Web Store or ship ZIP. Set backend URL in extension options.  
 - **Web:** Users open your frontend URL; all traffic goes to backend.
+
+### 2.10 Trial licenses (e.g. 20 testers, 2 weeks)
+
+- Generate keys: `GET /api/license/generate-trials?count=20&days=14` or run `python scripts/generate_trial_licenses.py https://api.yourdomain.com`.
+- Distribute keys to testers; they enter the key in Desktop Settings → License (or web license flow).
+- See `SAAS-DEPLOYMENT-OPTIMIZATIONS-TONIGHT.md` for cost and logging setup.
 
 ---
 

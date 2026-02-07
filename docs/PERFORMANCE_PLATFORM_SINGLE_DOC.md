@@ -4,7 +4,7 @@ This document describes the end-to-end **enterprise load testing stack**: Record
 
 **Document review (accuracy):** This consolidated doc matches the implemented behavior and APIs. Cross-checked against PERF-OPTIMIZATIONS, PERF-CAPABILITIES-REFERENCE, and PERF-SETUP-AND-WALKTHROUGH. Minor clarifications: (1) Drafts API base path is `/api/performance` so endpoints are e.g. `POST /api/performance/drafts`. (2) Run manager compare uses `POST /api/performance/runs/compare` with body `{ "run_ids": ["id1", "id2"] }`. (3) Lighthouse run-hardened accepts `cache_strategy` (cold|warm) and `artifacts_dir` (default `data/lighthouse_artifacts`).
 
-**Step-by-step enterprise run:** For a full walkthrough (deploy site to AWS → browser run → API load test → Go runner → SRM → Lighthouse), see [PERFORMANCE-ENTERPRISE-RUN-WALKTHROUGH.md](./PERFORMANCE-ENTERPRISE-RUN-WALKTHROUGH.md).
+**Step-by-step enterprise run:** For a full walkthrough (deploy site to AWS → browser run → API load test → Go runner → SRM → Lighthouse), see [PERFORMANCE-ENTERPRISE-RUN-WALKTHROUGH.md](./PERFORMANCE-ENTERPRISE-RUN-WALKTHROUGH.md). For **connecting to AWS, purchasing EC2, and a full 1-hour enterprise test with scenario mix and all observability**, see [PERFORMANCE-AWS-ENTERPRISE-1HR-GUIDE.md](./PERFORMANCE-AWS-ENTERPRISE-1HR-GUIDE.md).
 
 ---
 
