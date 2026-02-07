@@ -3584,7 +3584,7 @@ class PlaywrightRecorder extends EventEmitter {
       // Wait for page to be stable before executing steps
       try {
         await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-        await this.page.waitForTimeout(150); // Brief settle after DOM ready
+        await this.page.waitForTimeout(500); // One-time settle for initial page load
       } catch (e) {
         console.log('[PlaywrightRecorder] Page stability wait skipped:', e.message);
       }
@@ -3841,7 +3841,7 @@ class PlaywrightRecorder extends EventEmitter {
           // FAST PATH: Minimal delay when locked selector was used (proven reliable, less variance)
           const usedLockedSelector = (strategyType === 'LockedSelector' || strategyType === 'already-locked');
           const usedQuickScan = strategyType && strategyType.startsWith('QuickScan-');
-          const minDelay = (usedLockedSelector || usedQuickScan) ? 20 : 50;
+          const minDelay = (usedLockedSelector || usedQuickScan) ? 50 : 100;
           const stepDelay = Math.max(minDelay, slowMo);
           await this.page.waitForTimeout(stepDelay);
           
@@ -4479,7 +4479,7 @@ class PlaywrightRecorder extends EventEmitter {
           await this._executeStepInternal(step, 30000);
           passedSteps++;
           this.emit('test-step-complete', { stepIndex: i, success: true });
-          await this.page.waitForTimeout(150); // Reduced from 500ms
+          await this.page.waitForTimeout(300); // Conservative delay for resume recovery
         } catch (stepError) {
           console.error(`[PlaywrightRecorder] Resume: Step ${i + 1} failed:`, stepError.message);
           failedStep = i;
@@ -7791,9 +7791,10 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         }, null, 2));
         
         if (this.useSmartFinderForPlayback) {
-          if (!this.smartFinder) {
-            // Pass scope instead of page for iframe support
-            this.smartFinder = new SmartFinder(isIframe ? scope : this.page, { debug: true, timeout: 5000 });
+          // Re-create SmartFinder if scope changed (e.g., switched to/from iframe)
+          const smartFinderTarget = isIframe ? scope : this.page;
+          if (!this.smartFinder || (isIframe && this.smartFinder.page !== smartFinderTarget)) {
+            this.smartFinder = new SmartFinder(smartFinderTarget, { debug: true, timeout: 8000 });
           }
           
           // FAST PATH: Skip heavy waits when a locked selector is available
@@ -7801,11 +7802,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const _hasLockedSelector = !!(getLockedSelector(action));
           if (!_hasLockedSelector) {
             await this.page.waitForLoadState('domcontentloaded').catch(() => {});
-            // domcontentloaded guarantees DOM is parsed - minimal extra settle time
-            await this.page.waitForTimeout(50);
+            // Wait for framework hydration (React, Salesforce Lightning shadow DOM rendering)
+            await this.page.waitForTimeout(300);
           } else {
             // Minimal wait for locked selectors - just ensure page isn't mid-navigation
-            await this.page.waitForTimeout(30);
+            await this.page.waitForTimeout(50);
           }
           
           // ═══════════════════════════════════════════════════════════════════
@@ -7878,15 +7879,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               quickStrategies.push({ name: 'aria-label-input', fn: () => scope.locator(`input[aria-label="${quickScanLabel}"]`) });
               quickStrategies.push({ name: 'name-input', fn: () => scope.locator(`input[name="${quickScanLabel}"]`) });
             } else {
-              // For click actions: try common interactive element locators
+              // For click actions: try role-based locators first (guaranteed interactive), text-based last
               quickStrategies.push({ name: 'getByRole-button', fn: () => scope.getByRole('button', { name: quickScanLabel }) });
               quickStrategies.push({ name: 'getByRole-link', fn: () => scope.getByRole('link', { name: quickScanLabel }) });
               quickStrategies.push({ name: 'getByRole-menuitem', fn: () => scope.getByRole('menuitem', { name: quickScanLabel }) });
               quickStrategies.push({ name: 'getByRole-tab', fn: () => scope.getByRole('tab', { name: quickScanLabel }) });
-              quickStrategies.push({ name: 'getByText', fn: () => scope.getByText(quickScanLabel, { exact: false }) });
               quickStrategies.push({ name: 'getByTitle', fn: () => scope.getByTitle(quickScanLabel) });
               quickStrategies.push({ name: 'aria-label', fn: () => scope.locator(`[aria-label="${quickScanLabel}"]`) });
               quickStrategies.push({ name: 'title-attr', fn: () => scope.locator(`[title="${quickScanLabel}"]`) });
+              // getByText LAST: can match non-interactive elements (spans, divs), needs interactivity guard
+              quickStrategies.push({ name: 'getByText', fn: () => scope.getByText(quickScanLabel, { exact: false }), needsInteractivityCheck: true });
             }
             
             for (const qs of quickStrategies) {
@@ -7894,11 +7896,27 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
                 const qsLocator = qs.fn();
                 const qsFound = await Promise.race([
                   qsLocator.count().then(c => c > 0),
-                  new Promise(resolve => setTimeout(() => resolve(false), 150))
+                  new Promise(resolve => setTimeout(() => resolve(false), 250))
                 ]);
                 if (qsFound) {
                   const qsVisible = await qsLocator.first().isVisible().catch(() => false);
                   if (qsVisible) {
+                    // Interactivity guard: getByText can match non-interactive elements (span, div, p)
+                    if (qs.needsInteractivityCheck) {
+                      const isInteractive = await qsLocator.first().evaluate(el => {
+                        const tag = el.tagName.toLowerCase();
+                        const interactiveTags = ['a', 'button', 'input', 'select', 'textarea', 'summary', 'details'];
+                        if (interactiveTags.includes(tag)) return true;
+                        if (el.getAttribute('role') && ['button', 'link', 'tab', 'menuitem', 'checkbox', 'radio', 'switch', 'option'].includes(el.getAttribute('role'))) return true;
+                        if (el.getAttribute('onclick') || el.getAttribute('tabindex') !== null) return true;
+                        if (el.closest('a, button')) return true;
+                        return false;
+                      }).catch(() => false);
+                      if (!isInteractive) {
+                        console.log(`[PlaywrightRecorder] 🔍 Quick Scan SKIP "${qs.name}" - matched non-interactive element`);
+                        continue;
+                      }
+                    }
                     const quickMs = Date.now() - quickScanStart;
                     console.log(`[PlaywrightRecorder] 🔍 Quick Scan HIT: "${qs.name}" in ${quickMs}ms`);
                     // Track for Lock Locators
@@ -8023,7 +8041,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
         }
         
         throw new Error(`Element not found: "${label}"`);
-      }, { maxRetries: 2, description: `Find "${label}"` });
+      }, { maxRetries: 3, description: `Find "${label}"` });
     } catch (e) {
       console.log(`[PlaywrightRecorder] findElementWithRetry failed:`, e.message);
       return null; // All retries failed
@@ -8448,11 +8466,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             
             // Reinitialize SmartFinder for new page
             if (this.useSmartFinderForPlayback) {
-              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 5000 });
+              this.smartFinder = new SmartFinder(this.page, { debug: true, timeout: 8000 });
             }
             
             console.log(`[PlaywrightRecorder] Now on new tab: ${this.page.url()}`);
-            await this.page.waitForTimeout(300); // Brief stabilize
+            await this.page.waitForTimeout(500); // Let new tab page stabilize
           }
           
           // Check if this is a link click that should navigate
@@ -8516,12 +8534,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             } catch (e) {
               console.log('[PlaywrightRecorder] DOM load wait skipped');
             }
-            // Brief settle time (reduced from 2000ms)
-            await this.page.waitForTimeout(300);
+            // Settle time for page frameworks (Salesforce Lightning needs ~1s after domcontentloaded)
+            await this.page.waitForTimeout(1000);
             console.log('[PlaywrightRecorder] Page should be loaded now');
           } else {
-            // Regular wait for UI update (reduced from 500ms)
-            await this.page.waitForTimeout(100);
+            // Regular wait for UI update (covers CSS transitions, dropdowns, modals: 200-300ms)
+            await this.page.waitForTimeout(250);
           }
           
           // Remove highlight
@@ -8544,9 +8562,11 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           console.log(`[PlaywrightRecorder] Fill action - Current page URL: ${this.page?.url()}`);
           console.log(`[PlaywrightRecorder] Fill action - action.tabIndex: ${action.tabIndex}, total pages: ${this.context?.pages()?.length || 0}`);
           
-          // NOTE: Stability wait removed - findElementWithRetry already handles domcontentloaded + stability
-          // Find input element using multiple strategies
-          let fillResult = await this._findElement(action);
+          // Wait for DOM to be ready before finding the input element
+          await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+          await this.page.waitForTimeout(200);
+          // Find input element using full waterfall (locked → Quick Scan → SmartFinder → legacy) with retries + iframe scope
+          let fillResult = await this.findElementWithRetry(action);
           
           // DIRECT ID/NAME FALLBACK: If not found, try simple direct selectors
           // This is critical for cross-origin tabs where complex strategies may fail
@@ -8729,8 +8749,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             await this.page.waitForTimeout(1000);
             console.log('[PlaywrightRecorder] Search results should be ready now');
           } else {
-            // Brief wait for input to register (reduced from 300ms)
-            await this.page.waitForTimeout(100);
+            // Wait for input validation/re-render after typing
+            await this.page.waitForTimeout(200);
           }
           
           // Remove highlight

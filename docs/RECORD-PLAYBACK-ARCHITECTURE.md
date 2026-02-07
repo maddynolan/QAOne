@@ -267,16 +267,18 @@ findElementWithRetry(action)
 │      │
 │      ├── LAYER 0.5: Quick Scan (NEW - text/role/aria fast checks)
 │      │   ├── For clicks: getByRole(button/link/menuitem/tab),
-│      │   │   getByText, getByTitle, aria-label, title attr
+│      │   │   getByTitle, aria-label, title attr, getByText (last)
 │      │   ├── For fills: getByLabel, getByPlaceholder,
 │      │   │   getByRole(textbox), aria-label-input, name-input
-│      │   ├── 150ms race timeout per strategy
+│      │   ├── 250ms race timeout per strategy
+│      │   ├── getByText has interactivity guard (skips non-interactive matches)
 │      │   ├── Self-healing: reports healed selector to frontend
 │      │   └── If visible → return (QuickScan-{strategy})
 │      │
 │      ├── LAYER 1: SmartFinder (recipe-based, 10-phase search)
 │      │   ├── Convert action to ElementRecipe
-│      │   ├── 5s timeout (was 15s)
+│      │   ├── 8s timeout (was 15s, then 5s, now balanced at 8s)
+│      │   ├── Re-scoped when switching to/from iframes
 │      │   ├── Handles: shadow DOM, Salesforce Lightning,
 │      │   │   role disambiguation, text normalization
 │      │   └── If found → return (SmartFinder)
@@ -333,7 +335,7 @@ Within `_findElement`, strategies are tried in this priority:
 | Phases | 10 phases | Single pass |
 | Salesforce | Lightning components, ListView, "New" button | SF-specific selectors |
 | Coordinates | BBox fallback | None |
-| Timeout | 5s | 5s |
+| Timeout | 8s | 5s |
 
 ---
 
@@ -404,25 +406,30 @@ action.selectorObj = {
 
 ### 7.1 All Timeout Changes (Before → After)
 
-| Location | Component | Before | After | Impact | File:Line |
-|----------|-----------|--------|-------|--------|-----------|
-| SmartFinder constructor | `timeout` | 15,000ms | **5,000ms** | -10s per SmartFinder invocation | `playwright-recorder.js:7796` |
-| SmartFinder (new tab) | `timeout` | 15,000ms | **5,000ms** | -10s on tab switch | `playwright-recorder.js:8451` |
-| Element find retries | `maxRetries` | 3 | **2** | -1 full retry cycle (~10s) | `playwright-recorder.js:8026` |
-| Quick Scan race | per-strategy | N/A (new) | **150ms** | New layer, finds most elements in <200ms | `playwright-recorder.js:7897` |
+| Location | Component | Before | After (Balanced) | Impact | File:Line |
+|----------|-----------|--------|-------------------|--------|-----------|
+| SmartFinder constructor | `timeout` | 15,000ms | **8,000ms** | -7s per SmartFinder invocation (balanced for deep shadow DOM) | `playwright-recorder.js:7797` |
+| SmartFinder (new tab) | `timeout` | 15,000ms | **8,000ms** | -7s on tab switch | `playwright-recorder.js:8469` |
+| SmartFinder re-scoping | iframe switch | Never re-created | **Re-created on iframe scope change** | Fixes iframe element finding | `playwright-recorder.js:7795` |
+| Element find retries | `maxRetries` | 3 | **3** (restored) | Restored from 2 for reliability | `playwright-recorder.js:8044` |
+| Quick Scan race | per-strategy | N/A (new) | **250ms** | New layer, finds most elements in <300ms | `playwright-recorder.js:7898` |
+| Quick Scan getByText | order | N/A (new) | **Last + interactivity guard** | Prevents matching non-interactive spans/divs | `playwright-recorder.js:7890` |
 | Locked selector race | per-check | 150ms | 150ms | (unchanged) | `playwright-recorder.js:7835` |
-| New tab detection | polling wait | **500ms** fixed | **200ms** event-driven | -300ms per click (saves ~4.5s for 15 clicks) | `playwright-recorder.js:8432` |
-| New tab stabilize | post-switch | 1,000ms | **300ms** | -700ms per tab switch | `playwright-recorder.js:8455` |
-| Link navigation check | polling wait | **2,000ms** fixed | **waitForURL** (event) | -2s per link click, instant when URL changes | `playwright-recorder.js:8476` |
-| Post-navigation settle | after nav load | 2,000ms | **300ms** | -1.7s per navigation | `playwright-recorder.js:8520` |
-| Post-click settle | regular clicks | 500ms | **100ms** | -400ms per click (saves ~6s for 15 clicks) | `playwright-recorder.js:8524` |
-| Fill pre-wait | before fill | 500ms (domcontent + 500ms) | **Removed** | -500ms per fill (saves ~2.5s for 5 fills) | `playwright-recorder.js:8547` |
+| New tab detection | polling wait | **500ms** fixed | **200ms** event-driven | -300ms per click | `playwright-recorder.js:8449` |
+| New tab stabilize | post-switch | 1,000ms | **500ms** | -500ms per tab switch | `playwright-recorder.js:8473` |
+| Link navigation check | polling wait | **2,000ms** fixed | **waitForURL 3s** (event) | -2s per link click, instant when URL changes | `playwright-recorder.js:8494` |
+| Post-navigation settle | after nav load | 2,000ms | **1,000ms** | -1s per navigation (sufficient for Salesforce) | `playwright-recorder.js:8538` |
+| Post-click settle | regular clicks | 500ms | **250ms** | -250ms per click (covers CSS transitions) | `playwright-recorder.js:8542` |
+| Fill pre-wait | before fill | 500ms (domcontent + 500ms) | **domcontent + 200ms** (restored) | -300ms but still ensures DOM ready for fills | `playwright-recorder.js:8566` |
+| Fill post-input | after typing | 200ms | **200ms** | (unchanged - needed for validation/re-render) | `playwright-recorder.js:8753` |
 | `_findElement` isVisible | per-strategy | `{ timeout: 5000 }` | **No timeout** (instant check) | -5s per non-visible match | `playwright-recorder.js:7388` |
-| DOM stability wait | before find (non-locked) | domcontent + 300ms | domcontent + 300ms | (unchanged - necessary for fresh pages) | `playwright-recorder.js:7802` |
-| DOM stability wait | before find (locked) | 30ms | 30ms | (unchanged) | `playwright-recorder.js:7807` |
+| DOM stability wait | before find (non-locked) | domcontent + 300ms | domcontent + 300ms | (unchanged - necessary for fresh pages) | `playwright-recorder.js:7806` |
+| DOM stability wait | before find (locked) | 50ms | 50ms | (unchanged) | `playwright-recorder.js:7809` |
 | `resolveMultiple` isVisible | per-candidate | `{ timeout: 500 }` × 10 | **No timeout** × 5 | -4.5s worst case per disambiguation | `smart-finder.js:3015` |
-| Step delay (locked) | between steps | 20ms min | 20ms min | (unchanged) | `playwright-recorder.js:3849` |
-| Step delay (non-locked) | between steps | 100ms min | 100ms min | (unchanged) | `playwright-recorder.js:3849` |
+| Step delay (locked/quick) | between steps | 50ms min | 50ms min | (unchanged) | `playwright-recorder.js:3844` |
+| Step delay (non-locked) | between steps | 100ms min | 100ms min | (unchanged) | `playwright-recorder.js:3844` |
+| Resume step delay | between resume steps | 300ms | **300ms** | (unchanged - conservative for resume recovery) | `playwright-recorder.js:4482` |
+| Initial page settle | one-time before loop | 500ms | **500ms** | (unchanged - one-time cost for initial load) | `playwright-recorder.js:3587` |
 
 ### 7.2 Net Performance Impact
 
@@ -439,35 +446,39 @@ action.selectorObj = {
 | SmartFinder failures (15s × 3 retries × per step) | 45-60s |
 | **Total dead time** | **~70-85s** |
 
-**After optimization:**
+**After optimization (balanced for robustness):**
 
 | Component | Time |
 |-----------|------|
 | Step delays (200ms × 20) | 4.0s |
 | DOM stability (300ms × 20) | 6.0s |
 | New tab checks (200ms event × 15 clicks) | 0.2s* |
-| Fill pre-waits (removed) | 0s |
+| Fill pre-waits (200ms × 5 fills) | 1.0s |
 | Link clicks (waitForURL, instant) | 0.1s |
 | Highlight delays (100ms × 15) | 1.5s |
-| Quick Scan finds (150ms × per step) | 0.5s |
-| **Total dead time** | **~12s** |
+| Quick Scan finds (250ms × per step) | 0.8s |
+| Post-click settle (250ms × 15 clicks) | 3.75s |
+| Post-nav settle (1000ms × 1 nav) | 1.0s |
+| **Total dead time** | **~18s** |
 
 *Event-driven: returns immediately when no tab opens (200ms timeout only hit if tab might open)
 
-**Estimated speedup: 6-7x for Salesforce tests**
+**Estimated speedup: 4-5x for Salesforce tests** (balanced for robustness, still major improvement)
 
 ### 7.3 Retry Backoff Configuration
 
 ```javascript
 retryWithBackoff(fn, {
-  maxRetries: 2,      // Was 3 - reduced to prevent 60s stall
-  baseDelay: 500,     // 500ms between retries
+  maxRetries: 3,      // Restored to 3 for robustness (was briefly 2, caused failures)
+  baseDelay: 200,     // 200ms initial delay between retries
   maxDelay: 5000,     // Cap at 5s
   description: '...'
 })
-// Retry 1: 500ms wait → domcontentloaded
-// Retry 2: 1000ms wait → domcontentloaded
-// Total retry overhead: ~1.5s + 2 × domcontentloaded
+// Retry 1: 200ms wait → re-find
+// Retry 2: 400ms wait → re-find (exponential backoff)
+// Retry 3: 800ms wait → re-find
+// Total retry overhead: ~1.4s + 3 × find attempt
+// With Quick Scan: most elements found on first attempt (<250ms)
 ```
 
 ### 7.4 Playback Speed Settings
@@ -603,12 +614,12 @@ SmartFinder._fixMissingSCharacter():
 | Layer | Typical Time | Max Time | When Hit |
 |-------|-------------|----------|----------|
 | Locked Selector | 1-5ms | 150ms | After Lock Locators |
-| Quick Scan (hit) | 10-100ms | 150ms per strategy | Most elements with text/role |
-| Quick Scan (miss) | 150ms × 8 = 1.2s | 1.5s | Complex elements, no text match |
-| SmartFinder (hit) | 100-500ms | 5s | Shadow DOM, complex disambiguation |
-| SmartFinder (miss) | 5s | 5s | Element truly not present |
+| Quick Scan (hit) | 10-100ms | 250ms per strategy | Most elements with text/role |
+| Quick Scan (miss) | 250ms × 8 = 2.0s | 2.0s | Complex elements, no text match |
+| SmartFinder (hit) | 100-500ms | 8s | Shadow DOM, complex disambiguation |
+| SmartFinder (miss) | 8s | 8s | Element truly not present |
 | Legacy `_findElement` (hit) | 50-200ms | 5s | Rare — SmartFinder usually finds first |
 | Legacy `_findElement` (miss) | 2-5s | 5s | Element not present |
 | iframe search | 100-500ms | 2s | Element in iframe |
 | AI Vision fallback | 3-10s | 15s | All other methods failed |
-| **Full waterfall (worst, 2 retries)** | | **~25s** | Was ~65s before optimization |
+| **Full waterfall (worst, 3 attempts)** | | **~46s** | Was ~65s before optimization |
