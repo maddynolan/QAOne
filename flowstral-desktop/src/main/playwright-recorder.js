@@ -5558,6 +5558,52 @@ class PlaywrightRecorder extends EventEmitter {
         continue;
       }
       
+      // ────────────────────────────────────────────────────────────────
+      // SMART HOVER FILTERING
+      // Skip hover steps that are redundant:
+      // 1. Hover right after a click on related element (click already opened the menu)
+      // 2. Hover followed immediately by a click on the same element (click subsumes hover)
+      // Keep hovers ONLY when they reveal content that wouldn't appear from a click
+      // ────────────────────────────────────────────────────────────────
+      const isHover = (action.qword || '').toLowerCase() === 'hover';
+      if (isHover && prevAction) {
+        const prevIsClick = ['ClickText', 'ClickElement', 'Click'].includes(prevAction.qword || '');
+        const hoverText = (action.args?.[0] || action.description || '').toLowerCase();
+        const prevText = (prevAction.args?.[0] || prevAction.description || '').toLowerCase();
+        
+        // Pattern 1: Click "Show Navigation Menu" → Hover "Navigation Menu" → Click "Item"
+        // The hover is redundant because the click already opened the menu
+        if (prevIsClick && timeDiff < 3000) {
+          // Check if hover target is same/related to previous click target
+          const textsOverlap = hoverText && prevText && (
+            hoverText.includes(prevText.replace(/^click\s*/i, '').replace(/"/g, '').trim()) ||
+            prevText.includes(hoverText.replace(/^hover\s*(over\s*)?/i, '').replace(/"/g, '').trim())
+          );
+          if (textsOverlap) {
+            console.log('[PlaywrightRecorder] Final dedupe: skipping redundant hover after click:', action.description);
+            continue;
+          }
+        }
+        
+        // Pattern 2: Hover "X" immediately followed by Click "X" (or child of X)
+        // Look ahead to see if next action is a click
+        const nextAction = actions[actions.indexOf(action) + 1] || sortedActions?.[sortedActions.indexOf(action) + 1];
+        if (nextAction) {
+          const nextIsClick = ['ClickText', 'ClickElement', 'Click'].includes(nextAction.qword || '');
+          const nextText = (nextAction.args?.[0] || nextAction.description || '').toLowerCase();
+          const nextTimeDiff = Math.abs((nextAction.timestamp || 0) - (action.timestamp || 0));
+          
+          if (nextIsClick && nextTimeDiff < 2000) {
+            // If hover and click are on the same element, skip the hover
+            if (hoverText === nextText || 
+                nextText.includes(hoverText.replace(/^hover\s*(over\s*)?/i, '').replace(/"/g, '').trim())) {
+              console.log('[PlaywrightRecorder] Final dedupe: skipping hover before click on same element:', action.description);
+              continue;
+            }
+          }
+        }
+      }
+      
       uniqueActions.push(action);
     }
     

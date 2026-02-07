@@ -659,10 +659,24 @@ function getRecipeClickCaptureScript() {
   // ========== HOVER HANDLER (for flyout/dropdown menus) ==========
   // CRITICAL: Many navigation menus open on hover, not click
   // Without recording hover, these menus never open during playback
+  //
+  // SMART FILTERING: Only record hovers that REVEAL hidden content.
+  // Skip hovers that are:
+  //   - Right after a click on the same/parent element (click already opened it)
+  //   - Incidental mouse-overs while navigating to a click target
+  //   - On list items, picklist options, table rows (browsing, not activating)
   
   var lastHoverElement = null;
   var lastHoverTime = 0;
   var hoverTimeout = null;
+  var lastClickElement = null;
+  var lastClickTime = 0;
+  
+  // Track clicks so we can suppress redundant hovers after clicks
+  document.addEventListener('click', function(e) {
+    lastClickElement = e.target;
+    lastClickTime = Date.now();
+  }, true);
   
   document.addEventListener('mouseenter', function(e) {
     try {
@@ -671,28 +685,52 @@ function getRecipeClickCaptureScript() {
       if (isOverlayElement(element)) return;
       if (isFrameworkInternal(element)) return;
       
-      // Only record hovers on elements that reveal hidden content
-      // Check for flyout/dropdown indicators
+      var tag = element.tagName.toLowerCase();
+      
+      // ── SKIP: list items, picklist options, table rows, dropdown items ──
+      // These are "browsing" hovers, not "reveal content" hovers
+      var role = element.getAttribute('role') || '';
+      var isListBrowsing = (
+        tag === 'li' || tag === 'tr' || tag === 'td' || tag === 'option' ||
+        role === 'option' || role === 'listitem' || role === 'row' ||
+        role === 'menuitem' || role === 'treeitem' ||
+        (element.className || '').match(/slds-listbox|slds-dropdown|combobox-item|lookup|picklist|list-item/i)
+      );
+      if (isListBrowsing) return;
+      
+      // ── SKIP: hover right after clicking the same or parent element ──
+      // If user clicked to open a menu, the hover is redundant
+      if (lastClickElement && (Date.now() - lastClickTime) < 2000) {
+        var clickedSameOrParent = (
+          element === lastClickElement ||
+          element.contains(lastClickElement) ||
+          (lastClickElement.contains && lastClickElement.contains(element))
+        );
+        if (clickedSameOrParent) return;
+      }
+      
+      // Only record hovers on elements that REVEAL hidden content
+      // Must have explicit flyout/popup indicators
       var hasPopup = element.hasAttribute('aria-haspopup');
-      var hasExpanded = element.hasAttribute('aria-expanded');
+      var hasExpanded = element.getAttribute('aria-expanded') === 'false'; // Only when collapsed
       var isFlyoutTrigger = (
-        (element.className || '').match(/flyout|dropdown|menu-trigger|nav-item|submenu/i) ||
+        (element.className || '').match(/flyout|dropdown|menu-trigger|submenu|has-children/i) ||
         (element.id || '').match(/navItem|menuTrigger/i) ||
-        element.closest('[class*="flyout"], [class*="nav-item], [class*="has-submenu"]')
+        element.closest('[class*="flyout"], [class*="has-submenu"], [class*="has-children"]')
       );
       
-      // Skip if not a hover-interactive element
+      // Skip if not a genuine hover-to-reveal element
       if (!hasPopup && !hasExpanded && !isFlyoutTrigger) {
         return;
       }
       
-      // Debounce - don't record multiple hovers on same element within 1s
-      if (element === lastHoverElement && (Date.now() - lastHoverTime) < 1000) {
+      // Debounce - don't record multiple hovers on same element within 2s
+      if (element === lastHoverElement && (Date.now() - lastHoverTime) < 2000) {
         return;
       }
       
-      // Use a small delay to avoid recording incidental hovers (just passing over)
-      // Only record if mouse stays on element for 200ms
+      // Use a delay to avoid recording incidental hovers (just passing over)
+      // Only record if mouse stays on element for 300ms (up from 200ms)
       clearTimeout(hoverTimeout);
       hoverTimeout = setTimeout(function() {
         // Verify mouse is still over this element
@@ -702,6 +740,11 @@ function getRecipeClickCaptureScript() {
         );
         if (!currentHover || !element.contains(currentHover)) {
           return; // Mouse moved away
+        }
+        
+        // Double-check: if a click happened while we were waiting, skip
+        if (lastClickElement && (Date.now() - lastClickTime) < 500) {
+          return;
         }
         
         var recipe = analyzer.analyze(element);
@@ -717,7 +760,7 @@ function getRecipeClickCaptureScript() {
           target: recipe,
           description: 'Hover over "' + (recipe.what.text || recipe.where.nearText || element.tagName) + '"'
         });
-      }, 200);
+      }, 300);
       
     } catch (err) {
       console.error('[Flowstral Recipe] Hover capture error:', err);
