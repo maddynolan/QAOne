@@ -1,0 +1,763 @@
+/**
+ * RequestBuilder - Postman-style ad-hoc API request builder.
+ * Lets a regular tester type a URL, pick method, set headers/body/auth,
+ * send the request, and see the full response with syntax highlighting.
+ */
+
+import { useState, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Send, Plus, Trash2, Loader2, Copy, Save, Clock,
+  ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
+} from "lucide-react";
+import AssertionsPanel from "./AssertionsPanel";
+import {
+  API_BASE_URL,
+  HTTP_METHODS,
+  AUTH_TYPES,
+  BODY_TYPES,
+  getMethodColor,
+  type RequestConfig,
+  type ResponseData,
+  type AssertionConfig,
+  type KeyValuePair,
+  createEmptyRequest,
+  generateId,
+} from "./constants";
+
+interface SavedRequest {
+  id: string;
+  name: string;
+  request: RequestConfig;
+  assertions: AssertionConfig[];
+  savedAt: string;
+}
+
+interface RequestBuilderProps {
+  onSaveToChain?: (request: RequestConfig, assertions: AssertionConfig[]) => void;
+}
+
+export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
+  const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
+  const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
+  const [response, setResponse] = useState<ResponseData | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("params");
+  const [responseTab, setResponseTab] = useState("body");
+  const [savedRequests, setSavedRequests] = useState<SavedRequest[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("api_saved_requests") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [saveName, setSaveName] = useState("");
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+
+  // --- Key-Value helpers ---
+  const updateKV = (
+    field: "headers" | "params",
+    index: number,
+    key: string,
+    value: string
+  ) => {
+    const arr = [...request[field]];
+    arr[index] = { ...arr[index], [key]: value };
+    setRequest({ ...request, [field]: arr });
+  };
+
+  const toggleKV = (field: "headers" | "params", index: number) => {
+    const arr = [...request[field]];
+    arr[index] = { ...arr[index], enabled: !arr[index].enabled };
+    setRequest({ ...request, [field]: arr });
+  };
+
+  const addKV = (field: "headers" | "params") => {
+    setRequest({
+      ...request,
+      [field]: [...request[field], { key: "", value: "", enabled: true }],
+    });
+  };
+
+  const removeKV = (field: "headers" | "params", index: number) => {
+    setRequest({
+      ...request,
+      [field]: request[field].filter((_, i) => i !== index),
+    });
+  };
+
+  // --- Build headers from auth + custom headers ---
+  const buildHeaders = useCallback((): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    request.headers.forEach(h => {
+      if (h.enabled && h.key.trim()) headers[h.key.trim()] = h.value;
+    });
+    if (request.authType === "bearer" && request.authToken) {
+      headers["Authorization"] = `Bearer ${request.authToken}`;
+    } else if (request.authType === "basic" && request.authUsername) {
+      headers["Authorization"] = `Basic ${btoa(`${request.authUsername}:${request.authPassword}`)}`;
+    } else if (request.authType === "api_key" && request.authApiKeyName && request.authApiKeyLocation === "header") {
+      headers[request.authApiKeyName] = request.authApiKeyValue;
+    }
+    return headers;
+  }, [request]);
+
+  // --- Build URL with query params ---
+  const buildUrl = useCallback((): string => {
+    let url = request.url.trim();
+    if (!url) return url;
+    const params = request.params.filter(p => p.enabled && p.key.trim());
+    if (params.length > 0) {
+      const sep = url.includes("?") ? "&" : "?";
+      url += sep + params.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
+    }
+    if (request.authType === "api_key" && request.authApiKeyLocation === "query" && request.authApiKeyName) {
+      const sep = url.includes("?") ? "&" : "?";
+      url += `${sep}${encodeURIComponent(request.authApiKeyName)}=${encodeURIComponent(request.authApiKeyValue)}`;
+    }
+    return url;
+  }, [request]);
+
+  // --- Send the request ---
+  const handleSend = async () => {
+    const url = buildUrl();
+    if (!url) {
+      setError("Please enter a URL");
+      return;
+    }
+
+    setSending(true);
+    setError(null);
+    setResponse(null);
+
+    const startTime = performance.now();
+
+    try {
+      // Use the backend proxy endpoint to avoid CORS issues
+      const proxyResponse = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          test_suite: {
+            test_cases: [
+              {
+                test_case_id: `adhoc_${Date.now()}`,
+                title: "Ad-hoc Request",
+                method: request.method,
+                path: url,
+                request: {
+                  headers: buildHeaders(),
+                  body: request.bodyType !== "none" && request.body.trim()
+                    ? tryParseJSON(request.body)
+                    : undefined,
+                  query: Object.fromEntries(
+                    request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
+                  ),
+                },
+                expected_status: 200,
+                assertions: assertions.map(a => ({
+                  type: a.type,
+                  operator: a.operator,
+                  expected: a.expected,
+                  path: a.path,
+                  schema: a.schema,
+                })),
+                test_type: "functional",
+              },
+            ],
+            base_url: "",
+          },
+          execution_config: {
+            base_url: "",
+            parallel: false,
+          },
+          mode: "manual",
+        }),
+      });
+
+      const elapsed = Math.round(performance.now() - startTime);
+      const data = await proxyResponse.json();
+
+      // Extract the actual result from the test execution
+      const testResult = data?.execution_results?.test_results?.[0];
+      if (testResult) {
+        setResponse({
+          status: testResult.actual_status || testResult.status_code || proxyResponse.status,
+          statusText: testResult.status === "passed" ? "OK" : testResult.error || "Error",
+          headers: testResult.response_headers || {},
+          body: typeof testResult.response_body === "string"
+            ? testResult.response_body
+            : JSON.stringify(testResult.response_body ?? data, null, 2),
+          time: testResult.response_time_ms || elapsed,
+          size: 0,
+        });
+      } else {
+        // Fallback: show the raw response
+        setResponse({
+          status: proxyResponse.status,
+          statusText: proxyResponse.statusText,
+          headers: Object.fromEntries(proxyResponse.headers.entries()),
+          body: JSON.stringify(data, null, 2),
+          time: elapsed,
+          size: 0,
+        });
+      }
+    } catch (err: any) {
+      setError(err.message || "Request failed");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // --- Save request ---
+  const saveRequest = () => {
+    if (!saveName.trim()) return;
+    const saved: SavedRequest = {
+      id: generateId(),
+      name: saveName.trim(),
+      request: { ...request },
+      assertions: [...assertions],
+      savedAt: new Date().toISOString(),
+    };
+    const updated = [...savedRequests, saved];
+    setSavedRequests(updated);
+    localStorage.setItem("api_saved_requests", JSON.stringify(updated));
+    setSaveName("");
+    setShowSaveInput(false);
+  };
+
+  const loadSavedRequest = (saved: SavedRequest) => {
+    setRequest({ ...saved.request });
+    setAssertions([...saved.assertions]);
+    setShowSaved(false);
+  };
+
+  const deleteSavedRequest = (id: string) => {
+    const updated = savedRequests.filter(r => r.id !== id);
+    setSavedRequests(updated);
+    localStorage.setItem("api_saved_requests", JSON.stringify(updated));
+  };
+
+  const getStatusColor = (status: number) => {
+    if (status >= 200 && status < 300) return "text-green-600 bg-green-500/10 border-green-500/30";
+    if (status >= 300 && status < 400) return "text-blue-600 bg-blue-500/10 border-blue-500/30";
+    if (status >= 400 && status < 500) return "text-amber-600 bg-amber-500/10 border-amber-500/30";
+    return "text-red-600 bg-red-500/10 border-red-500/30";
+  };
+
+  const methodColor = getMethodColor(request.method);
+
+  return (
+    <div className="space-y-4">
+      {/* Saved requests toggle */}
+      {savedRequests.length > 0 && (
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowSaved(!showSaved)}
+          >
+            {showSaved ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+            Saved Requests ({savedRequests.length})
+          </Button>
+        </div>
+      )}
+
+      {showSaved && savedRequests.length > 0 && (
+        <Card className="border-muted">
+          <CardContent className="p-3">
+            <ScrollArea className="max-h-48">
+              <div className="space-y-1">
+                {savedRequests.map(saved => (
+                  <div
+                    key={saved.id}
+                    className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer group"
+                    onClick={() => loadSavedRequest(saved)}
+                  >
+                    <Badge variant="outline" className={`text-xs ${getMethodColor(saved.request.method)}`}>
+                      {saved.request.method}
+                    </Badge>
+                    <span className="text-sm font-medium flex-1 truncate">{saved.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
+                      {saved.request.url}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                      onClick={e => { e.stopPropagation(); deleteSavedRequest(saved.id); }}
+                    >
+                      <Trash2 className="w-3 h-3 text-red-500" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* URL Bar */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex gap-2">
+            <Select
+              value={request.method}
+              onValueChange={v => setRequest({ ...request, method: v })}
+            >
+              <SelectTrigger className={`w-[120px] font-bold text-sm ${methodColor}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HTTP_METHODS.map(m => (
+                  <SelectItem key={m.value} value={m.value}>
+                    <span className={`font-bold ${m.color}`}>{m.label}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Input
+              className="flex-1 font-mono text-sm"
+              placeholder="https://api.example.com/endpoint"
+              value={request.url}
+              onChange={e => setRequest({ ...request, url: e.target.value })}
+              onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
+            />
+
+            <Button
+              onClick={handleSend}
+              disabled={sending || !request.url.trim()}
+              className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px]"
+            >
+              {sending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Send
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowSaveInput(!showSaveInput)}
+              title="Save request"
+            >
+              <Save className="w-4 h-4" />
+            </Button>
+
+            {onSaveToChain && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSaveToChain(request, assertions)}
+                title="Add to chain"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Chain
+              </Button>
+            )}
+          </div>
+
+          {showSaveInput && (
+            <div className="flex gap-2 mt-3">
+              <Input
+                placeholder="Request name (e.g. Login, Get Users)"
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveRequest(); }}
+                className="flex-1"
+              />
+              <Button size="sm" onClick={saveRequest} disabled={!saveName.trim()}>
+                Save
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Request Configuration Tabs */}
+      <Card>
+        <CardContent className="p-0">
+          <Tabs value={activeSection} onValueChange={setActiveSection}>
+            <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-4 pt-2">
+              <TabsTrigger value="params" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Params
+                {request.params.filter(p => p.enabled && p.key.trim()).length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {request.params.filter(p => p.enabled && p.key.trim()).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="headers" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Headers
+                {request.headers.filter(h => h.enabled && h.key.trim()).length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {request.headers.filter(h => h.enabled && h.key.trim()).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="body" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Body
+              </TabsTrigger>
+              <TabsTrigger value="auth" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Auth
+                {request.authType !== "none" && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {AUTH_TYPES.find(a => a.value === request.authType)?.label}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="assertions" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Assertions
+                {assertions.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {assertions.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Params */}
+            <TabsContent value="params" className="p-4 mt-0">
+              <KeyValueEditor
+                pairs={request.params}
+                onUpdate={(i, k, v) => updateKV("params", i, k, v)}
+                onToggle={i => toggleKV("params", i)}
+                onAdd={() => addKV("params")}
+                onRemove={i => removeKV("params", i)}
+                keyPlaceholder="Parameter name"
+                valuePlaceholder="Value"
+              />
+            </TabsContent>
+
+            {/* Headers */}
+            <TabsContent value="headers" className="p-4 mt-0">
+              <KeyValueEditor
+                pairs={request.headers}
+                onUpdate={(i, k, v) => updateKV("headers", i, k, v)}
+                onToggle={i => toggleKV("headers", i)}
+                onAdd={() => addKV("headers")}
+                onRemove={i => removeKV("headers", i)}
+                keyPlaceholder="Header name"
+                valuePlaceholder="Value"
+              />
+            </TabsContent>
+
+            {/* Body */}
+            <TabsContent value="body" className="p-4 mt-0 space-y-3">
+              <div className="flex gap-2">
+                {BODY_TYPES.map(bt => (
+                  <Button
+                    key={bt.value}
+                    variant={request.bodyType === bt.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRequest({ ...request, bodyType: bt.value })}
+                  >
+                    {bt.label}
+                  </Button>
+                ))}
+              </div>
+              {request.bodyType !== "none" && (
+                <Textarea
+                  className="min-h-[200px] font-mono text-sm"
+                  placeholder={
+                    request.bodyType === "json"
+                      ? '{\n  "key": "value"\n}'
+                      : request.bodyType === "xml"
+                        ? '<?xml version="1.0"?>\n<root></root>'
+                        : request.bodyType === "form"
+                          ? "key=value&key2=value2"
+                          : "Raw text content..."
+                  }
+                  value={request.body}
+                  onChange={e => setRequest({ ...request, body: e.target.value })}
+                />
+              )}
+              {request.bodyType === "json" && request.body.trim() && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        setRequest({ ...request, body: JSON.stringify(JSON.parse(request.body), null, 2) });
+                      } catch {}
+                    }}
+                  >
+                    Format JSON
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Auth */}
+            <TabsContent value="auth" className="p-4 mt-0 space-y-4">
+              <div className="space-y-2">
+                <Label>Authorization Type</Label>
+                <Select
+                  value={request.authType}
+                  onValueChange={v => setRequest({ ...request, authType: v })}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AUTH_TYPES.map(at => (
+                      <SelectItem key={at.value} value={at.value}>{at.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {request.authType === "bearer" && (
+                <div className="space-y-2">
+                  <Label>Token</Label>
+                  <Input
+                    className="font-mono text-sm"
+                    placeholder="Enter bearer token"
+                    value={request.authToken}
+                    onChange={e => setRequest({ ...request, authToken: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use <code className="bg-muted px-1 rounded">{"${variable_name}"}</code> to reference chain variables.
+                  </p>
+                </div>
+              )}
+
+              {request.authType === "basic" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Username</Label>
+                    <Input
+                      value={request.authUsername}
+                      onChange={e => setRequest({ ...request, authUsername: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Password</Label>
+                    <Input
+                      type="password"
+                      value={request.authPassword}
+                      onChange={e => setRequest({ ...request, authPassword: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {request.authType === "api_key" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Key Name</Label>
+                      <Input
+                        placeholder="X-API-Key"
+                        value={request.authApiKeyName}
+                        onChange={e => setRequest({ ...request, authApiKeyName: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Key Value</Label>
+                      <Input
+                        className="font-mono"
+                        value={request.authApiKeyValue}
+                        onChange={e => setRequest({ ...request, authApiKeyValue: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Add To</Label>
+                    <Select
+                      value={request.authApiKeyLocation}
+                      onValueChange={v => setRequest({ ...request, authApiKeyLocation: v })}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="header">Header</SelectItem>
+                        <SelectItem value="query">Query Parameter</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Assertions */}
+            <TabsContent value="assertions" className="p-4 mt-0">
+              <AssertionsPanel assertions={assertions} onChange={setAssertions} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Error */}
+      {error && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="p-4 flex items-center gap-2 text-red-600">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Response */}
+      {response && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-3">
+                Response
+                <Badge variant="outline" className={getStatusColor(response.status)}>
+                  {response.status} {response.statusText}
+                </Badge>
+                <span className="text-sm font-normal text-muted-foreground flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  {response.time}ms
+                </span>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(response.body);
+                }}
+              >
+                <Copy className="w-4 h-4 mr-1" />
+                Copy
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Tabs value={responseTab} onValueChange={setResponseTab}>
+              <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-4">
+                <TabsTrigger value="body" className="rounded-b-none">Body</TabsTrigger>
+                <TabsTrigger value="headers" className="rounded-b-none">
+                  Headers
+                  {Object.keys(response.headers).length > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                      {Object.keys(response.headers).length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="body" className="mt-0">
+                <ScrollArea className="h-[350px]">
+                  <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words">
+                    {formatResponseBody(response.body)}
+                  </pre>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="headers" className="mt-0">
+                <ScrollArea className="h-[300px]">
+                  <div className="p-4 space-y-1">
+                    {Object.entries(response.headers).map(([key, value]) => (
+                      <div key={key} className="flex gap-3 text-sm py-1 border-b border-border/50 last:border-0">
+                        <span className="font-mono font-medium text-primary min-w-[180px]">{key}</span>
+                        <span className="font-mono text-muted-foreground break-all">{value}</span>
+                      </div>
+                    ))}
+                    {Object.keys(response.headers).length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No headers returned from proxy</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// --- Helper Components ---
+
+function KeyValueEditor({
+  pairs,
+  onUpdate,
+  onToggle,
+  onAdd,
+  onRemove,
+  keyPlaceholder,
+  valuePlaceholder,
+}: {
+  pairs: KeyValuePair[];
+  onUpdate: (index: number, key: string, value: string) => void;
+  onToggle: (index: number) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+  keyPlaceholder: string;
+  valuePlaceholder: string;
+}) {
+  return (
+    <div className="space-y-2">
+      {pairs.map((pair, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={pair.enabled}
+            onChange={() => onToggle(i)}
+            className="cursor-pointer"
+          />
+          <Input
+            className="flex-1 h-8 text-sm font-mono"
+            placeholder={keyPlaceholder}
+            value={pair.key}
+            onChange={e => onUpdate(i, "key", e.target.value)}
+          />
+          <Input
+            className="flex-1 h-8 text-sm font-mono"
+            placeholder={valuePlaceholder}
+            value={pair.value}
+            onChange={e => onUpdate(i, "value", e.target.value)}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+            onClick={() => onRemove(i)}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={onAdd}>
+        <Plus className="w-3 h-3 mr-1" />
+        Add Row
+      </Button>
+    </div>
+  );
+}
+
+// --- Helpers ---
+
+function tryParseJSON(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function formatResponseBody(body: string): string {
+  try {
+    return JSON.stringify(JSON.parse(body), null, 2);
+  } catch {
+    return body;
+  }
+}

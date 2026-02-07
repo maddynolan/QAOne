@@ -13,13 +13,18 @@ import {
   Database, Play, BarChart3, Server, Settings, TrendingUp,
   Zap, Shield, Activity, Globe, Loader2, Eye, Copy, X,
   FileCode, Rocket, BookOpen, Network, MessageSquare, Radio,
-  Workflow, RefreshCw, Link, ExternalLink, Trash2, Plus
+  Workflow, RefreshCw, Link, ExternalLink, Trash2, Plus,
+  Send, Link2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import RequestBuilder from "@/components/api-testing/RequestBuilder";
+import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
+import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const ECOMMERCE_TEST_URL = "http://localhost:8002";
@@ -185,7 +190,7 @@ type AuthPayload {
 export default function EnhancedAPITesting() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("templates");
+  const [activeTab, setActiveTab] = useState("builder");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -1866,22 +1871,36 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8 bg-card border border-border p-1">
-          <TabsTrigger value="templates" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
+        <TabsList className="flex w-full bg-card border border-border p-1 overflow-x-auto">
+          <TabsTrigger value="builder" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
+            <Send className="w-4 h-4 mr-1" />
+            Builder
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Rocket className="w-4 h-4 mr-1" />
             Templates
           </TabsTrigger>
-          <TabsTrigger value="import" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
-          <TabsTrigger value="database" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Database</TabsTrigger>
-          <TabsTrigger value="execute" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
+          <TabsTrigger value="import" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
+          <TabsTrigger value="chains" className="flex-1 min-w-0 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-500 text-muted-foreground">
+            <Link2 className="w-4 h-4 mr-1" />
+            Chains
+          </TabsTrigger>
+          <TabsTrigger value="execute" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
+          <TabsTrigger value="security" className="flex-1 min-w-0 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
             <Shield className="w-4 h-4 mr-1" />
             Security
           </TabsTrigger>
-          <TabsTrigger value="environments" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
-          <TabsTrigger value="virtual" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Virtual</TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
+          <TabsTrigger value="environments" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
+          <TabsTrigger value="mock" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Mock</TabsTrigger>
+          <TabsTrigger value="results" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
         </TabsList>
+
+        {/* Builder Tab - Ad-hoc Request Builder */}
+        <TabsContent value="builder" className="space-y-4">
+          <TabErrorBoundary tabName="Builder">
+            <RequestBuilder />
+          </TabErrorBoundary>
+        </TabsContent>
 
         {/* Templates Tab - Quick Start */}
         <TabsContent value="templates" className="space-y-4">
@@ -2082,102 +2101,40 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </Card>
         </TabsContent>
 
-        {/* Database Tab */}
-        <TabsContent value="database" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Database Connectivity</CardTitle>
-              <CardDescription>
-                Connect to databases for data-driven testing and assertions
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Connection ID</Label>
-                  <Input
-                    value={dbConfig.connection_id}
-                    onChange={(e) => setDbConfig({...dbConfig, connection_id: e.target.value})}
-                    placeholder="db1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Database Type</Label>
-                  <Select value={dbConfig.db_type} onValueChange={(v) => setDbConfig({...dbConfig, db_type: v})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="postgresql">PostgreSQL</SelectItem>
-                      <SelectItem value="mysql">MySQL</SelectItem>
-                      <SelectItem value="sqlite">SQLite</SelectItem>
-                      <SelectItem value="mongodb">MongoDB</SelectItem>
-                      <SelectItem value="mssql">MSSQL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Host</Label>
-                  <Input
-                    value={dbConfig.host}
-                    onChange={(e) => setDbConfig({...dbConfig, host: e.target.value})}
-                    placeholder="localhost"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Port</Label>
-                  <Input
-                    type="number"
-                    value={dbConfig.port}
-                    onChange={(e) => setDbConfig({...dbConfig, port: parseInt(e.target.value)})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Database</Label>
-                  <Input
-                    value={dbConfig.database}
-                    onChange={(e) => setDbConfig({...dbConfig, database: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>User</Label>
-                  <Input
-                    value={dbConfig.user}
-                    onChange={(e) => setDbConfig({...dbConfig, user: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Password</Label>
-                  <Input
-                    type="password"
-                    value={dbConfig.password}
-                    onChange={(e) => setDbConfig({...dbConfig, password: e.target.value})}
-                  />
-                </div>
-              </div>
-              <Button onClick={handleConnectDatabase} disabled={loading}>
-                <Database className="w-4 h-4 mr-2" />
-                {loading ? "Connecting..." : "Connect"}
-              </Button>
-              
-              {dbConnections.length > 0 && (
-                <div className="mt-4">
-                  <Label>Active Connections</Label>
-                  <div className="space-y-2 mt-2">
-                    {dbConnections.map((conn, idx) => (
-                      <Badge key={idx} variant="outline" className="mr-2">
-                        {conn.connection_id} ({conn.type})
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Chains Tab - Request Chaining */}
+        <TabsContent value="chains" className="space-y-4">
+          <TabErrorBoundary tabName="Chains">
+            <RequestChainBuilder />
+          </TabErrorBoundary>
         </TabsContent>
 
         {/* Execute Tab */}
         <TabsContent value="execute" className="space-y-4">
+          {!testSuite && (
+            <Card className="border-dashed border-2 border-muted-foreground/25">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <Play className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Test Suite Ready</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+                  Import an API specification or use a template to generate test cases before executing.
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setActiveTab("templates")}>
+                    <Rocket className="w-4 h-4 mr-2" />
+                    Load Template
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab("import")}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import Spec
+                  </Button>
+                  <Button variant="default" onClick={() => setActiveTab("builder")}>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Build Request
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Execute Tests</CardTitle>
@@ -2749,10 +2706,105 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               )}
             </CardContent>
           </Card>
+
+          {/* Database Connectivity - moved from standalone tab */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="w-5 h-5" />
+                Database Connectivity
+              </CardTitle>
+              <CardDescription>
+                Connect to databases for data-driven testing and assertions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Connection ID</Label>
+                  <Input
+                    value={dbConfig.connection_id}
+                    onChange={(e) => setDbConfig({...dbConfig, connection_id: e.target.value})}
+                    placeholder="db1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Database Type</Label>
+                  <Select value={dbConfig.db_type} onValueChange={(v) => setDbConfig({...dbConfig, db_type: v})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                      <SelectItem value="mysql">MySQL</SelectItem>
+                      <SelectItem value="sqlite">SQLite</SelectItem>
+                      <SelectItem value="mongodb">MongoDB</SelectItem>
+                      <SelectItem value="mssql">MSSQL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Host</Label>
+                  <Input
+                    value={dbConfig.host}
+                    onChange={(e) => setDbConfig({...dbConfig, host: e.target.value})}
+                    placeholder="localhost"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Port</Label>
+                  <Input
+                    type="number"
+                    value={dbConfig.port}
+                    onChange={(e) => setDbConfig({...dbConfig, port: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Database</Label>
+                  <Input
+                    value={dbConfig.database}
+                    onChange={(e) => setDbConfig({...dbConfig, database: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>User</Label>
+                  <Input
+                    value={dbConfig.user}
+                    onChange={(e) => setDbConfig({...dbConfig, user: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    value={dbConfig.password}
+                    onChange={(e) => setDbConfig({...dbConfig, password: e.target.value})}
+                  />
+                </div>
+              </div>
+              <Button onClick={handleConnectDatabase} disabled={loading}>
+                <Database className="w-4 h-4 mr-2" />
+                {loading ? "Connecting..." : "Connect"}
+              </Button>
+              
+              {dbConnections.length > 0 && (
+                <div className="mt-4">
+                  <Label>Active Connections</Label>
+                  <div className="space-y-2 mt-2">
+                    {dbConnections.map((conn, idx) => (
+                      <Badge key={idx} variant="outline" className="mr-2">
+                        {conn.connection_id} ({conn.type})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* Virtual Services Tab */}
-        <TabsContent value="virtual" className="space-y-4">
+        {/* Mock Services Tab (renamed from Virtual) */}
+        <TabsContent value="mock" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Create Virtual Service</CardTitle>
@@ -2830,6 +2882,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Results Tab */}
         <TabsContent value="results" className="space-y-4">
+          <TabErrorBoundary tabName="Results">
           {executionResults && (
             <>
               {/* Export Buttons */}
@@ -3090,6 +3143,28 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               </AlertDescription>
             </Alert>
           )}
+          {!testSuite && !executionResults && (
+            <Card className="border-dashed border-2 border-muted-foreground/25">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <BarChart3 className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Results Yet</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+                  Run API tests to see execution results, pass/fail rates, response times, and detailed reports here.
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setActiveTab("execute")}>
+                    <Play className="w-4 h-4 mr-2" />
+                    Go to Execute
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveTab("builder")}>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Build a Request
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          </TabErrorBoundary>
         </TabsContent>
       </Tabs>
 
