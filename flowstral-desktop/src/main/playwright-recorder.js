@@ -3838,7 +3838,10 @@ class PlaywrightRecorder extends EventEmitter {
           
           // Wait between steps - use slowMo for playback speed control
           // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
-          const stepDelay = Math.max(100, slowMo); // Minimum 100ms for stability
+          // FAST PATH: Minimal delay when locked selector was used (proven reliable, less variance)
+          const usedLockedSelector = (strategyType === 'LockedSelector' || strategyType === 'already-locked');
+          const minDelay = usedLockedSelector ? 20 : 100;
+          const stepDelay = Math.max(minDelay, slowMo);
           await this.page.waitForTimeout(stepDelay);
           
         } catch (stepError) {
@@ -7788,8 +7791,16 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             this.smartFinder = new SmartFinder(isIframe ? scope : this.page, { debug: true, timeout: 15000 });
           }
           
-          await this.page.waitForLoadState('domcontentloaded').catch(() => {});
-          await this.page.waitForTimeout(300);
+          // FAST PATH: Skip heavy waits when a locked selector is available
+          // Locked selectors are already proven to work, no need to wait for full DOM settle
+          const _hasLockedSelector = !!(getLockedSelector(action));
+          if (!_hasLockedSelector) {
+            await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+            await this.page.waitForTimeout(300);
+          } else {
+            // Minimal wait for locked selectors - just ensure page isn't mid-navigation
+            await this.page.waitForTimeout(30);
+          }
           
           // ═══════════════════════════════════════════════════════════════════
           // OPTIMIZED SELECTOR: User-locked selector from "Lock Locators" 
@@ -8254,15 +8265,15 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             console.log(`[PlaywrightRecorder] Element details: tag=${elementInfo.tag}, href=${elementInfo.href}, classes=${elementInfo.classes?.substring(0, 50)}`);
           } catch (e) {}
           
-          // Scroll into view and highlight briefly
+          // Scroll into view and highlight briefly (skip highlight for locked selectors - speed priority)
           await clickResult.locator.scrollIntoViewIfNeeded().catch(() => {});
-          await clickResult.locator.evaluate(el => {
-            el.style.outline = '2px solid #22c55e';
-            el.style.outlineOffset = '1px';
-          }).catch(() => {});
-          
-          // Minimal delay for highlight visibility (reduced from 300ms)
-          await this.page.waitForTimeout(100);
+          if (clickResult.strategy?.type !== 'LockedSelector') {
+            await clickResult.locator.evaluate(el => {
+              el.style.outline = '2px solid #22c55e';
+              el.style.outlineOffset = '1px';
+            }).catch(() => {});
+            await this.page.waitForTimeout(100); // Highlight visibility delay
+          }
           
           // Try multiple click methods
           let clickSuccess = false;
@@ -8333,8 +8344,10 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           }
           
           // Check if this click opened a NEW TAB
+          // FAST PATH: Shorter wait for locked selectors (most locked steps don't open new tabs)
           const pagesBefore = this.context.pages().length;
-          await this.page.waitForTimeout(500); // Brief wait for new tab to open
+          const newTabWait = (clickResult.strategy?.type === 'LockedSelector') ? 50 : 500;
+          await this.page.waitForTimeout(newTabWait);
           const pagesAfter = this.context.pages();
           
           if (pagesAfter.length > pagesBefore) {
