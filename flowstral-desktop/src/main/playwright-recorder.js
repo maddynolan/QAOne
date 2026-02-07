@@ -111,6 +111,8 @@ const { SmartFinder, ActionExecutor } = require('./lib/smart-finder');
 // Refactored handler modules (extracted for maintainability)
 const ActionHandlers = require('./lib/action-handlers');
 const { getManualOverrideSelector, getLockedSelector } = require('./lib/override-and-locked');
+// V2 Simplified playback: Playwright-native element finding with parallel racing
+const { SimpleStepExecutor } = require('./lib/simple-step-executor');
 const TabManager = require('./lib/tab-manager');
 const SalesforceHandlers = require('./lib/salesforce-handlers');
 const { executeAssertion: executeAssertionHandler } = require('./lib/assertion-handlers');
@@ -201,6 +203,13 @@ class PlaywrightRecorder extends EventEmitter {
     // CRITICAL: Track when interactions happen to suppress navigation events
     // Navigation events can fire BEFORE click is fully processed, causing duplicate actions
     this._lastInteractionTimestamp = 0; // Timestamp of last click/select/fill START
+    
+    // ========== V2 SIMPLE PLAYBACK ==========
+    // Uses Playwright-native auto-wait instead of manual count()+isVisible() snapshots
+    // Parallel strategy racing instead of sequential waterfall
+    // Set to true for 3-10x faster element finding on happy path
+    this.useSimplePlayback = options.useSimplePlayback || false; // Default: OFF (opt-in)
+    this._simpleStepExecutor = null; // Lazy-initialized per test run
     
     // AI Vision Fallback - LAST RESORT when all deterministic strategies fail
     this.enableAIFallback = options.enableAIFallback !== false; // Default: enabled
@@ -1118,7 +1127,14 @@ class PlaywrightRecorder extends EventEmitter {
     }
 
     // Start polling for actions from the page
-    this._startPolling();
+    // NOTE: In recipe mode, ONLY the CDP/recipe polling system handles actions.
+    // The legacy poller would create a dual-system race condition where fills
+    // from __flowstralActions__ arrive before clicks from __flowstralRecipeActions,
+    // causing incorrect action ordering. Recipe captures everything (clicks, fills,
+    // selects, checks, keyboard, file uploads, drag-drop), so legacy is redundant.
+    if (!this.useRecipeRecorder) {
+      this._startPolling();
+    }
     
     // Start polling for suggestions (auto-refresh)
     this._startSuggestionPolling();
@@ -1197,6 +1213,14 @@ class PlaywrightRecorder extends EventEmitter {
         console.log(`[PlaywrightRecorder] Tab closed: index ${closedIndex}`);
         
         if (this.recording && !this._isRunningTest) {
+          // ═══════════════════════════════════════════════════════════════
+          // CRITICAL FIX: Flush any buffered actions for this tab BEFORE
+          // recording closeTab/switchTab. Without this, actions captured
+          // via CDP console (pendingClicks/pendingInputs) appear AFTER
+          // the closeTab action, causing wrong step ordering.
+          // ═══════════════════════════════════════════════════════════════
+          this._flushPendingActionsForTab(closedIndex);
+          
           this._addAction({
             type: 'closeTab',
             tabIndex: closedIndex,
@@ -1209,6 +1233,13 @@ class PlaywrightRecorder extends EventEmitter {
         if (closedIndex !== -1) {
           this._pages.splice(closedIndex, 1);
           this._pageUrls.splice(closedIndex, 1);
+          
+          // ═══════════════════════════════════════════════════════════════
+          // FIX: Update tab indices in pending data after splice.
+          // When a tab is removed, all higher-indexed tabs shift down by 1.
+          // Without this, pending clicks/inputs reference stale indices.
+          // ═══════════════════════════════════════════════════════════════
+          this._adjustTabIndicesAfterClose(closedIndex);
           
           // If closed tab was current, switch back to first tab
           if (this._currentPageIndex >= closedIndex) {
@@ -1637,10 +1668,15 @@ class PlaywrightRecorder extends EventEmitter {
           const inputData = JSON.parse(text.substring('__FLOWSTRAL_INPUT__:'.length));
           console.log(`[PlaywrightRecorder] Input reported via console (tab ${pageIndex}):`, inputData.name || inputData.id);
           inputData.tabIndex = pageIndex;
+          // FIX: Also match on tabIndex to prevent cross-tab overwrites.
+          // Without this, an input in tab 1 with name="amount" would
+          // overwrite an input in tab 0 with the same name.
           const existingIndex = this.pendingInputs.findIndex(i => 
-            (i.key && i.key === inputData.key) ||
-            (i.name && i.name === inputData.name) ||
-            (i.id && i.id === inputData.id)
+            i.tabIndex === pageIndex && (
+              (i.key && i.key === inputData.key) ||
+              (i.name && i.name === inputData.name) ||
+              (i.id && i.id === inputData.id)
+            )
           );
           if (existingIndex !== -1) {
             this.pendingInputs[existingIndex] = inputData;
@@ -2705,7 +2741,9 @@ class PlaywrightRecorder extends EventEmitter {
         
         // THEN: Poll ALL pages for clicks (not just current page)
         // This enables multi-tab recording!
-        const allPages = this._pages || [this.page];
+        // FIX: Snapshot the array to prevent corruption if close handler
+        // modifies _pages during this async iteration
+        const allPages = [...(this._pages || [this.page])];
         
         for (let pageIndex = 0; pageIndex < allPages.length; pageIndex++) {
           const targetPage = allPages[pageIndex];
@@ -2762,15 +2800,23 @@ class PlaywrightRecorder extends EventEmitter {
                 // CRITICAL: Pass pageIndex for implicit tab switching during playback
                 await this._processRecipeAction(recipeAction, pageIndex);
               }
-              // Clear pendingClicks for this page since recipe handled them
+              // Clear pendingClicks/pendingInputs for this page since recipe handled them
               // (they captured the same clicks)
+              // FIX: Filter per-tab instead of clearing all. Global clear loses
+              // inputs from other tabs that haven't been processed yet.
               this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageIndex);
-              this.pendingInputs = [];
+              this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
             }
             
-            // Process page data (inputs first, then clicks) - fallback if recipe not used
-            if (!this.useRecipeRecorder || !data.recipeActions || data.recipeActions.length === 0) {
-              // CRITICAL: Add pageIndex to inputs from page.evaluate (they don't have it)
+            // Process page data (inputs first, then clicks)
+            // Tiered approach:
+            //   - Recipe OFF: process all CDP inputs/clicks normally
+            //   - Recipe ON + recipe had actions this cycle: recipe handled them (cleared above)
+            //   - Recipe ON + NO recipe actions this cycle: safety-net for stale pendingInputs
+            //     that recipe missed (cross-origin eval succeeded but recipe script didn't fire,
+            //     navigation before debounce, etc.). Only process inputs older than 2s.
+            if (!this.useRecipeRecorder) {
+              // Non-recipe mode: process CDP inputs normally
               const inputsWithTabIndex = (data.inputs || []).map(inp => ({
                 ...inp,
                 tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
@@ -2779,19 +2825,46 @@ class PlaywrightRecorder extends EventEmitter {
               for (const click of data.clicks) {
                 await this._processClick(click);
               }
+            } else if (!data.recipeActions || data.recipeActions.length === 0) {
+              // Recipe mode but no recipe actions this cycle:
+              // Process ONLY pendingInputs that are old enough (>2s) to be considered
+              // missed by recipe. This prevents the ordering issue (CDP 300ms vs recipe 1500ms)
+              // while still recovering fills that recipe never captured.
+              const now = Date.now();
+              const staleInputs = (this.pendingInputs || []).filter(
+                i => i.tabIndex === pageIndex && (now - (i.timestamp || 0)) > 2000
+              );
+              if (staleInputs.length > 0) {
+                console.log(`[PlaywrightRecorder] Safety-net: processing ${staleInputs.length} stale inputs for tab ${pageIndex} (recipe missed them)`);
+                await this._processInputs(staleInputs);
+                // Remove only the stale ones we just processed
+                this.pendingInputs = (this.pendingInputs || []).filter(
+                  i => i.tabIndex !== pageIndex || (now - (i.timestamp || 0)) <= 2000
+                );
+              }
             }
           } catch (e) {
-            // Page might be cross-origin - process pendingClicks as fallback
-            if (this.useRecipeRecorder && mainProcessClicks.length > 0) {
+            // Page is cross-origin - page.evaluate failed.
+            // Fall back to console-based capture (pendingClicks/pendingInputs).
+            if (this.useRecipeRecorder) {
               const pageClicks = mainProcessClicks.filter(c => c.tabIndex === pageIndex);
+              const pageInputs = mainProcessInputs.filter(i => i.tabIndex === pageIndex);
+              
+              // Process inputs even without clicks (fills-only interactions)
+              if (pageInputs.length > 0) {
+                console.log(`[PlaywrightRecorder] Cross-origin fallback: processing ${pageInputs.length} inputs for tab ${pageIndex}`);
+                await this._processInputs(pageInputs);
+              }
               if (pageClicks.length > 0) {
-                console.log(`[PlaywrightRecorder] Cross-origin fallback: processing ${pageClicks.length} clicks from console for tab ${pageIndex}`);
-                await this._processInputs(mainProcessInputs.filter(i => i.tabIndex === pageIndex));
+                console.log(`[PlaywrightRecorder] Cross-origin fallback: processing ${pageClicks.length} clicks for tab ${pageIndex}`);
                 for (const click of pageClicks) {
                   await this._processClick(click);
                 }
-                // Clear processed clicks
+              }
+              // Clear BOTH processed clicks AND inputs for this tab
+              if (pageClicks.length > 0 || pageInputs.length > 0) {
                 this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageIndex);
+                this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
               }
             }
           }
@@ -2803,6 +2876,72 @@ class PlaywrightRecorder extends EventEmitter {
     } catch (error) {
       console.error('[PlaywrightRecorder] Failed to setup CDP click capture:', error.message);
       // Fall back to JS-based capture (already set up)
+    }
+  }
+
+  /**
+   * Flush any pending clicks and inputs for a specific tab.
+   * Called BEFORE recording closeTab to ensure correct action ordering.
+   * 
+   * Without this, the sequence would be:
+   *   closeTab → switchTab → [click actions from closed tab]
+   * With this fix:
+   *   [click actions] → [fill actions] → closeTab → switchTab
+   */
+  _flushPendingActionsForTab(tabIndex) {
+    if (tabIndex < 0) return; // Guard: invalid tab index
+    
+    const tabClicks = (this.pendingClicks || []).filter(c => c.tabIndex === tabIndex);
+    const tabInputs = (this.pendingInputs || []).filter(i => i.tabIndex === tabIndex);
+    
+    if (tabClicks.length === 0 && tabInputs.length === 0) return;
+    
+    console.log(`[PlaywrightRecorder] Flushing ${tabClicks.length} clicks, ${tabInputs.length} inputs for closing tab ${tabIndex}`);
+    
+    try {
+      // Process inputs first (fills that happened in the closing tab)
+      // NOTE: _processInputs and _processClick are async but execute synchronously
+      // (no real awaits inside them), so this.actions.push() happens immediately.
+      if (tabInputs.length > 0) {
+        // Ensure tabIndex is set for proper tracking
+        for (const input of tabInputs) {
+          input.tabIndex = input.tabIndex !== undefined ? input.tabIndex : tabIndex;
+        }
+        this._processInputs(tabInputs);
+      }
+      
+      // Process clicks
+      for (const click of tabClicks) {
+        this._processClick(click);
+      }
+    } catch (e) {
+      console.error(`[PlaywrightRecorder] Error flushing actions for tab ${tabIndex}:`, e.message);
+    }
+    
+    // Always remove flushed items from pending queues (even if processing errored)
+    this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== tabIndex);
+    this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== tabIndex);
+  }
+
+  /**
+   * After a tab is removed (splice), adjust tabIndex in all pending data.
+   * When tab N is removed, tabs N+1, N+2, ... shift down to N, N+1, ...
+   * Without this, pending data references stale/wrong tab indices.
+   */
+  _adjustTabIndicesAfterClose(closedIndex) {
+    if (this.pendingClicks) {
+      for (const click of this.pendingClicks) {
+        if (click.tabIndex > closedIndex) {
+          click.tabIndex--;
+        }
+      }
+    }
+    if (this.pendingInputs) {
+      for (const input of this.pendingInputs) {
+        if (input.tabIndex > closedIndex) {
+          input.tabIndex--;
+        }
+      }
     }
   }
 
@@ -3036,7 +3175,7 @@ class PlaywrightRecorder extends EventEmitter {
         tabIndex: inputTabIndex
       };
       
-      this.actions.push(action);
+      this._insertByTimestamp(action);
       this.emit('action', action);
     }
   }
@@ -3187,7 +3326,7 @@ class PlaywrightRecorder extends EventEmitter {
       // Continue without confidence data if calculation fails
     }
     
-    this.actions.push(legacyAction);
+    this._insertByTimestamp(legacyAction);
     this.emit('action', legacyAction);
   }
 
@@ -3360,30 +3499,9 @@ class PlaywrightRecorder extends EventEmitter {
       console.log('[PlaywrightRecorder] Click has multiple matches:', clickLabel, 'index:', elementIndex, 'of', click.totalMatching);
     }
     
-    // For submit clicks, insert at correct position based on timestamp
-    if (click.isSubmit && click.timestamp) {
-      // Find the correct position (after fills, before navigation)
-      let insertIndex = this.actions.length;
-      for (let i = this.actions.length - 1; i >= 0; i--) {
-        const existing = this.actions[i];
-        // Insert before any action with later timestamp
-        if (existing.timestamp && existing.timestamp > click.timestamp) {
-          insertIndex = i;
-        } else {
-          break;
-        }
-      }
-      
-      if (insertIndex < this.actions.length) {
-        console.log('[PlaywrightRecorder] Inserting submit click at position', insertIndex);
-        this.actions.splice(insertIndex, 0, action);
-      } else {
-        this.actions.push(action);
-      }
-    } else {
-      this.actions.push(action);
-    }
-    
+    // Use timestamp-based insertion for ALL clicks (not just submit)
+    // This ensures clicks from different capture paths maintain correct ordering
+    this._insertByTimestamp(action);
     this.emit('action', action);
   }
 
@@ -3424,15 +3542,22 @@ class PlaywrightRecorder extends EventEmitter {
       // Array of step IDs that user flagged as false positives
       flaggedSteps = [],
       // NEW: Stop at flagged step - when true, test pauses at flagged step for repair
-      stopAtFlagged = false
+      stopAtFlagged = false,
+      // V2 SIMPLE PLAYBACK: Use Playwright-native element finding for 3-10x faster playback
+      // When true: parallel strategy racing with auto-wait (no manual count/isVisible snapshots)
+      // When false: existing 4-layer waterfall (Quick Scan → SmartFinder → Legacy → AI)
+      useSimplePlayback = this.useSimplePlayback || false
     } = options;
     
     console.log('[PlaywrightRecorder] Running test with', steps?.length || 0, 'steps', 
       isRetry ? '(RETRY)' : '', freshBrowser ? '(FRESH BROWSER)' : '(PERSISTENT)',
-      `slowMo=${slowMo}ms`, flaggedSteps.length > 0 ? `flagged=${flaggedSteps.length}` : '');
+      `slowMo=${slowMo}ms`, flaggedSteps.length > 0 ? `flagged=${flaggedSteps.length}` : '',
+      useSimplePlayback ? '⚡ SIMPLE-PLAYBACK' : '');
     
     // Reset AI call counter for this test run
     this.aiCallsThisRun = 0;
+    // Reset SimpleStepExecutor for this test run
+    this._simpleStepExecutor = null;
     
     // CRITICAL: Set flag to prevent recording navigations during test run
     this._isRunningTest = true;
@@ -3769,7 +3894,23 @@ class PlaywrightRecorder extends EventEmitter {
             continue;
           }
           
-          const result = await this.executeAction(action);
+          // ═══════════════════════════════════════════════════════════════════
+          // V2 SIMPLE PLAYBACK: Use Playwright-native element finding
+          // When enabled, uses parallel strategy racing with auto-wait
+          // instead of sequential waterfall with manual count()+isVisible()
+          // Falls back to existing executeAction for non-element actions
+          // ═══════════════════════════════════════════════════════════════════
+          let result;
+          if (useSimplePlayback) {
+            // Lazy-init SimpleStepExecutor for this test run
+            if (!this._simpleStepExecutor) {
+              this._simpleStepExecutor = new SimpleStepExecutor(this);
+              console.log('[PlaywrightRecorder] ⚡ V2 Simple Playback ENABLED — Playwright-native execution');
+            }
+            result = await this._simpleStepExecutor.executeAction(action);
+          } else {
+            result = await this.executeAction(action);
+          }
           
           // EXECUTE STEP ASSERTIONS if defined
           if (step.assertion && step.assertion.type && step.assertion.enabled !== false) {
@@ -3839,9 +3980,10 @@ class PlaywrightRecorder extends EventEmitter {
           // Wait between steps - use slowMo for playback speed control
           // slowMo: 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
           // FAST PATH: Minimal delay when locked selector was used (proven reliable, less variance)
-          const usedLockedSelector = (strategyType === 'LockedSelector' || strategyType === 'already-locked');
+          const usedLockedSelector = (strategyType === 'LockedSelector' || strategyType === 'already-locked' || strategyType === 'locked-selector');
           const usedQuickScan = strategyType && strategyType.startsWith('QuickScan-');
-          const minDelay = (usedLockedSelector || usedQuickScan) ? 50 : 100;
+          const usedSimplePlayback = useSimplePlayback && strategyType && !strategyType.startsWith('healed-');
+          const minDelay = (usedLockedSelector || usedQuickScan || usedSimplePlayback) ? 30 : 100;
           const stepDelay = Math.max(minDelay, slowMo);
           await this.page.waitForTimeout(stepDelay);
           
@@ -5651,7 +5793,7 @@ class PlaywrightRecorder extends EventEmitter {
       isManual: true
     };
     
-    this.actions.push(qwordAction);
+    this._insertByTimestamp(qwordAction);
     this.manualActions.push(qwordAction); // Also track in manual actions
     
     // Update overlay
@@ -5690,6 +5832,35 @@ class PlaywrightRecorder extends EventEmitter {
    */
   isRecording() {
     return this.recording;
+  }
+
+  /**
+   * Switch the active page context to a specific tab index.
+   * Used when opening Smart Suggestions for a step on a different tab.
+   * @param {number} tabIndex - The tab index to switch to
+   * @returns {{ success: boolean, error?: string }}
+   */
+  async switchToTabForContext(tabIndex) {
+    try {
+      const pages = this._pages || this.context.pages();
+      if (tabIndex < 0 || tabIndex >= pages.length) {
+        console.log(`[PlaywrightRecorder] switchToTabForContext: tab ${tabIndex} out of range (have ${pages.length} tabs)`);
+        return { success: false, error: `Tab ${tabIndex} not found (have ${pages.length} tabs)` };
+      }
+      const targetPage = pages[tabIndex];
+      if (targetPage.isClosed()) {
+        console.log(`[PlaywrightRecorder] switchToTabForContext: tab ${tabIndex} is closed`);
+        return { success: false, error: `Tab ${tabIndex} is closed` };
+      }
+      this.page = targetPage;
+      this._currentPageIndex = tabIndex;
+      await this.page.bringToFront();
+      console.log(`[PlaywrightRecorder] switchToTabForContext: switched to tab ${tabIndex} (${this.page.url().substring(0, 60)})`);
+      return { success: true };
+    } catch (e) {
+      console.error(`[PlaywrightRecorder] switchToTabForContext error:`, e);
+      return { success: false, error: e.message };
+    }
   }
 
   /**
@@ -12239,7 +12410,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       this.seenActionIds.add(contentId);
       
       const qwordAction = this._toQWord(action);
-      this.actions.push(qwordAction);
+      this._insertByTimestamp(qwordAction);
       this.emit('action', qwordAction);
       
       console.log('[PlaywrightRecorder] Forwarding action to webapp:', qwordAction.description);
@@ -12503,8 +12674,46 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
    */
   _addAction(action) {
     const qwordAction = this._toQWord(action);
-    this.actions.push(qwordAction);
+    this._insertByTimestamp(qwordAction);
     this.emit('action', qwordAction);
+  }
+
+  /**
+   * Insert action at the correct position based on timestamp.
+   * Multiple capture paths (recipe, CDP, legacy) can deliver actions
+   * out of order. This ensures this.actions stays chronologically sorted.
+   * 
+   * Fast path: most actions arrive in order → simple push.
+   * Slow path: out-of-order → splice into correct position (look back up to 30 actions).
+   */
+  _insertByTimestamp(action) {
+    const ts = action.timestamp || Date.now();
+    
+    // Fast path: action is newer than the most recent → just push
+    if (this.actions.length === 0 || (this.actions[this.actions.length - 1].timestamp || 0) <= ts) {
+      this.actions.push(action);
+      return;
+    }
+    
+    // Out-of-order: find correct chronological position
+    let insertAt = this.actions.length;
+    const lookBack = Math.min(30, this.actions.length);
+    for (let i = this.actions.length - 1; i >= this.actions.length - lookBack; i--) {
+      if ((this.actions[i].timestamp || 0) > ts) {
+        insertAt = i;
+      } else {
+        break;
+      }
+    }
+    
+    if (insertAt < this.actions.length) {
+      console.log(`[PlaywrightRecorder] Reordering: "${action.description || action.qword}" inserted at position ${insertAt} (${this.actions.length} total)`);
+      this.actions.splice(insertAt, 0, action);
+      // Emit refresh so frontend can re-render with correct order
+      this.emit('actions-reordered', this.actions);
+    } else {
+      this.actions.push(action);
+    }
   }
 
   /**

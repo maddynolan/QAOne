@@ -217,6 +217,7 @@ contextBridge.exposeInMainWorld('flowstral', {
     isRecording: () => ipcRenderer.invoke('playwright-recorder-is-recording'),
     isPaused: () => ipcRenderer.invoke('playwright-recorder-is-paused'),
     analyze: () => ipcRenderer.invoke('playwright-recorder-analyze'),
+    switchTabContext: (tabIndex) => ipcRenderer.invoke('playwright-recorder-switch-tab-context', tabIndex),
     executeAction: (action) => ipcRenderer.invoke('playwright-recorder-execute-action', action),
     addManualAction: (action) => ipcRenderer.invoke('playwright-recorder-add-manual-action', action),
     

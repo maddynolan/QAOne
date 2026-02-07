@@ -1180,6 +1180,14 @@ ipcMain.handle('playwright-recorder-analyze', async () => {
   return await playwrightRecorder.analyzePage();
 });
 
+// Switch to a specific tab for context (Smart Suggestions)
+ipcMain.handle('playwright-recorder-switch-tab-context', async (event, tabIndex) => {
+  if (!playwrightRecorder) {
+    return { success: false, error: 'Recorder not started' };
+  }
+  return await playwrightRecorder.switchToTabForContext(tabIndex);
+});
+
 // Execute a suggestion action (Playwright recorder)
 ipcMain.handle('playwright-recorder-execute-action', async (event, action) => {
   if (!playwrightRecorder) {
@@ -1293,6 +1301,12 @@ function setupRecordingEvents(recorder) {
   recorder.on('action', (action) => {
     console.log('[PlaywrightRecorder] Forwarding action to webapp:', action.description);
     sendToWebapp('playwright-recorder-action', action);
+  });
+  
+  // When actions are reordered (timestamp-based insertion), send full list to frontend
+  recorder.on('actions-reordered', (actions) => {
+    console.log('[PlaywrightRecorder] Actions reordered, sending full list:', actions?.length);
+    sendToWebapp('playwright-recorder-actions-refresh', { actions });
   });
   
   recorder.on('stopped', ({ actions }) => {

@@ -14,7 +14,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   Play, Square, Pause, Trash2, Download, ExternalLink, Save,
   CheckCircle, Video, Globe, Search, Filter, Loader2,
-  Folder, Tag, ChevronDown, ChevronRight, Settings, Code,
+  Folder, Tag, ChevronDown, ChevronLeft, ChevronRight, Settings, Code,
   Zap, FileText, Merge, RotateCcw, X, Sparkles,
   AlertCircle, Check, Layers, RefreshCw, Lightbulb,
   MousePointer, Keyboard, Eye, Target, Cloud, Link, Edit,
@@ -1033,6 +1033,7 @@ export default function PlaywrightRecorderPage() {
   const [testExecutionResult, setTestExecutionResult] = useState<{
     status: 'running' | 'passed' | 'failed' | 'paused';
     currentStep: number;
+    failedStepIndex?: number;    // Canonical failed step index from test-complete event
     stepResults: { 
       index: number; 
       status: string; 
@@ -1051,6 +1052,9 @@ export default function PlaywrightRecorderPage() {
   // Pause/Resume/Debug execution state
   const [isTestPaused, setIsTestPaused] = useState(false);
   const [pausedAtStep, setPausedAtStep] = useState<number | null>(null);
+  
+  // Step browsing in failure card - allows navigating to any step to fix it
+  const [failureCardStepIndex, setFailureCardStepIndex] = useState<number | null>(null);
   
   // Cross-origin step editor state
   const [showCrossOriginEditor, setShowCrossOriginEditor] = useState(false);
@@ -2402,6 +2406,14 @@ export default function PlaywrightRecorderPage() {
       setIsPaused(false);
     });
 
+    // Handle actions-reordered: replace entire actions list with correctly ordered list
+    const unsubRefresh = flowstral.on('playwright-recorder-actions-refresh', ({ actions: reorderedActions }: { actions: RecordedAction[] }) => {
+      if (reorderedActions?.length > 0) {
+        console.log(`[Recorder] Actions reordered, refreshing list (${reorderedActions.length} actions)`);
+        setActions(reorderedActions);
+      }
+    });
+
       flowstral.playwrightRecorder?.isRecording?.().then((recording: boolean) => {
       setIsRecording(recording);
       if (recording) {
@@ -2411,7 +2423,7 @@ export default function PlaywrightRecorderPage() {
       }
     });
 
-      return () => { unsubAction?.(); unsubStopped?.(); };
+      return () => { unsubAction?.(); unsubStopped?.(); unsubRefresh?.(); };
     }
     
     if (electronAPI?.on) {
@@ -2442,6 +2454,22 @@ export default function PlaywrightRecorderPage() {
     }
     prevActionsLengthRef.current = actions.length;
   }, [actions.length]);
+
+  // Switch to a step's tab context before opening Smart Suggestions
+  const switchToStepTabAndRefresh = async (stepIndex: number) => {
+    const flowstral = (window as any).flowstral;
+    const action = actions[stepIndex] as any;
+    if (action?.tabIndex !== undefined && action.tabIndex >= 0) {
+      try {
+        if (flowstral?.playwrightRecorder?.switchTabContext) {
+          await flowstral.playwrightRecorder.switchTabContext(action.tabIndex);
+        }
+      } catch (e) {
+        console.warn('Failed to switch tab context for step', stepIndex, e);
+      }
+    }
+    handleRefreshSuggestions();
+  };
 
   // Handle suggestions refresh
   const handleRefreshSuggestions = async () => {
@@ -3989,6 +4017,7 @@ Recorded Test
     const electronAPI = (window as any).electronAPI;
     
     // Show modal with running state
+    setFailureCardStepIndex(null); // Reset step browsing for new run
     setTestExecutionResult({
       status: 'running',
       currentStep: 0,
@@ -4027,7 +4056,9 @@ Recorded Test
           };
           return {
             ...prev,
-            currentStep: data.stepIndex,
+            // On success: advance currentStep so spinner moves to next step immediately
+            // On failure: keep currentStep on the failed step to show the failure indicator
+            currentStep: data.success ? data.stepIndex + 1 : data.stepIndex,
             stepResults: newResults
           };
         });
@@ -4070,7 +4101,7 @@ Recorded Test
           if (flowstral?.playwrightRecorder?.showSuggestionsOverlay) {
             flowstral.playwrightRecorder.showSuggestionsOverlay();
           }
-          handleRefreshSuggestions();
+          switchToStepTabAndRefresh(data.stepIndex);
           
           toast.error(
             `Step ${data.stepIndex + 1} failed. Click correct element in browser or use Smart Suggestions panel to fix.`,
@@ -4112,6 +4143,7 @@ Recorded Test
       const unsubComplete = flowstral.on('playwright-test-complete', (data: { 
         success: boolean; 
         passedSteps: number; 
+        failedStep?: number;
         totalSteps: number;
         stepResults?: any[];
         error?: string 
@@ -4128,9 +4160,24 @@ Recorded Test
           strategyType: s.strategyType
         })) || [];
         
+        // Determine the canonical failed step index:
+        // 1. Use failedStep from the event (most reliable, comes from backend)
+        // 2. Fall back to first step with 'failed' status in stepResults
+        // 3. Fall back to currentStep
+        let failedIdx: number | undefined = undefined;
+        if (!data.success) {
+          if (data.failedStep !== undefined && data.failedStep >= 0) {
+            failedIdx = data.failedStep;
+          } else {
+            const firstFailed = finalStepResults.find(s => s.status === 'failed');
+            failedIdx = firstFailed?.index;
+          }
+        }
+        
         setTestExecutionResult({
           status: data.success ? 'passed' : 'failed',
           currentStep: data.totalSteps - 1,
+          failedStepIndex: failedIdx,
           stepResults: finalStepResults,
           totalSteps: data.totalSteps,
           error: data.success ? undefined : data.error
@@ -4190,6 +4237,10 @@ Recorded Test
         const flaggedStepIds = Array.from(falsePositiveSteps.keys());
         const hasAnyFlaggedSteps = flaggedStepIds.length > 0;
         
+        // V2 Simple Playback: Playwright-native element finding (3-10x faster)
+        // Toggle via localStorage: localStorage.setItem('useSimplePlayback', 'true')
+        const useSimplePlayback = localStorage.getItem('useSimplePlayback') === 'true';
+        
         result = await flowstral.playwrightRecorder.runTest({
           steps: normalizedActions,
           url: url,
@@ -4199,7 +4250,9 @@ Recorded Test
           highlight: highlightElements,
           // NEW: Pass flagged steps so backend can pause at them
           flaggedSteps: flaggedStepIds,
-          stopAtFlagged: hasAnyFlaggedSteps // Stop at flagged steps if any exist
+          stopAtFlagged: hasAnyFlaggedSteps, // Stop at flagged steps if any exist
+          // V2: Simplified Playwright-native playback
+          useSimplePlayback: useSimplePlayback
         });
       } else if (electronAPI?.testRunner?.executeTest) {
         // Use normalized actions with enhanced selectorObj for fallbacks
@@ -4333,7 +4386,7 @@ Recorded Test
         if (flowstralAPI?.playwrightRecorder?.showSuggestionsOverlay) {
           flowstralAPI.playwrightRecorder.showSuggestionsOverlay();
         }
-        handleRefreshSuggestions();
+        switchToStepTabAndRefresh(flaggedStepIndex);
         
         toast.info(
           `🚩 Paused at step ${flaggedStepIndex + 1}. Use Smart Suggestions panel (right side) or click elements in browser to replace selector.`,
@@ -8720,72 +8773,168 @@ Recorded Test
             {/* ONE-SCREEN FAILURE CARD — step name, screenshot, one sentence, primary CTA, secondaries */}
             {/* Enhanced with AI explanation + multiple fix options (additive — existing buttons unchanged) */}
             {testExecutionResult?.status === 'failed' && !isTestPaused && (() => {
-              const firstFailed = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
-              if (!firstFailed || firstFailed.index == null) return null;
-              const failedAction = actions[firstFailed.index];
-              const stepLabel = failedAction ? getDisplayLabel(failedAction) : null;
-              const classified = classifyFailure(firstFailed.error, stepLabel || undefined);
-              const stepName = failedAction ? getDisplayDescription(maskSensitiveAction(failedAction)) : `Step ${firstFailed.index + 1}`;
-              const isStepFlaky = failedAction?.id ? flakyStepIds.has(failedAction.id) : false;
+              // Determine the canonical failed step for initial display
+              let canonicalFailedIdx: number | undefined;
+              if (testExecutionResult.failedStepIndex !== undefined) {
+                canonicalFailedIdx = testExecutionResult.failedStepIndex;
+              }
+              if (canonicalFailedIdx === undefined) {
+                const found = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
+                canonicalFailedIdx = found?.index;
+              }
+              if (canonicalFailedIdx === undefined) return null;
+              
+              // Use failureCardStepIndex for navigation, defaulting to canonical failed step
+              const viewingIdx = failureCardStepIndex ?? canonicalFailedIdx;
+              const viewingResult = testExecutionResult.stepResults?.[viewingIdx];
+              const viewingAction = actions[viewingIdx];
+              if (!viewingAction && !viewingResult) return null;
+              
+              const stepLabel = viewingAction ? getDisplayLabel(viewingAction) : null;
+              const isViewingFailed = viewingResult?.status === 'failed';
+              const classified = isViewingFailed ? classifyFailure(viewingResult?.error, stepLabel || undefined) : null;
+              const stepName = viewingAction ? getDisplayDescription(maskSensitiveAction(viewingAction)) : `Step ${viewingIdx + 1}`;
+              const isStepFlaky = viewingAction?.id ? flakyStepIds.has(viewingAction.id) : false;
+              const totalSteps = testExecutionResult.totalSteps || actions.length;
+              const isOnCanonicalFailed = viewingIdx === canonicalFailedIdx;
+              
               return (
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-3">
+                <div className={`p-4 ${isViewingFailed ? 'bg-red-500/10 border-red-500/30' : 'bg-zinc-500/10 border-zinc-500/30'} border rounded-lg space-y-3`}>
+                  {/* Step Navigation Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={viewingIdx <= 0}
+                        onClick={() => setFailureCardStepIndex(Math.max(0, viewingIdx - 1))}
+                        className="h-7 w-7 p-0"
+                        title="Previous step"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Step {viewingIdx + 1} of {totalSteps}
+                        {isViewingFailed && <span className="text-red-400 ml-1">(failed)</span>}
+                        {viewingResult?.status === 'passed' && <span className="text-emerald-400 ml-1">(passed)</span>}
+                        {viewingResult?.status === 'skipped' && <span className="text-gray-400 ml-1">(skipped)</span>}
+                        {!viewingResult && <span className="text-gray-500 ml-1">(not reached)</span>}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={viewingIdx >= totalSteps - 1}
+                        onClick={() => setFailureCardStepIndex(Math.min(totalSteps - 1, viewingIdx + 1))}
+                        className="h-7 w-7 p-0"
+                        title="Next step"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {!isOnCanonicalFailed && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFailureCardStepIndex(canonicalFailedIdx!)}
+                        className="text-xs text-red-400 hover:text-red-300 h-7"
+                      >
+                        Go to failed step
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Step Details */}
                   <div className="flex items-start gap-3">
-                    {firstFailed.screenshot && (
-                      <img src={firstFailed.screenshot} alt="Step" className="w-24 h-24 object-cover rounded border border-border shrink-0" />
+                    {viewingResult?.screenshot && (
+                      <img src={viewingResult.screenshot} alt="Step" className="w-24 h-24 object-cover rounded border border-border shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-red-200">{stepName}</p>
+                        <p className={`text-sm font-medium ${isViewingFailed ? 'text-red-200' : 'text-foreground'}`}>{stepName}</p>
                         {isStepFlaky && (
                           <span className="px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">
                             Flaky
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-red-300/90 mt-1">
-                        {aiExplanation ? aiExplanation.plain_explanation : classified.message}
-                      </p>
-                      {aiExplanation?.root_cause && aiExplanation.root_cause !== 'unknown' && aiExplanation.root_cause !== aiExplanation.failure_type && (
+                      {isViewingFailed && classified && (
+                        <p className="text-sm text-red-300/90 mt-1">
+                          {aiExplanation && isOnCanonicalFailed ? aiExplanation.plain_explanation : classified.message}
+                        </p>
+                      )}
+                      {isViewingFailed && aiExplanation && isOnCanonicalFailed && aiExplanation?.root_cause && aiExplanation.root_cause !== 'unknown' && aiExplanation.root_cause !== aiExplanation.failure_type && (
                         <p className="text-xs text-red-400/60 mt-0.5">
                           Root cause: {aiExplanation.root_cause.replace(/_/g, ' ')}
                           {aiExplanation.confidence > 0 && ` (${Math.round(aiExplanation.confidence * 100)}% confidence)`}
                         </p>
                       )}
+                      {viewingResult?.status === 'passed' && (
+                        <p className="text-sm text-emerald-400/90 mt-1">This step passed successfully.</p>
+                      )}
+                      {!viewingResult && (
+                        <p className="text-sm text-gray-400/90 mt-1">This step was not reached during execution.</p>
+                      )}
                     </div>
                   </div>
-                  {/* Primary fix buttons — SAME as before, always available */}
+                  
+                  {/* Fix buttons - available for ANY step, not just the failed one */}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       onClick={() => {
                         setShowTestResultModal(false);
-                        setEditingActionIndex(firstFailed.index);
+                        setEditingActionIndex(viewingIdx);
                         setRightPanelTab('suggestions');
-                        handleRefreshSuggestions();
+                        switchToStepTabAndRefresh(viewingIdx);
                         toast.info('Click the correct element in the browser or pick one from Smart Suggestions.', { duration: 4000 });
                       }}
                       className="bg-blue-600 hover:bg-blue-700 text-white"
+                      size="sm"
                     >
                       <MousePointer className="h-4 w-4 mr-2" />
-                      Click the correct one
+                      Fix this step
                     </Button>
-                    <Button variant="outline" size="sm" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10" onClick={() => handleRunFromStep(firstFailed.index)}>
+                    <Button variant="outline" size="sm" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10" onClick={() => handleRunFromStep(viewingIdx)}>
                       <RefreshCw className="h-4 w-4 mr-1" />
-                      Wait and retry
+                      Retry from here
                     </Button>
-                    {failedAction?.id && !falsePositiveSteps.has(failedAction.id) && (
-                      <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10" onClick={() => { markStepAsFalsePositive(firstFailed.index, firstFailed.screenshot || null); }}>
+                    {isViewingFailed && viewingAction?.id && !falsePositiveSteps.has(viewingAction.id) && (
+                      <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10" onClick={() => { markStepAsFalsePositive(viewingIdx, viewingResult?.screenshot || null); }}>
                         Not a real failure
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" className="border-gray-500/30 text-gray-400 hover:bg-gray-500/10" onClick={() => handleRunFromStep(firstFailed.index)}>
+                    {isViewingFailed && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10" 
+                        onClick={() => {
+                          // Mark this step as passed (override false failure) and move to next step
+                          setTestExecutionResult(prev => {
+                            if (!prev) return prev;
+                            const newResults = [...prev.stepResults];
+                            newResults[viewingIdx] = { ...newResults[viewingIdx], status: 'passed', error: undefined };
+                            return { ...prev, stepResults: newResults };
+                          });
+                          toast.success(`Step ${viewingIdx + 1} marked as passed`, { duration: 2000 });
+                          // Advance to next step automatically
+                          if (viewingIdx + 1 < totalSteps) {
+                            setFailureCardStepIndex(viewingIdx + 1);
+                          }
+                        }}
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Mark as Passed & Next
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" className="border-gray-500/30 text-gray-400 hover:bg-gray-500/10" onClick={() => handleRunFromStep(viewingIdx)}>
                       <Play className="h-4 w-4 mr-1" />
                       Run from here
                     </Button>
                   </div>
                   {/* AI MULTI-FIX — "Why did this fail?" expandable section */}
-                  {/* Loads on-demand when clicked — no AI cost until user asks */}
-                  <div className="border-t border-red-500/20 pt-2">
-                    {!aiExplanation && !aiExplanationLoading && (
+                  {/* Only shown when viewing a failed step. Loads on-demand when clicked — no AI cost until user asks */}
+                  {isViewingFailed && <div className="border-t border-red-500/20 pt-2">
+                    {!aiExplanation && !aiExplanationLoading && isOnCanonicalFailed && (
                       <button
                         onClick={async () => {
                           setAiExplanationLoading(true);
@@ -8793,16 +8942,16 @@ Recorded Test
                             const testId = (actions as any)._testId || 'current';
                             const result = await explainFailureApi({
                               test_id: testId,
-                              step_id: failedAction?.id || 'unknown',
-                              step_index: firstFailed.index,
+                              step_id: viewingAction?.id || 'unknown',
+                              step_index: viewingIdx,
                               step_label: stepLabel || '',
-                              error_message: firstFailed.error || 'Unknown error',
+                              error_message: viewingResult?.error || 'Unknown error',
                               step_info: {
-                                action: failedAction?.type || 'unknown',
+                                action: viewingAction?.type || 'unknown',
                                 label: stepLabel || '',
-                                selector: failedAction?.selectorObj?.selector || failedAction?.selector || '',
-                                description: failedAction?.description || '',
-                                element: failedAction?.element || {},
+                                selector: viewingAction?.selectorObj?.selector || viewingAction?.selector || '',
+                                description: viewingAction?.description || '',
+                                element: viewingAction?.element || {},
                               },
                               screenshot_b64: null, // Don't send screenshots (too large for API call)
                             });
@@ -8825,7 +8974,7 @@ Recorded Test
                         Analyzing failure...
                       </div>
                     )}
-                    {aiExplanation && aiExplanation.fix_options.length > 0 && (
+                    {aiExplanation && isOnCanonicalFailed && aiExplanation.fix_options.length > 0 && (
                       <div className="space-y-2">
                         <p className="text-xs text-red-300/70 font-medium">Fix options (ranked by likelihood):</p>
                         <div className="space-y-1.5">
@@ -8836,18 +8985,18 @@ Recorded Test
                                 // Route each fix option to the appropriate handler
                                 if (fix.fix_type === 'update_selector') {
                                   setShowTestResultModal(false);
-                                  setEditingActionIndex(firstFailed.index);
+                                  setEditingActionIndex(viewingIdx);
                                   setRightPanelTab('suggestions');
                                   handleRefreshSuggestions();
                                 } else if (fix.fix_type === 'add_wait' || fix.fix_type === 'retry') {
-                                  handleRunFromStep(firstFailed.index);
+                                  handleRunFromStep(viewingIdx);
                                 } else if (fix.fix_type === 'skip_step') {
                                   // Skip = run from next step
-                                  if (firstFailed.index + 1 < actions.length) {
-                                    handleRunFromStep(firstFailed.index + 1);
+                                  if (viewingIdx + 1 < actions.length) {
+                                    handleRunFromStep(viewingIdx + 1);
                                   }
                                 } else if (fix.fix_type === 'mark_false_positive') {
-                                  markStepAsFalsePositive(firstFailed.index, firstFailed.screenshot || null);
+                                  markStepAsFalsePositive(viewingIdx, viewingResult?.screenshot || null);
                                 } else if (fix.fix_type === 'quarantine') {
                                   toast.info('Step quarantined — it will be skipped in future runs until stabilized.', { duration: 4000 });
                                 } else if (fix.fix_type === 'investigate') {
@@ -8886,7 +9035,7 @@ Recorded Test
                         )}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
               );
             })()}
@@ -9127,7 +9276,7 @@ Recorded Test
                                     setShowTestResultModal(false);
                                     setEditingActionIndex(idx);
                                     setRightPanelTab('suggestions');
-                                    handleRefreshSuggestions();
+                                    switchToStepTabAndRefresh(idx);
                                     toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
                                   }}
                                   className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
@@ -9145,7 +9294,7 @@ Recorded Test
                                       setShowTestResultModal(false);
                                       setEditingActionIndex(idx);
                                       setRightPanelTab('suggestions');
-                                      handleRefreshSuggestions();
+                                      switchToStepTabAndRefresh(idx);
                                       toast.info('Step flagged! Select correct element from Smart Suggestions.', { duration: 4000 });
                                     }}
                                     className="px-2 py-0.5 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded border border-amber-500/30"
@@ -9163,7 +9312,7 @@ Recorded Test
                                         setShowTestResultModal(false);
                                         setEditingActionIndex(idx);
                                         setRightPanelTab('suggestions');
-                                        handleRefreshSuggestions();
+                                        switchToStepTabAndRefresh(idx);
                                         toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
                                       }}
                                       className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
@@ -9185,26 +9334,25 @@ Recorded Test
                                 )}
                               </div>
                             )}
-                            {/* FALSE POSITIVE FLAG for PASSED steps - key feature! */}
-                            {/* A false positive = step PASSES but clicked wrong element */}
+                            {/* Fix/Flag buttons for PASSED steps */}
+                            {/* Show Fix on hover for all passed steps (not just flagged), plus Flag/Unflag */}
                             {stepResult?.status === 'passed' && testExecutionResult?.status !== 'running' && action.id && (
                               <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-                                {falsePositiveSteps.has(action.id) && (
-                                  /* Fix button for flagged passed steps - allows replacing with Smart Suggestions */
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingActionIndex(idx);
-                                      setRightPanelTab('suggestions');
-                                      handleRefreshSuggestions();
-                                      toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
-                                    }}
-                                    className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                    title="Fix this step - use Smart Suggestions to replace"
-                                  >
-                                    Fix
-                                  </button>
-                                )}
+                                {/* Fix button - always visible on hover for passed steps */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowTestResultModal(false);
+                                    setEditingActionIndex(idx);
+                                    setRightPanelTab('suggestions');
+                                    switchToStepTabAndRefresh(idx);
+                                    toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
+                                  }}
+                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                  title="Fix this step - use Smart Suggestions to replace"
+                                >
+                                  Fix
+                                </button>
                                 {!falsePositiveSteps.has(action.id) ? (
                                   <button
                                     onClick={(e) => {
@@ -9295,8 +9443,9 @@ Recorded Test
                 </span>
                 <div className="flex items-center gap-2">
                   {testExecutionResult?.status === 'failed' && (() => {
-                    const firstFailed = testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed');
-                    const failedIdx = firstFailed?.index ?? 0;
+                    // Prefer canonical failedStepIndex, fall back to finding first failed
+                    const failedIdx = testExecutionResult.failedStepIndex ?? 
+                      testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed')?.index ?? 0;
                     return (
                       <>
                         <Button

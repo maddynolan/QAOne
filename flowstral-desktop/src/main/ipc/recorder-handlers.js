@@ -39,6 +39,12 @@ function registerRecorderHandlers(deps) {
         getWebappView()?.webContents.send('playwright-recorder-action', action);
       });
       
+      // When actions are reordered (timestamp-based insertion), send full list to frontend
+      playwrightRecorder.on('actions-reordered', (actions) => {
+        console.log('[PlaywrightRecorder] Actions reordered, sending full list:', actions?.length);
+        getWebappView()?.webContents.send('playwright-recorder-actions-refresh', { actions });
+      });
+      
       playwrightRecorder.on('stopped', ({ actions }) => {
         console.log('[PlaywrightRecorder] Forwarding stopped event, actions:', actions?.length);
         getWebappView()?.webContents.send('playwright-recorder-stopped', { actions });
@@ -181,6 +187,14 @@ function registerRecorderHandlers(deps) {
       return { success: false, suggestions: [], error: 'Recorder not started' };
     }
     return await playwrightRecorder.analyzePage();
+  });
+
+  // Switch to a specific tab for context (Smart Suggestions)
+  ipcMain.handle('playwright-recorder-switch-tab-context', async (event, tabIndex) => {
+    if (!playwrightRecorder) {
+      return { success: false, error: 'Recorder not started' };
+    }
+    return await playwrightRecorder.switchToTabForContext(tabIndex);
   });
   
   // Execute action

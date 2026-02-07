@@ -1,4 +1,4 @@
-# Record & Playback Architecture
+g# Record & Playback Architecture
 
 Complete architecture reference for the QAAI Record & Playback system. Covers recording flow, playback execution, element finding, performance optimizations, and all timeout configurations.
 
@@ -606,6 +606,50 @@ SmartFinder._fixMissingSCharacter():
 - **Input debounce**: 1500ms in recipe-recorder-integration.js; `blur` event flushes immediately
 - **Recipe round-trip**: `legacyActionToRecipe` → `recipeActionToLegacy` may lose `className`; `what.tag` stored uppercase
 - **nearText**: Falls back to element's own text when no `ariaLabel` is available
+
+---
+
+## 11. V2 Simple Playback (Feb 2026)
+
+### Feature Flag
+
+Opt-in via `localStorage.setItem('useSimplePlayback', 'true')` in the frontend, or `useSimplePlayback: true` in `runTest()` options.
+
+### Architecture
+
+Replaces the 4-layer sequential waterfall with a Playwright-native parallel racer:
+
+```
+CURRENT (4-layer waterfall, sequential):
+  300ms DOM wait → Locked(150ms) → QuickScan(8×250ms) → SmartFinder(8s) → Legacy(5s)
+  Happy path: ~1100ms | Worst: ~15s+ per step
+
+V2 SIMPLE PLAYBACK (parallel racing, Playwright auto-wait):
+  Tier1 race(manual|locked|testId|role+text|ariaLabel, 3s) → Tier2 race(text|name|id|css|href, 5s) → Heal(SmartFinder) → iframe → AI
+  Happy path: ~50-100ms | Worst: ~8s per step
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `flowstral-desktop/src/main/lib/simple-element-finder.js` | Parallel strategy racing with `Promise.any()` and Playwright `waitFor` |
+| `flowstral-desktop/src/main/lib/simple-step-executor.js` | Simplified step dispatch: element actions use SimpleElementFinder, everything else delegates to existing handlers |
+| `playwright-recorder.js` (constructor) | `useSimplePlayback` flag |
+| `playwright-recorder.js` (runTest loop) | Conditional dispatch to SimpleStepExecutor |
+
+### What Changes vs What Stays
+
+| Component | V2 Simple Playback | Original |
+|-----------|-------------------|----------|
+| Element finding for click/fill/hover/check | SimpleElementFinder (parallel, auto-wait) | 4-layer waterfall (sequential, count+isVisible) |
+| Tab switching | Same (implicit tabIndex) | Same |
+| iframe scoping | Same (_getFrameScope) | Same |
+| All 67 action handlers | Same (delegated) | Same |
+| Lock Locators tracking | Same (workingSelector) | Same |
+| Self-healing | SmartFinder (only on failure) | SmartFinder (every step) |
+| AI Vision fallback | Same | Same |
+| Inter-step delay | 30ms min (vs 50ms) | 50-100ms min |
 
 ---
 

@@ -214,7 +214,11 @@ function getRecipeClickCaptureScript() {
   
   // Record an action
   function recordAction(action) {
-    action.timestamp = Date.now();
+    // Use pre-set timestamp if available (e.g. fill actions use typing start time)
+    // Otherwise default to now (clicks, selects, etc.)
+    if (!action.timestamp) {
+      action.timestamp = Date.now();
+    }
     
     // Add iframe context if we're inside an iframe
     var frameInfo = getFrameContext();
@@ -808,7 +812,11 @@ function getRecipeClickCaptureScript() {
         displayValue: isPassword ? '********' : value,
         isPassword: isPassword,
         fieldLabel: fieldLabel,  // Store for later use
-        description: 'Fill "' + fieldLabel + '": "' + displayValue + '"'
+        description: 'Fill "' + fieldLabel + '": "' + displayValue + '"',
+        // Use the time when user STARTED typing, not when debounce fires.
+        // Without this, fills would get timestamps 1500ms too late,
+        // appearing after clicks that chronologically happened later.
+        timestamp: pendingInput.startedAt || Date.now()
       });
     }
     
@@ -831,7 +839,7 @@ function getRecipeClickCaptureScript() {
       clearTimeout(inputTimeout);
     } else {
       flushPendingInput();
-      pendingInput = { element: el, value: el.value, recipe: recipe };
+      pendingInput = { element: el, value: el.value, recipe: recipe, startedAt: Date.now() };
     }
     
     inputTimeout = setTimeout(flushPendingInput, 1500);
