@@ -4,8 +4,9 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  // Use relative paths so the build works with file:// in Electron desktop app
-  base: './',
+  // Use absolute paths for web (Vercel) so nested routes like /admin/licenses work.
+  // For Electron desktop, we build separately with VITE_BASE=./ to support file:// protocol.
+  base: process.env.VITE_BASE || '/',
   server: {
     host: "::",
     port: 8080,
