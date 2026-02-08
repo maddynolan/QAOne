@@ -2800,12 +2800,20 @@ class PlaywrightRecorder extends EventEmitter {
                 // CRITICAL: Pass pageIndex for implicit tab switching during playback
                 await this._processRecipeAction(recipeAction, pageIndex);
               }
-              // Clear pendingClicks/pendingInputs for this page since recipe handled them
-              // (they captured the same clicks)
+              // Clear pendingClicks for this page - recipe click capture is reliable.
               // FIX: Filter per-tab instead of clearing all. Global clear loses
               // inputs from other tabs that haven't been processed yet.
               this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageIndex);
-              this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
+              
+              // CRITICAL FIX: Only clear pendingInputs if recipe actually captured FILL
+              // actions for this tab. If recipe only had clicks (fills still debouncing
+              // at 1500ms), keep pendingInputs as a safety net. Without this, fills are
+              // lost when: recipe captures click → pendingInputs cleared → page navigates
+              // before recipe debounce fires → fill never captured.
+              const recipeHadFills = data.recipeActions.some(a => a.type === 'fill');
+              if (recipeHadFills) {
+                this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
+              }
             }
             
             // Process page data (inputs first, then clicks)
@@ -2826,10 +2834,24 @@ class PlaywrightRecorder extends EventEmitter {
                 await this._processClick(click);
               }
             } else if (!data.recipeActions || data.recipeActions.length === 0) {
-              // Recipe mode but no recipe actions this cycle:
-              // Process ONLY pendingInputs that are old enough (>2s) to be considered
-              // missed by recipe. This prevents the ordering issue (CDP 300ms vs recipe 1500ms)
-              // while still recovering fills that recipe never captured.
+              // Recipe mode but no recipe actions this cycle.
+              // TWO safety nets to catch fills that recipe missed:
+              
+              // Safety net 1: Process page-level CDP inputs (data.inputs) that were
+              // flushed from window.__flowstralCDPInputs by page.evaluate().
+              // These are thrown away every cycle in recipe mode unless we process them.
+              // _processInputs deduplicates by field key, so no risk of double recording.
+              if (data.inputs && data.inputs.length > 0) {
+                const inputsWithTabIndex = data.inputs.map(inp => ({
+                  ...inp,
+                  tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
+                }));
+                console.log(`[PlaywrightRecorder] Safety-net: processing ${inputsWithTabIndex.length} page-level inputs for tab ${pageIndex} (recipe had no actions)`);
+                await this._processInputs(inputsWithTabIndex);
+              }
+              
+              // Safety net 2: Process stale main-process pendingInputs (>2s old).
+              // These come from __FLOWSTRAL_INPUT__ console messages.
               const now = Date.now();
               const staleInputs = (this.pendingInputs || []).filter(
                 i => i.tabIndex === pageIndex && (now - (i.timestamp || 0)) > 2000

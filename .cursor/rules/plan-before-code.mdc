@@ -1,0 +1,122 @@
+---
+description: Mandatory plan-before-code workflow for all recorder and playback changes
+globs:
+  - flowstral-desktop/src/main/playwright-recorder.js
+  - flowstral-desktop/src/main/lib/recipe-recorder-integration.js
+  - flowstral-desktop/src/main/lib/simple-element-finder.js
+  - flowstral-desktop/src/main/lib/simple-step-executor.js
+  - flowstral-desktop/src/main/lib/action-handlers.js
+  - flowstral-desktop/src/main/lib/smart-finder.js
+  - flowstral-desktop/src/main/index.js
+  - flowstral-desktop/src/main/ipc/recorder-handlers.js
+  - flowstral-desktop/src/main/preload.js
+  - flowstral-desktop/src/main/webapp-preload.js
+  - src/pages/PlaywrightRecorderPage.tsx
+alwaysApply: false
+---
+
+# Plan-Before-Code Workflow (MANDATORY)
+
+## Golden Rule
+
+**NEVER make code changes to recorder or playback files without first:**
+1. Reading and understanding ALL relevant code paths end-to-end
+2. Writing a plan document (see format below)
+3. Reviewing the plan against known invariants before implementing
+
+## Why This Rule Exists
+
+The recording and playback pipeline has multiple interacting subsystems (Recipe Recorder, CDP console capture, pending queues, polling loops, tab management, timestamp ordering). Past changes that seemed simple (e.g., gating CDP inputs, changing flush thresholds) caused cascading failures like:
+- Fills filtered out entirely in new tabs
+- Actions appearing in wrong chronological order
+- Cross-origin pages losing all input capture
+- Stale data from one tab leaking into another
+
+## Workflow Steps
+
+### Step 1: Investigate (READ ONLY)
+- Read the specific code paths involved end-to-end
+- Trace data flow from capture → pending queues → processing → `this.actions`
+- Identify ALL consumers of the data you plan to change
+- Check for tab-index-specific filtering, timestamp dependencies, and cross-origin paths
+
+### Step 2: Write Plan Document
+Before ANY code edit, write/update `docs/CHANGE-PLAN.md` with:
+
+```markdown
+## Change: [Brief title]
+### Problem
+[What is broken and how to reproduce]
+### Root Cause Analysis
+[Exact code path that causes the issue, with line references]
+### Affected Code Paths
+[Every function/block that will be touched or is downstream]
+### Invariants That Must Be Preserved
+- [ ] Fills in new tabs must still be captured (recipe + CDP fallback)
+- [ ] Cross-origin pages must capture inputs via CDP pendingInputs
+- [ ] Tab indices must stay consistent after tab close/open
+- [ ] Timestamp ordering must be preserved in this.actions
+- [ ] Recipe recorder debounce (1500ms) must not lose fills
+- [ ] CDP stale threshold (2000ms) must not aggressively filter
+- [ ] pendingInputs/pendingClicks must be cleared per-tab, not globally
+- [ ] _insertByTimestamp must be used for ALL action insertions
+- [ ] Complex elements must work: shadow DOM, iframes, new tabs, drag-drop
+### Proposed Changes
+[Exact changes with before/after snippets]
+### Risk Assessment
+[What could break, and how to verify it won't]
+```
+
+### Step 3: Review Plan
+- Re-read the plan and cross-check each invariant
+- If ANY invariant might be violated, revise the plan
+- Only proceed to implementation after the plan passes all invariant checks
+
+### Step 4: Implement
+- Make changes exactly as planned
+- If you discover something unexpected during implementation, STOP and update the plan first
+
+### Step 5: Verify
+- Re-read changed code and confirm all invariants still hold
+- Check for accidental global clears, missing tab filters, wrong thresholds
+
+## Key Recording Subsystems (Must Understand Before Changing)
+
+### 1. Recipe Recorder (recipe-recorder-integration.js)
+- Injected into pages, captures clicks/inputs with rich element data
+- Fill debounce: 1500ms after last keystroke
+- Timestamps: `startedAt` when typing begins, used as action timestamp
+- Sends `recipeActions` array to polling loop
+
+### 2. CDP Console Capture (playwright-recorder.js)
+- Captures `__FLOWSTRAL_CLICK__` and `__FLOWSTRAL_INPUT__` from console
+- Stores in `pendingClicks[]` and `pendingInputs[]` with `tabIndex`
+- Fallback for cross-origin pages where recipe injection fails
+
+### 3. Polling Loop (playwright-recorder.js ~line 2780+)
+- Iterates all pages every cycle
+- For each page: tries `page.evaluate()` to get recipe + CDP data
+- **Normal path**: Recipe mode ON + recipe actions → process recipe only
+- **Tiered fallback**: Recipe mode ON + NO recipe actions → process stale CDP inputs (>2s old)
+- **Cross-origin catch**: `page.evaluate()` fails → process pendingClicks/pendingInputs for that tab
+- **Non-recipe mode**: Process all CDP inputs and clicks directly
+
+### 4. Tab Management
+- `this._pages[]` tracks open pages
+- `tabIndex` attached to all pending items and actions
+- `_flushPendingActionsForTab()` before tab close
+- `_adjustTabIndicesAfterClose()` decrements indices after close
+- CRITICAL: Always filter pending items by `tabIndex`, never clear globally
+
+### 5. Action Insertion
+- ALL actions go through `_insertByTimestamp(action)` for chronological ordering
+- NEVER use `this.actions.push()` directly
+
+## Common Mistakes to Avoid
+
+1. **Gating CDP inputs when recipe is active**: Recipe may not capture fills on cross-origin or delayed pages. CDP is the safety net.
+2. **Clearing pendingInputs globally**: Must filter by `tabIndex` to avoid losing inputs from other tabs.
+3. **Using `this.actions.push()`**: Breaks chronological ordering. Always use `_insertByTimestamp()`.
+4. **Ignoring timestamp source**: Recipe fills use `startedAt` (typing start), not debounce-fire time.
+5. **Not handling cross-origin catch block**: `page.evaluate()` throws for cross-origin → must process pending items in catch.
+6. **Flushing too aggressively**: CDP stale threshold of 2000ms exists for a reason — lowering it filters legitimate inputs.
