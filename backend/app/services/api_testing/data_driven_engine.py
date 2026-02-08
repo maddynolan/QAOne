@@ -436,8 +436,7 @@ class DataDrivenEngine:
                 execution_config.get("environment_vars", {})
             )
             
-            # Execute tests for this data row
-            # Note: Actual execution would call TestExecutionEngine
+            # Execute tests for this data row using the real TestExecutionEngine
             iteration_result = {
                 "row_index": row_index,
                 "data_row": {k: v for k, v in data_row.items() if not k.startswith("_")},
@@ -445,10 +444,23 @@ class DataDrivenEngine:
                 "test_results": []
             }
             
-            # Placeholder for actual execution
-            # In production, this would call the TestExecutionEngine
-            iteration_result["status"] = "completed"
-            iteration_result["passed"] = True  # Placeholder
+            try:
+                from app.services.api_testing.test_execution_engine import get_test_execution_engine
+                engine = get_test_execution_engine()
+                execution_result = await engine.execute_test_suite(
+                    test_suite=parameterized_suite,
+                    execution_config=execution_config,
+                    mode=execution_config.get("mode", "automated")
+                )
+                iteration_result["test_results"] = execution_result.get("test_results", [])
+                iteration_result["status"] = execution_result.get("status", "failed")
+                summary = execution_result.get("summary", {})
+                iteration_result["passed"] = (summary.get("failed", 1) == 0)
+            except Exception as e:
+                logger.error(f"Data-driven iteration {row_index} failed: {e}")
+                iteration_result["status"] = "failed"
+                iteration_result["passed"] = False
+                iteration_result["error"] = str(e)
             
             results["iterations"].append(iteration_result)
             

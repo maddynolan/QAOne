@@ -89,11 +89,80 @@ class APITestEngine:
         }
     
     def _generate_from_postman(self, collection: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate tests from Postman collection"""
+        """Generate tests from Postman collection (normalized or raw format)"""
         endpoints = []
         test_cases = []
         
+        # Support BOTH normalized format (from APISpecParser) and raw Postman format
+        # APISpecParser normalizes Postman into {format, paths: {"/path": {"METHOD": {...}}}}
+        # Raw Postman has {item: [{name, request: {method, url, ...}}]}
+        
+        if "paths" in collection and collection.get("format") == "postman":
+            # Normalized format from APISpecParser — use paths dict (same as OpenAPI)
+            paths = collection.get("paths", {})
+            base_url = collection.get("base_url", "")
+            
+            for path, methods in paths.items():
+                for method, operation in methods.items():
+                    if method.upper() in ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]:
+                        endpoint = {
+                            "endpoint_id": str(uuid4()),
+                            "method": method.upper(),
+                            "path": path,
+                            "operation_id": operation.get("operation_id", ""),
+                            "summary": operation.get("summary", ""),
+                            "description": operation.get("description", ""),
+                            "parameters": operation.get("parameters", []),
+                            "request_body": operation.get("request_body", {}),
+                            "responses": operation.get("responses", {}),
+                            "tags": operation.get("tags", []),
+                            "security": operation.get("security", [])
+                        }
+                        endpoints.append(endpoint)
+                        endpoint_tests = self._generate_endpoint_tests(endpoint, collection)
+                        test_cases.extend(endpoint_tests)
+            
+            return {
+                "spec_format": "postman",
+                "spec_version": collection.get("version", "unknown"),
+                "base_url": base_url,
+                "endpoints": endpoints,
+                "test_cases": test_cases,
+                "total_endpoints": len(endpoints),
+                "total_tests": len(test_cases)
+            }
+        
+        # Raw Postman Collection format (direct import without parser)
         items = collection.get("item", [])
+        self._process_postman_items_recursive(items, endpoints, test_cases, collection)
+        
+        # Extract base_url from variables
+        base_url = ""
+        variables = collection.get("variable", [])
+        if isinstance(variables, list):
+            for var in variables:
+                if isinstance(var, dict) and var.get("key", "").lower() in ["base_url", "baseurl", "url"]:
+                    base_url = var.get("value", "")
+                    break
+        
+        return {
+            "spec_format": "postman",
+            "spec_version": collection.get("info", {}).get("schema", "unknown"),
+            "base_url": base_url,
+            "endpoints": endpoints,
+            "test_cases": test_cases,
+            "total_endpoints": len(endpoints),
+            "total_tests": len(test_cases)
+        }
+    
+    def _process_postman_items_recursive(
+        self,
+        items: List[Dict[str, Any]],
+        endpoints: List[Dict[str, Any]],
+        test_cases: List[Dict[str, Any]],
+        collection: Dict[str, Any]
+    ):
+        """Recursively process Postman collection items (handles nested folders)"""
         for item in items:
             if "request" in item:
                 request = item["request"]
@@ -104,72 +173,113 @@ class APITestEngine:
                     "operation_id": item.get("name", ""),
                     "summary": item.get("name", ""),
                     "description": item.get("description", ""),
-                    "parameters": request.get("url", {}).get("query", []),
-                    "request_body": request.get("body", {}),
-                    "responses": [],  # Postman doesn't have responses in spec
+                    "parameters": self._extract_postman_params(request),
+                    "request_body": self._extract_postman_body(request),
+                    "responses": {},
                     "tags": [item.get("name", "")]
                 }
                 endpoints.append(endpoint)
-                
                 endpoint_tests = self._generate_endpoint_tests(endpoint, collection)
                 test_cases.extend(endpoint_tests)
-        
-        return {
-            "spec_format": "postman",
-            "spec_version": collection.get("info", {}).get("schema", "unknown"),
-            "base_url": collection.get("variable", []),  # Postman uses variables
-            "endpoints": endpoints,
-            "test_cases": test_cases,
-            "total_endpoints": len(endpoints),
-            "total_tests": len(test_cases)
-        }
+            
+            # Recurse into nested folders
+            if "item" in item:
+                self._process_postman_items_recursive(item["item"], endpoints, test_cases, collection)
+    
+    def _extract_postman_params(self, request: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract parameters from Postman request"""
+        params = []
+        url_obj = request.get("url", {})
+        if isinstance(url_obj, dict):
+            for q in url_obj.get("query", []):
+                if isinstance(q, dict):
+                    params.append({
+                        "name": q.get("key", ""),
+                        "in": "query",
+                        "required": not q.get("disabled", False),
+                        "schema": {"type": "string", "example": q.get("value", "")}
+                    })
+        return params
+    
+    def _extract_postman_body(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract request body from Postman request"""
+        body = request.get("body", {})
+        if not body:
+            return {}
+        mode = body.get("mode", "")
+        if mode == "raw":
+            try:
+                raw = body.get("raw", "")
+                if raw:
+                    body_json = json.loads(raw)
+                    return {
+                        "content": {
+                            "application/json": {
+                                "schema": self._infer_schema(body_json)
+                            }
+                        }
+                    }
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
     
     def _generate_from_graphql(self, schema: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate tests from GraphQL schema"""
+        """Generate tests from GraphQL schema (normalized or raw format)"""
         endpoints = []
         test_cases = []
         
-        # GraphQL has queries and mutations
-        query_type = schema.get("data", {}).get("__schema", {}).get("queryType", {})
-        mutation_type = schema.get("data", {}).get("__schema", {}).get("mutationType", {})
+        # Support BOTH normalized format (from APISpecParser) and raw introspection format
+        # APISpecParser outputs: {format: "graphql", schema: {data: {__schema: {...}}}, paths: {...}}
+        # Raw introspection: {data: {__schema: {queryType: {...}, mutationType: {...}}}}
         
-        # Process queries
-        if query_type:
-            queries = query_type.get("fields", [])
-            for query in queries:
-                endpoint = {
-                    "endpoint_id": str(uuid4()),
-                    "method": "POST",  # GraphQL uses POST
-                    "path": "/graphql",
-                    "operation_id": query.get("name", ""),
-                    "summary": query.get("description", ""),
-                    "query_type": "query",
-                    "fields": query.get("fields", []),
-                    "arguments": query.get("args", [])
-                }
-                endpoints.append(endpoint)
-                
-                endpoint_tests = self._generate_graphql_tests(endpoint, "query")
-                test_cases.extend(endpoint_tests)
+        # Try normalized format first (parser wraps schema under "schema" key)
+        schema_data = schema.get("schema", schema)  # unwrap if nested
         
-        # Process mutations
-        if mutation_type:
-            mutations = mutation_type.get("fields", [])
-            for mutation in mutations:
-                endpoint = {
-                    "endpoint_id": str(uuid4()),
-                    "method": "POST",
-                    "path": "/graphql",
-                    "operation_id": mutation.get("name", ""),
-                    "summary": mutation.get("description", ""),
-                    "query_type": "mutation",
-                    "fields": mutation.get("fields", []),
-                    "arguments": mutation.get("args", [])
-                }
-                endpoints.append(endpoint)
-                
-                endpoint_tests = self._generate_graphql_tests(endpoint, "mutation")
-                test_cases.extend(endpoint_tests)
+        # Also check if queries/mutations are embedded in paths (normalized format)
+        paths = schema.get("paths", {})
+        graphql_op = paths.get("/graphql", {}).get("POST", {})
+        embedded_queries = graphql_op.get("queries", [])
+        embedded_mutations = graphql_op.get("mutations", [])
+        
+        # GraphQL has queries and mutations — try multiple access paths
+        query_type = schema_data.get("data", {}).get("__schema", {}).get("queryType", {})
+        mutation_type = schema_data.get("data", {}).get("__schema", {}).get("mutationType", {})
+        
+        # Process queries — from introspection or from embedded paths
+        queries = query_type.get("fields", []) if query_type else embedded_queries
+        for query in queries:
+            endpoint = {
+                "endpoint_id": str(uuid4()),
+                "method": "POST",  # GraphQL uses POST
+                "path": "/graphql",
+                "operation_id": query.get("name", ""),
+                "summary": query.get("description", ""),
+                "query_type": "query",
+                "fields": query.get("fields", []),
+                "arguments": query.get("args", [])
+            }
+            endpoints.append(endpoint)
+            
+            endpoint_tests = self._generate_graphql_tests(endpoint, "query")
+            test_cases.extend(endpoint_tests)
+        
+        # Process mutations — from introspection or from embedded paths
+        mutations = mutation_type.get("fields", []) if mutation_type else embedded_mutations
+        for mutation in mutations:
+            endpoint = {
+                "endpoint_id": str(uuid4()),
+                "method": "POST",
+                "path": "/graphql",
+                "operation_id": mutation.get("name", ""),
+                "summary": mutation.get("description", ""),
+                "query_type": "mutation",
+                "fields": mutation.get("fields", []),
+                "arguments": mutation.get("args", [])
+            }
+            endpoints.append(endpoint)
+            
+            endpoint_tests = self._generate_graphql_tests(endpoint, "mutation")
+            test_cases.extend(endpoint_tests)
         
         return {
             "spec_format": "graphql",
@@ -182,35 +292,60 @@ class APITestEngine:
         }
     
     def _generate_from_wsdl(self, wsdl: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate tests from WSDL (simplified)"""
-        # WSDL parsing is complex, simplified version
+        """Generate tests from WSDL (normalized or raw format)"""
         endpoints = []
         test_cases = []
+        base_url = wsdl.get("base_url", "")
         
-        # Extract services and operations
-        services = wsdl.get("services", [])
-        for service in services:
-            operations = service.get("operations", [])
-            for operation in operations:
-                endpoint = {
-                    "endpoint_id": str(uuid4()),
-                    "method": "POST",  # SOAP uses POST
-                    "path": service.get("endpoint", ""),
-                    "operation_id": operation.get("name", ""),
-                    "summary": operation.get("description", ""),
-                    "soap_action": operation.get("soapAction", ""),
-                    "input": operation.get("input", {}),
-                    "output": operation.get("output", {})
-                }
-                endpoints.append(endpoint)
-                
-                endpoint_tests = self._generate_soap_tests(endpoint)
-                test_cases.extend(endpoint_tests)
+        # Support BOTH normalized format (from APISpecParser) and raw WSDL-like format
+        # APISpecParser normalizes WSDL into {format: "wsdl", paths: {"/service/op": {"POST": {...}}}, services: [...]}
+        # The operations are in paths, not in services[].operations[]
+        
+        if "paths" in wsdl and wsdl.get("paths"):
+            # Normalized format — operations are in paths dict
+            paths = wsdl.get("paths", {})
+            for path, methods in paths.items():
+                for method, operation in methods.items():
+                    if method.upper() == "POST":
+                        endpoint = {
+                            "endpoint_id": str(uuid4()),
+                            "method": "POST",
+                            "path": path,
+                            "operation_id": operation.get("operation_id", ""),
+                            "summary": operation.get("summary", ""),
+                            "description": operation.get("description", ""),
+                            "soap_action": operation.get("soap_action", ""),
+                            "soap_service": operation.get("soap_service", ""),
+                            "input": {"message": operation.get("input_message", "")},
+                            "output": {"message": operation.get("output_message", "")}
+                        }
+                        endpoints.append(endpoint)
+                        endpoint_tests = self._generate_soap_tests(endpoint)
+                        test_cases.extend(endpoint_tests)
+        else:
+            # Raw format — services[].operations[]
+            services = wsdl.get("services", [])
+            for service in services:
+                operations = service.get("operations", [])
+                for operation in operations:
+                    endpoint = {
+                        "endpoint_id": str(uuid4()),
+                        "method": "POST",
+                        "path": service.get("endpoint", ""),
+                        "operation_id": operation.get("name", ""),
+                        "summary": operation.get("description", ""),
+                        "soap_action": operation.get("soapAction", ""),
+                        "input": operation.get("input", {}),
+                        "output": operation.get("output", {})
+                    }
+                    endpoints.append(endpoint)
+                    endpoint_tests = self._generate_soap_tests(endpoint)
+                    test_cases.extend(endpoint_tests)
         
         return {
             "spec_format": "wsdl",
             "spec_version": "1.1",
-            "base_url": "",
+            "base_url": base_url,
             "endpoints": endpoints,
             "test_cases": test_cases,
             "total_endpoints": len(endpoints),
@@ -486,13 +621,49 @@ class APITestEngine:
         
         return {}
     
-    def _extract_path_from_url(self, url_obj: Dict[str, Any]) -> str:
+    def _extract_path_from_url(self, url_obj) -> str:
         """Extract path from Postman URL object"""
         if isinstance(url_obj, str):
-            return url_obj
+            # Could be a full URL or just a path
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url_obj)
+                return parsed.path or url_obj
+            except Exception:
+                return url_obj
         if isinstance(url_obj, dict):
-            return url_obj.get("raw", "") or url_obj.get("path", [""])[0] if url_obj.get("path") else ""
+            # Postman URL object format: {raw, host, path[], query[]}
+            path_parts = url_obj.get("path", [])
+            if path_parts and isinstance(path_parts, list):
+                path = "/" + "/".join(path_parts)
+                return path
+            raw = url_obj.get("raw", "")
+            if raw:
+                try:
+                    from urllib.parse import urlparse
+                    return urlparse(raw).path or raw
+                except Exception:
+                    return raw
         return ""
+    
+    def _infer_schema(self, json_obj: Any) -> Dict[str, Any]:
+        """Infer JSON schema from a JSON object"""
+        if isinstance(json_obj, dict):
+            properties = {}
+            for key, value in json_obj.items():
+                properties[key] = self._infer_schema(value)
+            return {"type": "object", "properties": properties}
+        elif isinstance(json_obj, list):
+            if json_obj:
+                return {"type": "array", "items": self._infer_schema(json_obj[0])}
+            return {"type": "array"}
+        elif isinstance(json_obj, bool):
+            return {"type": "boolean"}
+        elif isinstance(json_obj, int):
+            return {"type": "integer"}
+        elif isinstance(json_obj, float):
+            return {"type": "number"}
+        return {"type": "string"}
     
     def _generate_graphql_tests(self, endpoint: Dict[str, Any], operation_type: str) -> List[Dict[str, Any]]:
         """Generate tests for GraphQL query/mutation"""

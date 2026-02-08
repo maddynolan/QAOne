@@ -649,19 +649,79 @@ class EnhancedAssertionEngine:
         context: Dict[str, Any],
         name: str
     ) -> AssertionResult:
-        """Assert script execution (JavaScript/Python)"""
-        script = assertion.get("script", "")
-        language = assertion.get("language", "javascript")
+        """Assert script execution (Python sandbox)
         
-        # For now, return not implemented
-        # In production, use a safe script executor (e.g., PyV8, PyExecJS)
-        return AssertionResult(
-            "script",
-            name,
-            False,
-            error="Script assertions not yet implemented",
-            message="Script assertions require a safe script execution environment"
-        )
+        The script has access to:
+        - response: the parsed response body (dict/list/str)
+        - status_code: HTTP status code (int)
+        - headers: response headers (dict)
+        - context: execution context (dict)
+        - json, re: standard library modules
+        
+        The script must set `result = True` to pass the assertion.
+        Optionally set `message = "..."` for custom messages.
+        
+        Example script:
+            result = status_code == 200 and len(response) > 0
+            message = f"Found {len(response)} items"
+        """
+        script = assertion.get("script", "")
+        language = assertion.get("language", "python")
+        
+        if not script or not script.strip():
+            return AssertionResult(
+                "script", name, False,
+                error="No script provided",
+                message="Script assertion requires a 'script' field"
+            )
+        
+        if language not in ("python", "py"):
+            return AssertionResult(
+                "script", name, False,
+                error=f"Script language '{language}' not supported. Use 'python'.",
+                message="Only Python script assertions are currently supported"
+            )
+        
+        try:
+            # Sandboxed execution — limited builtins for safety
+            safe_builtins = {
+                "True": True, "False": False, "None": None,
+                "len": len, "str": str, "int": int, "float": float,
+                "bool": bool, "list": list, "dict": dict, "tuple": tuple,
+                "set": set, "type": type, "isinstance": isinstance,
+                "range": range, "enumerate": enumerate, "zip": zip,
+                "min": min, "max": max, "sum": sum, "abs": abs,
+                "sorted": sorted, "reversed": reversed,
+                "any": any, "all": all, "map": map, "filter": filter,
+                "round": round, "print": lambda *a: None,  # no-op print
+            }
+            
+            script_locals = {
+                "response": response_data,
+                "status_code": status_code,
+                "headers": response_headers,
+                "context": context,
+                "json": json,
+                "re": re,
+                "result": False,
+                "message": "",
+            }
+            
+            exec(script, {"__builtins__": safe_builtins}, script_locals)
+            
+            passed = bool(script_locals.get("result", False))
+            msg = script_locals.get("message", "")
+            
+            return AssertionResult(
+                "script", name, passed,
+                message=msg or f"Script assertion {'passed' if passed else 'failed'}"
+            )
+        except Exception as e:
+            return AssertionResult(
+                "script", name, False,
+                error=str(e),
+                message=f"Script execution failed: {e}"
+            )
     
     def _assert_database(
         self,
@@ -669,27 +729,80 @@ class EnhancedAssertionEngine:
         context: Dict[str, Any],
         name: str
     ) -> AssertionResult:
-        """Assert database state"""
-        # Database assertions are handled by DatabaseConnector
-        # This is a placeholder
+        """Assert database state using DatabaseConnector"""
         db_connector = context.get("db_connector")
         if not db_connector:
+            # Try to get or create a DatabaseConnector instance
+            try:
+                from app.services.api_testing.database_connector import DatabaseConnector
+                db_connector = DatabaseConnector()
+            except Exception:
+                return AssertionResult(
+                    "database",
+                    name,
+                    False,
+                    error="Database connector not available",
+                    message="Database assertions require a database connection"
+                )
+        
+        connection_id = assertion.get("connection_id") or context.get("connection_id")
+        if not connection_id:
             return AssertionResult(
                 "database",
                 name,
                 False,
-                error="Database connector not available",
-                message="Database assertions require a database connection"
+                error="No connection_id provided",
+                message="Database assertion requires a connection_id in the assertion or context"
             )
         
-        # Delegate to database connector
-        # This would be implemented in the execution engine
-        return AssertionResult(
-            "database",
-            name,
-            True,
-            message="Database assertion passed"
-        )
+        query = assertion.get("query", "")
+        if not query:
+            return AssertionResult(
+                "database",
+                name,
+                False,
+                error="No query provided",
+                message="Database assertion requires a 'query' field"
+            )
+        
+        try:
+            import asyncio
+            # DatabaseConnector.assert_database_state is async, run it synchronously
+            loop = None
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            
+            if loop and loop.is_running():
+                # We're in an async context — create a task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    result = pool.submit(
+                        asyncio.run,
+                        db_connector.assert_database_state(connection_id, assertion)
+                    ).result(timeout=30)
+            else:
+                result = asyncio.run(
+                    db_connector.assert_database_state(connection_id, assertion)
+                )
+            
+            return AssertionResult(
+                "database",
+                name,
+                passed=result.get("passed", False),
+                expected=assertion.get("expected_result"),
+                actual=result.get("actual_result"),
+                message=result.get("message", "Database assertion evaluated")
+            )
+        except Exception as e:
+            return AssertionResult(
+                "database",
+                name,
+                False,
+                error=str(e),
+                message=f"Database assertion failed: {e}"
+            )
     
     def _assert_header(
         self,

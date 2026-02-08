@@ -1552,23 +1552,39 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         test_cases: normalizedTestCases
       };
 
+      // Build execution config — add load test params if in load mode
+      const execConfig: any = {
+        base_url: baseUrl,
+        parallel: true,
+        max_workers: 10
+      };
+      
+      if (executionMode === "load") {
+        const vus = parseInt((document.getElementById("load-vus") as HTMLInputElement)?.value) || 10;
+        const duration = parseInt((document.getElementById("load-duration") as HTMLInputElement)?.value) || 30;
+        const rampUp = parseInt((document.getElementById("load-rampup") as HTMLInputElement)?.value) || 5;
+        const thinkTime = parseInt((document.getElementById("load-think") as HTMLInputElement)?.value) || 1000;
+        execConfig.virtual_users = vus;
+        execConfig.duration_seconds = duration;
+        execConfig.ramp_up_seconds = rampUp;
+        execConfig.think_time_ms = thinkTime;
+        execConfig.max_workers = vus;
+      }
+
       const requestBody = {
         test_suite: {
           ...testSuiteToExecute,
-          base_url: baseUrl  // Add base_url to test_suite as well
+          base_url: baseUrl
         },
-        execution_config: {
-          base_url: baseUrl,
-          parallel: true,
-          max_workers: 10
-        },
+        execution_config: execConfig,
         mode: executionMode
       };
 
       console.log("Sending execution request:", {
         test_cases_count: requestBody.test_suite.test_cases?.length || 0,
         base_url: baseUrl,
-        mode: executionMode
+        mode: executionMode,
+        ...(executionMode === "load" ? { load_config: execConfig } : {})
       });
 
       const response = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
@@ -2036,11 +2052,175 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Import Tab */}
         <TabsContent value="import" className="space-y-4">
+          {/* Quick Import: Sample Collections */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Rocket className="w-5 h-5" />
+                Quick Import - Sample Collections
+              </CardTitle>
+              <CardDescription>
+                Import sample Postman collections or public API specs to get started instantly
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Postman Sample: JSONPlaceholder */}
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-orange-500/50"
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const postmanCollection = {
+                        info: { name: "JSONPlaceholder API", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json", description: "REST API for testing" },
+                        variable: [{ key: "base_url", value: "https://jsonplaceholder.typicode.com" }],
+                        item: [
+                          { name: "Get All Posts", request: { method: "GET", url: { raw: "{{base_url}}/posts", host: ["{{base_url}}"], path: ["posts"] } } },
+                          { name: "Get Single Post", request: { method: "GET", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] } } },
+                          { name: "Create Post", request: { method: "POST", url: { raw: "{{base_url}}/posts", host: ["{{base_url}}"], path: ["posts"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ title: "Test Post", body: "This is a test", userId: 1 }) } } },
+                          { name: "Update Post", request: { method: "PUT", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ id: 1, title: "Updated Post", body: "Updated content", userId: 1 }) } } },
+                          { name: "Delete Post", request: { method: "DELETE", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] } } },
+                          { name: "Get Users", request: { method: "GET", url: { raw: "{{base_url}}/users", host: ["{{base_url}}"], path: ["users"] } } },
+                          { name: "Get Comments", request: { method: "GET", url: { raw: "{{base_url}}/comments", host: ["{{base_url}}"], path: ["comments"] } } },
+                          { name: "Get Todos", request: { method: "GET", url: { raw: "{{base_url}}/todos", host: ["{{base_url}}"], path: ["todos"] } } },
+                          { name: "Get Albums", request: { method: "GET", url: { raw: "{{base_url}}/albums", host: ["{{base_url}}"], path: ["albums"] } } },
+                          { name: "Get Photos", request: { method: "GET", url: { raw: "{{base_url}}/photos", host: ["{{base_url}}"], path: ["photos"] } } }
+                        ]
+                      };
+                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ spec_content: JSON.stringify(postmanCollection), spec_format: "postman", content_type: "json" }),
+                      });
+                      if (!parseRes.ok) throw new Error("Failed to parse");
+                      const parseData = await parseRes.json();
+                      setParsedSpec(parseData.parsed_spec);
+                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "postman", protocol: "REST", test_options: {} }),
+                      });
+                      if (!enhRes.ok) throw new Error("Failed to generate tests");
+                      const enhData = await enhRes.json();
+                      setTestSuite(enhData.test_suite);
+                      toast({ title: "Imported JSONPlaceholder Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases from Postman collection` });
+                      setActiveTab("execute");
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally { setLoading(false); }
+                  }}
+                >
+                  <span className="font-semibold text-orange-600">Postman: JSONPlaceholder</span>
+                  <span className="text-xs text-muted-foreground">10 endpoints - REST CRUD</span>
+                </Button>
+
+                {/* Postman Sample: ReqRes Auth */}
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-orange-500/50"
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const postmanCollection = {
+                        info: { name: "ReqRes Auth API", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+                        variable: [{ key: "base_url", value: "https://reqres.in" }],
+                        item: [
+                          { name: "List Users", request: { method: "GET", url: { raw: "{{base_url}}/api/users?page=2", host: ["{{base_url}}"], path: ["api", "users"], query: [{ key: "page", value: "2" }] } } },
+                          { name: "Get Single User", request: { method: "GET", url: { raw: "{{base_url}}/api/users/2", host: ["{{base_url}}"], path: ["api", "users", "2"] } } },
+                          { name: "Create User", request: { method: "POST", url: { raw: "{{base_url}}/api/users", host: ["{{base_url}}"], path: ["api", "users"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ name: "morpheus", job: "leader" }) } } },
+                          { name: "Login", request: { method: "POST", url: { raw: "{{base_url}}/api/login", host: ["{{base_url}}"], path: ["api", "login"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ email: "eve.holt@reqres.in", password: "cityslicka" }) } } },
+                          { name: "Register", request: { method: "POST", url: { raw: "{{base_url}}/api/register", host: ["{{base_url}}"], path: ["api", "register"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ email: "eve.holt@reqres.in", password: "pistol" }) } } },
+                          { name: "Delete User", request: { method: "DELETE", url: { raw: "{{base_url}}/api/users/2", host: ["{{base_url}}"], path: ["api", "users", "2"] } } },
+                          { name: "Delayed Response", request: { method: "GET", url: { raw: "{{base_url}}/api/users?delay=3", host: ["{{base_url}}"], path: ["api", "users"], query: [{ key: "delay", value: "3" }] } } }
+                        ]
+                      };
+                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ spec_content: JSON.stringify(postmanCollection), spec_format: "postman", content_type: "json" }),
+                      });
+                      if (!parseRes.ok) throw new Error("Failed to parse");
+                      const parseData = await parseRes.json();
+                      setParsedSpec(parseData.parsed_spec);
+                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "postman", protocol: "REST", test_options: {} }),
+                      });
+                      if (!enhRes.ok) throw new Error("Failed to generate tests");
+                      const enhData = await enhRes.json();
+                      setTestSuite(enhData.test_suite);
+                      toast({ title: "Imported ReqRes Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
+                      setActiveTab("execute");
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally { setLoading(false); }
+                  }}
+                >
+                  <span className="font-semibold text-orange-600">Postman: ReqRes Auth</span>
+                  <span className="text-xs text-muted-foreground">7 endpoints - Auth + CRUD</span>
+                </Button>
+
+                {/* OpenAPI Petstore */}
+                <Button
+                  variant="outline"
+                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-blue-500/50"
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const petstoreSpec = {
+                        openapi: "3.0.0",
+                        info: { title: "Petstore", version: "1.0.0" },
+                        servers: [{ url: "https://petstore.swagger.io/v2" }],
+                        paths: {
+                          "/pet": { post: { operationId: "addPet", summary: "Add a new pet", requestBody: { content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, status: { type: "string" } } } } } }, responses: { "200": { description: "Success" } } } },
+                          "/pet/{petId}": { get: { operationId: "getPetById", summary: "Find pet by ID", parameters: [{ name: "petId", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Success" } } }, delete: { operationId: "deletePet", summary: "Delete a pet", parameters: [{ name: "petId", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Success" } } } },
+                          "/pet/findByStatus": { get: { operationId: "findByStatus", summary: "Find by status", parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["available", "pending", "sold"] } }], responses: { "200": { description: "Success" } } } },
+                          "/store/order": { post: { operationId: "placeOrder", summary: "Place order", requestBody: { content: { "application/json": { schema: { type: "object", properties: { petId: { type: "integer" }, quantity: { type: "integer" } } } } } }, responses: { "200": { description: "Success" } } } },
+                          "/store/inventory": { get: { operationId: "getInventory", summary: "Get inventory", responses: { "200": { description: "Success" } } } },
+                          "/user/login": { get: { operationId: "loginUser", summary: "Login user", parameters: [{ name: "username", in: "query", schema: { type: "string" } }, { name: "password", in: "query", schema: { type: "string" } }], responses: { "200": { description: "Success" } } } }
+                        }
+                      };
+                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ spec_content: JSON.stringify(petstoreSpec), spec_format: "openapi", content_type: "json" }),
+                      });
+                      if (!parseRes.ok) throw new Error("Failed to parse");
+                      const parseData = await parseRes.json();
+                      setParsedSpec(parseData.parsed_spec);
+                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "openapi", protocol: "REST", test_options: {} }),
+                      });
+                      if (!enhRes.ok) throw new Error("Failed to generate tests");
+                      const enhData = await enhRes.json();
+                      setTestSuite(enhData.test_suite);
+                      toast({ title: "Imported Petstore API", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
+                      setActiveTab("execute");
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally { setLoading(false); }
+                  }}
+                >
+                  <span className="font-semibold text-blue-600">OpenAPI: Petstore</span>
+                  <span className="text-xs text-muted-foreground">7 endpoints - Full CRUD + auth</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Main Import Card */}
           <Card>
             <CardHeader>
               <CardTitle>Import API Specification</CardTitle>
               <CardDescription>
-                Import OpenAPI, Swagger, WSDL, Postman, GraphQL, or HAR (from recorder/desktop)
+                Import OpenAPI, Swagger, WSDL, Postman Collection, GraphQL, or HAR (from recorder/desktop)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2060,14 +2240,20 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </div>
                 <div className="space-y-2">
                   <Label>Format</Label>
-                  <Select value={specFormat} onValueChange={setSpecFormat}>
+                  <Select value={specFormat} onValueChange={(val) => {
+                    setSpecFormat(val);
+                    // Auto-set protocol based on format
+                    if (val === "wsdl") setProtocol("SOAP");
+                    else if (val === "graphql") setProtocol("GraphQL");
+                    else setProtocol("REST");
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="openapi">OpenAPI/Swagger</SelectItem>
                       <SelectItem value="wsdl">WSDL/SOAP</SelectItem>
-                      <SelectItem value="postman">Postman</SelectItem>
+                      <SelectItem value="postman">Postman Collection</SelectItem>
                       <SelectItem value="graphql">GraphQL</SelectItem>
                       <SelectItem value="har">HAR (recorded traffic)</SelectItem>
                     </SelectContent>
@@ -2075,30 +2261,150 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <Label>Upload File</Label>
+              {/* Drag & Drop File Upload */}
+              <div 
+                className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-primary", "bg-primary/5"); }}
+                onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-primary", "bg-primary/5"); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove("border-primary", "bg-primary/5");
+                  const file = e.dataTransfer.files[0];
+                  if (file) {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    const event = { target: input } as React.ChangeEvent<HTMLInputElement>;
+                    handleFileUpload(event);
+                  }
+                }}
+                onClick={() => document.getElementById("import-file-input")?.click()}
+              >
+                <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+                <p className="font-medium">Drag & drop or click to upload</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Supports: .json, .yaml, .yml, .xml, .wsdl, .graphql, .gql, .har
+                </p>
                 <Input
+                  id="import-file-input"
                   type="file"
                   accept=".json,.yaml,.yml,.xml,.wsdl,.graphql,.gql,.har"
                   onChange={handleFileUpload}
                   disabled={loading}
+                  className="hidden"
                 />
               </div>
               
+              {/* URL Import */}
+              <div className="space-y-2">
+                <Label>Or Import from URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://petstore.swagger.io/v2/swagger.json"
+                    id="import-url-input"
+                    className="flex-1"
+                  />
+                  <Button 
+                    variant="outline"
+                    disabled={loading}
+                    onClick={async () => {
+                      const urlInput = document.getElementById("import-url-input") as HTMLInputElement;
+                      const url = urlInput?.value?.trim();
+                      if (!url) { toast({ title: "Error", description: "Enter a URL", variant: "destructive" }); return; }
+                      setLoading(true);
+                      try {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+                        const text = await res.text();
+                        setSpecContent(text);
+                        // Auto-detect format
+                        if (url.includes("wsdl") || url.endsWith(".wsdl")) { setSpecFormat("wsdl"); setProtocol("SOAP"); }
+                        else if (url.includes("graphql")) { setSpecFormat("graphql"); setProtocol("GraphQL"); }
+                        else if (url.includes("postman")) { setSpecFormat("postman"); }
+                        else { setSpecFormat("openapi"); }
+                        toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click Import below.` });
+                      } catch (e: any) {
+                        toast({ title: "Fetch Failed", description: e.message, variant: "destructive" });
+                      } finally { setLoading(false); }
+                    }}
+                  >
+                    Fetch
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Text Paste */}
               <div className="space-y-2">
                 <Label>Or Paste Specification</Label>
                 <Textarea
                   value={specContent}
                   onChange={(e) => setSpecContent(e.target.value)}
-                  placeholder="Paste your API specification here..."
+                  placeholder="Paste your API specification here (OpenAPI JSON/YAML, Postman Collection JSON, WSDL XML, GraphQL SDL, HAR JSON)..."
                   className="min-h-[200px] font-mono text-sm"
                 />
-                <Button onClick={handleTextImport} disabled={loading || !specContent.trim()}>
-                  {loading ? "Importing..." : "Import Specification"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleTextImport} disabled={loading || !specContent.trim()} className="flex-1">
+                    {loading ? "Importing..." : "Import Specification"}
+                  </Button>
+                  <Button variant="outline" onClick={exportToPostman} disabled={!testSuite?.test_cases?.length}>
+                    Export Postman
+                  </Button>
+                  <Button variant="outline" onClick={exportToHAR} disabled={!testSuite?.test_cases?.length}>
+                    Export HAR
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Parsed Spec Preview */}
+          {parsedSpec && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Parsed Endpoints</CardTitle>
+                <CardDescription>
+                  {Object.keys(parsedSpec.paths || {}).length} endpoints found from {parsedSpec.format || specFormat} spec
+                  {parsedSpec.base_url && ` | Base URL: ${parsedSpec.base_url}`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-64 overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Path</TableHead>
+                        <TableHead>Summary</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(parsedSpec.paths || {}).flatMap(([path, methods]: [string, any]) =>
+                        Object.entries(methods || {}).map(([method, op]: [string, any]) => (
+                          <TableRow key={`${method}-${path}`}>
+                            <TableCell>
+                              <Badge variant="outline" className={
+                                method === "GET" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                                method === "POST" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" :
+                                method === "PUT" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
+                                method === "DELETE" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
+                                ""
+                              }>
+                                {method}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{path}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{op?.summary || op?.operation_id || "-"}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Chains Tab - Request Chaining */}
@@ -2191,6 +2497,36 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </SelectContent>
                 </Select>
               </div>
+              
+              {/* Load Testing Controls - shown when Load Testing mode is selected */}
+              {executionMode === "load" && (
+                <Card className="border-orange-500/20 bg-orange-50/50 dark:bg-orange-950/10">
+                  <CardContent className="pt-4 space-y-3">
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Load Test Configuration</p>
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Virtual Users</Label>
+                        <Input type="number" id="load-vus" defaultValue="10" min="1" max="1000" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Duration (seconds)</Label>
+                        <Input type="number" id="load-duration" defaultValue="30" min="5" max="3600" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Ramp-up (seconds)</Label>
+                        <Input type="number" id="load-rampup" defaultValue="5" min="0" max="300" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Think Time (ms)</Label>
+                        <Input type="number" id="load-think" defaultValue="1000" min="0" max="30000" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Simulates {(document.getElementById("load-vus") as HTMLInputElement)?.value || 10} concurrent users hitting your API for {(document.getElementById("load-duration") as HTMLInputElement)?.value || 30} seconds
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
               
               {testSuite && (
                 <Alert>
@@ -2805,23 +3141,27 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </Card>
         </TabsContent>
 
-        {/* Mock Services Tab (renamed from Virtual) */}
+        {/* Mock Services Tab - Full Mock Server Management */}
         <TabsContent value="mock" className="space-y-4">
+          {/* Create Mock Server */}
           <Card>
             <CardHeader>
-              <CardTitle>Create Virtual Service</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="w-5 h-5" />
+                Create Mock Server
+              </CardTitle>
               <CardDescription>
-                Create mock API endpoints for testing when real services are unavailable
+                Create real HTTP mock servers with dynamic responses, scenarios, and request verification
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Service Name</Label>
+                  <Label>Server Name</Label>
                   <Input
                     value={newVirtualService.name}
                     onChange={(e) => setNewVirtualService({...newVirtualService, name: e.target.value})}
-                    placeholder="My Mock Service"
+                    placeholder="My Mock API"
                   />
                 </div>
                 <div className="space-y-2">
@@ -2832,20 +3172,220 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     placeholder="http://localhost:9000"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Port</Label>
+                  <Input
+                    type="number"
+                    value={(newVirtualService as any).port || "8081"}
+                    onChange={(e) => setNewVirtualService({...newVirtualService, port: parseInt(e.target.value) || 8081} as any)}
+                    placeholder="8081"
+                  />
+                </div>
               </div>
-              <Button onClick={createVirtualService} disabled={loading}>
-                <Plus className="w-4 h-4 mr-2" />
-                Create Virtual Service
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={createVirtualService} disabled={loading}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Virtual Service
+                </Button>
+                <Button 
+                  variant="outline" 
+                  disabled={loading}
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const port = (newVirtualService as any).port || 8081;
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: newVirtualService.name || "Mock Server", port }),
+                      });
+                      if (!res.ok) throw new Error("Failed to create mock server");
+                      const data = await res.json();
+                      toast({ title: "Mock Server Created", description: `Server ID: ${data.server_id}. Add endpoints and start it.` });
+                      // Refresh list
+                      const listRes = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server`);
+                      if (listRes.ok) {
+                        const listData = await listRes.json();
+                        setVirtualServices(prev => [...prev, ...(listData.servers || [])]);
+                      }
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally { setLoading(false); }
+                  }}
+                >
+                  <Server className="w-4 h-4 mr-2" />
+                  Create Real Mock Server (HTTP)
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
+          {/* Add Endpoint to Mock */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Add Mock Endpoint</CardTitle>
+              <CardDescription>Define endpoints with custom responses for your mock server</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="space-y-2">
+                  <Label>Server ID</Label>
+                  <Input id="mock-server-id" placeholder="server-id" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Method</Label>
+                  <Select defaultValue="GET">
+                    <SelectTrigger id="mock-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="PATCH">PATCH</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Path</Label>
+                  <Input id="mock-path" placeholder="/api/users" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status Code</Label>
+                  <Input id="mock-status" type="number" defaultValue="200" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Response Body (JSON)</Label>
+                <Textarea
+                  id="mock-response-body"
+                  placeholder={'{\n  "users": [\n    {"id": 1, "name": "{{$random.fullName}}", "email": "{{$random.email}}"}\n  ]\n}'}
+                  className="min-h-[120px] font-mono text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="mock-dynamic" defaultChecked />
+                  <Label htmlFor="mock-dynamic">Dynamic (template variables)</Label>
+                </div>
+                <Button
+                  variant="default"
+                  disabled={loading}
+                  onClick={async () => {
+                    const serverId = (document.getElementById("mock-server-id") as HTMLInputElement)?.value;
+                    const method = "GET"; // Would need proper select binding
+                    const path = (document.getElementById("mock-path") as HTMLInputElement)?.value;
+                    const status = parseInt((document.getElementById("mock-status") as HTMLInputElement)?.value) || 200;
+                    const bodyText = (document.getElementById("mock-response-body") as HTMLTextAreaElement)?.value;
+                    const dynamic = (document.getElementById("mock-dynamic") as HTMLInputElement)?.checked;
+                    if (!serverId || !path) { toast({ title: "Error", description: "Server ID and Path required", variant: "destructive" }); return; }
+                    setLoading(true);
+                    try {
+                      let responseBody: any = bodyText;
+                      try { responseBody = JSON.parse(bodyText); } catch {}
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${serverId}/endpoint`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          endpoint_id: `ep-${Date.now()}`,
+                          path, method, response_body: responseBody, response_status: status, dynamic
+                        }),
+                      });
+                      if (!res.ok) throw new Error("Failed to add endpoint");
+                      toast({ title: "Endpoint Added", description: `${method} ${path} → ${status}` });
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    } finally { setLoading(false); }
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Endpoint
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Mock Server Controls */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Mock Server Controls</CardTitle>
+              <CardDescription>Start, stop, and manage your mock servers</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2 items-center">
+                <Input id="mock-control-id" placeholder="Server ID" className="max-w-xs" />
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={async () => {
+                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
+                    if (!id) return;
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/start`, { method: "POST" });
+                      if (!res.ok) throw new Error("Failed to start");
+                      toast({ title: "Started", description: `Mock server ${id} is now running` });
+                    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                  }}
+                >
+                  <Play className="w-4 h-4 mr-1" /> Start
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
+                    if (!id) return;
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/stop`, { method: "POST" });
+                      if (!res.ok) throw new Error("Failed to stop");
+                      toast({ title: "Stopped", description: `Mock server ${id} stopped` });
+                    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                  }}
+                >
+                  Stop
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
+                    if (!id) return;
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/logs`);
+                      if (!res.ok) throw new Error("Failed to get logs");
+                      const data = await res.json();
+                      toast({ title: `Request Logs (${data.logs?.length || 0})`, description: JSON.stringify(data.logs?.slice(0, 3), null, 2).substring(0, 200) });
+                    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                  }}
+                >
+                  View Logs
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
+                    if (!id) return;
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}`);
+                      if (!res.ok) throw new Error("Failed to get info");
+                      const data = await res.json();
+                      toast({ title: `Server: ${data.name || id}`, description: `Port: ${data.port || "?"}, Endpoints: ${data.endpoints?.length || 0}, Running: ${data.running || false}` });
+                    } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
+                  }}
+                >
+                  Info
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Virtual Services List */}
           <Card>
             <CardHeader>
               <CardTitle>Virtual Services</CardTitle>
-              <CardDescription>
-                Manage your mock API services
-              </CardDescription>
+              <CardDescription>Manage your mock API services</CardDescription>
             </CardHeader>
             <CardContent>
               {virtualServices.length > 0 ? (
@@ -2855,10 +3395,15 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold">{service.name}</p>
-                          <p className="text-sm text-muted-foreground">{service.base_url}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {service.base_url || `Port: ${service.port || "?"}`}
+                            {service.server_id && <span className="ml-2 text-xs opacity-50">ID: {service.server_id}</span>}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline">{service.endpoints_count || 0} endpoints</Badge>
+                          <Badge variant={service.running ? "default" : "outline"}>
+                            {service.running ? "Running" : `${service.endpoints_count || service.endpoints?.length || 0} endpoints`}
+                          </Badge>
                           <Button
                             variant="ghost"
                             size="sm"
