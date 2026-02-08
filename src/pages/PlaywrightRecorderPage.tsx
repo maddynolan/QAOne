@@ -134,6 +134,7 @@ interface RecordedAction {
   selectorObj?: any;
   selector?: any;
   type?: string;
+  value?: string; // Fill value for input steps
   // Confidence system fields
   confidence?: StepConfidence;
   matchAnalysis?: MatchAnalysis;
@@ -148,6 +149,7 @@ interface Suggestion {
   category: string;
   selector?: string;
   selectorObj?: any;
+  inputType?: string; // 'text', 'email', 'password', 'tel', etc.
   count?: number; // For "X FOUND" badge
 }
 
@@ -2577,7 +2579,9 @@ export default function PlaywrightRecorderPage() {
         element: label,
         category, // This is the key field for grouping!
         selector: s.selector,
-        selectorObj: s.selectorObj || { selector: s.selector },
+        // Preserve full selectorObj from analyze (includes text, inputType, placeholder, ariaLabel, name, id)
+        selectorObj: s.selectorObj || { selector: s.selector, text: label },
+        inputType: s.inputType,
         count: s.duplicateCount || s.count || 1
       });
     });
@@ -2765,22 +2769,24 @@ export default function PlaywrightRecorderPage() {
       toast.loading('Executing...', { id: 'exec' });
       
       let result;
+      // Build action with all available metadata for robust element finding
+      const actionPayload = {
+        type: suggestion.type || suggestion.qword,
+        qword: suggestion.qword,
+        args: suggestion.args,
+        label: suggestion.args?.[0] || suggestion.element,
+        selector: suggestion.selector,
+        selectorObj: suggestion.selectorObj,
+        inputType: (suggestion as any).inputType,
+        // For fill-type suggestions executed via Play button, just click/focus the input
+        // (don't fill with empty string - that's confusing)
+        executeMode: 'click-only'
+      };
+      
       if (flowstral?.playwrightRecorder?.executeAction) {
-        result = await flowstral.playwrightRecorder.executeAction({
-          type: suggestion.type || suggestion.qword,
-          qword: suggestion.qword,
-          args: suggestion.args,
-          label: suggestion.args?.[0],
-          selector: suggestion.selector,
-          selectorObj: suggestion.selectorObj
-        });
+        result = await flowstral.playwrightRecorder.executeAction(actionPayload);
       } else if (electronAPI?.executeAction) {
-        result = await electronAPI.executeAction({
-          qword: suggestion.qword,
-          args: suggestion.args,
-          selector: suggestion.selector,
-          selectorObj: suggestion.selectorObj
-        });
+        result = await electronAPI.executeAction(actionPayload);
       }
       
       if (result?.success !== false) {
@@ -2804,15 +2810,31 @@ export default function PlaywrightRecorderPage() {
     }
   };
 
-  // Add suggestion to test
-  const addToTest = (suggestion: Suggestion) => {
+  // Add suggestion to test (with fill value prompt for input-type suggestions)
+  const addToTest = (suggestion: Suggestion, fillValue?: string) => {
+    const isFillType = suggestion.qword === 'Fill' || suggestion.type === 'fill' || suggestion.category === 'input';
+    
+    // For fill-type suggestions, prompt for value if not already provided
+    if (isFillType && fillValue === undefined) {
+      const label = suggestion.element || suggestion.args?.[0] || 'this field';
+      const value = window.prompt(`Enter value to fill in "${label}":`, '');
+      if (value === null) return; // User cancelled
+      fillValue = value;
+    }
+    
     const newAction: RecordedAction = {
       id: `action_${Date.now()}`,
       qword: suggestion.qword,
-      args: suggestion.args,
-      description: suggestion.description,
+      args: isFillType 
+        ? [suggestion.args?.[0] || suggestion.element || '', fillValue || '']  // [label, value]
+        : suggestion.args,
+      description: isFillType 
+        ? `Fill "${suggestion.element || suggestion.args?.[0]}" with "${fillValue || ''}"`
+        : suggestion.description,
       timestamp: Date.now(),
-      selectorObj: suggestion.selectorObj
+      selectorObj: suggestion.selectorObj,
+      value: isFillType ? fillValue : undefined,
+      selector: suggestion.selector
     };
     
     // In 'existing' mode, assign to current step
@@ -2821,7 +2843,7 @@ export default function PlaywrightRecorderPage() {
       if (currentStepIndex < manualSteps.length) {
         setStepAutomation(prev => ({
           ...prev,
-          [currentStepIndex]: { type: 'suggested', data: suggestion }
+          [currentStepIndex]: { type: 'suggested', data: { ...suggestion, value: fillValue } }
         }));
         
         // Find next unassigned step
@@ -2840,24 +2862,43 @@ export default function PlaywrightRecorderPage() {
       } else {
         // All steps assigned, just add to regular actions
         setActions(prev => [...prev, newAction]);
-        toast.success('Added to test steps', { duration: 1500 });
+        toast.success('Added fill step to test', { duration: 1500 });
       }
     } else {
       // Normal mode - just add to actions
       setActions(prev => [...prev, newAction]);
-      toast.success('Added to test steps', { duration: 1500 });
+      toast.success(isFillType ? `Added fill step: "${fillValue}"` : 'Added to test steps', { duration: 1500 });
     }
   };
 
   // Replace a failed/flagged step with a suggestion from Smart Suggestions panel
   const replaceStepWithSuggestion = (stepIndex: number, suggestion: Suggestion) => {
+    const isFillType = suggestion.qword === 'Fill' || suggestion.type === 'fill' || suggestion.category === 'input';
+    let fillValue: string | undefined;
+    
+    // For fill-type suggestions, prompt for value
+    if (isFillType) {
+      const label = suggestion.element || suggestion.args?.[0] || 'this field';
+      // Try to get existing value from the step being replaced
+      const existingValue = actions[stepIndex]?.value || actions[stepIndex]?.args?.[1] || '';
+      const value = window.prompt(`Enter value to fill in "${label}":`, existingValue);
+      if (value === null) return; // User cancelled
+      fillValue = value;
+    }
+    
     const newAction: RecordedAction = {
       id: `action_${Date.now()}`,
       qword: suggestion.qword,
-      args: suggestion.args,
-      description: suggestion.description,
+      args: isFillType 
+        ? [suggestion.args?.[0] || suggestion.element || '', fillValue || '']
+        : suggestion.args,
+      description: isFillType 
+        ? `Fill "${suggestion.element || suggestion.args?.[0]}" with "${fillValue || ''}"`
+        : suggestion.description,
       timestamp: Date.now(),
-      selectorObj: suggestion.selectorObj
+      selectorObj: suggestion.selectorObj,
+      value: isFillType ? fillValue : undefined,
+      selector: suggestion.selector
     };
     
     // Replace the action at stepIndex
@@ -6277,7 +6318,7 @@ Recorded Test
                             size="icon"
                             className="h-7 w-7 shrink-0 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                             onClick={() => executeAction(s)}
-                            title="Execute action on page"
+                            title={s.category === 'input' ? 'Click to highlight input on page' : 'Execute action on page'}
                           >
                             <Play className="h-3 w-3" />
                       </Button>
@@ -6298,7 +6339,7 @@ Recorded Test
                             size="icon"
                             className="h-7 w-7 shrink-0 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                             onClick={() => addToTest(s)}
-                            title="Add to test steps"
+                            title={s.category === 'input' ? 'Add fill step (will prompt for value)' : 'Add to test steps'}
                           >
                             <Plus className="h-3 w-3" />
                       </Button>

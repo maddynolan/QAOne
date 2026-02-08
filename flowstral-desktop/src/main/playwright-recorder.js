@@ -6205,30 +6205,54 @@ class PlaywrightRecorder extends EventEmitter {
 
         // ======== GENERATE BEST SELECTOR ========
         function getBestSelector(el) {
-          // Test ID - highest priority
+          // Uniqueness guard: only return a selector if it matches exactly 1 element.
+          // This prevents issues like Flipkart where data-testid="test-input" is shared
+          // across ALL inputs — without this check, Playwright picks the first match.
+          function isUnique(sel) {
+            try { return document.querySelectorAll(sel).length === 1; }
+            catch(e) { return true; } // trust it if querySelectorAll fails (e.g. pseudo-selectors)
+          }
+
+          // Test ID - highest priority (but only if unique on the page)
           const testId = el.getAttribute && (el.getAttribute('data-testid') || el.getAttribute('data-test-id') || el.getAttribute('data-automation-id') || el.getAttribute('data-cy'));
-          if (testId) return '[data-testid="' + testId + '"]';
+          if (testId) {
+            const sel = '[data-testid="' + testId + '"]';
+            if (isUnique(sel)) return sel;
+          }
           
           // Meaningful ID (not dynamic)
           if (el.id && !/^(lwc|aura)-/i.test(el.id) && !/^\\d+$/.test(el.id) && !/[0-9]{8,}/.test(el.id) && !el.id.includes(':')) {
-            return '#' + CSS.escape(el.id);
+            const sel = '#' + CSS.escape(el.id);
+            if (isUnique(sel)) return sel;
           }
           
           // Name attribute
           const name = el.name || el.getAttribute && el.getAttribute('name');
-          if (name) return '[name="' + name.replace(/"/g, '\\\\"') + '"]';
+          if (name) {
+            const sel = '[name="' + name.replace(/"/g, '\\\\"') + '"]';
+            if (isUnique(sel)) return sel;
+          }
           
           // Aria label
           const aria = el.getAttribute && el.getAttribute('aria-label');
-          if (aria) return '[aria-label="' + aria.replace(/"/g, '\\\\"') + '"]';
+          if (aria) {
+            const sel = '[aria-label="' + aria.replace(/"/g, '\\\\"') + '"]';
+            if (isUnique(sel)) return sel;
+          }
           
           // Title
           const title = el.getAttribute && el.getAttribute('title');
-          if (title && title.length < 50) return '[title="' + title.replace(/"/g, '\\\\"') + '"]';
+          if (title && title.length < 50) {
+            const sel = '[title="' + title.replace(/"/g, '\\\\"') + '"]';
+            if (isUnique(sel)) return sel;
+          }
           
           // Placeholder
           const placeholder = el.getAttribute && el.getAttribute('placeholder');
-          if (placeholder) return '[placeholder="' + placeholder.replace(/"/g, '\\\\"') + '"]';
+          if (placeholder) {
+            const sel = '[placeholder="' + placeholder.replace(/"/g, '\\\\"') + '"]';
+            if (isUnique(sel)) return sel;
+          }
           
           // Role + text for accessible elements
           const role = el.getAttribute && el.getAttribute('role');
@@ -6488,12 +6512,17 @@ class PlaywrightRecorder extends EventEmitter {
 
         // ======== COLLECT TEXT INPUTS (Enhanced for Shadow DOM) ========
         const textInputs = deepQueryAll('input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], input[type="number"], input:not([type]), textarea');
+        
         textInputs.forEach(el => {
           if (!isVisible(el) || seen.has(el)) return;
           seen.add(el);
           
           const label = getInputLabel(el);
           const type = (el.type || 'text').toLowerCase();
+          
+          // getBestSelector now validates uniqueness — only returns selectors that match
+          // exactly 1 element on the page. No complex fallbacks needed.
+          const selector = getBestSelector(el);
           
           addResult({
             type: 'fill',
@@ -6502,7 +6531,16 @@ class PlaywrightRecorder extends EventEmitter {
             text: label,
             tagName: (el.tagName || '').toLowerCase(),
               inputType: type,
-            selector: getBestSelector(el),
+            selector: selector,
+            selectorObj: {
+              selector: selector,
+              text: label,
+              inputType: type,
+              placeholder: el.getAttribute && el.getAttribute('placeholder') || null,
+              ariaLabel: el.getAttribute && el.getAttribute('aria-label') || null,
+              name: el.name || el.getAttribute && el.getAttribute('name') || null,
+              id: el.id || null
+            },
             action: 'Fill',
             description: 'Fill "' + label + '" field'
           });
@@ -7317,6 +7355,7 @@ class PlaywrightRecorder extends EventEmitter {
       strategies.push({ type: 'css-selector', value: selectorStr });
     }
     
+    
     // 2. For fill actions, prioritize input-specific selectors FIRST
     if (isFillAction && cleanLabel) {
       const lowerLabel = cleanLabel.toLowerCase();
@@ -7332,7 +7371,14 @@ class PlaywrightRecorder extends EventEmitter {
       if (lowerLabel.includes('password') || lowerLabel.includes('pwd')) {
         strategies.push({ type: 'sf-password', value: `#password` });
         strategies.push({ type: 'sf-password-name', value: `input[name="pw"]` });
-        strategies.push({ type: 'sf-password-type', value: `input[type="password"]` });
+        // Only use bare input[type="password"] for login pages (single password field)
+        // NOT for registration/confirm-password pages where there are multiple password fields
+        const isConfirmOrNew = lowerLabel.includes('confirm') || lowerLabel.includes('verify') || 
+                               lowerLabel.includes('re-enter') || lowerLabel.includes('retype') ||
+                               lowerLabel.includes('new password') || lowerLabel.includes('create');
+        if (!isConfirmOrNew) {
+          strategies.push({ type: 'sf-password-type', value: `input[type="password"]` });
+        }
         strategies.push({ type: 'sf-password-autocomplete', value: `input[autocomplete="current-password"]` });
         strategies.push({ type: 'sf-login-password', value: `input[id*="password" i]` });
       }
@@ -7386,13 +7432,12 @@ class PlaywrightRecorder extends EventEmitter {
       strategies.push({ type: 'aria-label-input', value: `input[aria-label="${cleanLabel}"]` });
       strategies.push({ type: 'aria-label-input-contains', value: `input[aria-label*="${cleanLabel}" i]` });
       // Salesforce form rows - find input inside the row with matching label
+      // NOTE: .slds-form-element is a small container, so has-text is safe here
       strategies.push({ type: 'sf-form-row', value: `.slds-form-element:has-text("${cleanLabel}") input` });
       strategies.push({ type: 'sf-form-row-textarea', value: `.slds-form-element:has-text("${cleanLabel}") textarea` });
-      // Generic type-based fallbacks
-      strategies.push({ type: 'input-type-text', value: `input[type="text"]` });
-      strategies.push({ type: 'input-no-type', value: `input:not([type])` });
-      // ID-based (if label's "for" attribute points to input)
-      strategies.push({ type: 'getByRole-textbox', value: `getByRole:textbox:${cleanLabel}` });
+      // NOTE: Removed div:has-text("label") >> input strategies.
+      // has-text matches ANY ancestor containing the text (including the form container),
+      // so >> input always finds the FIRST input on the page (e.g., Mobile Number on Flipkart).
     }
     
     // 3. For non-fill actions, add click-oriented strategies
@@ -7589,6 +7634,7 @@ class PlaywrightRecorder extends EventEmitter {
           locator = getAtIndex(baseLocator);
         }
         
+        if (!locator) continue; // Skip if locator wasn't created
         const count = await locator.count().catch(() => 0);
         if (count > 0) {
           // isVisible() is an instant boolean check - no timeout needed
@@ -8375,6 +8421,31 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
       const value = action.value;
       const timeout = action.timeout || 30000;
       const label = getActionLabel(action); // FIXED: Use comprehensive label extraction with normalization
+
+      // ============================================================
+      // CLICK-ONLY MODE: For suggestion panel Play button on fill-type items
+      // Just click/focus the input element - don't fill with empty string
+      // This lets the user verify the correct element is highlighted
+      // ============================================================
+      if (action.executeMode === 'click-only' && (action.type === 'fill' || action.type === 'Fill' || action.qword === 'Fill')) {
+        console.log(`[PlaywrightRecorder] Click-only mode for fill suggestion: "${label}"`);
+        // Convert to a click action to find and click the correct input
+        const clickAction = { ...action, type: 'click', qword: 'Click', executeMode: undefined };
+        // Use _findElement with the fill-specific strategies (isFillAction check uses original type)
+        // but just click the element instead of filling
+        const findResult = await this._findElement({ ...action, type: 'fill' });
+        if (findResult) {
+          await findResult.locator.click({ timeout: 5000 });
+          console.log(`[PlaywrightRecorder] ✓ Click-only: focused input for "${label}" using ${findResult.strategy?.type}`);
+          return { success: true, strategy: 'click-only-' + (findResult.strategy?.type || 'unknown') };
+        }
+        // Fallback: try unified click handler
+        const clickResult = await ActionHandlers.executeAction(this, clickAction, { timeout });
+        if (clickResult.success) {
+          return { success: true, strategy: 'click-only-unified' };
+        }
+        return { success: false, error: `Could not find input: "${label}"` };
+      }
 
       // ============================================================
       // UNIFIED EXECUTION: Try ActionHandlers first for consistency
