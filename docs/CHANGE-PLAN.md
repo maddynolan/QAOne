@@ -1,4 +1,11 @@
-# Change Plan: Fix Fills Filtered Out in New Tabs (IMPLEMENTED)
+# Change Plan: Two Critical Issues
+
+## Issue 1: Fills Filtered Out in New Tabs
+## Issue 2: Playback Timing Unchanged (SimplePlayback Never Activated)
+
+---
+
+# Issue 1: Fills Filtered Out in New Tabs
 
 ## Problem
 Fill actions (text input recordings) are being lost/filtered out when recording in new tabs. The user types values into fields on a new tab but the fill actions don't appear in the recorded steps.
@@ -14,7 +21,7 @@ Fill actions (text input recordings) are being lost/filtered out when recording 
 
 ### The Recording Pipeline for Fills
 
-There are TWO parallel capture systems that BOTH capture fills:
+Two parallel capture systems BOTH capture fills:
 
 1. **Recipe Recorder** (injected via `context.addInitScript`):
    - Listens to `document.addEventListener('input')` in `recipe-recorder-integration.js` line 826
@@ -48,49 +55,21 @@ if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 
 3. Recipe fill is still **debouncing** (1500ms hasn't elapsed)
 4. Polling loop fires (100ms interval):
    - `data.recipeActions = [clickAction]` (has the click, NOT the fill yet)
-   - Enters the recipe processing block (line 2798): `data.recipeActions.length > 0` → TRUE
+   - Enters the recipe block: `data.recipeActions.length > 0` → TRUE
    - Processes the click action ✓
    - **Clears `pendingInputs` for this tab** (line 2808) ← DESTROYS CDP safety net
 5. The fill is still debouncing in recipe — BUT the CDP fallback was just cleared
-6. Later: Recipe debounce fires → fill captured → **usually works fine IF debounce completes**
-7. **BUT**: If page navigates, user switches tabs, or timing aligns badly:
-   - Recipe debounce may not fire (page destroyed)
-   - CDP safety net is already cleared
-   - `data.inputs` from page-level `__flowstralCDPInputs` is NEVER processed when recipe mode is ON
-   - **Fill is LOST**
+6. If page navigates before debounce fires, or timing aligns badly → **Fill is LOST**
 
-### Additional Risk: page.evaluate() Returns data.inputs but They're Ignored
+### Additional Risk: data.inputs Ignored in Recipe Mode
 
-In recipe mode, `data.inputs` from the page's `window.__flowstralCDPInputs` is **completely ignored**:
+In recipe mode, `data.inputs` from the page's `window.__flowstralCDPInputs` is completely ignored:
 - Line 2818: `if (!this.useRecipeRecorder)` → FALSE → skipped
 - Line 2828: Only processes `this.pendingInputs` (main-process level), not `data.inputs` (page-level)
 
-This means the page-level CDP inputs are thrown away every polling cycle when recipe mode is on.
+## Proposed Fix for Issue 1
 
-## Affected Code Paths
-
-1. **Polling loop** (`playwright-recorder.js` ~line 2748-2871): The per-page processing loop
-2. **`pendingInputs` clearing** (line 2807-2808): Clears after recipe actions
-3. **Tiered fallback** (line 2828-2844): Only processes `this.pendingInputs` >2s old
-4. **`_processRecipeAction`** (line 3195+): Recipe action processing and deduplication
-5. **`_processInputs`** (line 3084+): CDP input processing (has its own deduplication)
-
-## Invariants That Must Be Preserved
-
-- [x] Fills in new tabs must still be captured (recipe + CDP fallback)
-- [x] Cross-origin pages must capture inputs via CDP pendingInputs  
-- [x] Tab indices must stay consistent after tab close/open
-- [x] Timestamp ordering must be preserved in this.actions
-- [x] Recipe recorder debounce (1500ms) must not lose fills
-- [x] CDP stale threshold (2000ms) must not aggressively filter
-- [x] pendingInputs/pendingClicks must be cleared per-tab, not globally
-- [x] _insertByTimestamp must be used for ALL action insertions
-- [x] Complex elements must work: shadow DOM, iframes, new tabs, drag-drop
-- [x] No duplicate fills (recipe + CDP recording same fill should deduplicate)
-
-## Proposed Changes
-
-### Change 1: Only clear pendingInputs when recipe captured fills for the tab
+### Change 1: Only clear pendingInputs when recipe captured fills
 
 **File:** `playwright-recorder.js` lines 2803-2808
 
@@ -108,47 +87,30 @@ this.pendingClicks = (this.pendingClicks || []).filter(c => c.tabIndex !== pageI
 
 // ONLY clear pendingInputs if recipe actually captured FILL actions for this tab.
 // If recipe only had clicks (fills still debouncing), keep pendingInputs as safety net.
-// The stale safety net (>2s) or recipe debounce will handle them later.
 const recipeHadFills = data.recipeActions.some(a => a.type === 'fill');
 if (recipeHadFills) {
   this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
 }
 ```
 
-### Change 2: Also process page-level data.inputs as safety net in recipe mode
+### Change 2: Process page-level data.inputs as additional safety net
 
-When recipe mode is ON but recipe had NO fills this cycle, process `data.inputs` (page-level CDP inputs) via `_processInputs` as an additional safety net. The `_processInputs` method already deduplicates against existing Fill actions (line 3093-3120), so no risk of double recording.
+When recipe mode is ON but recipe had NO actions this cycle, also process `data.inputs` 
+(page-level CDP inputs) alongside the stale `this.pendingInputs` check.
 
 **File:** `playwright-recorder.js` lines 2828-2845
 
-**Before:**
-```javascript
-} else if (!data.recipeActions || data.recipeActions.length === 0) {
-  // Recipe mode but no recipe actions this cycle: safety net for stale pendingInputs
-  const now = Date.now();
-  const staleInputs = (this.pendingInputs || []).filter(
-    i => i.tabIndex === pageIndex && (now - (i.timestamp || 0)) > 2000
-  );
-  // ... process stale inputs
-}
-```
-
-**After:**
+**After (updated else-if block):**
 ```javascript
 } else if (!data.recipeActions || data.recipeActions.length === 0) {
   // Recipe mode but no recipe actions this cycle.
-  // TWO safety nets:
-  
-  // Safety net 1: Process page-level CDP inputs (data.inputs) that are flushed/stale.
-  // These are inputs from window.__flowstralCDPInputs that page.evaluate() returned.
-  // They have already been flushed from the page, so process them.
+  // Safety net 1: Process page-level CDP inputs (data.inputs) that were flushed.
   // _processInputs deduplicates against existing Fill actions by field key.
   if (data.inputs && data.inputs.length > 0) {
     const inputsWithTabIndex = data.inputs.map(inp => ({
       ...inp,
       tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
     }));
-    console.log(`[PlaywrightRecorder] Safety-net: processing ${inputsWithTabIndex.length} page-level inputs for tab ${pageIndex} (recipe had no actions)`);
     await this._processInputs(inputsWithTabIndex);
   }
   
@@ -158,7 +120,6 @@ When recipe mode is ON but recipe had NO fills this cycle, process `data.inputs`
     i => i.tabIndex === pageIndex && (now - (i.timestamp || 0)) > 2000
   );
   if (staleInputs.length > 0) {
-    console.log(`[PlaywrightRecorder] Safety-net: processing ${staleInputs.length} stale inputs for tab ${pageIndex} (recipe missed them)`);
     await this._processInputs(staleInputs);
     this.pendingInputs = (this.pendingInputs || []).filter(
       i => i.tabIndex !== pageIndex || (now - (i.timestamp || 0)) <= 2000
@@ -167,53 +128,149 @@ When recipe mode is ON but recipe had NO fills this cycle, process `data.inputs`
 }
 ```
 
-### Change 3: Also process page-level data.inputs when recipe had only clicks
+### Invariants Preserved
+- [x] Fills in new tabs captured (recipe + CDP fallback preserved)
+- [x] Cross-origin pages capture inputs via CDP pendingInputs
+- [x] Tab indices consistent after tab close/open
+- [x] Timestamp ordering preserved via _insertByTimestamp
+- [x] Recipe debounce (1500ms) doesn't lose fills
+- [x] pendingInputs cleared per-tab, not globally
+- [x] No duplicate fills (_processInputs deduplicates by field key)
+- [x] Complex elements work: shadow DOM, iframes, new tabs, drag-drop
 
-Add a third branch: when recipe mode is ON and recipe had actions BUT none of them were fills, still process `data.inputs` as safety net.
+### Risk Assessment
+- **Duplicate fills**: LOW — `_processInputs` deduplicates by field key (name/id/placeholder)
+- **Ordering**: LOW — All actions use `_insertByTimestamp()` with correct timestamps
+- **pendingInputs accumulation**: LOW — Stale safety net (>2s) still clears old items
 
-**File:** `playwright-recorder.js` after the recipe processing block (line 2809)
+---
 
-**After recipe block, add:**
+# Issue 2: Playback Timing Unchanged
+
+## Problem
+Despite building `SimpleStepExecutor` and `SimpleElementFinder` for 3-10x faster playback,
+timing has NOT changed at all. The user sees the same slow execution as before.
+
+## Root Cause: useSimplePlayback is NEVER activated
+
+**Finding: `useSimplePlayback` is set to `false` by default and NOTHING ever sets it to `true`.**
+
 ```javascript
-// If recipe had actions but NO fills, process data.inputs as safety net
-// (fills might still be debouncing in recipe, but CDP captured them)
-if (this.useRecipeRecorder && data.recipeActions && data.recipeActions.length > 0) {
-  const recipeHadFills = data.recipeActions.some(a => a.type === 'fill');
-  if (!recipeHadFills && data.inputs && data.inputs.length > 0) {
-    const inputsWithTabIndex = data.inputs.map(inp => ({
-      ...inp,
-      tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
-    }));
-    console.log(`[PlaywrightRecorder] Safety-net: processing ${inputsWithTabIndex.length} page-level inputs for tab ${pageIndex} (recipe had clicks but no fills)`);
-    await this._processInputs(inputsWithTabIndex);
-  }
-}
+// playwright-recorder.js line 211
+this.useSimplePlayback = options.useSimplePlayback || false; // Default: OFF (opt-in)
+
+// playwright-recorder.js line 3571  
+useSimplePlayback = this.useSimplePlayback || false; // Falls back to false
 ```
 
-Wait - this could cause ordering issues (CDP fills appearing before recipe clicks). Better approach: fold this into Change 1 by not clearing pendingInputs, and let the stale safety net handle it. The key fix is Change 1 (don't clear pendingInputs when recipe only had clicks).
+The `SimpleStepExecutor` and `SimpleElementFinder` are fully implemented but **dead code** —
+the `if (useSimplePlayback)` branch at line 3926 is never taken. Every test run goes through
+the legacy `this.executeAction(action)` path.
 
-**REVISED: Changes 2 and 3 are merged into a single approach:**
+### Current Legacy Playback Timing Per Step
 
-Instead of processing `data.inputs` explicitly (which could cause ordering issues), we:
-1. **Change 1**: Only clear `pendingInputs` when recipe captured fills (not just clicks)
-2. **Change 2**: In the stale safety net, also include `data.inputs` (page-level) alongside `this.pendingInputs` (main-process-level)
+| Phase | Time | Notes |
+|-------|------|-------|
+| DOM hydration wait | 50-300ms | 50ms locked, 300ms otherwise |
+| Locked selector race | 0-150ms | 150ms timeout |
+| Quick Scan (8 strategies, SEQUENTIAL) | 0-2000ms | Each 250ms, one after another |
+| SmartFinder (SEQUENTIAL) | 0-8000ms | 8s budget, strategies tried sequentially |
+| Legacy `_findElement` | 0-?ms | 50+ strategies |
+| Retry backoff (up to 3x) | 0-2600ms | 200+400+800ms |
+| Post-click highlight | 100ms | |
+| Post-click settle | 250-1000ms | 250ms normal, 1000ms for links |
+| Inter-step delay (slowMo) | 200ms default | `max(minDelay, slowMo)` |
+| **Happy path** | ~500-800ms per step | Locked selector hit |
+| **Worst case** | ~30-40s+ per step | All strategies fail, 3 retries |
 
-This way the fill capture is always preserved through the safety net, and ordering is maintained via `_insertByTimestamp`.
+### SimplePlayback Timing Per Step (if activated)
 
-## Risk Assessment
+| Phase | Time | Notes |
+|-------|------|-------|
+| Tier 1: High-confidence PARALLEL | 0-3000ms | 5-6 strategies raced via Promise.any() |
+| Tier 2: Medium-confidence PARALLEL | 0-5000ms | Only if Tier 1 fails |
+| Post-action settle | 100-200ms | Minimal delays |
+| Inter-step delay | 30ms | Uses simple playback flag for min delay |
+| **Happy path** | ~100-300ms per step | 3-10x faster |
+| **Worst case** | ~8-10s per step | Both tiers fail → SmartFinder healing |
 
-### Risk 1: Duplicate fills (recipe + CDP both record same fill)
-- **Mitigation**: `_processInputs` (line 3093-3120) deduplicates by field key (name/id/placeholder). If recipe already processed the fill, the CDP fill will match and be skipped or update the existing action.
-- **Risk level**: LOW
+## Proposed Fix for Issue 2
 
-### Risk 2: Ordering issues (CDP fill processed before recipe click)
-- **Mitigation**: All actions use `_insertByTimestamp()` for chronological ordering. CDP fills have `timestamp` from when the input event fired. Recipe fills use `startedAt` (typing start time). Both are set at interaction time, so ordering will be correct.
-- **Risk level**: LOW
+### Change 3: Enable SimplePlayback by default
 
-### Risk 3: pendingInputs accumulation (never cleared if recipe never captures fills)
-- **Mitigation**: The stale safety net (>2s) still processes and clears old pendingInputs. If recipe eventually captures the fill, the field-key dedup in `_processInputs` prevents duplicates.
-- **Risk level**: LOW
+**File:** `playwright-recorder.js` line 211
 
-### Risk 4: Memory leak from accumulating pendingInputs
-- **Mitigation**: The stale safety net processes and removes items >2s old every polling cycle. Also, `_flushPendingActionsForTab()` clears pendingInputs on tab close.
-- **Risk level**: NEGLIGIBLE
+**Before:**
+```javascript
+this.useSimplePlayback = options.useSimplePlayback || false; // Default: OFF (opt-in)
+```
+
+**After:**
+```javascript
+this.useSimplePlayback = options.useSimplePlayback !== false; // Default: ON (opt-out)
+```
+
+This mirrors the pattern used by `useRecipeRecorder` (line 198) which is also ON by default.
+
+### Change 4: Set slowMo default to 0 for maximum speed
+
+**File:** `playwright-recorder.js` line 3560
+
+**Before:**
+```javascript
+slowMo = 200; // default
+```
+
+**After:**
+```javascript
+slowMo = 0; // default: fastest playback, user can increase via UI
+```
+
+With `slowMo=0`, the inter-step delay becomes `max(30, 0) = 30ms` for simple playback steps.
+
+### Change 5: Reduce post-action delays in executeAction
+
+Several fixed delays in `executeAction` are unnecessarily high:
+
+| Current | Proposed | Location | Reason |
+|---------|----------|----------|--------|
+| 100ms highlight | 50ms | line 8568 | Highlight is visual only |
+| 500ms new tab settle | 300ms | line 8666 | domcontentloaded already waited |
+| 1000ms link navigation | 500ms | line 8731 | Excessive for most sites |
+| 250ms non-link click | 100ms | line 8735 | CSS transitions are fast |
+| 200ms before fill | 100ms | line 8760 | DOM is already ready |
+| 1000ms search field | 500ms | line 8942 | Was overestimated |
+| 200ms regular fill | 100ms | line 8946 | Input event is synchronous |
+
+### Change 6: Reduce SmartFinder page stability wait
+
+**File:** `smart-finder.js` `waitForPageStability`
+
+Current: Up to 5100ms (domcontentloaded 5s + animations 2s + networkidle 3s + hydration 100ms)
+
+**Proposed:** Skip `waitForPageStability` entirely when called from simple playback path.
+Playwright's auto-wait handles actionability checks already.
+
+### Invariants Preserved
+- [x] All complex elements still work (shadow DOM, iframes, new tabs, etc.)
+- [x] Fallback chain intact: Simple → SmartFinder healing → legacy
+- [x] Locked locators still used (SimpleElementFinder checks them in Tier 1)
+- [x] Self-healing still works (SmartFinder is the healing fallback)
+- [x] User can opt-out by setting `useSimplePlayback: false`
+
+### Risk Assessment
+- **Breaking existing tests**: MEDIUM — Simple playback might not find elements that legacy does.
+  Mitigation: Falls back to SmartFinder healing if simple fails, preserving robustness.
+- **Too fast for slow sites**: LOW — Playwright auto-wait handles this. Sites that need more
+  time will naturally wait longer (actionability checks block until element is ready).
+- **Salesforce Lightning**: MEDIUM — The 1000ms post-navigation delay was specifically for SF.
+  Mitigation: Keep the 1000ms only for link clicks that trigger full navigation.
+
+---
+
+# Implementation Order
+
+1. **Issue 1 Fix** (recording): Changes 1-2 (fill safety net)
+2. **Issue 2 Fix** (playback): Changes 3-6 (activate simple playback, reduce delays)
+3. **Test**: Record a flow in a new tab, verify fills captured, verify faster playback
+4. **Build & Release**: Commit, rebuild Electron, push to GitHub release

@@ -4238,8 +4238,8 @@ Recorded Test
         const hasAnyFlaggedSteps = flaggedStepIds.length > 0;
         
         // V2 Simple Playback: Playwright-native element finding (3-10x faster)
-        // Toggle via localStorage: localStorage.setItem('useSimplePlayback', 'true')
-        const useSimplePlayback = localStorage.getItem('useSimplePlayback') === 'true';
+        // ON by default. Disable via localStorage: localStorage.setItem('useSimplePlayback', 'false')
+        const useSimplePlayback = localStorage.getItem('useSimplePlayback') !== 'false';
         
         result = await flowstral.playwrightRecorder.runTest({
           steps: normalizedActions,
