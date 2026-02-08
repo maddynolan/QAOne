@@ -213,7 +213,7 @@ For SaaS: issue JWTs with `tenant_id` and `user_id`, or have API clients send `X
 
 **Artifacts:**
 
-- Windows: `Flowstral-Setup-{version}.exe`, optional portable.
+- Windows: `Flowstral-Setup.exe`, optional portable (`Flowstral-Portable.exe`).
 - macOS: `Flowstral-{version}-{arch}.dmg` (and .zip).
 - Linux: `Flowstral-{version}-{arch}.AppImage`, `.deb`.
 

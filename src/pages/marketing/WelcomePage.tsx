@@ -40,7 +40,7 @@ export default function WelcomePage() {
     // TODO: Call API to resend verification email
   };
 
-  // Download URLs - GitHub Releases
+  // Download URLs - GitHub Releases (use /latest/download/ with exact artifact names from electron-builder)
   const DOWNLOAD_BASE = 'https://github.com/maddynolan/QAOne/releases/latest/download';
   
   const platforms = {
@@ -48,8 +48,8 @@ export default function WelcomePage() {
       name: 'Windows',
       icon: Monitor,
       size: '~79 MB',
-      url: `${DOWNLOAD_BASE}/Flowstral.Setup.3.2.2.exe`,
-      filename: 'Flowstral Setup 3.2.2.exe',
+      url: `${DOWNLOAD_BASE}/Flowstral-Setup.exe`,
+      filename: 'Flowstral-Setup.exe',
     },
     mac: {
       name: 'macOS',

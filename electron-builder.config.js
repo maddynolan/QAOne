@@ -40,7 +40,7 @@ module.exports = {
       },
     ],
     icon: "electron/resources/icon.ico",
-    artifactName: "Flowstral-Setup-${version}.${ext}",
+    artifactName: "Flowstral-Setup.${ext}",
   },
 
   // NSIS installer configuration (Windows)
