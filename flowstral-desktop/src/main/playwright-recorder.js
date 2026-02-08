@@ -208,7 +208,7 @@ class PlaywrightRecorder extends EventEmitter {
     // Uses Playwright-native auto-wait instead of manual count()+isVisible() snapshots
     // Parallel strategy racing instead of sequential waterfall
     // Set to true for 3-10x faster element finding on happy path
-    this.useSimplePlayback = options.useSimplePlayback || false; // Default: OFF (opt-in)
+    this.useSimplePlayback = options.useSimplePlayback !== false; // Default: ON (opt-out)
     this._simpleStepExecutor = null; // Lazy-initialized per test run
     
     // AI Vision Fallback - LAST RESORT when all deterministic strategies fail
@@ -2814,15 +2814,29 @@ class PlaywrightRecorder extends EventEmitter {
               if (recipeHadFills) {
                 this.pendingInputs = (this.pendingInputs || []).filter(i => i.tabIndex !== pageIndex);
               }
+              
+              // CRITICAL: When recipe had clicks but NO fills, process data.inputs as
+              // safety net. The fills might still be debouncing in recipe (1500ms), but
+              // the page-level CDP inputs (data.inputs) captured them immediately.
+              // Without this, data.inputs is thrown away because the else-if below
+              // only runs when recipe had NO actions at all.
+              // _processInputs deduplicates by field key, so no risk of double recording.
+              if (!recipeHadFills && data.inputs && data.inputs.length > 0) {
+                const inputsWithTabIndex = data.inputs.map(inp => ({
+                  ...inp,
+                  tabIndex: inp.tabIndex !== undefined ? inp.tabIndex : pageIndex
+                }));
+                console.log(`[PlaywrightRecorder] Safety-net: processing ${inputsWithTabIndex.length} page-level inputs for tab ${pageIndex} (recipe had clicks but no fills)`);
+                await this._processInputs(inputsWithTabIndex);
+              }
             }
             
             // Process page data (inputs first, then clicks)
             // Tiered approach:
             //   - Recipe OFF: process all CDP inputs/clicks normally
-            //   - Recipe ON + recipe had actions this cycle: recipe handled them (cleared above)
+            //   - Recipe ON + recipe had actions this cycle: handled above (fills safety net added)
             //   - Recipe ON + NO recipe actions this cycle: safety-net for stale pendingInputs
-            //     that recipe missed (cross-origin eval succeeded but recipe script didn't fire,
-            //     navigation before debounce, etc.). Only process inputs older than 2s.
+            //     and page-level data.inputs
             if (!this.useRecipeRecorder) {
               // Non-recipe mode: process CDP inputs normally
               const inputsWithTabIndex = (data.inputs || []).map(inp => ({
@@ -3557,7 +3571,7 @@ class PlaywrightRecorder extends EventEmitter {
       keepBrowserOpenOnFailure = false,
       // NEW: Playback speed control - slowMo delay in ms between steps
       // 0 = fastest (2x), 200 = normal (1x), 500 = slow (0.5x), 1000 = very slow (0.25x)
-      slowMo = 200,
+      slowMo = 0,
       // NEW: Highlight elements during playback (visual feedback)
       highlight = true,
       // NEW: Flagged steps for false positive handling
@@ -3731,7 +3745,7 @@ class PlaywrightRecorder extends EventEmitter {
       // Wait for page to be stable before executing steps
       try {
         await this.page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {});
-        await this.page.waitForTimeout(500); // One-time settle for initial page load
+        await this.page.waitForTimeout(300); // One-time settle for initial page load (reduced from 500ms)
       } catch (e) {
         console.log('[PlaywrightRecorder] Page stability wait skipped:', e.message);
       }
@@ -7995,8 +8009,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           const _hasLockedSelector = !!(getLockedSelector(action));
           if (!_hasLockedSelector) {
             await this.page.waitForLoadState('domcontentloaded').catch(() => {});
-            // Wait for framework hydration (React, Salesforce Lightning shadow DOM rendering)
-            await this.page.waitForTimeout(300);
+            // Wait for framework hydration (reduced from 300ms, Playwright auto-wait handles most cases)
+            await this.page.waitForTimeout(100);
           } else {
             // Minimal wait for locked selectors - just ensure page isn't mid-navigation
             await this.page.waitForTimeout(50);
@@ -8565,7 +8579,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               el.style.outline = '2px solid #22c55e';
               el.style.outlineOffset = '1px';
             }).catch(() => {});
-            await this.page.waitForTimeout(100); // Highlight visibility delay
+            await this.page.waitForTimeout(50); // Highlight visibility delay (reduced from 100ms)
           }
           
           // Try multiple click methods
@@ -8663,7 +8677,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             }
             
             console.log(`[PlaywrightRecorder] Now on new tab: ${this.page.url()}`);
-            await this.page.waitForTimeout(500); // Let new tab page stabilize
+            await this.page.waitForTimeout(300); // Let new tab page stabilize (reduced from 500ms)
           }
           
           // Check if this is a link click that should navigate
@@ -8727,12 +8741,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
             } catch (e) {
               console.log('[PlaywrightRecorder] DOM load wait skipped');
             }
-            // Settle time for page frameworks (Salesforce Lightning needs ~1s after domcontentloaded)
-            await this.page.waitForTimeout(1000);
+            // Settle time for page frameworks (reduced from 1000ms, domcontentloaded already waited)
+            await this.page.waitForTimeout(500);
             console.log('[PlaywrightRecorder] Page should be loaded now');
           } else {
-            // Regular wait for UI update (covers CSS transitions, dropdowns, modals: 200-300ms)
-            await this.page.waitForTimeout(250);
+            // Regular wait for UI update (covers CSS transitions, dropdowns, modals)
+            await this.page.waitForTimeout(100);
           }
           
           // Remove highlight
@@ -8757,7 +8771,7 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           
           // Wait for DOM to be ready before finding the input element
           await this.page.waitForLoadState('domcontentloaded').catch(() => {});
-          await this.page.waitForTimeout(200);
+          await this.page.waitForTimeout(50);
           // Find input element using full waterfall (locked → Quick Scan → SmartFinder → legacy) with retries + iframe scope
           let fillResult = await this.findElementWithRetry(action);
           
@@ -8938,12 +8952,12 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
               // Network might not go idle, use fallback wait
               console.log('[PlaywrightRecorder] Network did not go idle, using fallback wait');
             }
-            // Additional wait for DOM to stabilize after filtering
-            await this.page.waitForTimeout(1000);
+            // Additional wait for DOM to stabilize after filtering (reduced from 1000ms)
+            await this.page.waitForTimeout(500);
             console.log('[PlaywrightRecorder] Search results should be ready now');
           } else {
-            // Wait for input validation/re-render after typing
-            await this.page.waitForTimeout(200);
+            // Wait for input validation/re-render after typing (reduced from 200ms)
+            await this.page.waitForTimeout(50);
           }
           
           // Remove highlight
@@ -9324,8 +9338,8 @@ The viewport is ${viewport.width}x${viewport.height} pixels. Coordinates must be
           await hoverResult.locator.hover({ timeout });
           console.log(`[PlaywrightRecorder] ✓ Hover successful using ${hoverResult.strategy.type}`);
           
-          // Wait a bit for any menu/dropdown to appear after hover
-          await this.page.waitForTimeout(300);
+          // Wait a bit for any menu/dropdown to appear after hover (reduced from 300ms)
+          await this.page.waitForTimeout(150);
           break;
         }
 
