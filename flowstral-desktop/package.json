@@ -93,7 +93,11 @@
       "icon": "assets/icon.png",
       "category": "Development"
     },
+    "portable": {
+      "artifactName": "Flowstral-Portable.${ext}"
+    },
     "nsis": {
+      "artifactName": "Flowstral-Setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "assets/icon.ico",
@@ -106,8 +110,9 @@
       "deleteAppDataOnUninstall": false
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://releases.flowstral.com/desktop"
+      "provider": "github",
+      "owner": "maddynolan",
+      "repo": "QAOne"
     }
   }
 }
