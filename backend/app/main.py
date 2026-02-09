@@ -7044,6 +7044,10 @@ app.include_router(cdp_recorder_router)
 from app.routers.license_api import router as license_router
 app.include_router(license_router, prefix="/api")
 
+# Download Proxy - Serves GitHub release assets for private repos
+from app.routers.download_api import router as download_router
+app.include_router(download_router, prefix="/api")
+
 # Agent WebSocket API - Real-time Desktop Agent Communication
 from app.routers.agent_websocket import router as agent_ws_router
 app.include_router(agent_ws_router)

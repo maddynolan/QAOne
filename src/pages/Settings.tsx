@@ -600,7 +600,7 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">Latest • ~79 MB</p>
                 </div>
                 <Button 
-                  onClick={() => window.open('https://github.com/maddynolan/QAOne/releases/latest/download/Flowstral-Setup.exe', '_blank')}
+                  onClick={() => window.open('https://qaone-production.up.railway.app/api/download/Flowstral-Setup.exe', '_blank')}
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Download

@@ -40,8 +40,8 @@ export default function WelcomePage() {
     // TODO: Call API to resend verification email
   };
 
-  // Download URLs - GitHub Releases (use /latest/download/ with exact artifact names from electron-builder)
-  const DOWNLOAD_BASE = 'https://github.com/maddynolan/QAOne/releases/latest/download';
+  // Download URLs - proxied through backend API (GitHub repo is private)
+  const DOWNLOAD_BASE = 'https://qaone-production.up.railway.app/api/download';
   
   const platforms = {
     windows: {
