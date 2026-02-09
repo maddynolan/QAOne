@@ -22,7 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import RequestBuilder from "@/components/api-testing/RequestBuilder";
+import RequestBuilder, { type InitialRequestData } from "@/components/api-testing/RequestBuilder";
 import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 
@@ -267,6 +267,9 @@ export default function EnhancedAPITesting() {
   const [selectedSecurityTests, setSelectedSecurityTests] = useState<string[]>([
     "auth_matrix", "bola", "injection", "rate_limiting"
   ]);
+
+  // Builder pre-population state (for "Try It" buttons)
+  const [builderInitialRequest, setBuilderInitialRequest] = useState<any>(null);
 
   // Custom test case creation state
   const [showCreateTest, setShowCreateTest] = useState(false);
@@ -1570,7 +1573,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       // Build execution config — add load test params if in load mode
       const execConfig: any = {
         base_url: baseUrl,
-        parallel: true,
+        parallel: executionMode === "automated" || executionMode === "ci_cd",
         max_workers: 10
       };
       
@@ -1714,6 +1717,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     setSavingToTests(true);
     let saved = 0;
     let failed = 0;
+    const errors: string[] = [];
 
     try {
       // Determine which tests to save: selected or all
@@ -1725,16 +1729,25 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           })
         : allTests;
 
+      // Also save to localStorage so Tests page picks them up immediately
+      const existingLocal: any[] = (() => {
+        try { return JSON.parse(localStorage.getItem("test_cases") || "[]"); } catch { return []; }
+      })();
+
       for (const tc of testsToSave) {
         try {
           const method = (tc.method || tc.http_method || "GET").toUpperCase();
           const path = tc.path || tc.endpoint || tc.url || "";
-          const body = {
-            name: tc.title || tc.name || tc.test_name || `API Test: ${method} ${path}`,
-            description: tc.description || `${method} ${path} - Expected: ${tc.expected_status || 200}`,
+          const testName = tc.title || tc.name || tc.test_name || `API Test: ${method} ${path}`;
+          const localId = `api_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          
+          const payload = {
+            name: testName,
+            title: testName,
+            description: tc.description || `${method} ${path} - Expected status: ${tc.expected_status || 200}`,
             testType: "api",
             priority: "medium",
-            tags: [...(tc.tags || []), "api-testing", tc.test_type || "functional"],
+            tags: [...new Set([...(tc.tags || []), "api-testing", tc.test_type || "functional"])],
             method: method,
             endpoint: path,
             expected_status: String(tc.expected_status || 200),
@@ -1749,25 +1762,57 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             ],
           };
 
+          // Save to backend
           const resp = await fetch(`${API_BASE_URL}/test-cases`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
           });
 
           if (resp.ok) {
+            const data = await resp.json();
             saved++;
+            // Also save to localStorage for immediate visibility on Tests page
+            existingLocal.push({
+              id: data.id || localId,
+              name: testName,
+              title: testName,
+              description: payload.description,
+              type: "automated",
+              category: "api",
+              status: "draft",
+              priority: "medium",
+              tags: payload.tags,
+              steps: payload.steps,
+              createdAt: new Date().toISOString(),
+              automationStatus: "full",
+            });
           } else {
+            const errData = await resp.json().catch(() => ({}));
+            errors.push(`${testName}: ${errData.detail || resp.statusText}`);
             failed++;
           }
-        } catch {
+        } catch (err: any) {
           failed++;
+          errors.push(err.message || "Unknown error");
         }
       }
 
+      // Persist localStorage batch
+      if (saved > 0) {
+        localStorage.setItem("test_cases", JSON.stringify(existingLocal));
+      }
+
+      if (failed > 0) {
+        console.error("Save errors:", errors);
+      }
+
       toast({
-        title: "Saved to Test Cases",
-        description: `${saved} test case(s) saved${failed > 0 ? `, ${failed} failed` : ""}. Go to Tests tab to view them.`,
+        title: saved > 0 ? "Saved to Test Cases" : "Save Failed",
+        description: saved > 0
+          ? `${saved} test case(s) saved.${failed > 0 ? ` ${failed} failed.` : ""} Go to Tests page to see them.`
+          : `All ${failed} save(s) failed. ${errors[0] || "Check console for details."}`,
+        variant: saved > 0 ? "default" : "destructive",
       });
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to save test cases", variant: "destructive" });
@@ -2044,7 +2089,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         {/* Builder Tab - Ad-hoc Request Builder */}
         <TabsContent value="builder" className="space-y-4">
           <TabErrorBoundary tabName="Builder">
-            <RequestBuilder />
+            <RequestBuilder 
+              initialRequest={builderInitialRequest}
+              onSaveToChain={(req, asserts) => {
+                // Switch to Chains tab and add the request as a new step
+                setActiveTab("chains");
+                toast({ title: "Added to Chain", description: `${req.method} ${req.url} added as a chain step` });
+              }}
+            />
           </TabErrorBoundary>
         </TabsContent>
 
@@ -2542,6 +2594,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                         <TableHead>Method</TableHead>
                         <TableHead>Path</TableHead>
                         <TableHead>Summary</TableHead>
+                        <TableHead className="w-20">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2561,6 +2614,43 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                             </TableCell>
                             <TableCell className="font-mono text-sm">{path}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">{op?.summary || op?.operation_id || "-"}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                onClick={() => {
+                                  const baseUrl = parsedSpec.base_url || parsedSpec.servers?.[0]?.url || "";
+                                  const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path;
+                                  // Build sample body from spec if POST/PUT/PATCH
+                                  let sampleBody: any = undefined;
+                                  if (["post", "put", "patch"].includes(method.toLowerCase())) {
+                                    const reqBody = op?.requestBody?.content?.["application/json"]?.schema;
+                                    if (reqBody?.properties) {
+                                      sampleBody = {};
+                                      for (const [propName, propSchema] of Object.entries(reqBody.properties)) {
+                                        const ps = propSchema as any;
+                                        sampleBody[propName] = ps.type === "integer" ? 1 
+                                          : ps.type === "number" ? 1.0
+                                          : ps.type === "boolean" ? true
+                                          : ps.type === "array" ? []
+                                          : `sample_${propName}`;
+                                      }
+                                    }
+                                  }
+                                  setBuilderInitialRequest({
+                                    method: method.toUpperCase(),
+                                    url: fullUrl,
+                                    headers: { "Content-Type": "application/json" },
+                                    body: sampleBody,
+                                  });
+                                  setActiveTab("builder");
+                                }}
+                              >
+                                <Send className="w-3 h-3 mr-1" />
+                                Try It
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -2807,6 +2897,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                               <TableHead>Test Case</TableHead>
                               <TableHead>Type</TableHead>
                               <TableHead>Endpoint</TableHead>
+                              <TableHead className="w-24">Action</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -2820,6 +2911,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                            testCase.id ||
                                            `test_${idx}`;
                               const isSelected = selectedTestCases.has(testId);
+                              const tcMethod = (testCase.method || "GET").toUpperCase();
+                              const tcPath = testCase.endpoint || testCase.url || testCase.path || 
+                                       (testCase.request?.url) || (testCase.steps?.[0]?.url) || "";
                               return (
                                 <TableRow key={testId} className={isSelected ? "bg-blue-50" : ""}>
                                   <TableCell>
@@ -2866,9 +2960,32 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                   </TableCell>
                                   <TableCell className="text-sm text-muted-foreground">
                                     <span className="font-mono text-xs">
-                                      {testCase.method || "GET"} {testCase.endpoint || testCase.url || testCase.path || 
-                                       (testCase.request?.url) || (testCase.steps?.[0]?.url) || "N/A"}
+                                      {tcMethod} {tcPath || "N/A"}
                                     </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                      onClick={() => {
+                                        // Build full URL from base_url + path
+                                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
+                                        const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
+                                        const fullPath = tcPath.startsWith("http") ? tcPath : `${baseUrl.replace(/\/$/, "")}${tcPath.startsWith("/") ? tcPath : `/${tcPath}`}`;
+                                        setBuilderInitialRequest({
+                                          method: tcMethod,
+                                          url: fullPath,
+                                          headers: testCase.request?.headers || { "Content-Type": "application/json" },
+                                          body: testCase.request?.body || undefined,
+                                        });
+                                        setActiveTab("builder");
+                                      }}
+                                      title="Open in Builder to test individually"
+                                    >
+                                      <Send className="w-3 h-3 mr-1" />
+                                      Try It
+                                    </Button>
                                   </TableCell>
                                 </TableRow>
                               );

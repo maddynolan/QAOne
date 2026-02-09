@@ -4,7 +4,7 @@
  * send the request, and see the full response with syntax highlighting.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,18 +41,57 @@ interface SavedRequest {
   savedAt: string;
 }
 
-interface RequestBuilderProps {
-  onSaveToChain?: (request: RequestConfig, assertions: AssertionConfig[]) => void;
+export interface InitialRequestData {
+  method: string;
+  url: string;
+  headers?: Record<string, string>;
+  body?: any;
+  bodyType?: string;
 }
 
-export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
+interface RequestBuilderProps {
+  onSaveToChain?: (request: RequestConfig, assertions: AssertionConfig[]) => void;
+  initialRequest?: InitialRequestData | null;
+}
+
+export default function RequestBuilder({ onSaveToChain, initialRequest }: RequestBuilderProps) {
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
+  const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string }>>([]);
   const [response, setResponse] = useState<ResponseData | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("params");
   const [responseTab, setResponseTab] = useState("body");
+
+  // --- Load initial request when prop changes (e.g. from "Try It" button) ---
+  useEffect(() => {
+    if (initialRequest) {
+      const headers: KeyValuePair[] = [];
+      if (initialRequest.headers) {
+        Object.entries(initialRequest.headers).forEach(([key, value]) => {
+          headers.push({ key, value, enabled: true });
+        });
+      }
+      if (!headers.find(h => h.key.toLowerCase() === "content-type")) {
+        headers.push({ key: "Content-Type", value: "application/json", enabled: true });
+      }
+
+      setRequest({
+        ...createEmptyRequest(),
+        method: initialRequest.method || "GET",
+        url: initialRequest.url || "",
+        headers,
+        body: initialRequest.body
+          ? (typeof initialRequest.body === "string" ? initialRequest.body : JSON.stringify(initialRequest.body, null, 2))
+          : "",
+        bodyType: initialRequest.bodyType || (initialRequest.body ? "json" : "none"),
+      });
+      setResponse(null);
+      setError(null);
+      setAssertionResults([]);
+    }
+  }, [initialRequest]);
   const [savedRequests, setSavedRequests] = useState<SavedRequest[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("api_saved_requests") || "[]");
@@ -213,6 +252,76 @@ export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
           time: Math.round(testResult.response_time_ms || elapsed),
           size: typeof responseBody === "string" ? responseBody.length : JSON.stringify(responseBody || "").length,
         });
+
+        // Extract assertion results from backend response
+        if (testResult.assertion_results && Array.isArray(testResult.assertion_results)) {
+          setAssertionResults(testResult.assertion_results);
+        } else {
+          // Build assertion results client-side from basic checks
+          const results: Array<{ passed: boolean; message: string }> = [];
+          for (const a of assertions) {
+            if (a.type === "status_code") {
+              const expected = parseInt(a.expected) || 200;
+              results.push({
+                passed: httpStatus === expected,
+                message: `Status code: expected ${expected}, got ${httpStatus}`,
+              });
+            } else if (a.type === "contains") {
+              const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
+              const found = bodyStr.includes(a.expected);
+              results.push({
+                passed: a.operator === "not_contains" ? !found : found,
+                message: `Body ${found ? "contains" : "does not contain"} "${a.expected}"`,
+              });
+            } else if (a.type === "response_time") {
+              const maxMs = parseInt(a.expected) || 1000;
+              const actualMs = Math.round(testResult.response_time_ms || elapsed);
+              results.push({
+                passed: actualMs <= maxMs,
+                message: `Response time: ${actualMs}ms (max ${maxMs}ms)`,
+              });
+            } else if (a.type === "header") {
+              const headerVal = (testResult.response_headers || {})[a.path || ""] || "";
+              const match = a.operator === "contains"
+                ? headerVal.toLowerCase().includes((a.expected || "").toLowerCase())
+                : headerVal === a.expected;
+              results.push({
+                passed: match,
+                message: `Header "${a.path}": ${match ? "matches" : `expected "${a.expected}", got "${headerVal}"`}`,
+              });
+            } else if (a.type === "jsonpath" && a.path) {
+              // Basic JSONPath check: extract from response and compare
+              try {
+                const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+                const pathParts = a.path.replace(/^\$\.?/, "").split(".");
+                let val: any = bodyObj;
+                for (const part of pathParts) {
+                  if (val == null) break;
+                  const arrMatch = part.match(/^(\w+)\[(\d+)\]$/);
+                  if (arrMatch) {
+                    val = val[arrMatch[1]]?.[parseInt(arrMatch[2])];
+                  } else {
+                    val = val[part];
+                  }
+                }
+                const actual = String(val);
+                const passed = a.operator === "exists" ? val !== undefined && val !== null
+                  : a.operator === "not_exists" ? val === undefined || val === null
+                  : a.operator === "contains" ? actual.includes(a.expected)
+                  : actual === a.expected;
+                results.push({
+                  passed,
+                  message: `JSONPath "${a.path}": ${passed ? "passed" : `expected "${a.expected}", got "${actual}"`}`,
+                });
+              } catch {
+                results.push({ passed: false, message: `JSONPath "${a.path}": failed to evaluate` });
+              }
+            } else {
+              results.push({ passed: true, message: `${a.type}: evaluated` });
+            }
+          }
+          setAssertionResults(results);
+        }
       } else {
         // Fallback: show the raw response
         setResponse({
@@ -609,7 +718,21 @@ export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
 
             {/* Assertions */}
             <TabsContent value="assertions" className="p-4 mt-0">
-              <AssertionsPanel assertions={assertions} onChange={setAssertions} />
+              <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} />
+              {assertionResults.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {assertionResults.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      {r.passed
+                        ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        : <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
+                      <span className={r.passed ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}>
+                        {r.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
