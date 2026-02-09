@@ -351,19 +351,20 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       assertions: [...assertions],
       savedAt: new Date().toISOString(),
     };
+    // Keep in local list for quick access in Builder's "Saved" tab
     const updated = [...savedRequests, saved];
     setSavedRequests(updated);
     localStorage.setItem("api_saved_requests", JSON.stringify(updated));
     setSaveName("");
     setShowSaveInput(false);
 
-    // Also add to test suite if callback is available (so it's executable)
+    // Save to Execute suite AND database (via the callback in EnhancedAPITesting)
     if (onAddToTestSuite) {
       const url = buildUrl();
       onAddToTestSuite({
         test_case_id: `builder_${saved.id}`,
-        title: saved.name,
-        description: `Builder request: ${request.method} ${url}`,
+        title: saved.name,  // Use the user-provided name, NOT the endpoint path
+        description: `Custom test: ${request.method} ${url}`,
         method: request.method,
         path: url,
         expected_status: (() => {
@@ -528,10 +529,13 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 onClick={() => {
                   const url = buildUrl();
                   if (!url) return;
+                  const defaultName = `${request.method} ${url.replace(/https?:\/\/[^/]+/, "")}`;
+                  const userTitle = prompt("Enter a name for this test case:", defaultName);
+                  if (!userTitle) return; // cancelled
                   onAddToTestSuite({
                     test_case_id: `builder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                    title: `${request.method} ${url.replace(/https?:\/\/[^/]+/, "")}`,
-                    description: `Builder request: ${request.method} ${url}`,
+                    title: userTitle.trim(),
+                    description: `Custom test: ${request.method} ${url}`,
                     method: request.method,
                     path: url,
                     expected_status: (() => {
@@ -558,7 +562,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     })),
                   });
                 }}
-                title="Add this request as a test case to the Execute tab"
+                title="Add this request as a test case to the Execute tab and Tests page"
                 className="text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950"
               >
                 <CheckCircle2 className="w-4 h-4 mr-1" />

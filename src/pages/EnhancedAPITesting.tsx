@@ -2130,6 +2130,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   };
 
                   // Save to persistent database API (/api/db/test-cases)
+                  // Serialize assertions to string to avoid double-serialization in metadata
+                  const assertionsStr = testCase.assertions ? JSON.stringify(testCase.assertions) : "[]";
+                  
                   const resp = await fetch(`${API_BASE_URL}/api/db/test-cases`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2148,16 +2151,24 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                         expected_status: payload.expected_status,
                         request_body: payload.request_body,
                         headers: payload.headers,
-                        assertions: testCase.assertions,
+                        assertions: assertionsStr,
                         automationStatus: "full",
                       }
                     }),
                   });
+
+                  if (!resp.ok) {
+                    const errData = await resp.text().catch(() => "Unknown error");
+                    console.error("Backend save failed:", resp.status, errData);
+                    throw new Error(`Backend returned ${resp.status}: ${errData.substring(0, 100)}`);
+                  }
+
                   const data = await resp.json().catch(() => ({}));
+                  console.log("Test case saved to DB:", data);
 
                   toast({
-                    title: "Test Saved",
-                    description: `"${testName}" saved to Execute tab + Tests page. Run it from either place.`,
+                    title: "Test Saved to Database",
+                    description: `"${testName}" saved. Visible in Tests tab and Execute tab for all team members.`,
                   });
                 } catch (err: any) {
                   // Still added to execute suite even if backend save fails
