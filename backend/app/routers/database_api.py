@@ -61,6 +61,38 @@ class CreateTestRunRequest(BaseModel):
     environment: str = "local"
     project_id: Optional[str] = None
 
+class CreateTestPlanRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    suite_ids: List[str] = []
+    test_case_ids: List[str] = []
+    status: str = "draft"
+    project_id: Optional[str] = None
+
+class UpdateTestPlanRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    suite_ids: Optional[List[str]] = None
+    test_case_ids: Optional[List[str]] = None
+    status: Optional[str] = None
+
+class CreateDefectRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    severity: str = "medium"
+    status: str = "open"
+    test_case_id: Optional[str] = None
+    test_run_id: Optional[str] = None
+    screenshot: Optional[str] = None
+
+class UpdateDefectRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    test_case_id: Optional[str] = None
+    test_run_id: Optional[str] = None
+
 class CreateRecordingRequest(BaseModel):
     name: str
     url: str
@@ -342,6 +374,76 @@ async def create_element(request: CreateElementRequest):
     return created.model_dump()
 
 
+# ==================== TEST PLANS ====================
+
+@router.get("/test-plans", response_model=List[Dict[str, Any]])
+async def get_test_plans(
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+):
+    """Get all test plans."""
+    filters = {'status': status} if status else None
+    items = await db.test_plans.get_all(limit=limit, offset=offset, filters=filters)
+    return [item.model_dump() for item in items]
+
+@router.get("/test-plans/{id}", response_model=Dict[str, Any])
+async def get_test_plan(id: str):
+    """Get a single test plan with its suites and test cases."""
+    plan = await db.test_plans.get(id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Test plan not found")
+    result = plan.model_dump()
+    # Optionally load linked test cases
+    test_cases = []
+    for tc_id in (plan.test_case_ids or []):
+        tc = await db.test_cases.get(tc_id)
+        if tc:
+            test_cases.append(tc.model_dump())
+    result['test_cases'] = test_cases
+    return result
+
+@router.post("/test-plans", response_model=Dict[str, Any])
+async def create_test_plan(request: CreateTestPlanRequest):
+    """Create a new test plan."""
+    plan = TestPlan(
+        id=str(uuid.uuid4())[:8],
+        **request.model_dump()
+    )
+    created = await db.test_plans.create(plan)
+    return created.model_dump()
+
+@router.put("/test-plans/{id}", response_model=Dict[str, Any])
+async def update_test_plan(id: str, request: UpdateTestPlanRequest):
+    """Update a test plan."""
+    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    updated = await db.test_plans.update(id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Test plan not found")
+    return updated.model_dump()
+
+@router.delete("/test-plans/{id}")
+async def delete_test_plan(id: str):
+    """Delete a test plan."""
+    deleted = await db.test_plans.delete(id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Test plan not found")
+    return {"status": "deleted", "id": id}
+
+
+# ==================== TEST RUN DELETE ====================
+
+@router.delete("/test-runs/{id}")
+async def delete_test_run(id: str):
+    """Delete a test run."""
+    deleted = await db.test_runs.delete(id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Test run not found")
+    return {"status": "deleted", "id": id}
+
+
 # ==================== DEFECTS ====================
 
 @router.get("/defects", response_model=List[Dict[str, Any]])
@@ -360,6 +462,43 @@ async def get_defects(
     
     items = await db.defects.get_all(limit=limit, offset=offset, filters=filters if filters else None)
     return [item.model_dump() for item in items]
+
+@router.get("/defects/{id}", response_model=Dict[str, Any])
+async def get_defect(id: str):
+    """Get a single defect."""
+    item = await db.defects.get(id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Defect not found")
+    return item.model_dump()
+
+@router.post("/defects", response_model=Dict[str, Any])
+async def create_defect(request: CreateDefectRequest):
+    """Create a new defect."""
+    defect = Defect(
+        id=str(uuid.uuid4())[:8],
+        **request.model_dump()
+    )
+    created = await db.defects.create(defect)
+    return created.model_dump()
+
+@router.put("/defects/{id}", response_model=Dict[str, Any])
+async def update_defect(id: str, request: UpdateDefectRequest):
+    """Update a defect."""
+    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    updated = await db.defects.update(id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Defect not found")
+    return updated.model_dump()
+
+@router.delete("/defects/{id}")
+async def delete_defect(id: str):
+    """Delete a defect."""
+    deleted = await db.defects.delete(id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Defect not found")
+    return {"status": "deleted", "id": id}
 
 
 # ==================== STATS & ADMIN ====================
@@ -386,4 +525,28 @@ async def migrate_from_json():
     """Migrate data from JSON files to database."""
     count = await db.migrate_from_json()
     return {"status": "success", "migrated_count": count}
+
+
+@router.post("/clear-all")
+async def clear_all_data():
+    """Clear ALL test data from all tables. Use with caution - enterprise reset."""
+    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings"]
+    deleted = {}
+    
+    for table in tables:
+        try:
+            async with db.connection() as conn:
+                cursor = await conn.execute(f"SELECT COUNT(*) FROM {table}")
+                row = await cursor.fetchone()
+                count = row[0] if row else 0
+                await conn.execute(f"DELETE FROM {table}")
+                await conn.commit()
+                deleted[table] = count
+        except Exception as e:
+            deleted[table] = f"error: {str(e)}"
+    
+    # Clear all caches
+    db.clear_all_caches()
+    
+    return {"status": "success", "deleted": deleted, "message": "All test data cleared"}
 

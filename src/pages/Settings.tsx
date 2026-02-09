@@ -520,25 +520,37 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Clear All Local Data</Label>
+                  <Label>Clear Local Cache</Label>
                   <p className="text-sm text-muted-foreground">
-                    Remove all locally stored data (releases, plans, runs, test cases, requirements, defects)
+                    Clear locally cached data. All test cases, runs, plans, suites, and defects are stored in the database and shared across all users.
                   </p>
                 </div>
                 <Button 
                   variant="destructive"
                   onClick={() => {
-                    if (confirm('Are you sure you want to clear ALL local data?\n\nThis will delete:\n- Releases\n- Test Plans\n- Test Runs\n- Test Cases (local)\n- Requirements (local)\n- Defects (local)\n\nThis cannot be undone!')) {
-                      // Clear all localStorage
-                      localStorage.clear();
-                      sessionStorage.clear();
-                      toast.success('All local data cleared');
-                      // Reload to reset state
+                    if (confirm('Clear all locally cached data?\n\nThis clears the browser cache only.\nYour test data is safe in the database and visible to all team members.')) {
+                      // Clear test-data related localStorage keys (not theme/preferences)
+                      const testDataKeys = [
+                        'test_cases', 'flowstral_test_cases', 'test_plans', 'test_runs',
+                        'test_execution_history', 'test_suites', 'test_defects', 'defects',
+                        'test_folders', 'test_repository_folders', 'test_releases', 'releases',
+                        'test_schedules', 'test_environments', 'reusable_modules',
+                        'deleted_test_ids', 'execution_queue', 'qaai_test_results',
+                        'workflow_test_history', 'unified_test_history',
+                        'tm_test_cases', 'tm_test_suites', 'tm_schedules', 'tm_environments',
+                        'tm_cache_timestamps', 'api_saved_requests', 'api_saved_chains',
+                        'requirements', 'use_scale_db',
+                      ];
+                      testDataKeys.forEach(key => localStorage.removeItem(key));
+                      // Clear unified_test_case_{id} entries
+                      Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_')).forEach(k => localStorage.removeItem(k));
+                      Object.keys(localStorage).filter(k => k.startsWith('run_results_')).forEach(k => localStorage.removeItem(k));
+                      toast.success('Local cache cleared. Database data is unaffected.');
                       setTimeout(() => window.location.reload(), 500);
                     }
                   }}
                 >
-                  Clear All Data
+                  Clear Cache
                 </Button>
               </div>
               <Separator />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1730,10 +1730,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           })
         : allTests;
 
-      // Also save to localStorage so Tests page picks them up immediately
-      const existingLocal: any[] = (() => {
-        try { return JSON.parse(localStorage.getItem("test_cases") || "[]"); } catch { return []; }
-      })();
+      // All saves go to persistent database API (/api/db/test-cases)
 
       for (const tc of testsToSave) {
         try {
@@ -1763,31 +1760,35 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             ],
           };
 
-          // Save to backend
-          const resp = await fetch(`${API_BASE_URL}/test-cases`, {
+          // Save to persistent database API (/api/db/test-cases)
+          const resp = await fetch(`${API_BASE_URL}/api/db/test-cases`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              name: testName,
+              description: payload.description,
+              steps: payload.steps,
+              status: "draft",
+              priority: "medium",
+              category: "api",
+              tags: payload.tags,
+              metadata: {
+                type: "automated",
+                method: method,
+                endpoint: path,
+                expected_status: payload.expected_status,
+                request_body: payload.request_body,
+                headers: payload.headers,
+                assertions: JSON.stringify(tc.assertions || []),
+                test_type: tc.test_type || "functional",
+                priority: tc.priority || "medium",
+                automationStatus: "full",
+              }
+            }),
           });
 
           if (resp.ok) {
-            const data = await resp.json();
             saved++;
-            // Also save to localStorage for immediate visibility on Tests page
-            existingLocal.push({
-              id: data.id || localId,
-              name: testName,
-              title: testName,
-              description: payload.description,
-              type: "automated",
-              category: "api",
-              status: "draft",
-              priority: "medium",
-              tags: payload.tags,
-              steps: payload.steps,
-              createdAt: new Date().toISOString(),
-              automationStatus: "full",
-            });
           } else {
             const errData = await resp.json().catch(() => ({}));
             errors.push(`${testName}: ${errData.detail || resp.statusText}`);
@@ -1797,11 +1798,6 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           failed++;
           errors.push(err.message || "Unknown error");
         }
-      }
-
-      // Persist localStorage batch
-      if (saved > 0) {
-        localStorage.setItem("test_cases", JSON.stringify(existingLocal));
       }
 
       if (failed > 0) {
@@ -2133,29 +2129,31 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     }],
                   };
 
-                  const resp = await fetch(`${API_BASE_URL}/test-cases`, {
+                  // Save to persistent database API (/api/db/test-cases)
+                  const resp = await fetch(`${API_BASE_URL}/api/db/test-cases`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify({
+                      name: testName,
+                      description: payload.description,
+                      steps: payload.steps,
+                      status: "draft",
+                      priority: "medium",
+                      category: "api",
+                      tags: payload.tags,
+                      metadata: {
+                        type: "automated",
+                        method: testCase.method,
+                        endpoint: testCase.path,
+                        expected_status: payload.expected_status,
+                        request_body: payload.request_body,
+                        headers: payload.headers,
+                        assertions: testCase.assertions,
+                        automationStatus: "full",
+                      }
+                    }),
                   });
                   const data = await resp.json().catch(() => ({}));
-                  const savedId = data.id || `api_${Date.now()}`;
-
-                  // Also save to localStorage for immediate visibility
-                  const existing: any[] = (() => {
-                    try { return JSON.parse(localStorage.getItem("test_cases") || "[]"); } catch { return []; }
-                  })();
-                  existing.push({
-                    id: savedId, name: testName, title: testName,
-                    description: payload.description, type: "automated", category: "api",
-                    status: "draft", priority: "medium", tags: payload.tags,
-                    steps: payload.steps, method: testCase.method, endpoint: testCase.path,
-                    expected_status: payload.expected_status,
-                    request_body: payload.request_body, headers: payload.headers,
-                    assertions: testCase.assertions,
-                    createdAt: new Date().toISOString(), automationStatus: "full",
-                  });
-                  localStorage.setItem("test_cases", JSON.stringify(existing));
 
                   toast({
                     title: "Test Saved",

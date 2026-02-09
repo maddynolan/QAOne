@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/api-config";
 
 // ==================== TEMPLATES ====================
 const TEMPLATES = [
@@ -209,34 +209,32 @@ export default function CreateDefect() {
       const id = `DEF-${Date.now()}`;
       const defectData = { ...payload, id };
 
-      // Try backend first
+      // Save to persistent database API (/api/db/defects)
       try {
-        const response = await fetch(`${API_BASE_URL}/defects`, {
+        const response = await fetch(`${API_BASE_URL}/api/db/defects`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(defectData)
+          body: JSON.stringify({
+            title: defectData.title,
+            description: defectData.description || '',
+            severity: defectData.severity || 'medium',
+            status: defectData.status || 'open',
+            test_case_id: defectData.testCaseId || null,
+            test_run_id: defectData.testRunId || null,
+          })
         });
 
         if (response.ok) {
-          // Also save to localStorage for consistency
-          const stored = JSON.parse(localStorage.getItem('defects') || '[]');
-          stored.push(defectData);
-          localStorage.setItem('defects', JSON.stringify(stored));
-          
-          toast.success('Defect reported!');
+          toast.success('Defect reported and saved to database!');
           navigate('/defects');
           return;
+        } else {
+          throw new Error(`Backend returned ${response.status}`);
         }
-      } catch (backendError) {
-        console.log('Backend not available, saving locally');
+      } catch (backendError: any) {
+        console.error('Failed to save defect to database:', backendError);
+        toast.error(`Failed to save: ${backendError.message}`);
       }
-
-      // Fallback to localStorage
-      const stored = JSON.parse(localStorage.getItem('defects') || '[]');
-      stored.push(defectData);
-      localStorage.setItem('defects', JSON.stringify(stored));
-      toast.success('Defect saved!');
-      navigate('/defects');
     } catch (error) {
       console.error('Error saving defect:', error);
       toast.error('Failed to save defect');

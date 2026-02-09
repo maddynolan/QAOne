@@ -163,8 +163,30 @@ const RootRoute = () => {
 
 const App = () => {
   useEffect(() => {
-    // Initialize sample data when app starts
-    dataStorageService.initializeSampleData();
+    // One-time cleanup: remove old localStorage test data
+    // All data now lives in persistent database (/api/db/)
+    const cleaned = localStorage.getItem('qaai_localstorage_cleaned_v3');
+    if (!cleaned) {
+      const keysToRemove = [
+        'test_cases', 'flowstral_test_cases', 'test_plans', 'test_runs',
+        'test_execution_history', 'test_suites', 'defects', 'test_defects',
+        'test_releases', 'releases', 'test_repository_folders', 'test_folders',
+        'test_schedules', 'test_environments', 'reusable_modules',
+        'deleted_test_ids', 'workflow_test_history', 'qaai_test_results',
+        'unified_test_history', 'tm_test_cases', 'tm_test_suites', 
+        'tm_schedules', 'tm_environments', 'tm_cache_timestamps',
+        'requirements', 'use_scale_db', 'execution_queue',
+        'api_saved_requests', 'api_saved_chains',
+        'qaai_localstorage_cleaned_v2', // clean up old marker
+      ];
+      // Also remove unified_test_case_* and run_results_* keys
+      Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_')).forEach(k => keysToRemove.push(k));
+      Object.keys(localStorage).filter(k => k.startsWith('run_results_')).forEach(k => keysToRemove.push(k));
+      keysToRemove.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+      localStorage.setItem('qaai_localstorage_cleaned_v3', 'true');
+      console.log('[QAAI] Cleaned old localStorage test data. All data now in persistent database.');
+    }
+    // No sample data - enterprise mode: all data comes from team members via the database
   }, []);
 
   return (

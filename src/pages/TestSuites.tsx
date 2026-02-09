@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/api-config';
 
 interface TestCase {
   id: string;
@@ -89,9 +89,8 @@ export default function TestSuites() {
         const data = await suitesRes.json();
         setSuites(Array.isArray(data) ? data : []);
       } else {
-        // Load from localStorage as fallback
-        const stored = localStorage.getItem('test_suites');
-        setSuites(stored ? JSON.parse(stored) : []);
+        console.error('Failed to load suites from backend');
+        setSuites([]);
       }
 
       // Load test cases
@@ -148,17 +147,8 @@ export default function TestSuites() {
       if (!response.ok) throw new Error('Backend failed');
       
       toast.success(editingSuite ? 'Suite updated!' : 'Suite created!');
-    } catch {
-      // Save to localStorage as fallback
-      const stored = JSON.parse(localStorage.getItem('test_suites') || '[]');
-      if (editingSuite) {
-        const idx = stored.findIndex((s: TestSuite) => s.id === suite.id);
-        if (idx >= 0) stored[idx] = suite;
-      } else {
-        stored.push(suite);
-      }
-      localStorage.setItem('test_suites', JSON.stringify(stored));
-      toast.success(editingSuite ? 'Suite updated!' : 'Suite created!');
+    } catch (err: any) {
+      toast.error(`Failed to save suite: ${err.message || 'Backend error'}`);
     }
 
     // Update local state
@@ -176,10 +166,8 @@ export default function TestSuites() {
 
     try {
       await fetch(`${API_BASE_URL}/api/db/test-suites/${suiteId}`, { method: 'DELETE' });
-    } catch {
-      // Remove from localStorage
-      const stored = JSON.parse(localStorage.getItem('test_suites') || '[]');
-      localStorage.setItem('test_suites', JSON.stringify(stored.filter((s: TestSuite) => s.id !== suiteId)));
+    } catch (err) {
+      console.error('Failed to delete suite from backend:', err);
     }
 
     setSuites(prev => prev.filter(s => s.id !== suiteId));

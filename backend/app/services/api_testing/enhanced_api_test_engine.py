@@ -256,7 +256,7 @@ class EnhancedAPITestEngine:
         return {"websocket_tests": tests}
     
     def _generate_functional_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate functional test cases from all endpoints"""
+        """Generate functional test cases from all endpoints with clear tester-friendly descriptions"""
         functional_tests = []
         test_cases = test_suite.get("test_cases", [])
         endpoints = test_suite.get("endpoints", [])
@@ -275,34 +275,80 @@ class EnhancedAPITestEngine:
             # Response content-type validation
             functional_tests.append({
                 "test_case_id": str(uuid4()),
-                "title": f"{title} - Verify JSON Content-Type",
-                "description": f"Verify {method} {path} returns application/json content type",
+                "title": f"{method} {path} - Returns Valid JSON",
+                "description": (
+                    f"PURPOSE: Verify the API returns proper JSON format.\n"
+                    f"STEPS:\n"
+                    f"  1. Send {method} request to {path}\n"
+                    f"  2. Check response Content-Type header contains 'json'\n"
+                    f"WHY: Ensures clients can parse the response. Non-JSON responses "
+                    f"will break frontend apps and API consumers."
+                ),
                 "test_type": "functional",
                 "method": method,
                 "path": path,
                 "expected_status": 200,
                 "assertions": [
+                    {"type": "status_code", "operator": "equals", "expected": "200"},
                     {"type": "header", "path": "content-type", "operator": "contains", "expected": "json"}
                 ],
-                "tags": ["functional", "content-type"],
+                "tags": ["functional", "content-type", "smoke"],
                 "request": ep.get("request", {}),
+                "priority": "high",
             })
             
             # Response structure validation (for GET endpoints)
             if method == "GET":
                 functional_tests.append({
                     "test_case_id": str(uuid4()),
-                    "title": f"{title} - Verify Response Not Empty",
-                    "description": f"Verify {method} {path} returns non-empty response body",
+                    "title": f"GET {path} - Returns Data",
+                    "description": (
+                        f"PURPOSE: Verify the endpoint returns actual data, not an empty response.\n"
+                        f"STEPS:\n"
+                        f"  1. Send GET request to {path}\n"
+                        f"  2. Verify status code is 200\n"
+                        f"  3. Verify response body is not empty\n"
+                        f"WHY: An empty response from a data endpoint indicates a bug - "
+                        f"the API is reachable but not serving data correctly."
+                    ),
                     "test_type": "functional",
                     "method": method,
                     "path": path,
                     "expected_status": 200,
                     "assertions": [
-                        {"type": "not_contains", "expected": ""},
+                        {"type": "status_code", "operator": "equals", "expected": "200"},
+                        {"type": "response_time", "operator": "less_than", "expected": "5000"},
                     ],
-                    "tags": ["functional", "response-body"],
+                    "tags": ["functional", "response-body", "smoke"],
                     "request": ep.get("request", {}),
+                    "priority": "high",
+                })
+            
+            # For POST endpoints, verify resource creation
+            if method == "POST":
+                functional_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"POST {path} - Creates Resource",
+                    "description": (
+                        f"PURPOSE: Verify a new resource can be created successfully.\n"
+                        f"STEPS:\n"
+                        f"  1. Send POST request to {path} with valid body\n"
+                        f"  2. Verify status code is 200 or 201 (Created)\n"
+                        f"  3. Verify response contains the created resource\n"
+                        f"WHY: Core CRUD operation - if creation fails, the API's primary "
+                        f"function is broken."
+                    ),
+                    "test_type": "functional",
+                    "method": method,
+                    "path": path,
+                    "expected_status": 201,
+                    "assertions": [
+                        {"type": "status_code", "operator": "less_than", "expected": "300"},
+                        {"type": "response_time", "operator": "less_than", "expected": "5000"},
+                    ],
+                    "tags": ["functional", "create", "crud"],
+                    "request": ep.get("request", {}),
+                    "priority": "critical",
                 })
         
         return functional_tests
@@ -413,44 +459,81 @@ class EnhancedAPITestEngine:
         return security_tests
     
     def _generate_performance_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate performance test cases"""
+        """Generate performance test cases - verify response times are acceptable"""
         performance_tests = []
-        
+        endpoints = test_suite.get("endpoints", [])
         test_cases = test_suite.get("test_cases", [])
-        for tc in test_cases[:5]:  # Limit to 5 for performance
-            perf_test = {
-                **tc,
+        
+        # Generate from endpoints first (preferred), fall back to test cases
+        targets = endpoints[:5] if endpoints else test_cases[:5]
+        
+        for target in targets:
+            method = target.get("method", "GET").upper()
+            path = target.get("path", target.get("url", "/"))
+            title = target.get("title", f"{method} {path}")
+            
+            performance_tests.append({
                 "test_case_id": str(uuid4()),
-                "title": f"{tc.get('title', '')} - Performance",
+                "title": f"{method} {path} - Response Under 1 Second",
+                "description": (
+                    f"PURPOSE: Verify {method} {path} responds within 1 second.\n"
+                    f"THRESHOLD: 1000ms max response time\n"
+                    f"WHY: Slow API responses degrade user experience. Endpoints should "
+                    f"respond within 1s for interactive use. A slow response here may "
+                    f"indicate missing DB indexes, N+1 queries, or unoptimized logic."
+                ),
                 "test_type": "performance",
+                "method": method,
+                "path": path,
+                "expected_status": 200,
+                "assertions": [
+                    {"type": "status_code", "operator": "less_than", "expected": "500"},
+                    {"type": "response_time", "operator": "less_than", "expected": "1000"},
+                ],
                 "performance_metrics": {
                     "max_response_time_ms": 1000,
                     "throughput_rps": 100,
-                    "concurrent_users": 10
+                    "concurrent_users": 10,
                 },
-                "tags": tc.get("tags", []) + ["performance"]
-            }
-            performance_tests.append(perf_test)
+                "request": target.get("request", {}),
+                "tags": ["performance", "response-time", "sla"],
+                "priority": "high",
+            })
         
         return performance_tests
     
     def _generate_integration_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate integration test cases"""
+        """Generate integration test cases - test workflows that chain multiple endpoints"""
         integration_tests = []
         
         # Create test flows that chain multiple endpoints
         endpoints = test_suite.get("endpoints", [])
         if len(endpoints) >= 2:
+            ep1_method = endpoints[0].get("method", "GET").upper()
+            ep1_path = endpoints[0].get("path", "")
+            ep2_method = endpoints[1].get("method", "GET").upper()
+            ep2_path = endpoints[1].get("path", "")
+            
             integration_test = {
                 "test_case_id": str(uuid4()),
-                "title": "Multi-Endpoint Integration Flow",
-                "description": "Test flow across multiple endpoints",
+                "title": f"Integration: {ep1_method} {ep1_path} -> {ep2_method} {ep2_path}",
+                "description": (
+                    f"PURPOSE: Test a workflow that chains two API calls together.\n"
+                    f"FLOW:\n"
+                    f"  Step 1: {ep1_method} {ep1_path} - extract 'id' from response\n"
+                    f"  Step 2: {ep2_method} {ep2_path} - use extracted 'id' in request\n"
+                    f"WHY: Individual endpoints may work, but chained workflows can fail due to "
+                    f"data format mismatches, missing fields, or timing issues between calls."
+                ),
                 "test_type": "integration",
+                "assertions": [
+                    {"type": "status_code", "operator": "less_than", "expected": "500"},
+                ],
                 "test_flow": [
                     {
                         "step": 1,
-                        "endpoint": endpoints[0].get("path", ""),
-                        "method": endpoints[0].get("method", "GET"),
+                        "endpoint": ep1_path,
+                        "method": ep1_method,
                         "extract": {"variable": "id", "path": "$.id"}
                     },
                     {
@@ -516,7 +599,7 @@ class EnhancedAPITestEngine:
         return contract_tests
     
     def _generate_negative_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate negative test cases for each endpoint"""
+        """Generate negative test cases - verify the API handles bad input gracefully"""
         negative_tests = []
         test_cases = test_suite.get("test_cases", [])
         endpoints = test_suite.get("endpoints", [])
@@ -536,14 +619,25 @@ class EnhancedAPITestEngine:
             wrong = wrong_methods.get(method, "OPTIONS")
             negative_tests.append({
                 "test_case_id": str(uuid4()),
-                "title": f"{title} - Wrong Method ({wrong})",
-                "description": f"Send {wrong} instead of {method} to {path}",
+                "title": f"{method} {path} - Wrong Method ({wrong})",
+                "description": (
+                    f"PURPOSE: Verify the API rejects requests with incorrect HTTP method.\n"
+                    f"STEPS:\n"
+                    f"  1. Send {wrong} request to {path} (should be {method})\n"
+                    f"  2. Expect 405 Method Not Allowed\n"
+                    f"WHY: APIs must reject wrong methods to prevent accidental data "
+                    f"modification (e.g., DELETE on a GET-only resource)."
+                ),
                 "test_type": "negative",
                 "method": wrong,
                 "path": path,
                 "expected_status": 405,
+                "assertions": [
+                    {"type": "status_code", "operator": "greater_than", "expected": "399"},
+                ],
                 "tags": ["negative", "wrong-method"],
                 "request": {},
+                "priority": "medium",
             })
             
             # For endpoints with path params, test with invalid ID
@@ -551,47 +645,80 @@ class EnhancedAPITestEngine:
                 invalid_path = re.sub(r'\{[^}]+\}', '99999999', path)
                 negative_tests.append({
                     "test_case_id": str(uuid4()),
-                    "title": f"{title} - Invalid Resource ID",
-                    "description": f"Request {method} {path} with non-existent resource ID",
+                    "title": f"{method} {path} - Non-Existent Resource (404)",
+                    "description": (
+                        f"PURPOSE: Verify the API returns 404 for resources that don't exist.\n"
+                        f"STEPS:\n"
+                        f"  1. Send {method} to {invalid_path} (ID=99999999)\n"
+                        f"  2. Expect 404 Not Found\n"
+                        f"WHY: Proper 404 handling prevents information leakage and helps "
+                        f"clients distinguish 'not found' from server errors."
+                    ),
                     "test_type": "negative",
                     "method": method,
                     "path": invalid_path,
                     "expected_status": 404,
+                    "assertions": [
+                        {"type": "status_code", "operator": "equals", "expected": "404"},
+                    ],
                     "tags": ["negative", "invalid-id"],
                     "request": ep.get("request", {}),
+                    "priority": "high",
                 })
             
             # For POST/PUT/PATCH, test with empty body
             if method in ["POST", "PUT", "PATCH"]:
                 negative_tests.append({
                     "test_case_id": str(uuid4()),
-                    "title": f"{title} - Empty Request Body",
-                    "description": f"Send {method} {path} with empty body",
+                    "title": f"{method} {path} - Empty Request Body",
+                    "description": (
+                        f"PURPOSE: Verify the API validates that required fields are present.\n"
+                        f"STEPS:\n"
+                        f"  1. Send {method} to {path} with empty JSON body {{}}\n"
+                        f"  2. Expect 400 Bad Request or validation error\n"
+                        f"WHY: Missing required fields should be caught by validation, "
+                        f"not cause a 500 server error or corrupt data."
+                    ),
                     "test_type": "negative",
                     "method": method,
                     "path": path,
                     "expected_status": 400,
+                    "assertions": [
+                        {"type": "status_code", "operator": "greater_than", "expected": "399"},
+                    ],
                     "request": {"headers": {"Content-Type": "application/json"}, "body": {}},
-                    "tags": ["negative", "empty-body"],
+                    "tags": ["negative", "empty-body", "validation"],
+                    "priority": "high",
                 })
                 
                 # Test with malformed JSON
                 negative_tests.append({
                     "test_case_id": str(uuid4()),
-                    "title": f"{title} - Malformed JSON Body",
-                    "description": f"Send {method} {path} with invalid JSON",
+                    "title": f"{method} {path} - Malformed JSON Body",
+                    "description": (
+                        f"PURPOSE: Verify the API handles malformed JSON gracefully.\n"
+                        f"STEPS:\n"
+                        f"  1. Send {method} to {path} with invalid JSON string\n"
+                        f"  2. Expect 400 Bad Request\n"
+                        f"WHY: Malformed input from clients should return a clear error, "
+                        f"not crash the server (500) or be silently ignored."
+                    ),
                     "test_type": "negative",
                     "method": method,
                     "path": path,
                     "expected_status": 400,
+                    "assertions": [
+                        {"type": "status_code", "operator": "greater_than", "expected": "399"},
+                    ],
                     "request": {"headers": {"Content-Type": "application/json"}, "body": "{{invalid json}}"},
-                    "tags": ["negative", "malformed-json"],
+                    "tags": ["negative", "malformed-json", "validation"],
+                    "priority": "medium",
                 })
         
         return negative_tests
     
     def _generate_boundary_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate boundary value test cases"""
+        """Generate boundary value test cases - test at the edges of valid input"""
         boundary_tests = []
         test_cases = test_suite.get("test_cases", [])
         endpoints = test_suite.get("endpoints", [])
@@ -614,84 +741,119 @@ class EnhancedAPITestEngine:
                     param_type = param.get("schema", {}).get("type", "string")
                     
                     if param_type in ["integer", "number"]:
-                        # Zero value
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name}=0 (boundary)",
-                            "description": f"Test {path} with {param_name}=0",
+                            "title": f"{method} {path} - {param_name}=0 (Zero Boundary)",
+                            "description": (
+                                f"PURPOSE: Test edge case where '{param_name}' is zero.\n"
+                                f"STEPS: Send {method} to {path} with {param_name}=0\n"
+                                f"EXPECTED: API handles zero gracefully (200 or 400)\n"
+                                f"WHY: Zero is a common boundary that breaks pagination, offsets, and counts."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [{"type": "status_code", "operator": "less_than", "expected": "500"}],
                             "request": {"query": {param_name: "0"}},
                             "tags": ["boundary", "zero-value"],
+                            "priority": "medium",
                         })
-                        # Very large value
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name}=999999 (boundary)",
-                            "description": f"Test {path} with extremely large {param_name}",
+                            "title": f"{method} {path} - {param_name}=999999 (Max Boundary)",
+                            "description": (
+                                f"PURPOSE: Test with an extremely large value for '{param_name}'.\n"
+                                f"STEPS: Send {method} to {path} with {param_name}=999999\n"
+                                f"EXPECTED: API returns data or empty result, NOT a 500 error\n"
+                                f"WHY: Large values can cause timeouts, memory issues, or DB query failures."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [
+                                {"type": "status_code", "operator": "less_than", "expected": "500"},
+                                {"type": "response_time", "operator": "less_than", "expected": "10000"},
+                            ],
                             "request": {"query": {param_name: "999999"}},
                             "tags": ["boundary", "large-value"],
+                            "priority": "medium",
                         })
-                        # Negative value
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name}=-1 (boundary)",
-                            "description": f"Test {path} with negative {param_name}",
+                            "title": f"{method} {path} - {param_name}=-1 (Negative Boundary)",
+                            "description": (
+                                f"PURPOSE: Test with a negative value where positive is expected.\n"
+                                f"STEPS: Send {method} to {path} with {param_name}=-1\n"
+                                f"EXPECTED: API rejects with 400 or handles gracefully\n"
+                                f"WHY: Negative values for IDs/limits can expose logic errors."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 400,
+                            "assertions": [{"type": "status_code", "operator": "less_than", "expected": "500"}],
                             "request": {"query": {param_name: "-1"}},
                             "tags": ["boundary", "negative-value"],
+                            "priority": "low",
                         })
                     elif param_type == "string":
-                        # Empty string
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name}='' (empty string)",
-                            "description": f"Test {path} with empty {param_name}",
+                            "title": f"{method} {path} - {param_name}='' (Empty String)",
+                            "description": (
+                                f"PURPOSE: Test with empty string for '{param_name}'.\n"
+                                f"EXPECTED: API handles empty input without crashing\n"
+                                f"WHY: Empty strings can cause null reference errors in backend processing."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [{"type": "status_code", "operator": "less_than", "expected": "500"}],
                             "request": {"query": {param_name: ""}},
                             "tags": ["boundary", "empty-string"],
+                            "priority": "medium",
                         })
-                        # Very long string
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name} very long (boundary)",
-                            "description": f"Test {path} with 5000-char {param_name}",
+                            "title": f"{method} {path} - {param_name} 5000 chars (Overflow)",
+                            "description": (
+                                f"PURPOSE: Test with extremely long string input.\n"
+                                f"EXPECTED: API returns error or truncates, not a 500\n"
+                                f"WHY: Long inputs can cause buffer overflows, DB column truncation, "
+                                f"or memory exhaustion in unprotected APIs."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [
+                                {"type": "status_code", "operator": "less_than", "expected": "500"},
+                                {"type": "response_time", "operator": "less_than", "expected": "10000"},
+                            ],
                             "request": {"query": {param_name: "a" * 5000}},
                             "tags": ["boundary", "long-string"],
+                            "priority": "low",
                         })
-                        # Special characters
                         boundary_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - {param_name} special chars (boundary)",
-                            "description": f"Test {path} with special characters in {param_name}",
+                            "title": f"{method} {path} - {param_name} Special Characters",
+                            "description": (
+                                f"PURPOSE: Test with special characters in '{param_name}'.\n"
+                                f"INPUT: !@#$%^&*(){{}}[]|\\<>?/~`\n"
+                                f"EXPECTED: API encodes/rejects special chars safely\n"
+                                f"WHY: Special chars can break URL parsing, SQL queries, or cause XSS."
+                            ),
                             "test_type": "boundary",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [{"type": "status_code", "operator": "less_than", "expected": "500"}],
                             "request": {"query": {param_name: "!@#$%^&*(){}[]|\\<>?/~`"}},
                             "tags": ["boundary", "special-chars"],
+                            "priority": "low",
                         })
         
         return boundary_tests
     
     def _generate_data_driven_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate data-driven test cases derived from spec schemas"""
+        """Generate data-driven test cases - test with different data variations from the API schema"""
         data_driven_tests = []
         endpoints = test_suite.get("endpoints", [])
         
@@ -730,15 +892,25 @@ class EnhancedAPITestEngine:
                         else:
                             valid_body[prop_name] = "value"
                     
+                    field_list = ", ".join(list(properties.keys())[:5])
                     data_driven_tests.append({
                         "test_case_id": str(uuid4()),
-                        "title": f"{title} - Valid Data",
+                        "title": f"{method} {path} - All Valid Fields",
+                        "description": (
+                            f"PURPOSE: Submit with all fields populated with valid data.\n"
+                            f"FIELDS: {field_list}\n"
+                            f"EXPECTED: Resource created/updated successfully (200/201)\n"
+                            f"WHY: Baseline test - if this fails, the entire endpoint is broken."
+                        ),
                         "test_type": "data_driven",
-                        "method": method,
-                        "path": path,
+                        "method": method, "path": path,
                         "expected_status": 200,
+                        "assertions": [
+                            {"type": "status_code", "operator": "less_than", "expected": "300"},
+                        ],
                         "request": {"body": valid_body, "headers": {"Content-Type": "application/json"}},
-                        "tags": ["data_driven", "valid"],
+                        "tags": ["data_driven", "valid", "smoke"],
+                        "priority": "high",
                     })
                     
                     # Variation 2: Min-length / empty strings
@@ -758,13 +930,21 @@ class EnhancedAPITestEngine:
                     
                     data_driven_tests.append({
                         "test_case_id": str(uuid4()),
-                        "title": f"{title} - Minimum Values",
+                        "title": f"{method} {path} - Minimum/Empty Values",
+                        "description": (
+                            f"PURPOSE: Submit with minimum-length values (empty strings, zeros).\n"
+                            f"EXPECTED: API accepts or returns validation error (not 500)\n"
+                            f"WHY: Tests minimum constraints - empty strings may bypass validation."
+                        ),
                         "test_type": "data_driven",
-                        "method": method,
-                        "path": path,
+                        "method": method, "path": path,
                         "expected_status": 200,
+                        "assertions": [
+                            {"type": "status_code", "operator": "less_than", "expected": "500"},
+                        ],
                         "request": {"body": min_body, "headers": {"Content-Type": "application/json"}},
                         "tags": ["data_driven", "minimum"],
+                        "priority": "medium",
                     })
                     
                     # Variation 3: Max-length / large values
@@ -785,13 +965,22 @@ class EnhancedAPITestEngine:
                     
                     data_driven_tests.append({
                         "test_case_id": str(uuid4()),
-                        "title": f"{title} - Maximum Values",
+                        "title": f"{method} {path} - Maximum/Large Values",
+                        "description": (
+                            f"PURPOSE: Submit with maximum-length values to test upper limits.\n"
+                            f"EXPECTED: API accepts if within limits, or returns 400 (not 500)\n"
+                            f"WHY: Large values test DB column limits, memory, and processing capacity."
+                        ),
                         "test_type": "data_driven",
-                        "method": method,
-                        "path": path,
+                        "method": method, "path": path,
                         "expected_status": 200,
+                        "assertions": [
+                            {"type": "status_code", "operator": "less_than", "expected": "500"},
+                            {"type": "response_time", "operator": "less_than", "expected": "10000"},
+                        ],
                         "request": {"body": max_body, "headers": {"Content-Type": "application/json"}},
                         "tags": ["data_driven", "maximum"],
+                        "priority": "medium",
                     })
                     
                     # Variation 4: Only required fields (skip optional)
@@ -799,13 +988,22 @@ class EnhancedAPITestEngine:
                         required_only = {k: v for k, v in valid_body.items() if k in required}
                         data_driven_tests.append({
                             "test_case_id": str(uuid4()),
-                            "title": f"{title} - Required Fields Only",
+                            "title": f"{method} {path} - Required Fields Only",
+                            "description": (
+                                f"PURPOSE: Submit with only required fields, omitting optional ones.\n"
+                                f"REQUIRED FIELDS: {', '.join(required)}\n"
+                                f"EXPECTED: API accepts the request (200/201)\n"
+                                f"WHY: Ensures optional fields are truly optional and don't cause errors."
+                            ),
                             "test_type": "data_driven",
-                            "method": method,
-                            "path": path,
+                            "method": method, "path": path,
                             "expected_status": 200,
+                            "assertions": [
+                                {"type": "status_code", "operator": "less_than", "expected": "300"},
+                            ],
                             "request": {"body": required_only, "headers": {"Content-Type": "application/json"}},
                             "tags": ["data_driven", "required-only"],
+                            "priority": "high",
                         })
             
             # For GET with query params, generate variations
@@ -843,11 +1041,16 @@ class EnhancedAPITestEngine:
                 "categories": list(set(t.get("test_type") for t in tests_for_endpoint))
             }
         
+        covered_endpoints = len([e for e in endpoint_coverage.values() if e["total_tests"] > 0])
+        coverage_pct = round((covered_endpoints / max(1, len(endpoints))) * 100, 1)
+        
         return {
             "endpoint_coverage": endpoint_coverage,
             "total_endpoints": len(endpoints),
+            "covered_endpoints": covered_endpoints,
             "total_tests": len(all_tests),
-            "coverage_percentage": min(100, (len(endpoints) / max(1, len(endpoints))) * 100)
+            "coverage_percentage": coverage_pct,
+            "categories_used": list(set(t.get("test_type") for t in all_tests if t.get("test_type")))
         }
 
 
