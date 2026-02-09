@@ -256,13 +256,54 @@ class EnhancedAPITestEngine:
         return {"websocket_tests": tests}
     
     def _generate_functional_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate functional test cases"""
+        """Generate functional test cases from all endpoints"""
         functional_tests = []
         test_cases = test_suite.get("test_cases", [])
+        endpoints = test_suite.get("endpoints", [])
         
+        # Include all happy-path tests from base suite
         for tc in test_cases:
             if "happy_path" in tc.get("tags", []):
                 functional_tests.append(tc)
+        
+        # Generate additional functional tests per endpoint
+        for ep in endpoints[:15]:
+            method = ep.get("method", "GET").upper()
+            path = ep.get("path", "/")
+            title = ep.get("title", ep.get("summary", path))
+            
+            # Response content-type validation
+            functional_tests.append({
+                "test_case_id": str(uuid4()),
+                "title": f"{title} - Verify JSON Content-Type",
+                "description": f"Verify {method} {path} returns application/json content type",
+                "test_type": "functional",
+                "method": method,
+                "path": path,
+                "expected_status": 200,
+                "assertions": [
+                    {"type": "header", "path": "content-type", "operator": "contains", "expected": "json"}
+                ],
+                "tags": ["functional", "content-type"],
+                "request": ep.get("request", {}),
+            })
+            
+            # Response structure validation (for GET endpoints)
+            if method == "GET":
+                functional_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"{title} - Verify Response Not Empty",
+                    "description": f"Verify {method} {path} returns non-empty response body",
+                    "test_type": "functional",
+                    "method": method,
+                    "path": path,
+                    "expected_status": 200,
+                    "assertions": [
+                        {"type": "not_contains", "expected": ""},
+                    ],
+                    "tags": ["functional", "response-body"],
+                    "request": ep.get("request", {}),
+                })
         
         return functional_tests
     
@@ -426,72 +467,362 @@ class EnhancedAPITestEngine:
         return integration_tests
     
     def _generate_contract_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate contract test cases (Pact-style)"""
+        """Generate contract test cases with real schema assertions"""
         contract_tests = []
+        endpoints = test_suite.get("endpoints", [])
         
-        test_cases = test_suite.get("test_cases", [])
-        for tc in test_cases[:10]:  # Limit to 10
-            contract_test = {
-                **tc,
+        for ep in endpoints[:10]:
+            method = ep.get("method", "GET").upper()
+            path = ep.get("path", "/")
+            title = ep.get("title", ep.get("summary", path))
+            responses = ep.get("responses", {})
+            
+            # Build schema assertion from spec response definition
+            response_schema = None
+            for status_code, resp_def in responses.items():
+                if str(status_code).startswith("2"):
+                    content = resp_def.get("content", {})
+                    json_content = content.get("application/json", {})
+                    response_schema = json_content.get("schema")
+                    break
+            
+            assertions = [
+                {"type": "status_code", "operator": "equals", "expected": "200"},
+                {"type": "header", "path": "content-type", "operator": "contains", "expected": "json"},
+            ]
+            
+            # Add real JSON schema assertion if spec provides one
+            if response_schema:
+                assertions.append({
+                    "type": "schema",
+                    "schema": json.dumps(response_schema),
+                    "operator": "equals",
+                    "expected": "valid"
+                })
+            
+            contract_tests.append({
                 "test_case_id": str(uuid4()),
-                "title": f"{tc.get('title', '')} - Contract",
+                "title": f"{title} - Contract Validation",
+                "description": f"Validate {method} {path} response conforms to API contract",
                 "test_type": "contract",
-                "contract_assertions": [
-                    "response schema matches specification",
-                    "required fields present",
-                    "data types correct"
-                ],
-                "tags": tc.get("tags", []) + ["contract"]
-            }
-            contract_tests.append(contract_test)
+                "method": method,
+                "path": path,
+                "expected_status": 200,
+                "assertions": assertions,
+                "tags": ["contract", "schema"],
+                "request": ep.get("request", {}),
+            })
         
         return contract_tests
     
     def _generate_negative_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate negative test cases"""
+        """Generate negative test cases for each endpoint"""
         negative_tests = []
-        
         test_cases = test_suite.get("test_cases", [])
+        endpoints = test_suite.get("endpoints", [])
+        
+        # Include base-suite negative tests
         for tc in test_cases:
             if "negative" in tc.get("tags", []):
                 negative_tests.append(tc)
+        
+        for ep in endpoints[:10]:
+            method = ep.get("method", "GET").upper()
+            path = ep.get("path", "/")
+            title = ep.get("title", ep.get("summary", path))
+            
+            # Test with wrong HTTP method
+            wrong_methods = {"GET": "DELETE", "POST": "GET", "PUT": "GET", "DELETE": "POST", "PATCH": "GET"}
+            wrong = wrong_methods.get(method, "OPTIONS")
+            negative_tests.append({
+                "test_case_id": str(uuid4()),
+                "title": f"{title} - Wrong Method ({wrong})",
+                "description": f"Send {wrong} instead of {method} to {path}",
+                "test_type": "negative",
+                "method": wrong,
+                "path": path,
+                "expected_status": 405,
+                "tags": ["negative", "wrong-method"],
+                "request": {},
+            })
+            
+            # For endpoints with path params, test with invalid ID
+            if "{" in path:
+                invalid_path = re.sub(r'\{[^}]+\}', '99999999', path)
+                negative_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"{title} - Invalid Resource ID",
+                    "description": f"Request {method} {path} with non-existent resource ID",
+                    "test_type": "negative",
+                    "method": method,
+                    "path": invalid_path,
+                    "expected_status": 404,
+                    "tags": ["negative", "invalid-id"],
+                    "request": ep.get("request", {}),
+                })
+            
+            # For POST/PUT/PATCH, test with empty body
+            if method in ["POST", "PUT", "PATCH"]:
+                negative_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"{title} - Empty Request Body",
+                    "description": f"Send {method} {path} with empty body",
+                    "test_type": "negative",
+                    "method": method,
+                    "path": path,
+                    "expected_status": 400,
+                    "request": {"headers": {"Content-Type": "application/json"}, "body": {}},
+                    "tags": ["negative", "empty-body"],
+                })
+                
+                # Test with malformed JSON
+                negative_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"{title} - Malformed JSON Body",
+                    "description": f"Send {method} {path} with invalid JSON",
+                    "test_type": "negative",
+                    "method": method,
+                    "path": path,
+                    "expected_status": 400,
+                    "request": {"headers": {"Content-Type": "application/json"}, "body": "{{invalid json}}"},
+                    "tags": ["negative", "malformed-json"],
+                })
         
         return negative_tests
     
     def _generate_boundary_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate boundary value test cases"""
         boundary_tests = []
-        
         test_cases = test_suite.get("test_cases", [])
+        endpoints = test_suite.get("endpoints", [])
+        
+        # Include base-suite boundary tests
         for tc in test_cases:
             if "boundary" in tc.get("tags", []):
                 boundary_tests.append(tc)
         
+        for ep in endpoints[:10]:
+            method = ep.get("method", "GET").upper()
+            path = ep.get("path", "/")
+            title = ep.get("title", ep.get("summary", path))
+            params = ep.get("parameters", [])
+            
+            # Test with extreme query parameter values
+            for param in params:
+                if param.get("in") == "query":
+                    param_name = param.get("name", "")
+                    param_type = param.get("schema", {}).get("type", "string")
+                    
+                    if param_type in ["integer", "number"]:
+                        # Zero value
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name}=0 (boundary)",
+                            "description": f"Test {path} with {param_name}=0",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"query": {param_name: "0"}},
+                            "tags": ["boundary", "zero-value"],
+                        })
+                        # Very large value
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name}=999999 (boundary)",
+                            "description": f"Test {path} with extremely large {param_name}",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"query": {param_name: "999999"}},
+                            "tags": ["boundary", "large-value"],
+                        })
+                        # Negative value
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name}=-1 (boundary)",
+                            "description": f"Test {path} with negative {param_name}",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 400,
+                            "request": {"query": {param_name: "-1"}},
+                            "tags": ["boundary", "negative-value"],
+                        })
+                    elif param_type == "string":
+                        # Empty string
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name}='' (empty string)",
+                            "description": f"Test {path} with empty {param_name}",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"query": {param_name: ""}},
+                            "tags": ["boundary", "empty-string"],
+                        })
+                        # Very long string
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name} very long (boundary)",
+                            "description": f"Test {path} with 5000-char {param_name}",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"query": {param_name: "a" * 5000}},
+                            "tags": ["boundary", "long-string"],
+                        })
+                        # Special characters
+                        boundary_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - {param_name} special chars (boundary)",
+                            "description": f"Test {path} with special characters in {param_name}",
+                            "test_type": "boundary",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"query": {param_name: "!@#$%^&*(){}[]|\\<>?/~`"}},
+                            "tags": ["boundary", "special-chars"],
+                        })
+        
         return boundary_tests
     
     def _generate_data_driven_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate data-driven test cases"""
+        """Generate data-driven test cases derived from spec schemas"""
         data_driven_tests = []
+        endpoints = test_suite.get("endpoints", [])
         
-        # Create data-driven variations
-        test_cases = test_suite.get("test_cases", [])[:5]
-        test_data = [
-            {"scenario": "valid_data", "data": {"name": "John", "age": 30}},
-            {"scenario": "edge_case_1", "data": {"name": "", "age": 0}},
-            {"scenario": "edge_case_2", "data": {"name": "A" * 1000, "age": 999}}
-        ]
-        
-        for tc in test_cases:
-            for test_data_item in test_data:
-                data_test = {
-                    **tc,
-                    "test_case_id": str(uuid4()),
-                    "title": f"{tc.get('title', '')} - {test_data_item['scenario']}",
-                    "test_type": "data_driven",
-                    "test_data": test_data_item["data"],
-                    "tags": tc.get("tags", []) + ["data_driven", test_data_item["scenario"]]
-                }
-                data_driven_tests.append(data_test)
+        for ep in endpoints[:8]:
+            method = ep.get("method", "GET").upper()
+            path = ep.get("path", "/")
+            title = ep.get("title", ep.get("summary", path))
+            
+            # For POST/PUT/PATCH with request body, generate data variations from schema
+            if method in ["POST", "PUT", "PATCH"]:
+                request_body = ep.get("request_body", ep.get("request", {}).get("body", {}))
+                schema = {}
+                if isinstance(request_body, dict):
+                    content = request_body.get("content", {})
+                    json_content = content.get("application/json", {})
+                    schema = json_content.get("schema", request_body)
+                
+                properties = schema.get("properties", {})
+                required = schema.get("required", [])
+                
+                if properties:
+                    # Variation 1: All valid data
+                    valid_body = {}
+                    for prop_name, prop_schema in properties.items():
+                        ptype = prop_schema.get("type", "string")
+                        if ptype == "string":
+                            valid_body[prop_name] = f"valid_{prop_name}"
+                        elif ptype == "integer":
+                            valid_body[prop_name] = 42
+                        elif ptype == "number":
+                            valid_body[prop_name] = 42.5
+                        elif ptype == "boolean":
+                            valid_body[prop_name] = True
+                        elif ptype == "array":
+                            valid_body[prop_name] = ["item1"]
+                        else:
+                            valid_body[prop_name] = "value"
+                    
+                    data_driven_tests.append({
+                        "test_case_id": str(uuid4()),
+                        "title": f"{title} - Valid Data",
+                        "test_type": "data_driven",
+                        "method": method,
+                        "path": path,
+                        "expected_status": 200,
+                        "request": {"body": valid_body, "headers": {"Content-Type": "application/json"}},
+                        "tags": ["data_driven", "valid"],
+                    })
+                    
+                    # Variation 2: Min-length / empty strings
+                    min_body = {}
+                    for prop_name, prop_schema in properties.items():
+                        ptype = prop_schema.get("type", "string")
+                        if ptype == "string":
+                            min_body[prop_name] = ""
+                        elif ptype in ["integer", "number"]:
+                            min_body[prop_name] = 0
+                        elif ptype == "boolean":
+                            min_body[prop_name] = False
+                        elif ptype == "array":
+                            min_body[prop_name] = []
+                        else:
+                            min_body[prop_name] = ""
+                    
+                    data_driven_tests.append({
+                        "test_case_id": str(uuid4()),
+                        "title": f"{title} - Minimum Values",
+                        "test_type": "data_driven",
+                        "method": method,
+                        "path": path,
+                        "expected_status": 200,
+                        "request": {"body": min_body, "headers": {"Content-Type": "application/json"}},
+                        "tags": ["data_driven", "minimum"],
+                    })
+                    
+                    # Variation 3: Max-length / large values
+                    max_body = {}
+                    for prop_name, prop_schema in properties.items():
+                        ptype = prop_schema.get("type", "string")
+                        max_len = prop_schema.get("maxLength", 255)
+                        if ptype == "string":
+                            max_body[prop_name] = "x" * min(max_len, 500)
+                        elif ptype in ["integer", "number"]:
+                            max_body[prop_name] = prop_schema.get("maximum", 999999)
+                        elif ptype == "boolean":
+                            max_body[prop_name] = True
+                        elif ptype == "array":
+                            max_body[prop_name] = ["item"] * 50
+                        else:
+                            max_body[prop_name] = "x" * 255
+                    
+                    data_driven_tests.append({
+                        "test_case_id": str(uuid4()),
+                        "title": f"{title} - Maximum Values",
+                        "test_type": "data_driven",
+                        "method": method,
+                        "path": path,
+                        "expected_status": 200,
+                        "request": {"body": max_body, "headers": {"Content-Type": "application/json"}},
+                        "tags": ["data_driven", "maximum"],
+                    })
+                    
+                    # Variation 4: Only required fields (skip optional)
+                    if required:
+                        required_only = {k: v for k, v in valid_body.items() if k in required}
+                        data_driven_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{title} - Required Fields Only",
+                            "test_type": "data_driven",
+                            "method": method,
+                            "path": path,
+                            "expected_status": 200,
+                            "request": {"body": required_only, "headers": {"Content-Type": "application/json"}},
+                            "tags": ["data_driven", "required-only"],
+                        })
+            
+            # For GET with query params, generate variations
+            elif method == "GET":
+                params = ep.get("parameters", [])
+                query_params = [p for p in params if p.get("in") == "query"]
+                if query_params:
+                    data_driven_tests.append({
+                        "test_case_id": str(uuid4()),
+                        "title": f"{title} - No Query Params (defaults)",
+                        "test_type": "data_driven",
+                        "method": method,
+                        "path": path,
+                        "expected_status": 200,
+                        "request": {"query": {}},
+                        "tags": ["data_driven", "defaults"],
+                    })
         
         return data_driven_tests
     

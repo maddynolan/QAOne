@@ -3,7 +3,8 @@
  * Used by RequestBuilder, RequestChainBuilder, AssertionsPanel, and EnhancedAPITesting.
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL as CENTRAL_API_URL } from "@/lib/api-config";
+export const API_BASE_URL = CENTRAL_API_URL;
 
 // --- HTTP Methods ---
 export const HTTP_METHODS = [

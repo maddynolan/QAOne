@@ -695,3 +695,37 @@ async def get_supported_formats():
         "export_formats": ["postman", "openapi", "har"],
     }
 
+
+@router.get("/fetch-url")
+async def fetch_url_proxy(url: str):
+    """
+    Proxy endpoint to fetch external URLs server-side, avoiding CORS issues.
+    Used by the Import tab to fetch OpenAPI/Swagger/WSDL/Postman specs from URLs.
+    """
+    if not url or not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+    
+    import httpx
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, verify=False) as client:
+            response = await client.get(url, headers={
+                "Accept": "application/json, application/xml, text/xml, text/yaml, text/plain, */*",
+                "User-Agent": "Flowstral-API-Testing/1.0",
+            })
+            
+            content_type = response.headers.get("content-type", "")
+            text = response.text
+            
+            return {
+                "status": "success",
+                "content": text,
+                "content_type": content_type,
+                "status_code": response.status_code,
+                "url": str(response.url),
+            }
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail=f"Timeout fetching URL: {url}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch URL: {str(e)}")
+

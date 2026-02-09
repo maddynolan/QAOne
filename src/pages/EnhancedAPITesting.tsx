@@ -26,161 +26,161 @@ import RequestBuilder from "@/components/api-testing/RequestBuilder";
 import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const ECOMMERCE_TEST_URL = "http://localhost:8002";
+import { API_BASE_URL } from "@/lib/api-config";
 
-// Protocol Templates for quick-start
+// Protocol Templates for quick-start (using real public APIs)
 const PROTOCOL_TEMPLATES = {
   rest_openapi: {
-    name: "REST API (OpenAPI)",
+    name: "REST API (JSONPlaceholder)",
     icon: "🌐",
     protocol: "REST",
     format: "openapi",
-    description: "E-commerce REST API specification",
-    baseUrl: ECOMMERCE_TEST_URL,
+    description: "JSONPlaceholder - Free REST API for testing (public, no auth required)",
+    baseUrl: "https://jsonplaceholder.typicode.com",
     spec: {
       openapi: "3.1.0",
-      info: { title: "Test E-Commerce API", version: "1.0.0" },
-      servers: [{ url: ECOMMERCE_TEST_URL }],
+      info: { title: "JSONPlaceholder API", version: "1.0.0", description: "Free fake REST API for testing and prototyping" },
+      servers: [{ url: "https://jsonplaceholder.typicode.com" }],
       paths: {
-        "/health": {
-          get: { summary: "Health check", operationId: "healthCheck", responses: { "200": { description: "OK" } } }
-        },
-        "/api/products": {
-          get: { 
-            summary: "Get products", 
-            operationId: "getProducts", 
-            parameters: [
-              { name: "skip", in: "query", schema: { type: "integer", default: 0 } },
-              { name: "limit", in: "query", schema: { type: "integer", default: 20 } }
-            ],
-            responses: { "200": { description: "List of products" } } 
-          }
-        },
-        "/api/products/{id}": {
-          get: { summary: "Get product by ID", operationId: "getProduct", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Product" } } }
-        },
-        "/api/categories": {
-          get: { summary: "Get categories", operationId: "getCategories", responses: { "200": { description: "List of categories" } } }
-        },
-        "/api/auth/register": {
+        "/posts": {
+          get: { summary: "List all posts", operationId: "listPosts", responses: { "200": { description: "Array of posts", content: { "application/json": { schema: { type: "array", items: { type: "object", properties: { id: { type: "integer" }, userId: { type: "integer" }, title: { type: "string" }, body: { type: "string" } } } } } } } } },
           post: { 
-            summary: "Register user", 
-            operationId: "register",
-            requestBody: {
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    properties: {
-                      email: { type: "string" },
-                      username: { type: "string" },
-                      password: { type: "string" },
-                      full_name: { type: "string" }
-                    },
-                    required: ["email", "username", "password"]
-                  }
-                }
-              }
-            },
-            responses: { "200": { description: "User registered" } }
+            summary: "Create a post", operationId: "createPost",
+            requestBody: { content: { "application/json": { schema: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, userId: { type: "integer" } }, required: ["title", "body", "userId"] } } } },
+            responses: { "201": { description: "Post created" } }
           }
         },
-        "/api/auth/login": {
-          post: { summary: "Login", operationId: "login", responses: { "200": { description: "Token" } } }
+        "/posts/{id}": {
+          get: { summary: "Get post by ID", operationId: "getPost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Post object" } } },
+          put: { summary: "Update post", operationId: "updatePost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], requestBody: { content: { "application/json": { schema: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, userId: { type: "integer" } } } } } }, responses: { "200": { description: "Post updated" } } },
+          delete: { summary: "Delete post", operationId: "deletePost", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Post deleted" } } }
         },
-        "/api/search": {
-          get: { summary: "Search", operationId: "search", parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }], responses: { "200": { description: "Results" } } }
+        "/posts/{id}/comments": {
+          get: { summary: "Get comments for a post", operationId: "getPostComments", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Array of comments" } } }
+        },
+        "/users": {
+          get: { summary: "List all users", operationId: "listUsers", responses: { "200": { description: "Array of users" } } }
+        },
+        "/users/{id}": {
+          get: { summary: "Get user by ID", operationId: "getUser", parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "User object" } } }
+        },
+        "/comments": {
+          get: { summary: "List comments (with filter)", operationId: "listComments", parameters: [{ name: "postId", in: "query", schema: { type: "integer" } }], responses: { "200": { description: "Array of comments" } } }
         }
       }
     }
   },
   graphql: {
-    name: "GraphQL API",
+    name: "GraphQL API (Countries)",
     icon: "⬢",
     protocol: "GraphQL",
     format: "graphql",
-    description: "GraphQL schema for products, users, orders",
-    baseUrl: `${ECOMMERCE_TEST_URL}/graphql`,
+    description: "Countries GraphQL API - Query countries, continents, languages (public, no auth)",
+    baseUrl: "https://countries.trevorblades.com/graphql",
     spec: `
 type Query {
-  products(skip: Int = 0, limit: Int = 20): [Product!]!
-  product(id: ID!): Product
-  categories: [Category!]!
-  me: User
+  countries(filter: CountryFilterInput): [Country!]!
+  country(code: ID!): Country
+  continents(filter: ContinentFilterInput): [Continent!]!
+  continent(code: ID!): Continent
+  languages(filter: LanguageFilterInput): [Language!]!
+  language(code: ID!): Language
 }
 
-type Mutation {
-  login(username: String!, password: String!): AuthPayload!
-  addToCart(productId: ID!, quantity: Int = 1): CartItem!
-}
-
-type Product {
-  id: ID!
+type Country {
+  code: ID!
   name: String!
-  description: String!
-  price: Float!
-  stock: Int!
-  categoryId: Int!
+  native: String!
+  phone: String!
+  continent: Continent!
+  capital: String
+  currency: String
+  languages: [Language!]!
+  emoji: String!
+  emojiU: String!
 }
 
-type Category {
-  id: ID!
+type Continent {
+  code: ID!
   name: String!
-  slug: String!
+  countries: [Country!]!
 }
 
-type User {
-  id: ID!
-  email: String!
-  username: String!
+type Language {
+  code: ID!
+  name: String!
+  native: String!
+  rtl: Boolean!
 }
 
-type CartItem {
-  id: ID!
-  productId: Int!
-  quantity: Int!
+input CountryFilterInput {
+  code: StringQueryOperatorInput
+  continent: StringQueryOperatorInput
 }
 
-type AuthPayload {
-  accessToken: String!
-  tokenType: String!
+input ContinentFilterInput {
+  code: StringQueryOperatorInput
+}
+
+input LanguageFilterInput {
+  code: StringQueryOperatorInput
+}
+
+input StringQueryOperatorInput {
+  eq: String
+  in: [String!]
 }
 `
   },
   soap: {
-    name: "SOAP Service",
+    name: "SOAP Service (CountryInfo)",
     icon: "📨",
     protocol: "SOAP",
     format: "wsdl",
-    description: "SOAP WSDL for product operations",
-    baseUrl: `${ECOMMERCE_TEST_URL}/soap`,
+    description: "CountryInfo SOAP service - Get country details (public, no auth)",
+    baseUrl: "http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso",
     spec: `<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
              xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
-             xmlns:tns="http://testwebsite.com/soap"
+             xmlns:tns="http://www.oorsprong.org/websamples.countryinfo"
              xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-             targetNamespace="http://testwebsite.com/soap">
+             targetNamespace="http://www.oorsprong.org/websamples.countryinfo">
   <types>
-    <xsd:schema targetNamespace="http://testwebsite.com/soap">
-      <xsd:complexType name="GetProductRequest">
+    <xsd:schema targetNamespace="http://www.oorsprong.org/websamples.countryinfo">
+      <xsd:element name="CountryISOCode" type="xsd:string"/>
+      <xsd:element name="FullCountryInfo" type="tns:tCountryInfo"/>
+      <xsd:complexType name="tCountryInfo">
         <xsd:sequence>
-          <xsd:element name="product_id" type="xsd:int"/>
+          <xsd:element name="sISOCode" type="xsd:string"/>
+          <xsd:element name="sName" type="xsd:string"/>
+          <xsd:element name="sCapitalCity" type="xsd:string"/>
+          <xsd:element name="sPhoneCode" type="xsd:string"/>
+          <xsd:element name="sContinentCode" type="xsd:string"/>
+          <xsd:element name="sCurrencyISOCode" type="xsd:string"/>
+          <xsd:element name="sCountryFlag" type="xsd:string"/>
         </xsd:sequence>
       </xsd:complexType>
     </xsd:schema>
   </types>
-  <message name="GetProductRequest">
-    <part name="parameters" element="tns:GetProductRequest"/>
+  <message name="FullCountryInfoRequest">
+    <part name="sCountryISOCode" element="tns:CountryISOCode"/>
   </message>
-  <portType name="TestWebsitePortType">
-    <operation name="GetProduct">
-      <input message="tns:GetProductRequest"/>
+  <message name="FullCountryInfoResponse">
+    <part name="FullCountryInfoResult" element="tns:FullCountryInfo"/>
+  </message>
+  <portType name="CountryInfoServiceSoap">
+    <operation name="FullCountryInfo">
+      <input message="tns:FullCountryInfoRequest"/>
+      <output message="tns:FullCountryInfoResponse"/>
+    </operation>
+    <operation name="ListOfCountryNamesByCode">
+      <input message="tns:FullCountryInfoRequest"/>
+      <output message="tns:FullCountryInfoResponse"/>
     </operation>
   </portType>
-  <service name="TestWebsiteSOAPService">
-    <port name="TestWebsitePort" binding="tns:TestWebsiteBinding">
-      <soap:address location="${ECOMMERCE_TEST_URL}/soap"/>
+  <service name="CountryInfoService">
+    <port name="CountryInfoServiceSoap" binding="tns:CountryInfoServiceSoapBinding">
+      <soap:address location="http://webservices.oorsprong.org/websamples.countryinfo/CountryInfoService.wso"/>
     </port>
   </service>
 </definitions>`
@@ -197,6 +197,9 @@ export default function EnhancedAPITesting() {
   // Flowstral integration state
   const [flowstralSessions, setFlowstralSessions] = useState<any[]>([]);
   const [loadingFlowstral, setLoadingFlowstral] = useState(false);
+  
+  // Mock endpoint method state
+  const [mockEndpointMethod, setMockEndpointMethod] = useState("GET");
   
   // Virtual service creation state  
   const [newVirtualService, setNewVirtualService] = useState({
@@ -260,7 +263,7 @@ export default function EnhancedAPITesting() {
   // Security scanning state
   const [securityScanning, setSecurityScanning] = useState(false);
   const [securityResults, setSecurityResults] = useState<any>(null);
-  const [securityTargetUrl, setSecurityTargetUrl] = useState(ECOMMERCE_TEST_URL);
+  const [securityTargetUrl, setSecurityTargetUrl] = useState("");
   const [selectedSecurityTests, setSelectedSecurityTests] = useState<string[]>([
     "auth_matrix", "bola", "injection", "rate_limiting"
   ]);
@@ -677,7 +680,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     const startTime = Date.now();
     
     try {
-      // Fix double slashes in URL (e.g., http://localhost:8002//api/cart -> http://localhost:8002/api/cart)
+      // Fix double slashes in URL (e.g., https://api.example.com//path -> https://api.example.com/path)
       const normalizedUrl = req.url.replace(/([^:]\/)\/+/g, '$1');
       
       const response = await fetch(normalizedUrl, {
@@ -863,7 +866,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           version: "1.0.0",
           description: `Auto-generated from Flowstral recording: ${sessionData.name || sessionId}`
         },
-        servers: [{ url: sessionData.initial_url || ECOMMERCE_TEST_URL }],
+        servers: [{ url: sessionData.initial_url || "" }],
         paths: httpRequests.reduce((acc: any, req: any, idx: number) => {
           const pathKey = req.path || `/endpoint_${idx}`;
           if (!acc[pathKey]) acc[pathKey] = {};
@@ -886,7 +889,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         environment_id: `env_flowstral_${sessionId}`,
         name: envName,
         type: "development",
-        base_url: sessionData.initial_url || ECOMMERCE_TEST_URL,
+        base_url: sessionData.initial_url || "",
         variables: {}
       };
       const updatedEnvs = [...environments.filter(e => e.environment_id !== newEnv.environment_id), newEnv];
@@ -1343,7 +1346,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
     // Get selected environment's base URL
     const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
-    const baseUrl = selectedEnv?.base_url || envConfig.base_url || "http://localhost:8002";
+    const baseUrl = selectedEnv?.base_url || envConfig.base_url || "";
     
     if (!baseUrl || baseUrl === "https://api.example.com") {
       toast({
@@ -1923,7 +1926,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           <Alert className="bg-card border-border text-foreground">
             <Rocket className="h-4 w-4 text-primary" />
             <AlertDescription>
-              <strong className="text-foreground">Quick Start:</strong> Load pre-configured protocol templates for the e-commerce test site at <code className="bg-secondary px-1 rounded text-primary">{ECOMMERCE_TEST_URL}</code>
+              <strong className="text-foreground">Quick Start:</strong> Load pre-configured protocol templates using real public APIs (JSONPlaceholder, Countries GraphQL, CountryInfo SOAP)
             </AlertDescription>
           </Alert>
           
@@ -2315,9 +2318,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       if (!url) { toast({ title: "Error", description: "Enter a URL", variant: "destructive" }); return; }
                       setLoading(true);
                       try {
-                        const res = await fetch(url);
-                        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
-                        const text = await res.text();
+                        // Use backend proxy to avoid CORS issues
+                        const proxyRes = await fetch(`${API_BASE_URL}/api/import/fetch-url?url=${encodeURIComponent(url)}`);
+                        if (!proxyRes.ok) {
+                          const errData = await proxyRes.json().catch(() => ({}));
+                          throw new Error(errData.detail || `Failed to fetch: ${proxyRes.status}`);
+                        }
+                        const proxyData = await proxyRes.json();
+                        const text = proxyData.content;
                         
                         // Auto-detect format and validate spec content
                         let detectedFormat = "openapi";
@@ -3264,7 +3272,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </div>
                 <div className="space-y-2">
                   <Label>Method</Label>
-                  <Select defaultValue="GET">
+                  <Select value={mockEndpointMethod} onValueChange={setMockEndpointMethod}>
                     <SelectTrigger id="mock-method">
                       <SelectValue />
                     </SelectTrigger>
@@ -3304,7 +3312,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   disabled={loading}
                   onClick={async () => {
                     const serverId = (document.getElementById("mock-server-id") as HTMLInputElement)?.value;
-                    const method = "GET"; // Would need proper select binding
+                    const method = mockEndpointMethod;
                     const path = (document.getElementById("mock-path") as HTMLInputElement)?.value;
                     const status = parseInt((document.getElementById("mock-status") as HTMLInputElement)?.value) || 200;
                     const bodyText = (document.getElementById("mock-response-body") as HTMLTextAreaElement)?.value;

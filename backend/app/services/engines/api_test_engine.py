@@ -567,20 +567,59 @@ class APITestEngine:
     def _generate_sample_value(self, schema: Dict[str, Any]) -> Any:
         """Generate sample value from schema"""
         schema_type = schema.get("type", "string")
+        fmt = schema.get("format", "")
         
         if schema_type == "string":
             if "enum" in schema:
                 return schema["enum"][0]
-            if "format" == "email":
+            if fmt == "email":
                 return "test@example.com"
-            if "format" == "date":
+            if fmt == "date":
                 return "2024-01-01"
+            if fmt == "date-time":
+                return "2024-01-01T12:00:00Z"
+            if fmt == "uri" or fmt == "url":
+                return "https://example.com"
+            if fmt == "uuid":
+                return "550e8400-e29b-41d4-a716-446655440000"
+            if fmt == "password":
+                return "SecurePass123!"
+            if fmt == "phone":
+                return "+1-555-0100"
+            # Use property name hints for better sample values
+            prop_name = schema.get("_prop_name", "").lower()
+            if "email" in prop_name:
+                return "test@example.com"
+            if "name" in prop_name or "username" in prop_name:
+                return "test_user"
+            if "password" in prop_name:
+                return "SecurePass123!"
+            if "phone" in prop_name:
+                return "+1-555-0100"
+            if "url" in prop_name or "link" in prop_name:
+                return "https://example.com"
+            if "description" in prop_name or "body" in prop_name:
+                return "Sample description text for testing"
+            if "title" in prop_name:
+                return "Sample Title"
+            if "address" in prop_name:
+                return "123 Test Street"
+            if "city" in prop_name:
+                return "Test City"
+            if "country" in prop_name or "code" in prop_name:
+                return "US"
             return "sample_string"
         
         elif schema_type == "integer":
+            if "minimum" in schema:
+                return schema["minimum"]
+            if "maximum" in schema:
+                return min(schema["maximum"], 10)
             return 1
         
         elif schema_type == "number":
+            if "minimum" in schema:
+                return float(schema["minimum"])
             return 1.0
         
         elif schema_type == "boolean":
@@ -593,7 +632,9 @@ class APITestEngine:
         elif schema_type == "object":
             obj = {}
             for prop_name, prop_schema in schema.get("properties", {}).items():
-                obj[prop_name] = self._generate_sample_value(prop_schema)
+                # Pass property name hint for smarter value generation
+                prop_schema_with_hint = {**prop_schema, "_prop_name": prop_name}
+                obj[prop_name] = self._generate_sample_value(prop_schema_with_hint)
             return obj
         
         return None
