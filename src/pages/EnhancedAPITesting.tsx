@@ -29,6 +29,12 @@ import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables
 
 import { API_BASE_URL } from "@/lib/api-config";
 
+// Ensure test suite has folders array (collection hierarchy — zero-code)
+function ensureTestSuiteFolders(suite: any): any {
+  if (!suite) return suite;
+  return { ...suite, folders: Array.isArray(suite.folders) ? suite.folders : [] };
+}
+
 // Protocol Templates for quick-start (using real public APIs)
 const PROTOCOL_TEMPLATES = {
   rest_openapi: {
@@ -199,9 +205,22 @@ export default function EnhancedAPITesting() {
   const [flowstralSessions, setFlowstralSessions] = useState<any[]>([]);
   const [loadingFlowstral, setLoadingFlowstral] = useState(false);
   
-  // Mock endpoint method state
-  const [mockEndpointMethod, setMockEndpointMethod] = useState("GET");
-  
+  // Mock server full UI state (zero-code; no getElementById)
+  const [mockServers, setMockServers] = useState<any[]>([]);
+  const [selectedMockServerId, setSelectedMockServerId] = useState("");
+  const [mockForm, setMockForm] = useState({
+    method: "GET",
+    path: "",
+    status: 200,
+    body: '{\n  "message": "Hello"\n}',
+    dynamic: true,
+  });
+  const [mockLogs, setMockLogs] = useState<any[]>([]);
+  const [mockLogsServerId, setMockLogsServerId] = useState<string | null>(null);
+  const [mockVerifyResult, setMockVerifyResult] = useState<any>(null);
+  const [mockVerifyForm, setMockVerifyForm] = useState({ method: "GET", path: "", expected_count: undefined as number | undefined, body_contains: "" });
+  const [mockServerInfo, setMockServerInfo] = useState<any>(null);
+
   // Virtual service creation state  
   const [newVirtualService, setNewVirtualService] = useState({
     name: "",
@@ -246,6 +265,46 @@ export default function EnhancedAPITesting() {
   const [selectedTestCases, setSelectedTestCases] = useState<Set<string>>(new Set());
   const [viewingTestCase, setViewingTestCase] = useState<any>(null);
   const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
+
+  // Load testing (React state — zero-code, no getElementById)
+  const [loadConfig, setLoadConfig] = useState({
+    virtual_users: 10,
+    duration_seconds: 30,
+    ramp_up_seconds: 5,
+    think_time_ms: 1000,
+  });
+
+  // Data-driven (CSV/JSON upload, preview, run — zero-code)
+  const [dataDrivenSourceType, setDataDrivenSourceType] = useState<"csv" | "json">("csv");
+  const [dataDrivenContent, setDataDrivenContent] = useState("");
+  const [dataDrivenSourceId, setDataDrivenSourceId] = useState<string | null>(null);
+  const [dataDrivenPreview, setDataDrivenPreview] = useState<any>(null);
+  const [dataDrivenRunning, setDataDrivenRunning] = useState(false);
+  const [dataDrivenResults, setDataDrivenResults] = useState<any>(null);
+
+  // Variable scoping (Tier 2): global → env → collection. Resolve order in Builder.
+  const VAR_GLOBAL_KEY = "api_global_variables";
+  const VAR_COLLECTION_KEY = "api_collection_variables";
+  const [globalVariables, setGlobalVariables] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(VAR_GLOBAL_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const [collectionVariables, setCollectionVariables] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem(VAR_COLLECTION_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const persistGlobalVars = (v: Record<string, string>) => {
+    setGlobalVariables(v);
+    try { localStorage.setItem(VAR_GLOBAL_KEY, JSON.stringify(v)); } catch {}
+  };
+  const persistCollectionVars = (v: Record<string, string>) => {
+    setCollectionVariables(v);
+    try { localStorage.setItem(VAR_COLLECTION_KEY, JSON.stringify(v)); } catch {}
+  };
   
   // Environment state
   const [environments, setEnvironments] = useState<any[]>([]);
@@ -879,6 +938,19 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
+  const loadMockServers = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server`);
+      const data = await res.json();
+      setMockServers(data.servers || []);
+      if ((data.servers || []).length > 0 && !selectedMockServerId) {
+        setSelectedMockServerId(data.servers[0].server_id);
+      }
+    } catch (e) {
+      setMockServers([]);
+    }
+  };
+
   const loadFlowstralSessions = async () => {
     setLoadingFlowstral(true);
     try {
@@ -1101,6 +1173,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         await loadEnvironments();
         await loadDbConnections();
         await loadVirtualServices();
+        await loadMockServers();
         console.log("EnhancedAPITesting initialized successfully");
       } catch (error: any) {
         console.error("Error initializing EnhancedAPITesting:", error);
@@ -1203,7 +1276,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       }
 
       const enhanceData = await enhanceResponse.json();
-      setTestSuite(enhanceData.test_suite);
+      setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
       
       toast({
         title: "Success",
@@ -1279,7 +1352,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       }
 
       const enhanceData = await enhanceResponse.json();
-      setTestSuite(enhanceData.test_suite);
+      setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
       
       toast({
         title: "Success",
@@ -1680,15 +1753,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       };
       
       if (executionMode === "load") {
-        const vus = parseInt((document.getElementById("load-vus") as HTMLInputElement)?.value) || 10;
-        const duration = parseInt((document.getElementById("load-duration") as HTMLInputElement)?.value) || 30;
-        const rampUp = parseInt((document.getElementById("load-rampup") as HTMLInputElement)?.value) || 5;
-        const thinkTime = parseInt((document.getElementById("load-think") as HTMLInputElement)?.value) || 1000;
-        execConfig.virtual_users = vus;
-        execConfig.duration_seconds = duration;
-        execConfig.ramp_up_seconds = rampUp;
-        execConfig.think_time_ms = thinkTime;
-        execConfig.max_workers = vus;
+        execConfig.virtual_users = loadConfig.virtual_users;
+        execConfig.duration_seconds = loadConfig.duration_seconds;
+        execConfig.ramp_up_seconds = loadConfig.ramp_up_seconds;
+        execConfig.think_time_ms = loadConfig.think_time_ms;
+        execConfig.max_workers = loadConfig.virtual_users;
       }
 
       const requestBody = {
@@ -1793,15 +1862,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     };
 
     setTestSuite((prev: any) => {
-      if (!prev) {
-        return { test_cases: [newTestCase], metadata: { total_test_cases: 1 } };
-      }
-      const updatedCases = [...(prev.test_cases || []), newTestCase];
-      return {
-        ...prev,
-        test_cases: updatedCases,
-        metadata: { ...prev.metadata, total_test_cases: updatedCases.length },
-      };
+      const next = !prev
+        ? { test_cases: [newTestCase], metadata: { total_test_cases: 1 } }
+        : {
+            ...prev,
+            test_cases: [...(prev.test_cases || []), newTestCase],
+            metadata: { ...prev.metadata, total_test_cases: (prev.test_cases?.length || 0) + 1 },
+          };
+      return ensureTestSuiteFolders(next);
     });
 
     setShowCreateTest(false);
@@ -2190,6 +2258,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <RequestBuilder 
               initialRequest={builderInitialRequest}
               activeEnvironment={environments.find(e => e.environment_id === selectedEnvironment) || null}
+              globalVariables={globalVariables}
+              collectionVariables={collectionVariables}
               onSaveToChain={(req, asserts) => {
                 // Switch to Chains tab and add the request as a new step
                 setActiveTab("chains");
@@ -2198,15 +2268,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               onAddToTestSuite={async (testCase) => {
                 // 1) Add to Execute tab test suite (in-memory)
                 setTestSuite((prev: any) => {
-                  if (!prev) {
-                    return { test_cases: [testCase], metadata: { total_test_cases: 1 } };
-                  }
-                  const updatedCases = [...(prev.test_cases || []), testCase];
-                  return {
-                    ...prev,
-                    test_cases: updatedCases,
-                    metadata: { ...prev.metadata, total_test_cases: updatedCases.length },
-                  };
+                  const next = !prev
+                    ? { test_cases: [testCase], metadata: { total_test_cases: 1 } }
+                    : {
+                        ...prev,
+                        test_cases: [...(prev.test_cases || []), testCase],
+                        metadata: { ...prev.metadata, total_test_cases: (prev.test_cases?.length || 0) + 1 },
+                      };
+                  return ensureTestSuiteFolders(next);
                 });
 
                 // 2) Save to backend /test-cases AND localStorage so it shows on Tests page
@@ -2471,7 +2540,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       });
                       if (!enhRes.ok) throw new Error("Failed to generate tests");
                       const enhData = await enhRes.json();
-                      setTestSuite(enhData.test_suite);
+                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
                       toast({ title: "Imported JSONPlaceholder Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases from Postman collection` });
                       setActiveTab("execute");
                     } catch (e: any) {
@@ -2519,7 +2588,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       });
                       if (!enhRes.ok) throw new Error("Failed to generate tests");
                       const enhData = await enhRes.json();
-                      setTestSuite(enhData.test_suite);
+                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
                       toast({ title: "Imported ReqRes Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
                       setActiveTab("execute");
                     } catch (e: any) {
@@ -2567,7 +2636,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       });
                       if (!enhRes.ok) throw new Error("Failed to generate tests");
                       const enhData = await enhRes.json();
-                      setTestSuite(enhData.test_suite);
+                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
                       toast({ title: "Imported Petstore API", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
                       setActiveTab("execute");
                     } catch (e: any) {
@@ -2950,7 +3019,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </p>
               </div>
               
-              {/* Load Testing Controls - shown when Load Testing mode is selected */}
+              {/* Load Testing Controls - shown when Load Testing mode is selected (React state, zero-code) */}
               {executionMode === "load" && (
                 <Card className="border-orange-500/20 bg-orange-50/50 dark:bg-orange-950/10">
                   <CardContent className="pt-4 space-y-3">
@@ -2958,24 +3027,163 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <div className="grid grid-cols-4 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">Virtual Users</Label>
-                        <Input type="number" id="load-vus" defaultValue="10" min="1" max="1000" />
+                        <Input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={loadConfig.virtual_users}
+                          onChange={(e) => setLoadConfig((c) => ({ ...c, virtual_users: parseInt(e.target.value) || 10 }))}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Duration (seconds)</Label>
-                        <Input type="number" id="load-duration" defaultValue="30" min="5" max="3600" />
+                        <Input
+                          type="number"
+                          min={5}
+                          max={3600}
+                          value={loadConfig.duration_seconds}
+                          onChange={(e) => setLoadConfig((c) => ({ ...c, duration_seconds: parseInt(e.target.value) || 30 }))}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Ramp-up (seconds)</Label>
-                        <Input type="number" id="load-rampup" defaultValue="5" min="0" max="300" />
+                        <Input
+                          type="number"
+                          min={0}
+                          max={300}
+                          value={loadConfig.ramp_up_seconds}
+                          onChange={(e) => setLoadConfig((c) => ({ ...c, ramp_up_seconds: parseInt(e.target.value) || 5 }))}
+                        />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Think Time (ms)</Label>
-                        <Input type="number" id="load-think" defaultValue="1000" min="0" max="30000" />
+                        <Input
+                          type="number"
+                          min={0}
+                          max={30000}
+                          value={loadConfig.think_time_ms}
+                          onChange={(e) => setLoadConfig((c) => ({ ...c, think_time_ms: parseInt(e.target.value) || 1000 }))}
+                        />
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Simulates {(document.getElementById("load-vus") as HTMLInputElement)?.value || 10} concurrent users hitting your API for {(document.getElementById("load-duration") as HTMLInputElement)?.value || 30} seconds
+                      Simulates {loadConfig.virtual_users} concurrent users for {loadConfig.duration_seconds}s (ramp-up {loadConfig.ramp_up_seconds}s)
                     </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Data-driven: CSV/JSON upload, preview, run (zero-code — no scripts) */}
+              {testSuite && testSuite.test_cases?.length > 0 && (
+                <Card className="border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/10">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium">Run with data (data-driven)</CardTitle>
+                    <CardDescription className="text-xs">
+                      Upload CSV or JSON; each row runs the selected tests with variables substituted. No scripts.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex gap-2">
+                      <Select value={dataDrivenSourceType} onValueChange={(v: "csv" | "json") => setDataDrivenSourceType(v)}>
+                        <SelectTrigger className="w-28">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="csv">CSV</SelectItem>
+                          <SelectItem value="json">JSON</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="file"
+                        accept={dataDrivenSourceType === "csv" ? ".csv" : ".json"}
+                        className="max-w-[200px]"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const reader = new FileReader();
+                          reader.onload = () => setDataDrivenContent(String(reader.result ?? ""));
+                          reader.readAsText(f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </div>
+                    <Textarea
+                      placeholder={dataDrivenSourceType === "csv" ? "Or paste CSV (header row, then data)..." : 'Or paste JSON array, e.g. [{"id":1,"name":"a"},...]'}
+                      value={dataDrivenContent}
+                      onChange={(e) => setDataDrivenContent(e.target.value)}
+                      className="min-h-[80px] font-mono text-xs"
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!dataDrivenContent.trim() || dataDrivenRunning}
+                        onClick={async () => {
+                          try {
+                            const name = `data_${Date.now()}`;
+                            const res = await fetch(`${API_BASE_URL}/api/v2/testing/data-driven/source`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                name,
+                                source_type: dataDrivenSourceType,
+                                content: dataDrivenContent.trim(),
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.detail || "Failed to create source");
+                            setDataDrivenSourceId(data.source_id);
+                            setDataDrivenPreview(data.preview ?? null);
+                            toast({ title: "Data source ready", description: `Preview: ${data.preview?.row_count ?? "?"} rows` });
+                          } catch (err: any) {
+                            toast({ title: "Error", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        Create source & preview
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!dataDrivenSourceId || executing}
+                        onClick={async () => {
+                          if (!dataDrivenSourceId || !testSuite) return;
+                          setDataDrivenRunning(true);
+                          try {
+                            const selectedEnv = environments.find((e) => e.environment_id === selectedEnvironment);
+                            const baseUrl = selectedEnv?.base_url || testSuite.base_url || "";
+                            const res = await fetch(`${API_BASE_URL}/api/v2/testing/data-driven/execute`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                test_suite: { ...testSuite, base_url: baseUrl },
+                                source_id: dataDrivenSourceId,
+                                execution_config: { base_url: baseUrl, parallel: true, max_workers: 5 },
+                              }),
+                            });
+                            const results = await res.json();
+                            setDataDrivenResults(results);
+                            setExecutionResults(results?.execution_results ?? results);
+                            setActiveTab("results");
+                            toast({
+                              title: "Data-driven run finished",
+                              description: results?.summary ? `${results.summary.total} runs` : "See Results tab",
+                            });
+                          } catch (err: any) {
+                            toast({ title: "Error", description: err.message, variant: "destructive" });
+                          } finally {
+                            setDataDrivenRunning(false);
+                          }
+                        }}
+                      >
+                        {dataDrivenRunning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        Run with data
+                      </Button>
+                    </div>
+                    {dataDrivenPreview && (
+                      <div className="text-xs text-muted-foreground">
+                        Preview: {dataDrivenPreview.row_count ?? 0} rows, columns: {dataDrivenPreview.columns?.join(", ") ?? "—"}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -3079,9 +3287,49 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 return (
                   <Card>
                     <CardHeader>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
                         <CardTitle className="text-lg">Test Cases ({totalCount})</CardTitle>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                          {/* Collection folders (zero-code hierarchy) */}
+                          {(testSuite.folders?.length ?? 0) >= 0 && (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                placeholder="New folder name"
+                                className="w-36 h-8 text-xs"
+                                id="new-folder-name"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    const input = document.getElementById("new-folder-name") as HTMLInputElement;
+                                    const name = input?.value?.trim();
+                                    if (name) {
+                                      setTestSuite((prev: any) => ensureTestSuiteFolders({
+                                        ...prev,
+                                        folders: [...(prev.folders || []), { id: `f_${Date.now()}`, name, test_case_ids: [] }],
+                                      }));
+                                      input.value = "";
+                                    }
+                                  }
+                                }}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={() => {
+                                  const input = document.getElementById("new-folder-name") as HTMLInputElement;
+                                  const name = input?.value?.trim() || "New folder";
+                                  setTestSuite((prev: any) => ensureTestSuiteFolders({
+                                    ...prev,
+                                    folders: [...(prev.folders || []), { id: `f_${Date.now()}`, name, test_case_ids: [] }],
+                                  }));
+                                  if (input) input.value = "";
+                                  toast({ title: "Folder added", description: `"${name}" created. Assign tests via the Folder column.` });
+                                }}
+                              >
+                                Add folder
+                              </Button>
+                            </div>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -3141,6 +3389,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                               <TableHead>Test Case</TableHead>
                               <TableHead>Type</TableHead>
                               <TableHead>Endpoint</TableHead>
+                              <TableHead className="w-32">Folder</TableHead>
                               <TableHead className="w-24">Action</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -3206,6 +3455,38 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                     <span className="font-mono text-xs">
                                       {tcMethod} {tcPath || "N/A"}
                                     </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select
+                                      value={
+                                        (testSuite.folders || []).find((f: any) => (f.test_case_ids || []).includes(testId))?.id ?? "__none__"
+                                      }
+                                      onValueChange={(folderId) => {
+                                        setTestSuite((prev: any) => {
+                                          const folders = (prev.folders || []).map((f: any) => ({
+                                            ...f,
+                                            test_case_ids: (f.test_case_ids || []).filter((id: string) => id !== testId),
+                                          }));
+                                          if (folderId && folderId !== "__none__") {
+                                            const idx = folders.findIndex((f: any) => f.id === folderId);
+                                            if (idx >= 0) {
+                                              folders[idx] = { ...folders[idx], test_case_ids: [...(folders[idx].test_case_ids || []), testId] };
+                                            }
+                                          }
+                                          return { ...prev, folders };
+                                        });
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs w-full">
+                                        <SelectValue placeholder="Uncategorized" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">Uncategorized</SelectItem>
+                                        {(testSuite.folders || []).map((f: any) => (
+                                          <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </TableCell>
                                   <TableCell>
                                     <Button
@@ -3621,6 +3902,72 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Environments Tab */}
         <TabsContent value="environments" className="space-y-4">
+          {/* Variable scoping: Global & Collection (Tier 2 — zero-code) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Variable scoping</CardTitle>
+              <CardDescription>
+                Resolve order: Global → Environment → Collection. Use <code className="bg-muted px-1 rounded">{`{{name}}`}</code> in URL, headers, body.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Global (workspace)</Label>
+                  <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2 bg-muted/20">
+                    {Object.entries(globalVariables).map(([k, v]) => (
+                      <div key={k} className="flex gap-2 items-center text-xs">
+                        <span className="font-mono text-primary">{k}</span>
+                        <span className="truncate text-muted-foreground">= {String(v).slice(0, 40)}{String(v).length > 40 ? "…" : ""}</span>
+                        <Button variant="ghost" size="sm" className="h-6 px-1" onClick={() => { const next = { ...globalVariables }; delete next[k]; persistGlobalVars(next); }}>×</Button>
+                      </div>
+                    ))}
+                    {Object.keys(globalVariables).length === 0 && <p className="text-xs text-muted-foreground">No global variables</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Key"
+                      className="flex-1 h-8 text-xs"
+                      id="global-var-key"
+                    />
+                    <Input
+                      placeholder="Value"
+                      className="flex-1 h-8 text-xs"
+                      id="global-var-val"
+                    />
+                    <Button size="sm" className="h-8" onClick={() => {
+                      const key = (document.getElementById("global-var-key") as HTMLInputElement)?.value?.trim();
+                      const val = (document.getElementById("global-var-val") as HTMLInputElement)?.value ?? "";
+                      if (key) { persistGlobalVars({ ...globalVariables, [key]: val }); (document.getElementById("global-var-key") as HTMLInputElement).value = ""; (document.getElementById("global-var-val") as HTMLInputElement).value = ""; }
+                    }}>Add</Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Collection (current suite)</Label>
+                  <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2 bg-muted/20">
+                    {Object.entries(collectionVariables).map(([k, v]) => (
+                      <div key={k} className="flex gap-2 items-center text-xs">
+                        <span className="font-mono text-primary">{k}</span>
+                        <span className="truncate text-muted-foreground">= {String(v).slice(0, 40)}{String(v).length > 40 ? "…" : ""}</span>
+                        <Button variant="ghost" size="sm" className="h-6 px-1" onClick={() => { const next = { ...collectionVariables }; delete next[k]; persistCollectionVars(next); }}>×</Button>
+                      </div>
+                    ))}
+                    {Object.keys(collectionVariables).length === 0 && <p className="text-xs text-muted-foreground">No collection variables</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input placeholder="Key" className="flex-1 h-8 text-xs" id="coll-var-key" />
+                    <Input placeholder="Value" className="flex-1 h-8 text-xs" id="coll-var-val" />
+                    <Button size="sm" className="h-8" onClick={() => {
+                      const key = (document.getElementById("coll-var-key") as HTMLInputElement)?.value?.trim();
+                      const val = (document.getElementById("coll-var-val") as HTMLInputElement)?.value ?? "";
+                      if (key) { persistCollectionVars({ ...collectionVariables, [key]: val }); (document.getElementById("coll-var-key") as HTMLInputElement).value = ""; (document.getElementById("coll-var-val") as HTMLInputElement).value = ""; }
+                    }}>Add</Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <EnvironmentManagerComponent
             environments={environments}
             selectedEnvironmentId={selectedEnvironment}
@@ -3793,12 +4140,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       if (!res.ok) throw new Error("Failed to create mock server");
                       const data = await res.json();
                       toast({ title: "Mock Server Created", description: `Server ID: ${data.server_id}. Add endpoints and start it.` });
-                      // Refresh list
-                      const listRes = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server`);
-                      if (listRes.ok) {
-                        const listData = await listRes.json();
-                        setVirtualServices(prev => [...prev, ...(listData.servers || [])]);
-                      }
+                      await loadMockServers();
+                      setSelectedMockServerId(data.server_id || "");
                     } catch (e: any) {
                       toast({ title: "Error", description: e.message, variant: "destructive" });
                     } finally { setLoading(false); }
@@ -3811,7 +4154,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             </CardContent>
           </Card>
 
-          {/* Add Endpoint to Mock */}
+          {/* Add Endpoint to Mock — full React state, no getElementById */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Add Mock Endpoint</CardTitle>
@@ -3820,13 +4163,24 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <CardContent className="space-y-4">
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-2">
-                  <Label>Server ID</Label>
-                  <Input id="mock-server-id" placeholder="server-id" />
+                  <Label>Server</Label>
+                  <Select value={selectedMockServerId} onValueChange={setSelectedMockServerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select server" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockServers.map((s: any) => (
+                        <SelectItem key={s.server_id} value={s.server_id}>
+                          {s.name || s.server_id} {s.port && `:${s.port}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Method</Label>
-                  <Select value={mockEndpointMethod} onValueChange={setMockEndpointMethod}>
-                    <SelectTrigger id="mock-method">
+                  <Select value={mockForm.method} onValueChange={(v) => setMockForm((f) => ({ ...f, method: v }))}>
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -3840,51 +4194,72 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </div>
                 <div className="space-y-2">
                   <Label>Path</Label>
-                  <Input id="mock-path" placeholder="/api/users" />
+                  <Input
+                    placeholder="/api/users"
+                    value={mockForm.path}
+                    onChange={(e) => setMockForm((f) => ({ ...f, path: e.target.value }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Status Code</Label>
-                  <Input id="mock-status" type="number" defaultValue="200" />
+                  <Input
+                    type="number"
+                    value={mockForm.status}
+                    onChange={(e) => setMockForm((f) => ({ ...f, status: parseInt(e.target.value) || 200 }))}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label>Response Body (JSON)</Label>
                 <Textarea
-                  id="mock-response-body"
-                  placeholder={'{\n  "users": [\n    {"id": 1, "name": "{{$random.fullName}}", "email": "{{$random.email}}"}\n  ]\n}'}
+                  placeholder={'{\n  "users": [{"id": 1, "name": "{{$random.fullName}}"}]}\n'}
                   className="min-h-[120px] font-mono text-sm"
+                  value={mockForm.body}
+                  onChange={(e) => setMockForm((f) => ({ ...f, body: e.target.value }))}
                 />
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id="mock-dynamic" defaultChecked />
+                  <input
+                    type="checkbox"
+                    id="mock-dynamic"
+                    checked={mockForm.dynamic}
+                    onChange={(e) => setMockForm((f) => ({ ...f, dynamic: e.target.checked }))}
+                  />
                   <Label htmlFor="mock-dynamic">Dynamic (template variables)</Label>
                 </div>
                 <Button
                   variant="default"
-                  disabled={loading}
+                  disabled={loading || !selectedMockServerId || !mockForm.path.trim()}
                   onClick={async () => {
-                    const serverId = (document.getElementById("mock-server-id") as HTMLInputElement)?.value;
-                    const method = mockEndpointMethod;
-                    const path = (document.getElementById("mock-path") as HTMLInputElement)?.value;
-                    const status = parseInt((document.getElementById("mock-status") as HTMLInputElement)?.value) || 200;
-                    const bodyText = (document.getElementById("mock-response-body") as HTMLTextAreaElement)?.value;
-                    const dynamic = (document.getElementById("mock-dynamic") as HTMLInputElement)?.checked;
-                    if (!serverId || !path) { toast({ title: "Error", description: "Server ID and Path required", variant: "destructive" }); return; }
+                    if (!selectedMockServerId || !mockForm.path.trim()) {
+                      toast({ title: "Error", description: "Server and Path required", variant: "destructive" });
+                      return;
+                    }
                     setLoading(true);
                     try {
-                      let responseBody: any = bodyText;
-                      try { responseBody = JSON.parse(bodyText); } catch {}
-                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${serverId}/endpoint`, {
+                      let responseBody: any = mockForm.body;
+                      try { responseBody = JSON.parse(mockForm.body); } catch {}
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}/endpoint`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           endpoint_id: `ep-${Date.now()}`,
-                          path, method, response_body: responseBody, response_status: status, dynamic
+                          path: mockForm.path,
+                          method: mockForm.method,
+                          response_body: responseBody,
+                          response_status: mockForm.status,
+                          dynamic: mockForm.dynamic,
                         }),
                       });
                       if (!res.ok) throw new Error("Failed to add endpoint");
-                      toast({ title: "Endpoint Added", description: `${method} ${path} → ${status}` });
+                      toast({ title: "Endpoint Added", description: `${mockForm.method} ${mockForm.path} → ${mockForm.status}` });
+                      setMockServerInfo(null);
+                      const infoRes = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}`);
+                      if (infoRes.ok) {
+                        const d = await infoRes.json();
+                        setMockServerInfo(d);
+                      }
                     } catch (e: any) {
                       toast({ title: "Error", description: e.message, variant: "destructive" });
                     } finally { setLoading(false); }
@@ -3897,25 +4272,37 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             </CardContent>
           </Card>
 
-          {/* Mock Server Controls */}
+          {/* Mock Server Controls — state-driven; logs & info in UI */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Mock Server Controls</CardTitle>
-              <CardDescription>Start, stop, and manage your mock servers</CardDescription>
+              <CardDescription>Start, stop, view logs, and verify requests</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2 items-center">
-                <Input id="mock-control-id" placeholder="Server ID" className="max-w-xs" />
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2 items-center">
+                <Select value={selectedMockServerId} onValueChange={(v) => { setSelectedMockServerId(v); setMockLogsServerId(null); setMockServerInfo(null); setMockVerifyResult(null); }}>
+                  <SelectTrigger className="max-w-[220px]">
+                    <SelectValue placeholder="Select server" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mockServers.map((s: any) => (
+                      <SelectItem key={s.server_id} value={s.server_id}>
+                        {s.name || s.server_id} {s.port && `:${s.port}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="default"
                   size="sm"
+                  disabled={!selectedMockServerId}
                   onClick={async () => {
-                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
-                    if (!id) return;
+                    if (!selectedMockServerId) return;
                     try {
-                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/start`, { method: "POST" });
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}/start`, { method: "POST" });
                       if (!res.ok) throw new Error("Failed to start");
-                      toast({ title: "Started", description: `Mock server ${id} is now running` });
+                      toast({ title: "Started", description: `Mock server is now running` });
+                      await loadMockServers();
                     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
                   }}
                 >
@@ -3924,13 +4311,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!selectedMockServerId}
                   onClick={async () => {
-                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
-                    if (!id) return;
+                    if (!selectedMockServerId) return;
                     try {
-                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/stop`, { method: "POST" });
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}/stop`, { method: "POST" });
                       if (!res.ok) throw new Error("Failed to stop");
-                      toast({ title: "Stopped", description: `Mock server ${id} stopped` });
+                      toast({ title: "Stopped", description: `Mock server stopped` });
+                      await loadMockServers();
                     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
                   }}
                 >
@@ -3939,14 +4327,15 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!selectedMockServerId}
                   onClick={async () => {
-                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
-                    if (!id) return;
+                    if (!selectedMockServerId) return;
                     try {
-                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}/logs`);
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}/logs`);
                       if (!res.ok) throw new Error("Failed to get logs");
                       const data = await res.json();
-                      toast({ title: `Request Logs (${data.logs?.length || 0})`, description: JSON.stringify(data.logs?.slice(0, 3), null, 2).substring(0, 200) });
+                      setMockLogs(data.logs || []);
+                      setMockLogsServerId(selectedMockServerId);
                     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
                   }}
                 >
@@ -3955,22 +4344,150 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!selectedMockServerId}
                   onClick={async () => {
-                    const id = (document.getElementById("mock-control-id") as HTMLInputElement)?.value;
-                    if (!id) return;
+                    if (!selectedMockServerId) return;
                     try {
-                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${id}`);
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}`);
                       if (!res.ok) throw new Error("Failed to get info");
                       const data = await res.json();
-                      toast({ title: `Server: ${data.name || id}`, description: `Port: ${data.port || "?"}, Endpoints: ${data.endpoints?.length || 0}, Running: ${data.running || false}` });
+                      setMockServerInfo(data);
+                      setMockLogsServerId(null);
                     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
                   }}
                 >
                   Info
                 </Button>
+                <Button variant="outline" size="sm" onClick={loadMockServers}>
+                  Refresh
+                </Button>
               </div>
+              {mockLogsServerId && (
+                <div className="rounded border p-3 bg-muted/30">
+                  <h4 className="text-sm font-medium mb-2">Request logs ({mockLogs.length})</h4>
+                  <ScrollArea className="h-[200px]">
+                    <pre className="text-xs font-mono whitespace-pre-wrap p-2">
+                      {mockLogs.length === 0 ? "No requests yet" : JSON.stringify(mockLogs, null, 2)}
+                    </pre>
+                  </ScrollArea>
+                  <Button variant="ghost" size="sm" className="mt-2" onClick={() => setMockLogsServerId(null)}>Close</Button>
+                </div>
+              )}
+              {mockServerInfo && !mockLogsServerId && (
+                <div className="rounded border p-3 bg-muted/30">
+                  <h4 className="text-sm font-medium mb-2">Server info</h4>
+                  <p className="text-sm">Name: {mockServerInfo.server?.name ?? mockServerInfo.server_id}</p>
+                  <p className="text-sm">Port: {mockServerInfo.server?.port ?? "—"}</p>
+                  <p className="text-sm">Endpoints: {(mockServerInfo.endpoints || []).length}</p>
+                  <Button variant="ghost" size="sm" className="mt-2" onClick={() => setMockServerInfo(null)}>Close</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Verify mock requests */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Verify Requests</CardTitle>
+              <CardDescription>Check that expected requests were made to the mock server</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="space-y-1">
+                  <Label>Method</Label>
+                  <Select value={mockVerifyForm.method} onValueChange={(v) => setMockVerifyForm((f) => ({ ...f, method: v }))}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Path</Label>
+                  <Input
+                    placeholder="/api/users"
+                    value={mockVerifyForm.path}
+                    onChange={(e) => setMockVerifyForm((f) => ({ ...f, path: e.target.value }))}
+                    className="w-40"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Expected count</Label>
+                  <Input
+                    type="number"
+                    placeholder="optional"
+                    value={mockVerifyForm.expected_count ?? ""}
+                    onChange={(e) => setMockVerifyForm((f) => ({ ...f, expected_count: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    className="w-24"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Body contains</Label>
+                  <Input
+                    placeholder="optional"
+                    value={mockVerifyForm.body_contains}
+                    onChange={(e) => setMockVerifyForm((f) => ({ ...f, body_contains: e.target.value }))}
+                    className="w-40"
+                  />
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={!selectedMockServerId || !mockVerifyForm.path.trim()}
+                  onClick={async () => {
+                    if (!selectedMockServerId || !mockVerifyForm.path.trim()) return;
+                    try {
+                      const params = new URLSearchParams({ method: mockVerifyForm.method, path: mockVerifyForm.path });
+                      if (mockVerifyForm.expected_count != null) params.set("expected_count", String(mockVerifyForm.expected_count));
+                      if (mockVerifyForm.body_contains) params.set("body_contains", mockVerifyForm.body_contains);
+                      const res = await fetch(`${API_BASE_URL}/api/v2/testing/mock/server/${selectedMockServerId}/verify?${params}`, { method: "POST" });
+                      const data = await res.json();
+                      setMockVerifyResult(data);
+                    } catch (e: any) { setMockVerifyResult({ error: e.message }); }
+                  }}
+                >
+                  Verify
+                </Button>
+              </div>
+              {mockVerifyResult && (
+                <div className="rounded border p-3 bg-muted/30">
+                  <h4 className="text-sm font-medium mb-2">Result</h4>
+                  <pre className="text-xs font-mono whitespace-pre-wrap">{JSON.stringify(mockVerifyResult, null, 2)}</pre>
+                  <Button variant="ghost" size="sm" className="mt-2" onClick={() => setMockVerifyResult(null)}>Close</Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Mock Servers (HTTP) list — from /api/v2/testing/mock/server */}
+          {mockServers.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mock Servers (HTTP)</CardTitle>
+                <CardDescription>Real HTTP mock servers — select one above to add endpoints or control</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {mockServers.map((s: any) => (
+                    <div
+                      key={s.server_id}
+                      className={`flex items-center justify-between p-3 rounded border cursor-pointer hover:bg-muted/50 ${selectedMockServerId === s.server_id ? "ring-2 ring-primary" : ""}`}
+                      onClick={() => setSelectedMockServerId(s.server_id)}
+                    >
+                      <div>
+                        <p className="font-medium">{s.name || s.server_id}</p>
+                        <p className="text-sm text-muted-foreground">{s.base_url || `Port: ${s.port ?? "—"}`}</p>
+                      </div>
+                      <Badge variant="secondary">{s.endpoint_count ?? 0} endpoints</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Virtual Services List */}
           <Card>

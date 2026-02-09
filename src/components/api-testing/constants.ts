@@ -27,6 +27,7 @@ export const AUTH_TYPES = [
   { value: "bearer", label: "Bearer Token" },
   { value: "basic", label: "Basic Auth" },
   { value: "api_key", label: "API Key" },
+  { value: "oauth2", label: "OAuth 2.0" },
 ] as const;
 
 // --- Body Types ---

@@ -384,10 +384,14 @@ class TestExecutionEngine:
                     "expected_status": expected_status,
                     "actual_status": status_code,
                     "response_time_ms": response_time_ms,
+                    "request_headers": headers,
+                    "request_body": body,
+                    "request_params": params,
                     "response_body": response_data,
                     "response_data": response_data,
                     "response_headers": response_headers_dict,
                     "assertions": assertions_result,
+                    "assertion_results": assertions_result.get("results", []),
                     "extracted_variables": extracted_variables,
                     "timestamp": datetime.utcnow().isoformat()
                 }

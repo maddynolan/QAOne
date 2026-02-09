@@ -892,22 +892,48 @@ export function envVarsToDict(vars: EnvVariable[]): Record<string, string> {
   return dict;
 }
 
-// Resolve {{variable}} placeholders in a string using environment variables
-export function resolveVariables(template: string, env: EnvironmentConfig | null): string {
-  if (!env || !template) return template;
+// Resolve {{variable}} placeholders. Order: global → env → collection → local (later overrides).
+export function resolveVariables(
+  template: string,
+  env: EnvironmentConfig | null,
+  extra?: Record<string, string | number | boolean | null | undefined> | { global?: Record<string, string>; collection?: Record<string, string>; local?: Record<string, string> }
+): string {
+  if (!template) return template;
   let resolved = template;
 
-  // Always resolve base_url
-  resolved = resolved.replace(/\{\{base_url\}\}/g, env.base_url || "");
-  resolved = resolved.replace(/\$\{base_url\}/g, env.base_url || "");
+  const apply = (vars: Record<string, string>) => {
+    if (!vars) return;
+    for (const [key, val] of Object.entries(vars)) {
+      if (!key.trim()) continue;
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      resolved = resolved.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, "g"), val);
+      resolved = resolved.replace(new RegExp(`\\$\\{${escapedKey}\\}`, "g"), val);
+    }
+  };
 
-  // Resolve all env variables
-  const vars = normalizeVariables(env.variables);
-  for (const v of vars) {
-    if (!v.enabled || !v.key.trim()) continue;
-    const escapedKey = v.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    resolved = resolved.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, "g"), v.value);
-    resolved = resolved.replace(new RegExp(`\\$\\{${escapedKey}\\}`, "g"), v.value);
+  const isScoped = extra && typeof extra === "object" && ("global" in extra || "collection" in extra || "local" in extra);
+  if (isScoped && "global" in extra && extra.global) apply(extra.global);
+
+  if (env) {
+    resolved = resolved.replace(/\{\{base_url\}\}/g, env.base_url || "");
+    resolved = resolved.replace(/\$\{base_url\}/g, env.base_url || "");
+    const envVars: Record<string, string> = {};
+    normalizeVariables(env.variables).forEach((v) => {
+      if (v.enabled && v.key.trim()) envVars[v.key.trim()] = v.value;
+    });
+    apply(envVars);
+  }
+
+  if (isScoped && "collection" in extra && extra.collection) apply(extra.collection);
+  if (isScoped && "local" in extra && extra.local) apply(extra.local);
+
+  // Flat extra (backward compat): treat as single layer applied after env
+  if (extra && typeof extra === "object" && !isScoped) {
+    const strExtra: Record<string, string> = {};
+    for (const [key, val] of Object.entries(extra)) {
+      strExtra[key] = val === null || val === undefined ? "" : String(val);
+    }
+    apply(strExtra);
   }
 
   return resolved;

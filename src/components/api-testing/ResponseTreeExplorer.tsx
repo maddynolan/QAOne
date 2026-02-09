@@ -1,7 +1,7 @@
 /**
  * ResponseTreeExplorer - Browse response data tree and click-to-add assertions.
  * Shows all JSON nodes, headers, status in a collapsible tree.
- * Click any value to auto-create an assertion for it (like Postman/ReadyAPI).
+ * Zero-code: click to assert, click to save as variable; breadcrumb shows nesting.
  */
 
 import { useState, useMemo } from "react";
@@ -12,7 +12,16 @@ import { Input } from "@/components/ui/input";
 import {
   ChevronDown, ChevronRight, Plus, Target, Hash, Copy,
   Search, CheckCircle2, Type, List, Braces, AlertCircle,
+  Save, ChevronsRight,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { type AssertionConfig, generateId } from "./constants";
 
 interface ResponseTreeExplorerProps {
@@ -22,6 +31,8 @@ interface ResponseTreeExplorerProps {
   responseTime: number;
   onAddAssertion: (assertion: AssertionConfig) => void;
   existingAssertions?: AssertionConfig[];
+  /** Zero-code: save node value as variable for use in next request ({{name}}) */
+  onSaveAsVariable?: (variableName: string, path: string, value: unknown) => void;
 }
 
 type JsonNodeType = "object" | "array" | "string" | "number" | "boolean" | "null";
@@ -119,6 +130,16 @@ function formatValue(val: any, type: JsonNodeType): string {
   return String(val);
 }
 
+// JSONPath to human breadcrumb (e.g. $.data.user.id → data › user › id)
+function pathToBreadcrumb(path: string): string {
+  if (!path || path === "$") return "root";
+  const parts = path
+    .replace(/^\$\.?/, "")
+    .split(/\.(?![^\[]*\])/g)
+    .map((p) => p.replace(/\[(\d+)\]/g, "[$1]"));
+  return parts.join(" › ");
+}
+
 // Count all leaf nodes
 function countLeafNodes(nodes: TreeNode[]): number {
   let count = 0;
@@ -146,10 +167,13 @@ export default function ResponseTreeExplorer({
   responseTime,
   onAddAssertion,
   existingAssertions = [],
+  onSaveAsVariable,
 }: ResponseTreeExplorerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["$"]));
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"body" | "headers" | "meta">("body");
+  const [saveVarNode, setSaveVarNode] = useState<{ path: string; value: unknown } | null>(null);
+  const [saveVarName, setSaveVarName] = useState("");
 
   // Parse the response body
   const bodyTree = useMemo(() => {
@@ -194,18 +218,32 @@ export default function ResponseTreeExplorer({
     setExpandedPaths(new Set(["$"]));
   };
 
-  // Create assertion from a node
+  // Create assertion from a node (leaf or parent — parent gets "exists")
   const createAssertionFromNode = (node: TreeNode) => {
+    const isParent = node.type === "object" || node.type === "array";
     const assertion: AssertionConfig = {
       id: generateId(),
       type: "jsonpath",
-      name: `Assert ${node.key}`,
+      name: isParent ? `Assert ${node.key} exists` : `Assert ${node.key}`,
       path: node.path,
-      operator: node.type === "string" ? "equals" : node.type === "number" ? "equals" : "exists",
-      expected: node.type === "object" || node.type === "array" ? "" : String(node.value),
+      operator: isParent ? "exists" : node.type === "string" || node.type === "number" ? "equals" : "exists",
+      expected: isParent ? "" : node.type === "object" || node.type === "array" ? "" : String(node.value),
       schema: "",
     };
     onAddAssertion(assertion);
+  };
+
+  const handleSaveAsVariable = (node: TreeNode) => {
+    setSaveVarNode({ path: node.path, value: node.value });
+    setSaveVarName(node.key.replace(/[^a-zA-Z0-9_]/g, "_"));
+  };
+
+  const confirmSaveVariable = () => {
+    if (!saveVarNode || !saveVarName.trim()) return;
+    const name = saveVarName.trim().replace(/^\{+|\}+$/g, "");
+    onSaveAsVariable?.(name, saveVarNode.path, saveVarNode.value);
+    setSaveVarNode(null);
+    setSaveVarName("");
   };
 
   // Create assertion for a header
@@ -303,22 +341,39 @@ export default function ResponseTreeExplorer({
             {formatValue(node.value, node.type)}
           </span>
 
-          {/* Add assertion button */}
-          {!isExpandable && (
+          {/* Breadcrumb (human path) - zero-code clarity */}
+          <span className="hidden sm:inline text-[10px] text-muted-foreground truncate max-w-[120px]" title={node.path}>
+            <ChevronsRight className="w-3 h-3 inline mr-0.5" />
+            {pathToBreadcrumb(node.path)}
+          </span>
+
+          {/* Add assertion (any node: leaf = value assert, parent = exists) */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+              alreadyAsserted ? "text-green-500" : "text-primary"
+            }`}
+            onClick={() => createAssertionFromNode(node)}
+            title={alreadyAsserted ? "Assertion exists - click to add another" : `Assert ${node.path}`}
+          >
+            {alreadyAsserted ? (
+              <CheckCircle2 className="w-3 h-3" />
+            ) : (
+              <Plus className="w-3 h-3" />
+            )}
+          </Button>
+
+          {/* Save as variable - zero-code store for next request */}
+          {onSaveAsVariable && (
             <Button
               variant="ghost"
               size="sm"
-              className={`h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${
-                alreadyAsserted ? "text-green-500" : "text-primary"
-              }`}
-              onClick={() => createAssertionFromNode(node)}
-              title={alreadyAsserted ? "Assertion exists - click to add another" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
+              className="h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600"
+              onClick={() => handleSaveAsVariable(node)}
+              title={`Save as variable (use {{name}} in next request)`}
             >
-              {alreadyAsserted ? (
-                <CheckCircle2 className="w-3 h-3" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
+              <Save className="w-3 h-3" />
             </Button>
           )}
 
@@ -328,7 +383,7 @@ export default function ResponseTreeExplorer({
             size="sm"
             className="h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={() => navigator.clipboard.writeText(node.path)}
-            title={`Copy JSONPath: ${node.path}`}
+            title={`JSONPath: ${node.path}`}
           >
             <Copy className="w-3 h-3 text-muted-foreground" />
           </Button>
@@ -559,6 +614,28 @@ export default function ResponseTreeExplorer({
           )}
         </div>
       )}
+
+      {/* Save as variable dialog (zero-code) */}
+      <Dialog open={!!saveVarNode} onOpenChange={(open) => !open && setSaveVarNode(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save as variable</DialogTitle>
+            <DialogDescription>
+              Use in next request or chain as <code className="bg-muted px-1 rounded">{`{{variable_name}}`}</code>. Path: {saveVarNode?.path}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Variable name (e.g. user_id)"
+            value={saveVarName}
+            onChange={(e) => setSaveVarName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && confirmSaveVariable()}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveVarNode(null)}>Cancel</Button>
+            <Button onClick={confirmSaveVariable} disabled={!saveVarName.trim()}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

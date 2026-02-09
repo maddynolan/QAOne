@@ -4,7 +4,7 @@
  * send the request, and see the full response with syntax highlighting.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +15,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Send, Plus, Trash2, Loader2, Copy, Save, Clock,
+  Send, Plus, Trash2, Loader2, Copy, Save, Clock, History, Code,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import AssertionsPanel from "./AssertionsPanel";
+import { generateSnippet, SNIPPET_LABELS } from "./codeSnippets";
 import ResponseTreeExplorer from "./ResponseTreeExplorer";
+import { useToast } from "@/hooks/use-toast";
 import { resolveVariables, hasUnresolvedVariables, type EnvironmentConfig } from "./EnvironmentManager";
 import {
   API_BASE_URL,
@@ -34,6 +43,47 @@ import {
   createEmptyRequest,
   generateId,
 } from "./constants";
+
+/** Resolve a simple JSONPath (e.g. $[4].title or $.data.items[0]) to a value; supports arrays and objects. */
+function jsonPathValue(obj: any, path: string): unknown {
+  if (obj == null) return undefined;
+  let s = path.replace(/^\$\.?/, "").trim();
+  if (!s) return obj;
+  let current: any = obj;
+  const tokens: string[] = [];
+  for (let i = 0; i < s.length; ) {
+    if (s[i] === "[") {
+      const end = s.indexOf("]", i);
+      if (end === -1) break;
+      tokens.push(s.slice(i, end + 1));
+      i = end + 1;
+    } else if (s[i] === ".") {
+      i++;
+      const next = s[i];
+      if (next === "[" || next === undefined) continue;
+      let j = i;
+      while (j < s.length && /[a-zA-Z0-9_$]/.test(s[j])) j++;
+      tokens.push(s.slice(i, j));
+      i = j;
+    } else {
+      let j = i;
+      while (j < s.length && /[a-zA-Z0-9_$]/.test(s[j])) j++;
+      tokens.push(s.slice(i, j));
+      i = j;
+    }
+  }
+  for (const t of tokens) {
+    if (current == null) return undefined;
+    if (t.startsWith("[") && t.endsWith("]")) {
+      const idx = parseInt(t.slice(1, -1), 10);
+      if (Number.isNaN(idx)) continue;
+      current = current[idx];
+    } else {
+      current = current[t];
+    }
+  }
+  return current;
+}
 
 interface SavedRequest {
   id: string;
@@ -56,9 +106,13 @@ interface RequestBuilderProps {
   onAddToTestSuite?: (testCase: any) => void;
   initialRequest?: InitialRequestData | null;
   activeEnvironment?: EnvironmentConfig | null;
+  /** Tier 2: global variables (resolve order: global → env → collection → saved from response) */
+  globalVariables?: Record<string, string>;
+  collectionVariables?: Record<string, string>;
 }
 
-export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment }: RequestBuilderProps) {
+export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment, globalVariables = {}, collectionVariables = {} }: RequestBuilderProps) {
+  const { toast } = useToast();
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
   const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string }>>([]);
@@ -67,6 +121,22 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("params");
   const [responseTab, setResponseTab] = useState("body");
+  // Console: last request/response for inspection (zero-code)
+  const [lastRequest, setLastRequest] = useState<{ method: string; url: string; headers: Record<string, string>; body: string } | null>(null);
+  // Cookie jar: domain -> list of { name, value } (zero-code; from Set-Cookie, sent as Cookie header)
+  const [cookieJar, setCookieJar] = useState<Record<string, Array<{ name: string; value: string }>>>(() => {
+    try {
+      const raw = localStorage.getItem("api_cookie_jar");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("api_cookie_jar", JSON.stringify(cookieJar));
+    } catch {}
+  }, [cookieJar]);
 
   // --- Load initial request when prop changes (e.g. from "Try It" button) ---
   useEffect(() => {
@@ -106,6 +176,122 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   const [saveName, setSaveName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+
+  // Request history (zero-code: no scripts — just log and replay)
+  const HISTORY_KEY = "api_request_history";
+  const HISTORY_MAX = 100;
+  const [requestHistory, setRequestHistory] = useState<Array<{ id: string; method: string; url: string; timestamp: string; name?: string }>>(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+
+  const pushHistory = useCallback((method: string, url: string) => {
+    const entry = {
+      id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      method,
+      url,
+      timestamp: new Date().toISOString(),
+    };
+    setRequestHistory((prev) => {
+      const next = [entry, ...prev.filter((h) => !(h.method === method && h.url === url))].slice(0, HISTORY_MAX);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const loadFromHistory = useCallback((entry: { method: string; url: string }) => {
+    setRequest((prev) => ({ ...prev, method: entry.method, url: entry.url }));
+    setShowHistory(false);
+  }, []);
+
+  // OAuth2: list configs and get token (zero-code — no scripts)
+  const [oauth2Configs, setOauth2Configs] = useState<Array<{ config_id: string; name: string; grant_type: string }>>([]);
+  const [oauth2ConfigId, setOauth2ConfigId] = useState("");
+  const [oauth2Loading, setOauth2Loading] = useState(false);
+  const [oauth2Error, setOauth2Error] = useState<string | null>(null);
+  useEffect(() => {
+    if (request.authType !== "oauth2") return;
+    fetch(`${API_BASE_URL}/api/oauth2/configs`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.configs?.length) setOauth2Configs(data.configs);
+      })
+      .catch(() => setOauth2Configs([]));
+  }, [request.authType]);
+
+  // Saved from response (zero-code): store node values for use as {{name}} in next request
+  const [savedFromResponse, setSavedFromResponse] = useState<Record<string, unknown>>({});
+
+  // Before request (zero-code): set variables before send — Static, $timestamp, $randomUUID, etc.
+  type BeforeRequestVarType = "static" | "$timestamp" | "$randomUUID" | "$randomInt" | "$randomEmail" | "$randomFullName";
+  const BEFORE_REQUEST_TYPES: { value: BeforeRequestVarType; label: string }[] = [
+    { value: "static", label: "Static value" },
+    { value: "$timestamp", label: "$timestamp" },
+    { value: "$randomUUID", label: "$randomUUID" },
+    { value: "$randomInt", label: "$randomInt" },
+    { value: "$randomEmail", label: "$randomEmail" },
+    { value: "$randomFullName", label: "$randomFullName" },
+  ];
+  const [beforeRequestVars, setBeforeRequestVars] = useState<Array<{ id: string; variableName: string; type: BeforeRequestVarType; staticValue?: string }>>([]);
+  const preRequestComputedRef = useRef<Record<string, string>>({});
+  const computePreRequestVars = useCallback((): Record<string, string> => {
+    const out: Record<string, string> = {};
+    beforeRequestVars.forEach((row) => {
+      if (!row.variableName.trim()) return;
+      const key = row.variableName.trim();
+      switch (row.type) {
+        case "static":
+          out[key] = row.staticValue ?? "";
+          break;
+        case "$timestamp":
+          out[key] = String(Date.now());
+          break;
+        case "$randomUUID":
+          out[key] = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `uuid-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+          break;
+        case "$randomInt":
+          out[key] = String(Math.floor(Math.random() * 1e9));
+          break;
+        case "$randomEmail":
+          out[key] = `user-${Date.now()}@example.com`;
+          break;
+        case "$randomFullName":
+          out[key] = `User ${Math.random().toString(36).slice(2, 8)}`;
+          break;
+        default:
+          out[key] = "";
+      }
+    });
+    return out;
+  }, [beforeRequestVars]);
+  const addBeforeRequestVar = useCallback(() => {
+    setBeforeRequestVars((prev) => [...prev, { id: generateId(), variableName: "", type: "static", staticValue: "" }]);
+  }, []);
+  const updateBeforeRequestVar = useCallback((id: string, patch: Partial<{ variableName: string; type: BeforeRequestVarType; staticValue: string }>) => {
+    setBeforeRequestVars((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }, []);
+  const removeBeforeRequestVar = useCallback((id: string) => {
+    setBeforeRequestVars((prev) => prev.filter((r) => r.id !== id));
+  }, []);
+
+  const extraVarsForResolve = useCallback((): { global: Record<string, string>; collection: Record<string, string>; local: Record<string, string> } => {
+    const local: Record<string, string> = {};
+    Object.entries(savedFromResponse).forEach(([k, v]) => {
+      local[k] = v === null || v === undefined ? "" : String(v);
+    });
+    Object.entries(preRequestComputedRef.current).forEach(([k, v]) => {
+      local[k] = v;
+    });
+    return { global: globalVariables, collection: collectionVariables, local };
+  }, [globalVariables, collectionVariables, savedFromResponse]);
 
   // --- Key-Value helpers ---
   const updateKV = (
@@ -152,10 +338,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
     // Apply request-level auth first
     if (request.authType === "bearer" && request.authToken) {
-      headers["Authorization"] = `Bearer ${resolveVariables(request.authToken, activeEnvironment || null)}`;
+      headers["Authorization"] = `Bearer ${resolveVariables(request.authToken, activeEnvironment || null, extraVarsForResolve())}`;
     } else if (request.authType === "basic" && request.authUsername) {
-      const user = resolveVariables(request.authUsername, activeEnvironment || null);
-      const pass = resolveVariables(request.authPassword, activeEnvironment || null);
+      const user = resolveVariables(request.authUsername, activeEnvironment || null, extraVarsForResolve());
+      const pass = resolveVariables(request.authPassword, activeEnvironment || null, extraVarsForResolve());
       headers["Authorization"] = `Basic ${btoa(`${user}:${pass}`)}`;
     } else if (request.authType === "api_key" && request.authApiKeyName && request.authApiKeyLocation === "header") {
       const keyName = resolveVariables(request.authApiKeyName, activeEnvironment || null);
@@ -173,43 +359,60 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         headers[envAuth.api_key_name] = envAuth.api_key_value || "";
       }
     }
+    // Cookie jar: add Cookie header when request host matches stored cookies
+    try {
+      const resolvedUrl = resolveVariables(request.url.trim(), activeEnvironment || null, extraVarsForResolve());
+      if (resolvedUrl) {
+        const host = new URL(resolvedUrl, "http://localhost").hostname;
+        const cookies = cookieJar[host];
+        if (cookies?.length) {
+          headers["Cookie"] = cookies.map((c) => `${encodeURIComponent(c.name)}=${encodeURIComponent(c.value)}`).join("; ");
+        }
+      }
+    } catch {}
     return headers;
-  }, [request, activeEnvironment]);
+  }, [request, activeEnvironment, extraVarsForResolve, cookieJar]);
 
   // --- Build URL with query params and variable resolution ---
   const buildUrl = useCallback((): string => {
     let url = request.url.trim();
     if (!url) return url;
     // Resolve environment variables in URL
-    url = resolveVariables(url, activeEnvironment || null);
+    url = resolveVariables(url, activeEnvironment || null, extraVarsForResolve());
     const params = request.params.filter(p => p.enabled && p.key.trim());
     if (params.length > 0) {
       const sep = url.includes("?") ? "&" : "?";
       url += sep + params.map(p => {
-        const key = resolveVariables(p.key, activeEnvironment || null);
-        const val = resolveVariables(p.value, activeEnvironment || null);
+        const key = resolveVariables(p.key, activeEnvironment || null, extraVarsForResolve());
+        const val = resolveVariables(p.value, activeEnvironment || null, extraVarsForResolve());
         return `${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
       }).join("&");
     }
     if (request.authType === "api_key" && request.authApiKeyLocation === "query" && request.authApiKeyName) {
       const sep = url.includes("?") ? "&" : "?";
-      const keyName = resolveVariables(request.authApiKeyName, activeEnvironment || null);
-      const keyVal = resolveVariables(request.authApiKeyValue, activeEnvironment || null);
+      const keyName = resolveVariables(request.authApiKeyName, activeEnvironment || null, extraVarsForResolve());
+      const keyVal = resolveVariables(request.authApiKeyValue, activeEnvironment || null, extraVarsForResolve());
       url += `${sep}${encodeURIComponent(keyName)}=${encodeURIComponent(keyVal)}`;
     }
     return url;
-  }, [request, activeEnvironment]);
+  }, [request, activeEnvironment, extraVarsForResolve]);
 
   // Check for unresolved variables in URL
   const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
 
   // --- Send the request ---
   const handleSend = async () => {
+    // Compute before-request variables so {{var}} in URL/headers/body resolve correctly
+    preRequestComputedRef.current = computePreRequestVars();
     const url = buildUrl();
     if (!url) {
       setError("Please enter a URL");
       return;
     }
+    const sentHeaders = buildHeaders();
+    const sentBody = request.bodyType !== "none" && request.body.trim()
+      ? resolveVariables(request.body, activeEnvironment || null, extraVarsForResolve())
+      : "";
 
     setSending(true);
     setError(null);
@@ -231,9 +434,9 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 method: request.method,
                 path: url,
                 request: {
-                  headers: buildHeaders(),
+                  headers: sentHeaders,
                   body: request.bodyType !== "none" && request.body.trim()
-                    ? tryParseJSON(resolveVariables(request.body, activeEnvironment || null))
+                    ? tryParseJSON(sentBody)
                     : undefined,
                   query: Object.fromEntries(
                     request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
@@ -288,12 +491,49 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
           time: Math.round(testResult.response_time_ms || elapsed),
           size: typeof responseBody === "string" ? responseBody.length : JSON.stringify(responseBody || "").length,
         });
+        setLastRequest({ method: request.method, url, headers: sentHeaders, body: sentBody });
+        pushHistory(request.method, url);
 
-        // Extract assertion results from backend response
-        if (testResult.assertion_results && Array.isArray(testResult.assertion_results)) {
-          setAssertionResults(testResult.assertion_results);
+        // Cookie jar: parse Set-Cookie from response and store by host
+        const respHeaders = testResult.response_headers || {};
+        const setCookieRaw = respHeaders["set-cookie"] ?? respHeaders["Set-Cookie"];
+        if (setCookieRaw) {
+          const arr = Array.isArray(setCookieRaw) ? setCookieRaw : [setCookieRaw];
+          let host = "";
+          try {
+            host = new URL(url, "http://localhost").hostname;
+          } catch {}
+          if (host) {
+            const newCookies: Array<{ name: string; value: string }> = [];
+            for (const raw of arr) {
+              const part = String(raw).split(";")[0].trim();
+              const eq = part.indexOf("=");
+              if (eq > 0) {
+                newCookies.push({ name: part.slice(0, eq).trim(), value: part.slice(eq + 1).trim() });
+              }
+            }
+            if (newCookies.length) {
+              setCookieJar((prev) => {
+                const existing = prev[host] || [];
+                const byName = new Map(existing.map((c) => [c.name, c]));
+                newCookies.forEach((c) => byName.set(c.name, c));
+                return { ...prev, [host]: [...byName.values()] };
+              });
+            }
+          }
+        }
+
+        // Extract assertion results: prefer backend results (assertions.results), else build client-side
+        const backendResults = testResult.assertion_results ?? testResult.assertions?.results;
+        if (Array.isArray(backendResults) && backendResults.length > 0) {
+          setAssertionResults(backendResults.map((r: any) => ({
+            passed: !!r.passed,
+            message: r.message ?? (r.actual !== undefined || r.expected !== undefined
+              ? `expected ${r.expected ?? "—"}, got ${r.actual ?? "—"}`
+              : r.error ?? "Assertion failed"),
+          })));
         } else {
-          // Build assertion results client-side from basic checks
+          // Build assertion results client-side (with correct JSONPath for arrays)
           const results: Array<{ passed: boolean; message: string }> = [];
           for (const a of assertions) {
             if (a.type === "status_code") {
@@ -326,28 +566,17 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 message: `Header "${a.path}": ${match ? "matches" : `expected "${a.expected}", got "${headerVal}"`}`,
               });
             } else if (a.type === "jsonpath" && a.path) {
-              // Basic JSONPath check: extract from response and compare
               try {
                 const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
-                const pathParts = a.path.replace(/^\$\.?/, "").split(".");
-                let val: any = bodyObj;
-                for (const part of pathParts) {
-                  if (val == null) break;
-                  const arrMatch = part.match(/^(\w+)\[(\d+)\]$/);
-                  if (arrMatch) {
-                    val = val[arrMatch[1]]?.[parseInt(arrMatch[2])];
-                  } else {
-                    val = val[part];
-                  }
-                }
-                const actual = String(val);
+                const val = jsonPathValue(bodyObj, a.path);
+                const actual = val === undefined || val === null ? "undefined" : String(val);
                 const passed = a.operator === "exists" ? val !== undefined && val !== null
                   : a.operator === "not_exists" ? val === undefined || val === null
                   : a.operator === "contains" ? actual.includes(a.expected)
-                  : actual === a.expected;
+                  : actual === (a.expected ?? "");
                 results.push({
                   passed,
-                  message: `JSONPath "${a.path}": ${passed ? "passed" : `expected "${a.expected}", got "${actual}"`}`,
+                  message: `JSONPath "${a.path}": ${passed ? "passed" : `expected "${a.expected ?? ""}", got "${actual}"`}`,
                 });
               } catch {
                 results.push({ passed: false, message: `JSONPath "${a.path}": failed to evaluate` });
@@ -368,6 +597,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
           time: elapsed,
           size: 0,
         });
+        pushHistory(request.method, url);
       }
     } catch (err: any) {
       setError(err.message || "Request failed");
@@ -495,6 +725,54 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         </Card>
       )}
 
+      {/* Request History (zero-code: no scripts — replay from list) */}
+      {showHistory && (
+        <Card className="border-muted">
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">Request History</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowHistory(false)}>Close</Button>
+            </div>
+            <Input
+              placeholder="Search method or URL..."
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              className="mt-2 h-8 text-sm"
+            />
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ScrollArea className="max-h-56">
+              <div className="space-y-1">
+                {requestHistory
+                  .filter((h) => {
+                    const q = historySearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return h.method.toLowerCase().includes(q) || h.url.toLowerCase().includes(q);
+                  })
+                  .map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer border-b border-border/50 last:border-0"
+                      onClick={() => loadFromHistory(entry)}
+                    >
+                      <Badge variant="outline" className={`text-xs flex-shrink-0 ${getMethodColor(entry.method)}`}>
+                        {entry.method}
+                      </Badge>
+                      <span className="text-xs font-mono truncate flex-1" title={entry.url}>{entry.url}</span>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+              {requestHistory.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No history yet. Send a request to record it.</p>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+
       {/* URL Bar */}
       <Card>
         <CardContent className="p-4">
@@ -546,6 +824,38 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 <Send className="w-4 h-4 mr-2" />
               )}
               Send
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" title="Generate code snippet">
+                  <Code className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Copy as</DropdownMenuLabel>
+                {SNIPPET_LABELS.map(({ value, label }) => (
+                  <DropdownMenuItem
+                    key={value}
+                    onClick={() => {
+                      const snippet = generateSnippet(request, value);
+                      navigator.clipboard.writeText(snippet);
+                      toast({ title: "Copied", description: `${label} snippet copied to clipboard` });
+                    }}
+                  >
+                    {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowHistory(!showHistory)}
+              title="Request history"
+            >
+              <History className="w-4 h-4" />
             </Button>
 
             <Button
@@ -659,6 +969,12 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         <CardContent className="p-0">
           <Tabs value={activeSection} onValueChange={setActiveSection}>
             <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-4 pt-2">
+              <TabsTrigger value="before" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Before request
+                {beforeRequestVars.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{beforeRequestVars.length}</Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="params" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
                 Params
                 {request.params.filter(p => p.enabled && p.key.trim()).length > 0 && (
@@ -678,6 +994,14 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               <TabsTrigger value="body" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
                 Body
               </TabsTrigger>
+              <TabsTrigger value="cookies" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+                Cookies
+                {Object.keys(cookieJar).length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
+                    {Object.keys(cookieJar).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="auth" className="rounded-b-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
                 Auth
                 {request.authType !== "none" && (
@@ -695,6 +1019,53 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 )}
               </TabsTrigger>
             </TabsList>
+
+            {/* Before request — set variables before send (zero-code) */}
+            <TabsContent value="before" className="p-4 mt-0 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Set variables before sending. Use <code className="text-xs bg-muted px-1 rounded">{`{{variableName}}`}</code> in URL, headers, or body.
+              </p>
+              <div className="space-y-2">
+                {beforeRequestVars.map((row) => (
+                  <div key={row.id} className="flex flex-wrap items-center gap-2 p-2 rounded border bg-muted/30">
+                    <Input
+                      placeholder="Variable name"
+                      value={row.variableName}
+                      onChange={(e) => updateBeforeRequestVar(row.id, { variableName: e.target.value })}
+                      className="w-32 font-mono text-sm"
+                    />
+                    <Select
+                      value={row.type}
+                      onValueChange={(v) => updateBeforeRequestVar(row.id, { type: v as BeforeRequestVarType })}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BEFORE_REQUEST_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {row.type === "static" && (
+                      <Input
+                        placeholder="Value"
+                        value={row.staticValue ?? ""}
+                        onChange={(e) => updateBeforeRequestVar(row.id, { staticValue: e.target.value })}
+                        className="flex-1 min-w-[120px]"
+                      />
+                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeBeforeRequestVar(row.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={addBeforeRequestVar}>
+                <Plus className="w-4 h-4 mr-2" />
+                Set variable
+              </Button>
+            </TabsContent>
 
             {/* Params */}
             <TabsContent value="params" className="p-4 mt-0">
@@ -765,6 +1136,53 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   >
                     Format JSON
                   </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Cookies — view/edit jar; sent automatically when host matches */}
+            <TabsContent value="cookies" className="p-4 mt-0 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Cookies from <code className="text-xs bg-muted px-1 rounded">Set-Cookie</code> are stored by domain and sent on matching requests.
+              </p>
+              {Object.entries(cookieJar).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No cookies stored. Send a request that returns Set-Cookie to populate.</p>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(cookieJar).map(([domain, cookies]) => (
+                    <div key={domain} className="rounded border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-sm font-medium">{domain}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 h-7"
+                          onClick={() => setCookieJar((prev) => { const next = { ...prev }; delete next[domain]; return next; })}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Clear domain
+                        </Button>
+                      </div>
+                      <div className="space-y-1">
+                        {cookies.map((c, i) => (
+                          <div key={`${c.name}-${i}`} className="flex items-center gap-2 text-sm">
+                            <span className="font-mono text-muted-foreground">{c.name}</span>
+                            <span className="flex-1 truncate font-mono">{c.value}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-500"
+                              onClick={() => setCookieJar((prev) => ({
+                                ...prev,
+                                [domain]: (prev[domain] || []).filter((_, j) => j !== i),
+                              }))}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </TabsContent>
@@ -860,6 +1278,66 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   </div>
                 </div>
               )}
+
+              {request.authType === "oauth2" && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Select an OAuth2 config and get a token. The token will be set as Bearer for this request (no scripts).
+                  </p>
+                  <div className="space-y-2">
+                    <Label>OAuth2 Config</Label>
+                    <Select
+                      value={oauth2ConfigId}
+                      onValueChange={(v) => { setOauth2ConfigId(v); setOauth2Error(null); }}
+                    >
+                      <SelectTrigger className="w-full max-w-sm">
+                        <SelectValue placeholder="Select a config..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {oauth2Configs.map((c) => (
+                          <SelectItem key={c.config_id} value={c.config_id}>
+                            {c.name} ({c.grant_type})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="default"
+                    disabled={!oauth2ConfigId || oauth2Loading}
+                    onClick={async () => {
+                      if (!oauth2ConfigId) return;
+                      setOauth2Loading(true);
+                      setOauth2Error(null);
+                      try {
+                        const r = await fetch(`${API_BASE_URL}/api/oauth2/headers/${oauth2ConfigId}`);
+                        const data = await r.json();
+                        if (!r.ok) throw new Error(data.detail || "Failed to get token");
+                        const authHeader = data?.headers?.Authorization;
+                        if (!authHeader || typeof authHeader !== "string") throw new Error("No Authorization header");
+                        const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+                        setRequest((prev) => ({ ...prev, authType: "bearer", authToken: token }));
+                        toast({ title: "Token set", description: "OAuth2 token applied as Bearer. Send the request to use it." });
+                      } catch (err: any) {
+                        setOauth2Error(err.message || "Failed to get token");
+                        toast({ title: "OAuth2 error", description: err.message, variant: "destructive" });
+                      } finally {
+                        setOauth2Loading(false);
+                      }
+                    }}
+                  >
+                    {oauth2Loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Get token and use as Bearer
+                  </Button>
+                  {oauth2Error && (
+                    <p className="text-sm text-destructive">{oauth2Error}</p>
+                  )}
+                  {oauth2Configs.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No OAuth2 configs yet. Create one via API: POST /api/oauth2/configs</p>
+                  )}
+                </div>
+              )}
             </TabsContent>
 
             {/* Assertions */}
@@ -933,11 +1411,47 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     </Badge>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="console" className="rounded-b-none">Console</TabsTrigger>
                 <TabsTrigger value="tree" className="rounded-b-none text-green-600">
                   <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                   Assert Builder
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="console" className="mt-0 p-4 space-y-4">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-muted-foreground">Last request</h4>
+                  {lastRequest ? (
+                    <div className="rounded border bg-muted/30 p-3 font-mono text-xs space-y-2">
+                      <div><span className="text-primary font-semibold">{lastRequest.method}</span> {lastRequest.url}</div>
+                      <div className="border-t pt-2">
+                        {Object.entries(lastRequest.headers).map(([k, v]) => (
+                          <div key={k} className="flex gap-2"><span className="text-muted-foreground">{k}:</span><span className="break-all">{v}</span></div>
+                        ))}
+                      </div>
+                      {lastRequest.body && (
+                        <pre className="mt-2 pt-2 border-t whitespace-pre-wrap break-words">{lastRequest.body}</pre>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Send a request to see it here.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-muted-foreground">Last response</h4>
+                  {response && (
+                    <div className="rounded border bg-muted/30 p-3 font-mono text-xs space-y-2">
+                      <div><span className="text-primary font-semibold">{response.status}</span> {response.statusText} · {response.time}ms</div>
+                      <div className="border-t pt-2">
+                        {Object.entries(response.headers).map(([k, v]) => (
+                          <div key={k} className="flex gap-2"><span className="text-muted-foreground">{k}:</span><span className="break-all">{v}</span></div>
+                        ))}
+                      </div>
+                      <pre className="mt-2 pt-2 border-t whitespace-pre-wrap break-words max-h-48 overflow-auto">{formatResponseBody(response.body)}</pre>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
 
               <TabsContent value="body" className="mt-0">
                 <ScrollArea className="h-[350px]">
@@ -974,6 +1488,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     setActiveSection("assertions");
                   }}
                   existingAssertions={assertions}
+                  onSaveAsVariable={(name, _path, value) => {
+                    setSavedFromResponse(prev => ({ ...prev, [name]: value }));
+                    toast({ title: "Saved", description: `Use {{${name}}} in URL, headers, or body for the next request.` });
+                  }}
                 />
               </TabsContent>
             </Tabs>
