@@ -138,9 +138,11 @@ export interface Defect {
 
 class DataStorageService {
   private baseUrl: string;
+  private dbUrl: string; // /api/db endpoint for persistent SQLite storage
 
   constructor(baseUrl: string = 'https://qaone-production.up.railway.app') {
     this.baseUrl = baseUrl;
+    this.dbUrl = `${baseUrl}/api/db`; // Persistent database API
   }
 
   // Convert Flowstral recorded test case to standard TestCase format
@@ -195,108 +197,58 @@ class DataStorageService {
     }
   }
 
-  // Test Case Management
+  // Test Case Management - uses /api/db/ for persistent SQLite storage
   async createTestCase(testCase: Omit<TestCase, 'id' | 'createdAt' | 'updatedAt'>): Promise<TestCase> {
-    const url = `${this.baseUrl}/test-cases`;
-    console.log('Creating test case via API:', testCase);
-    console.log('Request URL:', url);
-    console.log('Base URL:', this.baseUrl);
-    
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${this.dbUrl}/test-cases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testCase)
+        body: JSON.stringify({
+          name: testCase.name,
+          description: testCase.description || '',
+          steps: testCase.steps || [],
+          status: testCase.status || 'draft',
+          priority: testCase.priority || 'medium',
+          category: testCase.category || testCase.testType || 'functional',
+          tags: testCase.tags || [],
+          script: testCase.automationScript || null,
+          metadata: {
+            type: testCase.type,
+            preconditions: testCase.preconditions,
+            testData: testCase.testData,
+            expectedResult: testCase.expectedResult,
+            source: testCase.source,
+            complexity: testCase.complexity,
+            estimatedTime: testCase.estimatedTime,
+            linkedRequirements: testCase.linkedRequirements,
+          }
+        })
       });
-      
-      console.log('Response status:', response.status, response.statusText);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Backend returned error:', errorText);
-        console.error('Error status:', response.status);
-        throw new Error(`Failed to create test case: ${response.status} ${response.statusText} - ${errorText}`);
+        throw new Error(`Failed to create test case: ${response.status} - ${errorText}`);
       }
       
-      const responseData = await response.json();
-      console.log('Backend response data:', responseData);
-      const { id } = responseData;
-      
-      if (!id) {
-        console.error('Backend returned no ID in response:', responseData);
-        throw new Error(`Backend returned no ID in response: ${JSON.stringify(responseData)}`);
-      }
-      
-      if (id.startsWith('tc_')) {
-        console.error('Backend returned invalid fallback ID:', id);
-        console.error('Full response:', responseData);
-        throw new Error(`Backend returned invalid fallback ID (${id}). This indicates a database error. Check server logs.`);
-      }
-      
-      console.log('Successfully created test case with ID:', id);
-      return {
-        ...testCase,
-        id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      } as TestCase;
+      const data = await response.json();
+      return { ...testCase, id: data.id, createdAt: data.created_at || new Date().toISOString(), updatedAt: data.updated_at || new Date().toISOString() } as TestCase;
     } catch (error: any) {
-      console.error('=== ERROR CREATING TEST CASE ===');
-      console.error('Error object:', error);
-      console.error('Error type:', error?.constructor?.name);
-      console.error('Error name:', error?.name);
-      console.error('Error message:', error?.message);
-      console.error('Error stack:', error?.stack);
-      
-      // Check for network errors
-      if (error instanceof TypeError) {
-        console.error('NETWORK ERROR DETECTED (TypeError)');
-        if (error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
-          console.error('Failed to connect to backend at:', url);
-          console.error('This usually means:');
-          console.error('  1. Backend server is not running');
-          console.error('  2. Backend is on a different port');
-          console.error('  3. CORS issue (backend not allowing requests from frontend)');
-          console.error('  4. Network/firewall blocking the connection');
-          throw new Error(`Cannot connect to backend at ${url}. Check: 1) Is server running? 2) Is it on port 8000? 3) Check CORS settings.`);
-        }
-      }
-      
-      // Check for CORS errors
-      if (error.message && (error.message.includes('CORS') || error.message.includes('cross-origin'))) {
-        console.error('CORS ERROR: Backend is not allowing requests from this origin');
-        console.error('Check backend CORS configuration');
-      }
-      
+      console.error('Error creating test case:', error.message);
       throw error;
     }
   }
 
   async getTestCases(planId?: string): Promise<TestCase[]> {
     try {
-      let url = `${this.baseUrl}/test-cases`;
-      if (planId) {
-        url += `?plan_id=${planId}`;
-      }
-      // Fetch from main endpoint
-      const response = await fetch(url);
+      // Use persistent /api/db/ endpoint as primary source
+      const response = await fetch(`${this.dbUrl}/test-cases?limit=1000`);
       
       let testCases: TestCase[] = [];
       
       if (response.ok) {
         const data = await response.json();
-        
-        // Handle different response formats
-        if (Array.isArray(data)) {
-          testCases = data;
-        } else if (data.testCases && Array.isArray(data.testCases)) {
-          testCases = data.testCases;
-        } else if (data.test_cases && Array.isArray(data.test_cases)) {
-          testCases = data.test_cases;
-        } else {
-          console.warn('Unexpected response format:', data);
-        }
+        const items = Array.isArray(data) ? data : [];
+        testCases = items.map((item: any) => this._dbItemToTestCase(item));
       }
       
       // Also fetch from Flowstral endpoint (recorded test cases)
@@ -309,10 +261,14 @@ class DataStorageService {
           const flowstralCases = flowstralData.test_cases || [];
           
           if (flowstralCases.length > 0) {
-            // Convert Flowstral format to standard TestCase format
             const convertedCases = flowstralCases.map((fc: any) => this.convertFlowstralTestCase(fc));
-            // Merge (Flowstral cases first - they're newer/recorded)
-            testCases = [...convertedCases, ...testCases];
+            // Merge: add Flowstral cases not already in DB
+            const existingIds = new Set(testCases.map(tc => tc.id));
+            for (const fc of convertedCases) {
+              if (!existingIds.has(fc.id)) {
+                testCases.push(fc);
+              }
+            }
           }
         }
       } catch (flowstralError) {
@@ -331,29 +287,41 @@ class DataStorageService {
     }
   }
 
+  // Convert database item to TestCase format
+  private _dbItemToTestCase(item: any): TestCase {
+    const meta = item.metadata || {};
+    return {
+      id: item.id,
+      name: item.name || 'Unnamed Test',
+      description: item.description || '',
+      type: meta.type || (item.script ? 'automated' : 'manual'),
+      category: item.category || meta.category || 'functional',
+      status: item.status || 'draft',
+      steps: Array.isArray(item.steps) ? item.steps : [],
+      preconditions: meta.preconditions || [],
+      testData: meta.testData || [],
+      expectedResult: meta.expectedResult || '',
+      priority: item.priority || 'medium',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      linkedRequirements: meta.linkedRequirements || [],
+      source: meta.source || { type: 'manual' },
+      automationScript: item.script || undefined,
+      testType: item.category || meta.testType || 'functional',
+      complexity: meta.complexity || 'medium',
+      estimatedTime: meta.estimatedTime || 0,
+      createdAt: item.created_at || '',
+      updatedAt: item.updated_at || '',
+    } as TestCase;
+  }
+
   async getTestCase(id: string): Promise<TestCase | null> {
     try {
-      // First try the main endpoint
-      const response = await fetch(`${this.baseUrl}/test-cases/${id}`);
-      
+      const response = await fetch(`${this.dbUrl}/test-cases/${id}`);
       if (response.ok) {
-        return await response.json() as TestCase;
+        const item = await response.json();
+        return this._dbItemToTestCase(item);
       }
-      
-      // If not found, try Flowstral endpoint
-      if (response.status === 404) {
-        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
-        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`);
-        
-        if (flowstralResponse.ok) {
-          const flowstralData = await flowstralResponse.json();
-          // Convert Flowstral format to standard TestCase format
-          return this.convertFlowstralTestCase(flowstralData.test_case || flowstralData);
-        }
-        
-        return null;
-      }
-      
+      if (response.status === 404) return null;
       throw new Error(`Failed to get test case: ${response.statusText}`);
     } catch (error) {
       console.error('Error getting test case:', error);
@@ -363,32 +331,24 @@ class DataStorageService {
 
   async updateTestCase(id: string, updates: Partial<TestCase>): Promise<TestCase | null> {
     try {
-      // First try the main endpoint
-      const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
+      const dbUpdates: any = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.steps !== undefined) dbUpdates.steps = updates.steps;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+      if (updates.category !== undefined) dbUpdates.category = updates.category;
+      if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.automationScript !== undefined) dbUpdates.script = updates.automationScript;
+      
+      const response = await fetch(`${this.dbUrl}/test-cases/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(dbUpdates)
       });
       
-      if (response.ok) {
-        return await this.getTestCase(id);
-      }
-      
-      // If not found, try Flowstral endpoint
-      if (response.status === 404) {
-        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
-        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
-        });
-        
-        if (flowstralResponse.ok) {
-          return await this.getTestCase(id);
-        }
-        return null;
-      }
-      
+      if (response.ok) return this._dbItemToTestCase(await response.json());
+      if (response.status === 404) return null;
       throw new Error(`Failed to update test case: ${response.statusText}`);
     } catch (error) {
       console.error('Error updating test case:', error);
@@ -398,52 +358,31 @@ class DataStorageService {
 
   async deleteTestCase(id: string): Promise<boolean> {
     try {
-      // First try the main endpoint
-      const response = await fetch(`${this.baseUrl}/test-cases/${id}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        return true;
-      }
-      
-      // If not found, try Flowstral endpoint
-      if (response.status === 404) {
-        console.log(`Test case ${id} not found in main endpoint, trying Flowstral...`);
-        const flowstralResponse = await fetch(`${this.baseUrl}/api/flowstral/test-cases/${id}`, {
-          method: 'DELETE'
-        });
-        
-        return flowstralResponse.ok;
-      }
-      
-      throw new Error(`Failed to delete test case: ${response.statusText}`);
+      const response = await fetch(`${this.dbUrl}/test-cases/${id}`, { method: 'DELETE' });
+      return response.ok;
     } catch (error) {
       console.error('Error deleting test case:', error);
       return false;
     }
   }
 
-  // Test Plan Management
+  // Test Plan Management - uses /api/db/ for persistent storage
   async createTestPlan(testPlan: Omit<TestPlan, 'id' | 'createdAt' | 'updatedAt'>): Promise<TestPlan> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-plans`, {
+      const response = await fetch(`${this.dbUrl}/test-plans`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testPlan)
+        body: JSON.stringify({
+          name: testPlan.name,
+          description: testPlan.description || '',
+          test_case_ids: testPlan.testCases || [],
+          status: testPlan.status || 'draft',
+        })
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to create test plan: ${response.statusText}`);
-      }
-      
-      const { id } = await response.json();
-      return {
-        ...testPlan,
-        id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      } as TestPlan;
+      if (!response.ok) throw new Error(`Failed to create test plan: ${response.statusText}`);
+      const data = await response.json();
+      return { ...testPlan, id: data.id, createdAt: data.created_at || new Date().toISOString(), updatedAt: data.updated_at || new Date().toISOString() } as TestPlan;
     } catch (error) {
       console.error('Error creating test plan:', error);
       throw error;
@@ -452,39 +391,56 @@ class DataStorageService {
 
   async getTestPlans(): Promise<TestPlan[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-plans`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to get test plans: ${response.statusText}`);
-      }
-      
-      const { testPlans } = await response.json();
-      return testPlans || [];
+      const response = await fetch(`${this.dbUrl}/test-plans?limit=1000`);
+      if (!response.ok) throw new Error(`Failed to get test plans: ${response.statusText}`);
+      const data = await response.json();
+      const items = Array.isArray(data) ? data : [];
+      return items.map((item: any) => ({
+        id: item.id,
+        name: item.name || 'Unnamed Plan',
+        description: item.description || '',
+        status: item.status || 'draft',
+        testCases: item.test_case_ids || [],
+        linkedRequirements: item.suite_ids || [],
+        environment: '',
+        estimatedDuration: 0,
+        coverage: '',
+        riskAssessment: '',
+        createdAt: item.created_at || '',
+        updatedAt: item.updated_at || '',
+      })) as TestPlan[];
     } catch (error) {
       console.error('Error getting test plans:', error);
       return [];
     }
   }
 
-  // Test Run Management
+  async deleteTestPlan(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.dbUrl}/test-plans/${id}`, { method: 'DELETE' });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting test plan:', error);
+      return false;
+    }
+  }
+
+  // Test Run Management - uses /api/db/ for persistent storage
   async createTestRun(testRun: Omit<TestRun, 'id' | 'startTime'>): Promise<TestRun> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-runs`, {
+      const response = await fetch(`${this.dbUrl}/test-runs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(testRun)
+        body: JSON.stringify({
+          name: testRun.name,
+          test_case_ids: (testRun.testCases || []).map((tc: any) => typeof tc === 'string' ? tc : tc.id),
+          status: testRun.status || 'pending',
+        })
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to create test run: ${response.statusText}`);
-      }
-      
-      const { id } = await response.json();
-      return {
-        ...testRun,
-        id,
-        createdAt: new Date().toISOString()
-      } as TestRun;
+      if (!response.ok) throw new Error(`Failed to create test run: ${response.statusText}`);
+      const data = await response.json();
+      return { ...testRun, id: data.id, createdAt: data.created_at || new Date().toISOString() } as TestRun;
     } catch (error) {
       console.error('Error creating test run:', error);
       throw error;
@@ -493,14 +449,20 @@ class DataStorageService {
 
   async getTestRuns(): Promise<TestRun[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-runs`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to get test runs: ${response.statusText}`);
-      }
-      
-      const { testRuns } = await response.json();
-      return testRuns || [];
+      const response = await fetch(`${this.dbUrl}/test-runs?limit=1000`);
+      if (!response.ok) throw new Error(`Failed to get test runs: ${response.statusText}`);
+      const data = await response.json();
+      const items = Array.isArray(data) ? data : [];
+      return items.map((item: any) => ({
+        id: item.id,
+        name: item.name || 'Unnamed Run',
+        status: item.status || 'pending',
+        testCases: item.test_case_ids || [],
+        results: item.results ? (typeof item.results === 'string' ? JSON.parse(item.results) : item.results) : [],
+        createdAt: item.created_at || '',
+        completedAt: item.completed_at || undefined,
+        duration: undefined,
+      })) as TestRun[];
     } catch (error) {
       console.error('Error getting test runs:', error);
       return [];
@@ -509,17 +471,21 @@ class DataStorageService {
 
   async updateTestRun(id: string, updates: Partial<TestRun>): Promise<TestRun | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-runs/${id}`, {
+      const dbUpdates: any = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.results !== undefined) dbUpdates.results = updates.results;
+      
+      const response = await fetch(`${this.dbUrl}/test-runs/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(dbUpdates)
       });
       
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error(`Failed to update test run: ${response.statusText}`);
       }
-      
       return await this.getTestRun(id);
     } catch (error) {
       console.error('Error updating test run:', error);
@@ -529,40 +495,56 @@ class DataStorageService {
 
   async getTestRun(id: string): Promise<TestRun | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/test-runs/${id}`);
-      
+      const response = await fetch(`${this.dbUrl}/test-runs/${id}`);
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error(`Failed to get test run: ${response.statusText}`);
       }
-      
-      return await response.json() as TestRun;
+      const item = await response.json();
+      return {
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        testCases: item.test_case_ids || [],
+        results: item.results || [],
+        createdAt: item.created_at || '',
+        completedAt: item.completed_at || undefined,
+      } as TestRun;
     } catch (error) {
       console.error('Error getting test run:', error);
       return null;
     }
   }
 
-  // Defect Management
+  async deleteTestRun(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.dbUrl}/test-runs/${id}`, { method: 'DELETE' });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting test run:', error);
+      return false;
+    }
+  }
+
+  // Defect Management - uses /api/db/ for persistent storage
   async createDefect(defect: Omit<Defect, 'id' | 'createdAt' | 'updatedAt'>): Promise<Defect> {
     try {
-      const response = await fetch(`${this.baseUrl}/defects`, {
+      const response = await fetch(`${this.dbUrl}/defects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(defect)
+        body: JSON.stringify({
+          title: defect.title,
+          description: defect.description || '',
+          severity: defect.severity || 'medium',
+          status: defect.status || 'open',
+          test_case_id: defect.testCaseId || null,
+          test_run_id: defect.testRunId || null,
+        })
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to create defect: ${response.statusText}`);
-      }
-      
-      const { id } = await response.json();
-      return {
-        ...defect,
-        id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      } as Defect;
+      if (!response.ok) throw new Error(`Failed to create defect: ${response.statusText}`);
+      const data = await response.json();
+      return { ...defect, id: data.id, createdAt: data.created_at || new Date().toISOString(), updatedAt: data.updated_at || new Date().toISOString() } as Defect;
     } catch (error) {
       console.error('Error creating defect:', error);
       throw error;
@@ -571,14 +553,22 @@ class DataStorageService {
 
   async getDefects(): Promise<Defect[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/defects`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to get defects: ${response.statusText}`);
-      }
-      
-      const { defects } = await response.json();
-      return defects || [];
+      const response = await fetch(`${this.dbUrl}/defects?limit=1000`);
+      if (!response.ok) throw new Error(`Failed to get defects: ${response.statusText}`);
+      const data = await response.json();
+      const items = Array.isArray(data) ? data : [];
+      return items.map((item: any) => ({
+        id: item.id,
+        title: item.title || 'Unnamed Defect',
+        description: item.description || '',
+        severity: item.severity || 'medium',
+        priority: item.severity || 'medium',
+        status: item.status || 'open',
+        testCaseId: item.test_case_id || undefined,
+        testRunId: item.test_run_id || undefined,
+        createdAt: item.created_at || '',
+        updatedAt: item.updated_at || '',
+      })) as Defect[];
     } catch (error) {
       console.error('Error getting defects:', error);
       return [];
@@ -587,17 +577,22 @@ class DataStorageService {
 
   async updateDefect(id: string, updates: Partial<Defect>): Promise<Defect | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/defects/${id}`, {
+      const dbUpdates: any = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.severity !== undefined) dbUpdates.severity = updates.severity;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+      
+      const response = await fetch(`${this.dbUrl}/defects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(dbUpdates)
       });
       
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error(`Failed to update defect: ${response.statusText}`);
       }
-      
       return await this.getDefect(id);
     } catch (error) {
       console.error('Error updating defect:', error);
@@ -607,17 +602,31 @@ class DataStorageService {
 
   async getDefect(id: string): Promise<Defect | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/defects/${id}`);
-      
+      const response = await fetch(`${this.dbUrl}/defects/${id}`);
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error(`Failed to get defect: ${response.statusText}`);
       }
-      
-      return await response.json() as Defect;
+      const item = await response.json();
+      return {
+        id: item.id, title: item.title, description: item.description,
+        severity: item.severity, priority: item.severity, status: item.status,
+        testCaseId: item.test_case_id, testRunId: item.test_run_id,
+        createdAt: item.created_at, updatedAt: item.updated_at,
+      } as Defect;
     } catch (error) {
       console.error('Error getting defect:', error);
       return null;
+    }
+  }
+
+  async deleteDefect(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.dbUrl}/defects/${id}`, { method: 'DELETE' });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting defect:', error);
+      return false;
     }
   }
 

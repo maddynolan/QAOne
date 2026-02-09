@@ -19,6 +19,8 @@ import {
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import AssertionsPanel from "./AssertionsPanel";
+import ResponseTreeExplorer from "./ResponseTreeExplorer";
+import { resolveVariables, hasUnresolvedVariables, type EnvironmentConfig } from "./EnvironmentManager";
 import {
   API_BASE_URL,
   HTTP_METHODS,
@@ -53,9 +55,10 @@ interface RequestBuilderProps {
   onSaveToChain?: (request: RequestConfig, assertions: AssertionConfig[]) => void;
   onAddToTestSuite?: (testCase: any) => void;
   initialRequest?: InitialRequestData | null;
+  activeEnvironment?: EnvironmentConfig | null;
 }
 
-export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest }: RequestBuilderProps) {
+export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest, activeEnvironment }: RequestBuilderProps) {
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
   const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string }>>([]);
@@ -136,37 +139,69 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     });
   };
 
-  // --- Build headers from auth + custom headers ---
+  // --- Build headers from auth + custom headers + env variables ---
   const buildHeaders = useCallback((): Record<string, string> => {
     const headers: Record<string, string> = {};
     request.headers.forEach(h => {
-      if (h.enabled && h.key.trim()) headers[h.key.trim()] = h.value;
+      if (h.enabled && h.key.trim()) {
+        const key = resolveVariables(h.key.trim(), activeEnvironment || null);
+        const val = resolveVariables(h.value, activeEnvironment || null);
+        headers[key] = val;
+      }
     });
+
+    // Apply request-level auth first
     if (request.authType === "bearer" && request.authToken) {
-      headers["Authorization"] = `Bearer ${request.authToken}`;
+      headers["Authorization"] = `Bearer ${resolveVariables(request.authToken, activeEnvironment || null)}`;
     } else if (request.authType === "basic" && request.authUsername) {
-      headers["Authorization"] = `Basic ${btoa(`${request.authUsername}:${request.authPassword}`)}`;
+      const user = resolveVariables(request.authUsername, activeEnvironment || null);
+      const pass = resolveVariables(request.authPassword, activeEnvironment || null);
+      headers["Authorization"] = `Basic ${btoa(`${user}:${pass}`)}`;
     } else if (request.authType === "api_key" && request.authApiKeyName && request.authApiKeyLocation === "header") {
-      headers[request.authApiKeyName] = request.authApiKeyValue;
+      const keyName = resolveVariables(request.authApiKeyName, activeEnvironment || null);
+      const keyVal = resolveVariables(request.authApiKeyValue, activeEnvironment || null);
+      headers[keyName] = keyVal;
+    }
+    // If request auth is "none", fall back to environment-level auth
+    else if (request.authType === "none" && activeEnvironment?.auth && activeEnvironment.auth.type !== "none") {
+      const envAuth = activeEnvironment.auth;
+      if (envAuth.type === "bearer" && envAuth.bearer_token) {
+        headers["Authorization"] = `Bearer ${envAuth.bearer_token}`;
+      } else if (envAuth.type === "basic" && envAuth.basic_username) {
+        headers["Authorization"] = `Basic ${btoa(`${envAuth.basic_username}:${envAuth.basic_password || ""}`)}`;
+      } else if (envAuth.type === "api_key" && envAuth.api_key_name && envAuth.api_key_location === "header") {
+        headers[envAuth.api_key_name] = envAuth.api_key_value || "";
+      }
     }
     return headers;
-  }, [request]);
+  }, [request, activeEnvironment]);
 
-  // --- Build URL with query params ---
+  // --- Build URL with query params and variable resolution ---
   const buildUrl = useCallback((): string => {
     let url = request.url.trim();
     if (!url) return url;
+    // Resolve environment variables in URL
+    url = resolveVariables(url, activeEnvironment || null);
     const params = request.params.filter(p => p.enabled && p.key.trim());
     if (params.length > 0) {
       const sep = url.includes("?") ? "&" : "?";
-      url += sep + params.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
+      url += sep + params.map(p => {
+        const key = resolveVariables(p.key, activeEnvironment || null);
+        const val = resolveVariables(p.value, activeEnvironment || null);
+        return `${encodeURIComponent(key)}=${encodeURIComponent(val)}`;
+      }).join("&");
     }
     if (request.authType === "api_key" && request.authApiKeyLocation === "query" && request.authApiKeyName) {
       const sep = url.includes("?") ? "&" : "?";
-      url += `${sep}${encodeURIComponent(request.authApiKeyName)}=${encodeURIComponent(request.authApiKeyValue)}`;
+      const keyName = resolveVariables(request.authApiKeyName, activeEnvironment || null);
+      const keyVal = resolveVariables(request.authApiKeyValue, activeEnvironment || null);
+      url += `${sep}${encodeURIComponent(keyName)}=${encodeURIComponent(keyVal)}`;
     }
     return url;
-  }, [request]);
+  }, [request, activeEnvironment]);
+
+  // Check for unresolved variables in URL
+  const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
 
   // --- Send the request ---
   const handleSend = async () => {
@@ -198,7 +233,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 request: {
                   headers: buildHeaders(),
                   body: request.bodyType !== "none" && request.body.trim()
-                    ? tryParseJSON(request.body)
+                    ? tryParseJSON(resolveVariables(request.body, activeEnvironment || null))
                     : undefined,
                   query: Object.fromEntries(
                     request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
@@ -480,13 +515,25 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               </SelectContent>
             </Select>
 
-            <Input
-              className="flex-1 font-mono text-sm"
-              placeholder="https://api.example.com/endpoint"
-              value={request.url}
-              onChange={e => setRequest({ ...request, url: e.target.value })}
-              onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
-            />
+            <div className="flex-1 relative">
+              <Input
+                className={`w-full font-mono text-sm ${unresolvedVars.length > 0 ? "border-amber-400 pr-20" : ""}`}
+                placeholder="https://api.example.com/endpoint  or  {{base_url}}/api/users"
+                value={request.url}
+                onChange={e => setRequest({ ...request, url: e.target.value })}
+                onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
+              />
+              {unresolvedVars.length > 0 && activeEnvironment && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  {unresolvedVars.length} unresolved
+                </span>
+              )}
+              {activeEnvironment && request.url.includes("{{") && unresolvedVars.length === 0 && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
+                  vars resolved
+                </span>
+              )}
+            </div>
 
             <Button
               onClick={handleSend}
@@ -583,6 +630,25 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               <Button size="sm" onClick={saveRequest} disabled={!saveName.trim()}>
                 Save
               </Button>
+            </div>
+          )}
+
+          {/* Active environment indicator */}
+          {activeEnvironment && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <span className={`w-2 h-2 rounded-full ${
+                activeEnvironment.type === "production" ? "bg-red-500" :
+                activeEnvironment.type === "staging" ? "bg-amber-500" : "bg-green-500"
+              }`} />
+              <span>
+                Env: <strong className="text-foreground">{activeEnvironment.name}</strong>
+                <span className="font-mono ml-1">({activeEnvironment.base_url})</span>
+              </span>
+              {activeEnvironment.auth?.type !== "none" && activeEnvironment.auth?.type && (
+                <Badge variant="secondary" className="text-[10px] h-4">
+                  Auth: {activeEnvironment.auth.type}
+                </Badge>
+              )}
             </div>
           )}
         </CardContent>
@@ -867,6 +933,10 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     </Badge>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="tree" className="rounded-b-none text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                  Assert Builder
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="body" className="mt-0">
@@ -891,6 +961,20 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     )}
                   </div>
                 </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="tree" className="mt-0 p-4">
+                <ResponseTreeExplorer
+                  responseBody={response.body}
+                  responseHeaders={response.headers}
+                  responseStatus={response.status}
+                  responseTime={response.time}
+                  onAddAssertion={(assertion) => {
+                    setAssertions(prev => [...prev, assertion]);
+                    setActiveSection("assertions");
+                  }}
+                  existingAssertions={assertions}
+                />
               </TabsContent>
             </Tabs>
           </CardContent>

@@ -123,6 +123,47 @@ class Defect(BaseModel):
     created_at: str = ""
     updated_at: str = ""
 
+class Environment(BaseModel):
+    id: str
+    name: str
+    env_type: str = "development"  # development, staging, production
+    base_url: str = ""
+    variables: List[Dict[str, Any]] = []  # [{key, value, type, enabled, description}]
+    auth: Dict[str, Any] = {}  # {type, bearer_token, oauth2_client_id, ...}
+    headers: Dict[str, Any] = {}
+    timeouts: Dict[str, Any] = {}
+    created_at: str = ""
+    updated_at: str = ""
+    created_by: Optional[str] = None
+    project_id: Optional[str] = None
+
+class TestCaseVersion(BaseModel):
+    id: str
+    test_case_id: str
+    version_number: int = 1
+    name: Optional[str] = None
+    description: Optional[str] = None
+    steps: List[Dict[str, Any]] = []
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    category: Optional[str] = None
+    tags: List[str] = []
+    script: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+    change_summary: Optional[str] = None
+    changed_by: Optional[str] = None
+    created_at: str = ""
+
+class GlobalVariable(BaseModel):
+    id: str
+    key: str
+    value: str = ""
+    var_type: str = "default"  # default, secret
+    enabled: int = 1
+    description: Optional[str] = None
+    created_at: str = ""
+    updated_at: str = ""
+
 # ==================== SQL SCHEMAS ====================
 
 SQLITE_SCHEMA = """
@@ -250,6 +291,61 @@ CREATE TABLE IF NOT EXISTS cache (
     value TEXT,
     expires_at TEXT
 );
+
+-- Environments (API testing environments with variables)
+CREATE TABLE IF NOT EXISTS environments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    env_type TEXT DEFAULT 'development',
+    base_url TEXT,
+    variables TEXT,  -- JSON array of {key, value, type, enabled, description}
+    auth TEXT,  -- JSON object {type, bearer_token, basic_username, ...}
+    headers TEXT,  -- JSON object
+    timeouts TEXT,  -- JSON object
+    created_at TEXT,
+    updated_at TEXT,
+    created_by TEXT,
+    project_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_environments_type ON environments(env_type);
+CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
+
+-- Test Case Versions (audit trail for test case edits)
+CREATE TABLE IF NOT EXISTS test_case_versions (
+    id TEXT PRIMARY KEY,
+    test_case_id TEXT NOT NULL,
+    version_number INTEGER DEFAULT 1,
+    name TEXT,
+    description TEXT,
+    steps TEXT,  -- JSON array
+    status TEXT,
+    priority TEXT,
+    category TEXT,
+    tags TEXT,  -- JSON array
+    script TEXT,
+    metadata TEXT,  -- JSON object
+    change_summary TEXT,
+    changed_by TEXT,
+    created_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tc_versions_case ON test_case_versions(test_case_id);
+CREATE INDEX IF NOT EXISTS idx_tc_versions_number ON test_case_versions(test_case_id, version_number);
+
+-- Global Variables (shared across all environments)
+CREATE TABLE IF NOT EXISTS global_variables (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT,
+    var_type TEXT DEFAULT 'default',
+    enabled INTEGER DEFAULT 1,
+    description TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_global_vars_key ON global_variables(key);
 """
 
 # ==================== REPOSITORY BASE CLASS ====================
@@ -445,6 +541,9 @@ class DatabaseService:
         self.recordings: Repository[Recording] = Repository(self, 'recordings', Recording)
         self.elements: Repository[Element] = Repository(self, 'elements', Element)
         self.defects: Repository[Defect] = Repository(self, 'defects', Defect)
+        self.environments: Repository[Environment] = Repository(self, 'environments', Environment)
+        self.test_case_versions: Repository[TestCaseVersion] = Repository(self, 'test_case_versions', TestCaseVersion)
+        self.global_variables: Repository[GlobalVariable] = Repository(self, 'global_variables', GlobalVariable)
     
     async def initialize(self):
         """Initialize the database and create tables."""
@@ -520,6 +619,9 @@ class DatabaseService:
             "recordings": await self.recordings.count(),
             "elements": await self.elements.count(),
             "defects": await self.defects.count(),
+            "environments": await self.environments.count(),
+            "test_case_versions": await self.test_case_versions.count(),
+            "global_variables": await self.global_variables.count(),
             "database_type": self.db_type,
             "database_path": self.db_path,
         }
@@ -547,6 +649,9 @@ class DatabaseService:
         self.recordings.clear_cache()
         self.elements.clear_cache()
         self.defects.clear_cache()
+        self.environments.clear_cache()
+        self.test_case_versions.clear_cache()
+        self.global_variables.clear_cache()
 
 
 # ==================== SINGLETON INSTANCE ====================

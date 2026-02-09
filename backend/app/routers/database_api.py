@@ -13,7 +13,8 @@ import uuid
 
 from ..services.storage.database_service import (
     db, init_database,
-    TestCase, TestSuite, TestRun, TestPlan, Recording, Element, Defect
+    TestCase, TestSuite, TestRun, TestPlan, Recording, Element, Defect,
+    Environment, TestCaseVersion, GlobalVariable
 )
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,31 @@ class CreateElementRequest(BaseModel):
     app_type: str = "generic"
     attributes: Dict[str, Any] = {}
 
+class CreateEnvironmentRequest(BaseModel):
+    name: str
+    env_type: str = "development"
+    base_url: str = ""
+    variables: List[Dict[str, Any]] = []
+    auth: Dict[str, Any] = {}
+    headers: Dict[str, Any] = {}
+    timeouts: Dict[str, Any] = {}
+    project_id: Optional[str] = None
+
+class UpdateEnvironmentRequest(BaseModel):
+    name: Optional[str] = None
+    env_type: Optional[str] = None
+    base_url: Optional[str] = None
+    variables: Optional[List[Dict[str, Any]]] = None
+    auth: Optional[Dict[str, Any]] = None
+    headers: Optional[Dict[str, Any]] = None
+    timeouts: Optional[Dict[str, Any]] = None
+
+class CreateGlobalVariableRequest(BaseModel):
+    key: str
+    value: str = ""
+    var_type: str = "default"
+    description: Optional[str] = None
+
 
 # ==================== INITIALIZATION ====================
 
@@ -165,10 +191,36 @@ async def create_test_case(request: CreateTestCaseRequest):
 
 @router.put("/test-cases/{id}", response_model=Dict[str, Any])
 async def update_test_case(id: str, request: UpdateTestCaseRequest):
-    """Update a test case."""
+    """Update a test case. Automatically creates a version snapshot before updating."""
     updates = {k: v for k, v in request.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
+    
+    # Auto-snapshot before update (version tracking)
+    try:
+        existing = await db.test_cases.get(id)
+        if existing:
+            versions = await db.test_case_versions.get_all(filters={"test_case_id": id})
+            next_version = max([v.version_number for v in versions], default=0) + 1
+            changed_fields = ", ".join(updates.keys())
+            snapshot = TestCaseVersion(
+                id=f"tcv_{str(uuid.uuid4())[:8]}",
+                test_case_id=id,
+                version_number=next_version,
+                name=existing.name,
+                description=existing.description,
+                steps=existing.steps,
+                status=existing.status,
+                priority=existing.priority,
+                category=existing.category,
+                tags=existing.tags,
+                script=existing.script,
+                metadata=existing.metadata,
+                change_summary=f"Auto-snapshot before update ({changed_fields})",
+            )
+            await db.test_case_versions.create(snapshot)
+    except Exception as e:
+        logger.warning(f"Failed to create version snapshot for test case {id}: {e}")
     
     updated = await db.test_cases.update(id, updates)
     if not updated:
@@ -530,7 +582,7 @@ async def migrate_from_json():
 @router.post("/clear-all")
 async def clear_all_data():
     """Clear ALL test data from all tables. Use with caution - enterprise reset."""
-    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings"]
+    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings", "environments", "test_case_versions", "global_variables"]
     deleted = {}
     
     for table in tables:
@@ -549,4 +601,159 @@ async def clear_all_data():
     db.clear_all_caches()
     
     return {"status": "success", "deleted": deleted, "message": "All test data cleared"}
+
+
+# ==================== ENVIRONMENTS ====================
+
+@router.get("/environments", response_model=List[Dict[str, Any]])
+async def get_environments(
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+    env_type: Optional[str] = None,
+):
+    """Get all environments with variables and auth config."""
+    filters = {'env_type': env_type} if env_type else None
+    items = await db.environments.get_all(limit=limit, offset=offset, filters=filters)
+    return [item.model_dump() for item in items]
+
+@router.get("/environments/{id}", response_model=Dict[str, Any])
+async def get_environment(id: str):
+    """Get a single environment."""
+    item = await db.environments.get(id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    return item.model_dump()
+
+@router.post("/environments", response_model=Dict[str, Any])
+async def create_environment(request: CreateEnvironmentRequest):
+    """Create a new environment with variables and auth."""
+    env = Environment(
+        id=f"env_{str(uuid.uuid4())[:8]}",
+        **request.model_dump()
+    )
+    created = await db.environments.create(env)
+    return created.model_dump()
+
+@router.put("/environments/{id}", response_model=Dict[str, Any])
+async def update_environment(id: str, request: UpdateEnvironmentRequest):
+    """Update an environment (variables, auth, base_url, etc.)."""
+    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No updates provided")
+    updated = await db.environments.update(id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    return updated.model_dump()
+
+@router.delete("/environments/{id}")
+async def delete_environment(id: str):
+    """Delete an environment."""
+    deleted = await db.environments.delete(id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    return {"status": "deleted", "id": id}
+
+
+# ==================== TEST CASE VERSIONS ====================
+
+@router.get("/test-cases/{test_case_id}/versions", response_model=List[Dict[str, Any]])
+async def get_test_case_versions(
+    test_case_id: str,
+    limit: int = Query(50, le=200),
+):
+    """Get version history for a test case (newest first)."""
+    items = await db.test_case_versions.get_all(
+        limit=limit, filters={"test_case_id": test_case_id}
+    )
+    return [item.model_dump() for item in items]
+
+@router.get("/test-case-versions/{id}", response_model=Dict[str, Any])
+async def get_test_case_version(id: str):
+    """Get a specific version snapshot."""
+    item = await db.test_case_versions.get(id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Version not found")
+    return item.model_dump()
+
+@router.post("/test-cases/{test_case_id}/snapshot")
+async def create_test_case_snapshot(test_case_id: str, change_summary: str = "Manual snapshot"):
+    """
+    Create a version snapshot of a test case's current state.
+    Called automatically before updates, or manually for important checkpoints.
+    """
+    tc = await db.test_cases.get(test_case_id)
+    if not tc:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    
+    # Get the next version number
+    existing = await db.test_case_versions.get_all(filters={"test_case_id": test_case_id})
+    next_version = max([v.version_number for v in existing], default=0) + 1
+    
+    version = TestCaseVersion(
+        id=f"tcv_{str(uuid.uuid4())[:8]}",
+        test_case_id=test_case_id,
+        version_number=next_version,
+        name=tc.name,
+        description=tc.description,
+        steps=tc.steps,
+        status=tc.status,
+        priority=tc.priority,
+        category=tc.category,
+        tags=tc.tags,
+        script=tc.script,
+        metadata=tc.metadata,
+        change_summary=change_summary,
+    )
+    created = await db.test_case_versions.create(version)
+    return created.model_dump()
+
+
+# ==================== GLOBAL VARIABLES ====================
+
+@router.get("/global-variables", response_model=List[Dict[str, Any]])
+async def get_global_variables():
+    """Get all global variables (shared across environments)."""
+    items = await db.global_variables.get_all(limit=500)
+    return [item.model_dump() for item in items]
+
+@router.post("/global-variables", response_model=Dict[str, Any])
+async def create_global_variable(request: CreateGlobalVariableRequest):
+    """Create or update a global variable."""
+    # Check if key already exists
+    existing = await db.global_variables.get_all(filters={"key": request.key})
+    if existing:
+        # Update existing
+        updated = await db.global_variables.update(existing[0].id, {
+            "value": request.value,
+            "var_type": request.var_type,
+            "description": request.description,
+        })
+        return updated.model_dump()
+    
+    gv = GlobalVariable(
+        id=f"gv_{str(uuid.uuid4())[:8]}",
+        key=request.key,
+        value=request.value,
+        var_type=request.var_type,
+        enabled=1,
+        description=request.description,
+    )
+    created = await db.global_variables.create(gv)
+    return created.model_dump()
+
+@router.put("/global-variables/{id}", response_model=Dict[str, Any])
+async def update_global_variable(id: str, updates: Dict[str, Any]):
+    """Update a global variable."""
+    updated = await db.global_variables.update(id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Global variable not found")
+    return updated.model_dump()
+
+@router.delete("/global-variables/{id}")
+async def delete_global_variable(id: str):
+    """Delete a global variable."""
+    deleted = await db.global_variables.delete(id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Global variable not found")
+    return {"status": "deleted", "id": id}
 

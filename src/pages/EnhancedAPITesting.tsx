@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import RequestBuilder, { type InitialRequestData } from "@/components/api-testing/RequestBuilder";
 import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
+import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables, resolveVariables } from "@/components/api-testing/EnvironmentManager";
 
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -800,6 +801,50 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
+  // Save an environment to the database
+  const saveEnvironmentToDb = async (env: any) => {
+    try {
+      // Check if it exists
+      const checkResp = await fetch(`${API_BASE_URL}/api/db/environments/${env.environment_id || env.id}`);
+      if (checkResp.ok) {
+        // Update
+        await fetch(`${API_BASE_URL}/api/db/environments/${env.environment_id || env.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: env.name,
+            env_type: env.type || env.env_type || "development",
+            base_url: env.base_url || "",
+            variables: env.variables || [],
+            auth: env.auth || {},
+          }),
+        });
+      } else {
+        // Create
+        await fetch(`${API_BASE_URL}/api/db/environments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: env.name,
+            env_type: env.type || env.env_type || "development",
+            base_url: env.base_url || "",
+            variables: env.variables || [],
+            auth: env.auth || {},
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to save environment to DB:", err);
+    }
+  };
+
+  // Sync all environments to database
+  const syncEnvironmentsToDb = async (envs: any[]) => {
+    for (const env of envs) {
+      await saveEnvironmentToDb(env);
+    }
+  };
+
   const loadCapabilities = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v2/testing/capabilities`);
@@ -989,18 +1034,39 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
   const loadEnvironments = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v2/testing/environment`);
-      const data = await response.json();
-      if (data.status === "success") {
-        // Merge with persisted environments from localStorage
-        const persisted = loadPersistedEnvironments();
-        const merged = [...(data.environments || []), ...persisted];
-        // Remove duplicates by environment_id
-        const unique = merged.filter((env, index, self) => 
-          index === self.findIndex((e) => e.environment_id === env.environment_id)
-        );
-        setEnvironments(unique);
-        saveEnvironmentsToLocalStorage(unique);
+      // Primary source: database
+      const dbResp = await fetch(`${API_BASE_URL}/api/db/environments`);
+      const dbEnvs: any[] = dbResp.ok ? await dbResp.json() : [];
+
+      // Normalize DB format to frontend format
+      const normalized = dbEnvs.map((e: any) => ({
+        environment_id: e.id || e.environment_id,
+        name: e.name,
+        type: e.env_type || e.type || "development",
+        base_url: e.base_url || "",
+        variables: e.variables || [],
+        auth: e.auth || { type: "none" },
+        created_at: e.created_at,
+        updated_at: e.updated_at,
+      }));
+
+      // Merge with localStorage (for migration of old data)
+      const persisted = loadPersistedEnvironments();
+      const allEnvs = [...normalized];
+      
+      // Add any localStorage envs that aren't in DB yet (one-time migration)
+      for (const p of persisted) {
+        const pId = p.environment_id || p.id;
+        if (!allEnvs.find(e => e.environment_id === pId)) {
+          allEnvs.push(p);
+          // Migrate to DB
+          saveEnvironmentToDb(p);
+        }
+      }
+
+      if (allEnvs.length > 0) {
+        setEnvironments(allEnvs);
+        saveEnvironmentsToLocalStorage(allEnvs);
       }
     } catch (error) {
       console.error("Failed to load environments:", error);
@@ -1566,9 +1632,44 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           requestsWithoutBodies.map((tc: any) => ({ path: tc.path, method: tc.method })));
       }
       
+      // Inject environment variables, auth, and headers into test cases
+      const envVars = normalizeVariables(selectedEnv?.variables || []);
+      const envAuth = selectedEnv?.auth;
+      const resolvedTestCases = normalizedTestCases.map((tc: any) => {
+        // Resolve {{variable}} placeholders in paths
+        let resolvedPath = tc.path || "";
+        for (const v of envVars) {
+          if (v.enabled && v.key) {
+            const escapedKey = v.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            resolvedPath = resolvedPath.replace(new RegExp(`\\{\\{${escapedKey}\\}\\}`, "g"), v.value);
+          }
+        }
+
+        // Build auth headers from environment
+        const envHeaders: Record<string, string> = {};
+        if (envAuth && envAuth.type !== "none") {
+          if (envAuth.type === "bearer" && envAuth.bearer_token) {
+            envHeaders["Authorization"] = `Bearer ${envAuth.bearer_token}`;
+          } else if (envAuth.type === "basic" && envAuth.basic_username) {
+            envHeaders["Authorization"] = `Basic ${btoa(`${envAuth.basic_username}:${envAuth.basic_password || ""}`)}`;
+          } else if (envAuth.type === "api_key" && envAuth.api_key_name && envAuth.api_key_location === "header") {
+            envHeaders[envAuth.api_key_name] = envAuth.api_key_value || "";
+          }
+        }
+
+        return {
+          ...tc,
+          path: resolvedPath,
+          request: {
+            ...tc.request,
+            headers: { ...envHeaders, ...(tc.request?.headers || {}) },
+          },
+        };
+      });
+
       testSuiteToExecute = {
         ...testSuite,
-        test_cases: normalizedTestCases
+        test_cases: resolvedTestCases
       };
 
       // Build execution config — add load test params if in load mode
@@ -2088,6 +2189,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           <TabErrorBoundary tabName="Builder">
             <RequestBuilder 
               initialRequest={builderInitialRequest}
+              activeEnvironment={environments.find(e => e.environment_id === selectedEnvironment) || null}
               onSaveToChain={(req, asserts) => {
                 // Switch to Chains tab and add the request as a new step
                 setActiveTab("chains");
@@ -2805,11 +2907,17 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     {environments.length === 0 ? (
                       <SelectItem value="__no_env__" disabled>No environments. Create one in Env tab.</SelectItem>
                     ) : (
-                      environments.map((env) => (
+                      environments.map((env) => {
+                        const varCount = Array.isArray(env.variables) ? env.variables.length : Object.keys(env.variables || {}).length;
+                        return (
                         <SelectItem key={env.environment_id} value={env.environment_id}>
-                          {env.name} ({env.base_url})
+                          <span className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${env.type === "production" ? "bg-red-500" : env.type === "staging" ? "bg-amber-500" : "bg-green-500"}`} />
+                            {env.name} ({env.base_url}){varCount > 0 ? ` [${varCount} vars]` : ""}
+                          </span>
                         </SelectItem>
-                      ))
+                        );
+                      })
                     )}
                   </SelectContent>
                 </Select>
@@ -3513,70 +3621,20 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Environments Tab */}
         <TabsContent value="environments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Environment Management</CardTitle>
-              <CardDescription>
-                Create and manage test environments
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Environment Name</Label>
-                  <Input
-                    value={envConfig.name}
-                    onChange={(e) => setEnvConfig({...envConfig, name: e.target.value})}
-                    placeholder="Production"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select value={envConfig.type} onValueChange={(v) => setEnvConfig({...envConfig, type: v})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="development">Development</SelectItem>
-                      <SelectItem value="staging">Staging</SelectItem>
-                      <SelectItem value="production">Production</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2 col-span-2">
-                  <Label>Base URL</Label>
-                  <Input
-                    value={envConfig.base_url}
-                    onChange={(e) => setEnvConfig({...envConfig, base_url: e.target.value})}
-                    placeholder="https://api.example.com"
-                  />
-                </div>
-              </div>
-              <Button onClick={handleCreateEnvironment} disabled={loading}>
-                <Settings className="w-4 h-4 mr-2" />
-                Create Environment
-              </Button>
-              
-              {environments.length > 0 && (
-                <div className="mt-4">
-                  <Label>Environments</Label>
-                  <div className="space-y-2 mt-2">
-                    {environments.map((env, idx) => (
-                      <Card key={idx} className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold">{env.name}</p>
-                            <p className="text-sm text-muted-foreground">{env.base_url}</p>
-                          </div>
-                          <Badge variant="outline">{env.type}</Badge>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <EnvironmentManagerComponent
+            environments={environments}
+            selectedEnvironmentId={selectedEnvironment}
+            onEnvironmentsChange={(envs) => {
+              setEnvironments(envs);
+              saveEnvironmentsToLocalStorage(envs);
+              // Sync to database for enterprise persistence
+              syncEnvironmentsToDb(envs);
+            }}
+            onSelectedChange={(id) => {
+              setSelectedEnvironment(id);
+              localStorage.setItem("apex_selected_environment", id);
+            }}
+          />
 
           {/* Database Connectivity - moved from standalone tab */}
           <Card>

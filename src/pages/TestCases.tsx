@@ -460,73 +460,86 @@ export default function TestCases() {
   const [stepResults, setStepResults] = useState<Array<{ step: number; name: string; status: string; error?: string; duration?: number }>>([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
-  // Load test cases
+  // Load test cases from persistent database API (/api/db/test-cases)
   const loadTestCases = async () => {
     setLoading(true);
-    const allCases: TestCase[] = [];
     
     try {
-      // Load from localStorage first
-      const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      allCases.push(...local);
+      const response = await fetch(`${API_BASE_URL}/api/db/test-cases?limit=1000`);
       
-      // Also load unified test cases
-      const unifiedKeys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
-      for (const key of unifiedKeys) {
-        try {
-          const tc = JSON.parse(localStorage.getItem(key) || '{}');
-          if (tc.id && !allCases.some(c => c.id === tc.id)) {
-            allCases.push({
-              ...tc,
-              name: tc.name || 'Unnamed Test',
-              automationStatus: tc.steps?.some((s: any) => s.automationStatus === 'recorded') ? 'partial' : 'none'
-            });
-          }
-        } catch (e) {}
-      }
-      
-      // Try backend (with timeout)
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/test-cases`, {
-          signal: controller.signal
+      if (response.ok) {
+        const data = await response.json();
+        const items = Array.isArray(data) ? data : [];
+        const cases: TestCase[] = items.map((item: any) => {
+          const meta = item.metadata || {};
+          return {
+            id: item.id,
+            name: item.name || 'Unnamed Test',
+            description: item.description || '',
+            type: meta.type || (item.script ? 'automated' : 'manual'),
+            category: item.category || 'functional',
+            status: item.status || 'draft',
+            steps: Array.isArray(item.steps) ? item.steps : [],
+            priority: item.priority || 'medium',
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            automationStatus: item.script ? 'full' : (meta.automationStatus || 'none'),
+            automationScript: item.script || undefined,
+            testType: item.category || 'functional',
+            createdAt: item.created_at || '',
+            updatedAt: item.updated_at || '',
+            lastResult: meta.lastResult || undefined,
+            lastRun: meta.lastRun || undefined,
+            // API test fields
+            method: meta.method,
+            endpoint: meta.endpoint,
+            expected_status: meta.expected_status,
+            request_body: meta.request_body,
+            headers: meta.headers,
+            assertions: meta.assertions,
+          };
         });
-        clearTimeout(timeout);
-        
-        if (response.ok) {
-          const data = await response.json();
-          const backendCases = Array.isArray(data) ? data : (data.value || data.test_cases || []);
-          backendCases.forEach((tc: TestCase) => {
-            if (!allCases.some(c => c.id === tc.id)) {
-              allCases.push({
-                ...tc,
-                name: tc.name || tc.title || `Test Case ${tc.id?.slice(0, 8) || 'Unknown'}`
-              });
-            }
-          });
-        }
-      } catch (e) {
-        console.log('Backend timeout/error, using local only');
+        setTestCases(cases);
+      } else {
+        console.error('Failed to load test cases from DB:', response.statusText);
+        setTestCases([]);
       }
-      
-      setTestCases(allCases);
     } catch (error) {
       console.error('Error loading test cases:', error);
+      setTestCases([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Load execution history from database
+  const loadExecutionHistory = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/db/test-runs?limit=100`);
+      if (response.ok) {
+        const data = await response.json();
+        const items = Array.isArray(data) ? data : [];
+        const history: ExecutionRun[] = items.map((item: any) => ({
+          id: item.id,
+          testCaseId: (item.test_case_ids || [])[0] || '',
+          testCaseName: item.name || 'Test Run',
+          startTime: item.started_at || item.created_at || '',
+          endTime: item.completed_at || undefined,
+          status: item.status || 'pending',
+          mode: 'automated',
+          totalSteps: 0,
+          passedSteps: 0,
+          failedSteps: 0,
+        }));
+        setExecutionHistory(history);
+      }
+    } catch (error) {
+      console.error('Error loading execution history:', error);
+    }
+  };
+
   useEffect(() => {
     loadTestCases();
-  }, []);
-
-  // Load execution history from localStorage
-  useEffect(() => {
-    const history = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
-    setExecutionHistory(history);
+    loadExecutionHistory();
   }, []);
 
   // Quick Run handler - runs test directly without opening builder
@@ -536,8 +549,8 @@ export default function TestCases() {
       return;
     }
 
-    // Get the full test case data
-    const fullTestCase = JSON.parse(localStorage.getItem(`unified_test_case_${testCase.id}`) || 'null') || testCase;
+    // Use the test case data directly (all data is from the database now)
+    const fullTestCase = testCase;
     
     // Detect if this is an API test case
     const isApiTest = fullTestCase.category === 'api' || fullTestCase.type === 'api' || 
@@ -647,9 +660,12 @@ export default function TestCases() {
         };
 
         setExecutionHistory(prev => prev.map(r => r.id === runId ? updatedRun : r));
-        const history = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
-        history.unshift(updatedRun);
-        localStorage.setItem('test_execution_history', JSON.stringify(history.slice(0, 100)));
+        // Save run to persistent database
+        fetch(`${API_BASE_URL}/api/db/test-runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `${testCase.name} - Run`, test_case_ids: [testCase.id], status: passed ? 'passed' : 'failed', results: { test_results: [testResult] } })
+        }).catch(() => {});
 
         setTestCases(prev => prev.map(tc => 
           tc.id === testCase.id 
@@ -698,12 +714,15 @@ export default function TestCases() {
         };
 
         setExecutionHistory(prev => prev.map(r => r.id === runId ? updatedRun : r));
-        const history = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
-        history.unshift(updatedRun);
-        localStorage.setItem('test_execution_history', JSON.stringify(history.slice(0, 100)));
+        // Save run to persistent database
+        fetch(`${API_BASE_URL}/api/db/test-runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: `${testCase.name} - Run`, test_case_ids: [testCase.id], status: result.success ? 'passed' : 'failed', results: result })
+        }).catch(() => {});
 
         setTestCases(prev => prev.map(tc => 
-          tc.id === testCase.id 
+          tc.id === testCase.id
             ? { ...tc, lastResult: result.success ? 'passed' : 'failed', lastRun: endTime }
             : tc
         ));
@@ -766,19 +785,18 @@ export default function TestCases() {
   const passedCount = testCases.filter(tc => tc.lastResult === 'passed').length;
   const failedCount = testCases.filter(tc => tc.lastResult === 'failed').length;
 
-  // Delete handler
+  // Delete handler - deletes from persistent database
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this test case?')) return;
     
     setTestCases(prev => prev.filter(tc => tc.id !== id));
     
-    const local = JSON.parse(localStorage.getItem('test_cases') || '[]');
-    localStorage.setItem('test_cases', JSON.stringify(local.filter((tc: any) => tc.id !== id)));
-    localStorage.removeItem(`unified_test_case_${id}`);
-    
-    fetch(`${API_BASE_URL}/test-cases/${id}`, { method: 'DELETE' }).catch(() => {});
-    
-    toast.success('Test case deleted');
+    try {
+      await fetch(`${API_BASE_URL}/api/db/test-cases/${id}`, { method: 'DELETE' });
+      toast.success('Test case deleted');
+    } catch (err) {
+      toast.error('Failed to delete from database');
+    }
   };
 
   return (
@@ -890,8 +908,8 @@ export default function TestCases() {
                 runs={executionHistory}
                 onViewDetails={(run) => {
                   setSelectedRun(run);
-                  // Try to get step results from localStorage
-                  const stored = JSON.parse(localStorage.getItem(`run_results_${run.id}`) || '[]');
+                  // Step results are in-memory from the current session
+                  const stored: any[] = [];
                   setStepResults(stored);
                   setShowResultsDialog(true);
                 }}
