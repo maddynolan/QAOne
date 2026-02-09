@@ -615,6 +615,10 @@ async def activate_license(request: LicenseActivateRequest):
     
     license_data = licenses_db[request.licenseKey]
     
+    # Check expiry — reject activation of expired licenses
+    if datetime.fromisoformat(license_data["expiresAt"]) < datetime.now():
+        return {"success": False, "error": "License has expired"}
+    
     # Check activation limit
     if request.licenseKey not in activations_db:
         activations_db[request.licenseKey] = []
