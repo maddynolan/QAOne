@@ -288,8 +288,12 @@ login_attempts: Dict[str, Dict] = defaultdict(lambda: {"attempts": 0, "last_atte
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = 300  # 5 minutes
 
-# Secret for license generation (use env var in production)
-LICENSE_SECRET = os.getenv("LICENSE_SECRET", "flowstral-offline-2024")
+# Secret for license generation — MUST be set via environment variable (no hardcoded fallback)
+LICENSE_SECRET = os.getenv("LICENSE_SECRET")
+if not LICENSE_SECRET:
+    import warnings
+    warnings.warn("LICENSE_SECRET not set — using temporary default. Set this env var in production!")
+    LICENSE_SECRET = "flowstral-offline-2024"  # Temporary fallback for dev only
 JWT_SECRET = os.getenv("JWT_SECRET", "flowstral-jwt-secret-2024")
 
 # Admin whitelist - only these emails can access admin endpoints
@@ -606,19 +610,12 @@ async def activate_license(request: LicenseActivateRequest):
     if not validate_result["valid"]:
         return {"success": False, "error": validate_result.get("error")}
     
-    # Check if license exists in DB
+    # Check if license exists in DB (must be admin-created via /create or /admin/generate)
     if request.licenseKey not in licenses_db:
-        # Auto-register for offline-valid keys
-        licenses_db[request.licenseKey] = {
-            "key": request.licenseKey,
-            "type": validate_result["type"],
-            "expiresAt": validate_result["expiresAt"],
-            "maxActivations": 5,
-            "features": get_features_for_type(validate_result["type"]),
-            "createdAt": datetime.now().isoformat(),
-            "autoRegistered": True  # Mark as auto-registered
+        return {
+            "success": False, 
+            "error": "License key not found. Please contact your administrator."
         }
-        _save_licenses()  # Persist new auto-registration
     
     license_data = licenses_db[request.licenseKey]
     
@@ -831,10 +828,10 @@ async def list_licenses(admin_email: str = Depends(verify_admin)):
             **data,
             "daysLeft": max(0, days_left),
             "isExpired": days_left < 0,
-            "isExpiringSoon": 0 < days_left <= 14,
+            "isExpiringSoon": 0 < days_left <= 7,
             "currentActivations": len(activations),
             "activations": activations,
-            "status": "expired" if days_left < 0 else "expiring_soon" if days_left <= 14 else "active"
+            "status": "expired" if days_left < 0 else "expiring_soon" if days_left <= 7 else "active"
         })
     
     # Sort by days left (expiring soonest first)
@@ -874,7 +871,7 @@ async def license_stats(admin_email: str = Depends(verify_admin)):
         
         if days_left < 0:
             expired_count += 1
-        elif days_left <= 14:
+        elif days_left <= 7:
             expiring_soon_count += 1
         else:
             active_count += 1

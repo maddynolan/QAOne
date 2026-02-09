@@ -5,9 +5,7 @@
  * Supports both online and offline validation.
  */
 
-const crypto = require('crypto');
 const axios = require('axios');
-const CryptoJS = require('crypto-js');
 
 class LicenseManager {
   constructor(options = {}) {
@@ -17,9 +15,6 @@ class LicenseManager {
     
     this.licenseInfo = null;
     this.validationInterval = null;
-    
-    // Secret for offline validation (should match server)
-    this.offlineSecret = 'flowstral-offline-2024';
   }
 
   /**
@@ -59,7 +54,10 @@ class LicenseManager {
   }
 
   /**
-   * Offline license validation (for on-premise deployments)
+   * Offline license validation (cache-based only)
+   * 
+   * When the server is unreachable, we only trust cached validation results.
+   * No client-side checksum verification — the server is the source of truth.
    */
   validateOffline(licenseKey) {
     try {
@@ -69,27 +67,7 @@ class LicenseManager {
         return { valid: false, error: 'Invalid license format' };
       }
 
-      const checksum = parts[4];
-      const dataToCheck = parts.slice(0, 4).join('-');
-      
-      // Verify checksum
-      const expectedChecksum = this.generateChecksum(dataToCheck);
-      if (checksum !== expectedChecksum.substring(0, 5).toUpperCase()) {
-        return { valid: false, error: 'Invalid license checksum' };
-      }
-
-      // Decode license type and expiry from middle parts
-      const typeCode = parts[1][0];
-      const licenseType = this.decodeLicenseType(typeCode);
-      
-      // Extract expiry (encoded in parts[3])
-      const expiryInfo = this.decodeExpiry(parts[3]);
-
-      if (expiryInfo.expired) {
-        return { valid: false, error: 'License has expired' };
-      }
-
-      // Check cached validation
+      // Check cached validation from a previous successful server validation
       const cache = this.store?.get('licenseCache');
       if (cache && cache.licenseKey === licenseKey) {
         const cacheAge = Date.now() - cache.cachedAt;
@@ -106,17 +84,7 @@ class LicenseManager {
         }
       }
 
-      // Create license info
-      this.licenseInfo = {
-        valid: true,
-        licenseKey,
-        type: licenseType,
-        expiresAt: expiryInfo.expiresAt,
-        features: this.getFeaturesForType(licenseType),
-        offline: true
-      };
-
-      return this.licenseInfo;
+      return { valid: false, error: 'Server unreachable and no valid cache. Please connect to the internet.' };
     } catch (error) {
       return { valid: false, error: 'License validation failed' };
     }
@@ -212,39 +180,6 @@ class LicenseManager {
   }
 
   /**
-   * Generate license checksum
-   */
-  generateChecksum(data) {
-    return CryptoJS.HmacSHA256(data, this.offlineSecret).toString();
-  }
-
-  /**
-   * Decode license type from code
-   */
-  decodeLicenseType(code) {
-    const types = {
-      'T': 'trial',
-      'P': 'professional',
-      'E': 'enterprise',
-      'U': 'unlimited'
-    };
-    return types[code] || 'trial';
-  }
-
-  /**
-   * Decode expiry date from license part
-   */
-  decodeExpiry(code) {
-    // Format: YYMM (e.g., 2512 = December 2025)
-    const year = 2000 + parseInt(code.substring(0, 2));
-    const month = parseInt(code.substring(2, 4)) - 1;
-    const expiresAt = new Date(year, month + 1, 0).toISOString();
-    const expired = new Date() > new Date(year, month + 1, 0);
-    
-    return { expiresAt, expired };
-  }
-
-  /**
    * Get features for license type
    */
   getFeaturesForType(type) {
@@ -281,25 +216,5 @@ class LicenseManager {
   }
 }
 
-/**
- * Generate a license key (for server-side use)
- */
-function generateLicenseKey(type = 'T', expiryYear = 25, expiryMonth = 12) {
-  const secret = 'flowstral-offline-2024';
-  const typeCode = type.toUpperCase();
-  const expiry = `${String(expiryYear).padStart(2, '0')}${String(expiryMonth).padStart(2, '0')}`;
-  
-  // Generate random segments
-  const seg1 = typeCode + crypto.randomBytes(2).toString('hex').toUpperCase();
-  const seg2 = crypto.randomBytes(2).toString('hex').toUpperCase() + 'A';
-  const seg3 = expiry + crypto.randomBytes(0.5).toString('hex').toUpperCase().substring(0, 1);
-  
-  const dataToSign = `FLOWSTRAL-${seg1}-${seg2}-${seg3}`;
-  const checksum = CryptoJS.HmacSHA256(dataToSign, secret).toString().substring(0, 5).toUpperCase();
-  
-  return `${dataToSign}-${checksum}`;
-}
-
 module.exports = LicenseManager;
-module.exports.generateLicenseKey = generateLicenseKey;
 
