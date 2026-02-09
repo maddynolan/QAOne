@@ -14,7 +14,7 @@ import {
   Zap, Shield, Activity, Globe, Loader2, Eye, Copy, X,
   FileCode, Rocket, BookOpen, Network, MessageSquare, Radio,
   Workflow, RefreshCw, Link, ExternalLink, Trash2, Plus,
-  Send, Link2
+  Send, Link2, ChevronDown, ChevronRight
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -244,6 +244,7 @@ export default function EnhancedAPITesting() {
   const [reportViewTab, setReportViewTab] = useState<"summary" | "html" | "junit" | "json" | "allure">("summary");
   const [selectedTestCases, setSelectedTestCases] = useState<Set<string>>(new Set());
   const [viewingTestCase, setViewingTestCase] = useState<any>(null);
+  const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
   
   // Environment state
   const [environments, setEnvironments] = useState<any[]>([]);
@@ -2096,8 +2097,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 setActiveTab("chains");
                 toast({ title: "Added to Chain", description: `${req.method} ${req.url} added as a chain step` });
               }}
-              onAddToTestSuite={(testCase) => {
-                // Add the Builder request as a test case to the test suite
+              onAddToTestSuite={async (testCase) => {
+                // 1) Add to Execute tab test suite (in-memory)
                 setTestSuite((prev: any) => {
                   if (!prev) {
                     return { test_cases: [testCase], metadata: { total_test_cases: 1 } };
@@ -2109,10 +2110,65 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     metadata: { ...prev.metadata, total_test_cases: updatedCases.length },
                   };
                 });
-                toast({ 
-                  title: "Added to Test Suite", 
-                  description: `"${testCase.title}" added. Go to Execute tab to run it with all tests.` 
-                });
+
+                // 2) Save to backend /test-cases AND localStorage so it shows on Tests page
+                try {
+                  const testName = testCase.title || `${testCase.method} ${testCase.path}`;
+                  const payload = {
+                    name: testName,
+                    title: testName,
+                    description: testCase.description || `${testCase.method} ${testCase.path}`,
+                    testType: "api",
+                    priority: "medium",
+                    tags: [...new Set([...(testCase.tags || []), "api-testing"])],
+                    method: testCase.method,
+                    endpoint: testCase.path,
+                    expected_status: String(testCase.expected_status || 200),
+                    request_body: testCase.request?.body ? JSON.stringify(testCase.request.body) : "",
+                    headers: testCase.request?.headers ? JSON.stringify(testCase.request.headers) : "",
+                    assertions: testCase.assertions || [],
+                    steps: [{
+                      action: `Send ${testCase.method} request to ${testCase.path}`,
+                      expectedResult: `Response status is ${testCase.expected_status || 200}`,
+                    }],
+                  };
+
+                  const resp = await fetch(`${API_BASE_URL}/test-cases`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                  });
+                  const data = await resp.json().catch(() => ({}));
+                  const savedId = data.id || `api_${Date.now()}`;
+
+                  // Also save to localStorage for immediate visibility
+                  const existing: any[] = (() => {
+                    try { return JSON.parse(localStorage.getItem("test_cases") || "[]"); } catch { return []; }
+                  })();
+                  existing.push({
+                    id: savedId, name: testName, title: testName,
+                    description: payload.description, type: "automated", category: "api",
+                    status: "draft", priority: "medium", tags: payload.tags,
+                    steps: payload.steps, method: testCase.method, endpoint: testCase.path,
+                    expected_status: payload.expected_status,
+                    request_body: payload.request_body, headers: payload.headers,
+                    assertions: testCase.assertions,
+                    createdAt: new Date().toISOString(), automationStatus: "full",
+                  });
+                  localStorage.setItem("test_cases", JSON.stringify(existing));
+
+                  toast({
+                    title: "Test Saved",
+                    description: `"${testName}" saved to Execute tab + Tests page. Run it from either place.`,
+                  });
+                } catch (err: any) {
+                  // Still added to execute suite even if backend save fails
+                  toast({
+                    title: "Added to Execute Tab",
+                    description: `Added to test suite. Backend save failed: ${err.message}`,
+                    variant: "destructive",
+                  });
+                }
               }}
             />
           </TabErrorBoundary>
@@ -2808,12 +2864,65 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               )}
               
               {testSuite && (
-                <Alert>
-                  <CheckCircle2 className="h-4 w-4" />
-                  <AlertDescription>
-                    Test suite ready: {testSuite.metadata?.total_test_cases || testSuite.test_cases?.length || 0} test cases
-                  </AlertDescription>
-                </Alert>
+                <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+                  <CardContent className="py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span className="font-semibold text-green-800 dark:text-green-300">
+                          Test Suite Ready
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        {parsedSpec && (
+                          <Button variant="ghost" size="sm" onClick={() => setActiveTab("import")} className="text-xs">
+                            View Spec
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {testSuite.metadata?.total_test_cases || testSuite.test_cases?.length || 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Total Tests</div>
+                      </div>
+                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {testSuite.endpoints?.length || Object.keys(testSuite.paths || parsedSpec?.paths || {}).length || 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Endpoints</div>
+                      </div>
+                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {testSuite.test_categories ? Object.keys(testSuite.test_categories).filter(k => {
+                            const tests = testSuite.test_categories[k];
+                            return Array.isArray(tests) && tests.length > 0;
+                          }).length : 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Categories</div>
+                      </div>
+                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
+                        <div className="text-2xl font-bold text-green-600">
+                          {selectedTestCases.size > 0 ? selectedTestCases.size : "All"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Selected</div>
+                      </div>
+                    </div>
+                    {testSuite.test_categories && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {Object.entries(testSuite.test_categories)
+                          .filter(([, tests]: [string, any]) => Array.isArray(tests) && tests.length > 0)
+                          .map(([cat, tests]: [string, any]) => (
+                            <Badge key={cat} variant="outline" className="text-xs">
+                              {tests.length} {cat}
+                            </Badge>
+                          ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
 
               {/* Test Cases View/Selector */}
@@ -3969,20 +4078,97 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                           </TableHeader>
                           <TableBody>
                             {executionResults.test_results && executionResults.test_results.length > 0 ? (
-                              executionResults.test_results.slice(0, 100).map((result: any, idx: number) => (
-                                <TableRow key={idx}>
-                                  <TableCell className="font-medium">
-                                    {result.title || result.name || result.test_name || result.test_case_name || `Test ${idx + 1}`}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant={result.status === "passed" ? "default" : "destructive"}>
-                                      {result.status || "unknown"}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>{result.response_time_ms?.toFixed(2) || "N/A"}ms</TableCell>
-                                  <TableCell>{result.actual_status || result.status_code || "N/A"}</TableCell>
-                                </TableRow>
-                              ))
+                              executionResults.test_results.slice(0, 100).map((result: any, idx: number) => {
+                                const isExpanded = expandedResultIdx === idx;
+                                return (
+                                  <React.Fragment key={idx}>
+                                    <TableRow 
+                                      className="cursor-pointer hover:bg-muted/50"
+                                      onClick={() => setExpandedResultIdx(isExpanded ? null : idx)}
+                                    >
+                                      <TableCell className="font-medium">
+                                        <div className="flex items-center gap-2">
+                                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                          <span>{result.title || result.name || result.test_name || result.test_case_name || `Test ${idx + 1}`}</span>
+                                          <span className="text-xs text-muted-foreground font-mono">{result.method} {result.url?.replace(/https?:\/\/[^/]+/, '') || ''}</span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant={result.status === "passed" ? "default" : "destructive"}>
+                                          {result.status || "unknown"}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{result.response_time_ms?.toFixed(0) || "N/A"}ms</TableCell>
+                                      <TableCell>{result.actual_status || result.status_code || "N/A"}</TableCell>
+                                    </TableRow>
+                                    {isExpanded && (
+                                      <TableRow>
+                                        <TableCell colSpan={4} className="bg-muted/30 p-4">
+                                          <div className="grid grid-cols-2 gap-4 text-sm">
+                                            {/* Request side */}
+                                            <div className="space-y-2">
+                                              <p className="font-semibold text-blue-600 dark:text-blue-400">Request</p>
+                                              <div className="bg-background rounded p-3 border space-y-1">
+                                                <p><span className="font-medium">URL:</span> <code className="text-xs">{result.url || "N/A"}</code></p>
+                                                <p><span className="font-medium">Method:</span> {result.method || "N/A"}</p>
+                                                {result.request_headers && Object.keys(result.request_headers).length > 0 && (
+                                                  <div>
+                                                    <p className="font-medium">Headers:</p>
+                                                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-24 overflow-auto">{JSON.stringify(result.request_headers, null, 2)}</pre>
+                                                  </div>
+                                                )}
+                                                {result.request_body && (
+                                                  <div>
+                                                    <p className="font-medium">Body:</p>
+                                                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-32 overflow-auto">{typeof result.request_body === 'string' ? result.request_body : JSON.stringify(result.request_body, null, 2)}</pre>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                            {/* Response side */}
+                                            <div className="space-y-2">
+                                              <p className="font-semibold text-green-600 dark:text-green-400">Response ({result.actual_status})</p>
+                                              <div className="bg-background rounded p-3 border space-y-1">
+                                                <p><span className="font-medium">Status:</span> {result.actual_status} (expected {result.expected_status})</p>
+                                                <p><span className="font-medium">Time:</span> {result.response_time_ms?.toFixed(0)}ms</p>
+                                                {result.response_headers && Object.keys(result.response_headers).length > 0 && (
+                                                  <div>
+                                                    <p className="font-medium">Headers:</p>
+                                                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-24 overflow-auto">{JSON.stringify(result.response_headers, null, 2)}</pre>
+                                                  </div>
+                                                )}
+                                                {result.response_body && (
+                                                  <div>
+                                                    <p className="font-medium">Body:</p>
+                                                    <pre className="text-xs bg-muted p-2 rounded mt-1 max-h-48 overflow-auto">{typeof result.response_body === 'string' ? result.response_body : JSON.stringify(result.response_body, null, 2)}</pre>
+                                                  </div>
+                                                )}
+                                                {result.error && (
+                                                  <p className="text-red-600 dark:text-red-400"><span className="font-medium">Error:</span> {result.error}</p>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          {/* Assertions */}
+                                          {result.assertions && result.assertions.results && (
+                                            <div className="mt-3">
+                                              <p className="font-semibold text-sm mb-1">Assertions</p>
+                                              <div className="space-y-1">
+                                                {result.assertions.results.map((a: any, ai: number) => (
+                                                  <div key={ai} className="flex items-center gap-2 text-xs">
+                                                    {a.passed ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <AlertCircle className="w-3 h-3 text-red-500" />}
+                                                    <span>{a.message || (a.passed ? "Passed" : "Failed")}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })
                             ) : (
                               <TableRow>
                                 <TableCell colSpan={4} className="text-center text-muted-foreground py-8">

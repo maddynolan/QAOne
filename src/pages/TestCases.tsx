@@ -42,7 +42,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { isElectron } from "@/lib/electron-bridge";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/api-config";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EXECUTION HISTORY TYPES
@@ -539,7 +539,12 @@ export default function TestCases() {
     // Get the full test case data
     const fullTestCase = JSON.parse(localStorage.getItem(`unified_test_case_${testCase.id}`) || 'null') || testCase;
     
-    if (!fullTestCase.steps || fullTestCase.steps.length === 0) {
+    // Detect if this is an API test case
+    const isApiTest = fullTestCase.category === 'api' || fullTestCase.type === 'api' || 
+      fullTestCase.testType === 'api' || fullTestCase.test_type === 'api' ||
+      (fullTestCase.tags && fullTestCase.tags.some((t: string) => t === 'api-testing' || t === 'api'));
+
+    if (!isApiTest && (!fullTestCase.steps || fullTestCase.steps.length === 0)) {
       toast.error('No steps found in this test case');
       return;
     }
@@ -553,7 +558,7 @@ export default function TestCases() {
       startTime: new Date().toISOString(),
       status: 'running',
       mode: 'automated',
-      totalSteps: fullTestCase.steps.length,
+      totalSteps: isApiTest ? 1 : fullTestCase.steps.length,
       passedSteps: 0,
       failedSteps: 0
     };
@@ -563,13 +568,114 @@ export default function TestCases() {
     toast.info(`Running: ${testCase.name || 'Test'}`, { duration: 2000 });
 
     try {
-      // Check if Electron API is available for Playwright execution
-      const electronAPI = (window as any).electronAPI;
-      const flowstral = (window as any).flowstral;
-      
-      if (isElectron() && flowstral?.playwrightRecorder?.runTest) {
+      if (isApiTest) {
+        // API test: execute via API testing engine backend
+        const method = fullTestCase.method || "GET";
+        const endpoint = fullTestCase.endpoint || fullTestCase.path || fullTestCase.url || "";
+        // If endpoint is a relative path, it will be combined with base_url by the backend
+        // For full URLs (starting with http), pass as-is; otherwise use as path
+        const isFullUrl = endpoint.startsWith("http://") || endpoint.startsWith("https://");
+        const testPath = isFullUrl ? endpoint : (endpoint.startsWith("/") ? endpoint : `/${endpoint}`);
+        
+        // Parse headers and body safely
+        let parsedHeaders: Record<string, string> = { "Content-Type": "application/json" };
+        try {
+          if (fullTestCase.headers && typeof fullTestCase.headers === "string") {
+            parsedHeaders = JSON.parse(fullTestCase.headers);
+          } else if (fullTestCase.headers && typeof fullTestCase.headers === "object") {
+            parsedHeaders = fullTestCase.headers;
+          }
+        } catch { /* keep defaults */ }
+
+        let parsedBody: any = undefined;
+        try {
+          if (fullTestCase.request_body && typeof fullTestCase.request_body === "string") {
+            parsedBody = JSON.parse(fullTestCase.request_body);
+          } else if (fullTestCase.request_body && typeof fullTestCase.request_body === "object") {
+            parsedBody = fullTestCase.request_body;
+          }
+        } catch { /* keep undefined */ }
+
+        // Parse assertions safely
+        let parsedAssertions: any[] = [];
+        try {
+          if (fullTestCase.assertions && typeof fullTestCase.assertions === "string") {
+            parsedAssertions = JSON.parse(fullTestCase.assertions);
+          } else if (Array.isArray(fullTestCase.assertions)) {
+            parsedAssertions = fullTestCase.assertions;
+          }
+        } catch { /* keep empty */ }
+
+        const response = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            test_suite: {
+              test_cases: [{
+                test_case_id: testCase.id,
+                title: testCase.name || "API Test",
+                method: method,
+                path: testPath,
+                request: {
+                  headers: parsedHeaders,
+                  body: parsedBody,
+                },
+                expected_status: parseInt(fullTestCase.expected_status) || 200,
+                assertions: parsedAssertions,
+                test_type: "functional",
+              }],
+              base_url: isFullUrl ? "" : "",
+            },
+            execution_config: { base_url: "", parallel: false },
+            mode: "automated",
+          }),
+        });
+
+        const data = await response.json();
+        const testResult = data?.execution_results?.test_results?.[0];
+        const endTime = new Date().toISOString();
+        const passed = testResult?.status === "passed";
+
+        const updatedRun: ExecutionRun = {
+          ...newRun,
+          endTime,
+          status: passed ? 'passed' : 'failed',
+          passedSteps: passed ? 1 : 0,
+          failedSteps: passed ? 0 : 1,
+          duration: testResult?.response_time_ms || (new Date(endTime).getTime() - new Date(newRun.startTime).getTime()),
+          error: testResult?.error || undefined
+        };
+
+        setExecutionHistory(prev => prev.map(r => r.id === runId ? updatedRun : r));
+        const history = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
+        history.unshift(updatedRun);
+        localStorage.setItem('test_execution_history', JSON.stringify(history.slice(0, 100)));
+
+        setTestCases(prev => prev.map(tc => 
+          tc.id === testCase.id 
+            ? { ...tc, lastResult: passed ? 'passed' : 'failed', lastRun: endTime }
+            : tc
+        ));
+
+        // Show results with API details
+        setSelectedRun(updatedRun);
+        setStepResults([{
+          step: `${method} ${endpoint}`,
+          status: passed ? 'passed' : 'failed',
+          duration: testResult?.response_time_ms || 0,
+          details: `Status: ${testResult?.actual_status || 'N/A'} | Expected: ${fullTestCase.expected_status || 200}`,
+          error: testResult?.error
+        }]);
+        setShowResultsDialog(true);
+
+        if (passed) {
+          toast.success(`Test passed! ${method} ${endpoint} returned ${testResult?.actual_status}`);
+        } else {
+          toast.error(`Test failed: ${testResult?.error || `Expected ${fullTestCase.expected_status || 200}, got ${testResult?.actual_status || 'error'}`}`);
+        }
+      } else if (isElectron() && (window as any).flowstral?.playwrightRecorder?.runTest) {
         // Use Playwright recorder for automated execution
-        const result = await flowstral.playwrightRecorder.runTest(
+        const result = await (window as any).flowstral.playwrightRecorder.runTest(
           fullTestCase.steps.map((step: any) => ({
             type: step.type,
             selector: step.selector,
@@ -591,30 +697,25 @@ export default function TestCases() {
           error: result.error
         };
 
-        // Update history
         setExecutionHistory(prev => prev.map(r => r.id === runId ? updatedRun : r));
-        
-        // Save to localStorage
         const history = JSON.parse(localStorage.getItem('test_execution_history') || '[]');
         history.unshift(updatedRun);
         localStorage.setItem('test_execution_history', JSON.stringify(history.slice(0, 100)));
 
-        // Update test case last result
         setTestCases(prev => prev.map(tc => 
           tc.id === testCase.id 
             ? { ...tc, lastResult: result.success ? 'passed' : 'failed', lastRun: endTime }
             : tc
         ));
 
-        // Show results
         setSelectedRun(updatedRun);
         setStepResults(result.stepResults || []);
         setShowResultsDialog(true);
 
         if (result.success) {
-          toast.success(`✅ Test passed! (${result.passedSteps}/${fullTestCase.steps.length} steps)`);
+          toast.success(`Test passed! (${result.passedSteps}/${fullTestCase.steps.length} steps)`);
         } else {
-          toast.error(`❌ Test failed: ${result.error || 'Unknown error'}`);
+          toast.error(`Test failed: ${result.error || 'Unknown error'}`);
         }
       } else {
         // Fallback: Navigate to builder for execution

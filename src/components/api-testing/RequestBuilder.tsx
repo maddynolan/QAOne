@@ -356,6 +356,36 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     localStorage.setItem("api_saved_requests", JSON.stringify(updated));
     setSaveName("");
     setShowSaveInput(false);
+
+    // Also add to test suite if callback is available (so it's executable)
+    if (onAddToTestSuite) {
+      const url = buildUrl();
+      onAddToTestSuite({
+        test_case_id: `builder_${saved.id}`,
+        title: saved.name,
+        description: `Builder request: ${request.method} ${url}`,
+        method: request.method,
+        path: url,
+        expected_status: (() => {
+          const sa = assertions.find(a => a.type === "status_code");
+          return sa ? parseInt(sa.expected) || 200 : 200;
+        })(),
+        test_type: "functional",
+        tags: ["functional", "builder", "custom"],
+        request: {
+          headers: buildHeaders(),
+          body: request.bodyType !== "none" && request.body.trim()
+            ? (() => { try { return JSON.parse(request.body); } catch { return request.body; } })()
+            : undefined,
+          query: Object.fromEntries(
+            request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
+          ),
+        },
+        assertions: assertions.map(a => ({
+          type: a.type, operator: a.operator, expected: a.expected, path: a.path, schema: a.schema,
+        })),
+      });
+    }
   };
 
   const loadSavedRequest = (saved: SavedRequest) => {
