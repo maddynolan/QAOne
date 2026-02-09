@@ -267,44 +267,108 @@ class EnhancedAPITestEngine:
         return functional_tests
     
     def _generate_security_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate security test cases"""
+        """Generate security test cases based on actual API endpoints"""
         security_tests = []
+        test_cases = test_suite.get("test_cases", [])
+        endpoints = test_suite.get("endpoints", [])
         
-        # OWASP API Top 10 tests
-        owasp_tests = [
+        # Use endpoints from spec, or fall back to test cases
+        targets = endpoints or test_cases
+        
+        # OWASP API Security Top 10 attack templates
+        attack_templates = [
             {
-                "test_case_id": str(uuid4()),
-                "title": "SQL Injection Test",
-                "description": "Test for SQL injection vulnerabilities",
-                "test_type": "security",
                 "attack_type": "SQLi",
-                "payload": "admin' OR '1'='1",
+                "title_suffix": "SQL Injection",
+                "description": "Inject SQL payloads in parameters to test for SQL injection",
+                "payloads": ["admin' OR '1'='1", "1; DROP TABLE users--", "' UNION SELECT NULL--"],
                 "owasp_category": "API3:2023 - Broken Object Property Level Authorization",
-                "tags": ["security", "owasp", "sqli"]
+                "tags": ["security", "owasp", "sqli"],
+                "applies_to": ["GET", "POST", "PUT", "PATCH", "DELETE"],
             },
             {
-                "test_case_id": str(uuid4()),
-                "title": "XSS Test",
-                "description": "Test for cross-site scripting vulnerabilities",
-                "test_type": "security",
                 "attack_type": "XSS",
-                "payload": "<script>alert('XSS')</script>",
+                "title_suffix": "XSS",
+                "description": "Inject script payloads to test for cross-site scripting",
+                "payloads": ["<script>alert('XSS')</script>", "<img onerror=alert(1) src=x>"],
                 "owasp_category": "API8:2023 - Security Misconfiguration",
-                "tags": ["security", "owasp", "xss"]
+                "tags": ["security", "owasp", "xss"],
+                "applies_to": ["GET", "POST", "PUT", "PATCH"],
             },
             {
-                "test_case_id": str(uuid4()),
-                "title": "Authentication Bypass Test",
-                "description": "Test for authentication bypass vulnerabilities",
-                "test_type": "security",
                 "attack_type": "auth_bypass",
-                "payload": None,
+                "title_suffix": "Auth Bypass",
+                "description": "Test endpoint without authentication credentials",
+                "payloads": [None],
                 "owasp_category": "API2:2023 - Broken Authentication",
-                "tags": ["security", "owasp", "authentication"]
-            }
+                "tags": ["security", "owasp", "authentication"],
+                "applies_to": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+            },
+            {
+                "attack_type": "BOLA",
+                "title_suffix": "Broken Object Level Auth",
+                "description": "Test accessing resources with different/invalid IDs",
+                "payloads": ["99999", "0", "-1", "admin"],
+                "owasp_category": "API1:2023 - Broken Object Level Authorization",
+                "tags": ["security", "owasp", "bola"],
+                "applies_to": ["GET", "PUT", "DELETE"],
+            },
+            {
+                "attack_type": "rate_limit",
+                "title_suffix": "Rate Limiting",
+                "description": "Test for missing rate limiting by sending rapid requests",
+                "payloads": [None],
+                "owasp_category": "API4:2023 - Unrestricted Resource Consumption",
+                "tags": ["security", "owasp", "rate-limit"],
+                "applies_to": ["GET", "POST"],
+            },
+            {
+                "attack_type": "mass_assignment",
+                "title_suffix": "Mass Assignment",
+                "description": "Test for mass assignment by adding extra fields (role, isAdmin)",
+                "payloads": ['{"role": "admin", "isAdmin": true}'],
+                "owasp_category": "API6:2023 - Unrestricted Access to Sensitive Business Flows",
+                "tags": ["security", "owasp", "mass-assignment"],
+                "applies_to": ["POST", "PUT", "PATCH"],
+            },
         ]
         
-        security_tests.extend(owasp_tests)
+        if targets:
+            # Generate security tests for each actual endpoint
+            for target in targets[:10]:  # Limit to 10 endpoints
+                method = target.get("method", "GET").upper()
+                endpoint_path = target.get("path", target.get("url", "/"))
+                endpoint_title = target.get("title", endpoint_path)
+                
+                for template in attack_templates:
+                    if method in template["applies_to"]:
+                        security_tests.append({
+                            "test_case_id": str(uuid4()),
+                            "title": f"{endpoint_title} - {template['title_suffix']} ({template['attack_type']})",
+                            "description": f"{template['description']} on {method} {endpoint_path}",
+                            "test_type": "security",
+                            "method": method,
+                            "path": endpoint_path,
+                            "attack_type": template["attack_type"],
+                            "payload": template["payloads"][0],
+                            "owasp_category": template["owasp_category"],
+                            "tags": template["tags"],
+                            "request": target.get("request", {}),
+                        })
+        else:
+            # Fallback: generate generic security tests when no endpoints available
+            for template in attack_templates[:3]:
+                security_tests.append({
+                    "test_case_id": str(uuid4()),
+                    "title": f"{template['title_suffix']} Test ({template['attack_type']})",
+                    "description": template["description"],
+                    "test_type": "security",
+                    "attack_type": template["attack_type"],
+                    "payload": template["payloads"][0],
+                    "owasp_category": template["owasp_category"],
+                    "tags": template["tags"],
+                })
+        
         return security_tests
     
     def _generate_performance_tests(self, test_suite: Dict[str, Any]) -> List[Dict[str, Any]]:

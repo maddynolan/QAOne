@@ -371,7 +371,9 @@ class TestExecutionEngine:
                     "expected_status": expected_status,
                     "actual_status": status_code,
                     "response_time_ms": response_time_ms,
-                    "response_data": response_data if len(str(response_data)) < 1000 else str(response_data)[:1000] + "...",
+                    "response_body": response_data,
+                    "response_data": response_data,
+                    "response_headers": response_headers_dict,
                     "assertions": assertions_result,
                     "extracted_variables": extracted_variables,
                     "timestamp": datetime.utcnow().isoformat()

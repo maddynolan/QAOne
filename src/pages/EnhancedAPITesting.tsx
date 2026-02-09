@@ -2318,13 +2318,43 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                         const res = await fetch(url);
                         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
                         const text = await res.text();
+                        
+                        // Auto-detect format and validate spec content
+                        let detectedFormat = "openapi";
+                        let isValidSpec = false;
+                        
+                        if (url.includes("wsdl") || url.endsWith(".wsdl") || text.includes("<definitions") || text.includes("<wsdl:")) { 
+                          detectedFormat = "wsdl"; setProtocol("SOAP"); isValidSpec = true;
+                        } else if (url.includes("graphql") || text.includes("type Query") || text.includes("type Mutation")) { 
+                          detectedFormat = "graphql"; setProtocol("GraphQL"); isValidSpec = true;
+                        } else if (url.includes("postman") || text.includes("_postman_id") || text.includes('"item"')) { 
+                          detectedFormat = "postman"; isValidSpec = true;
+                        } else {
+                          // Check if it looks like an OpenAPI/Swagger spec
+                          try {
+                            const parsed = JSON.parse(text);
+                            if (parsed.openapi || parsed.swagger || parsed.paths || parsed.components) {
+                              detectedFormat = "openapi"; isValidSpec = true;
+                            }
+                          } catch { /* not JSON or not a spec */ }
+                          // Check YAML OpenAPI
+                          if (!isValidSpec && (text.includes("openapi:") || text.includes("swagger:") || text.includes("paths:"))) {
+                            detectedFormat = "openapi"; isValidSpec = true;
+                          }
+                        }
+                        
                         setSpecContent(text);
-                        // Auto-detect format
-                        if (url.includes("wsdl") || url.endsWith(".wsdl")) { setSpecFormat("wsdl"); setProtocol("SOAP"); }
-                        else if (url.includes("graphql")) { setSpecFormat("graphql"); setProtocol("GraphQL"); }
-                        else if (url.includes("postman")) { setSpecFormat("postman"); }
-                        else { setSpecFormat("openapi"); }
-                        toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click Import below.` });
+                        setSpecFormat(detectedFormat);
+                        
+                        if (!isValidSpec) {
+                          toast({ 
+                            title: "Not an API Specification", 
+                            description: "This URL returned a regular API response, not an OpenAPI/Swagger/WSDL spec. Use the Builder tab to test API endpoints directly.",
+                            variant: "destructive"
+                          });
+                        } else {
+                          toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click Import below.` });
+                        }
                       } catch (e: any) {
                         toast({ title: "Fetch Failed", description: e.message, variant: "destructive" });
                       } finally { setLoading(false); }

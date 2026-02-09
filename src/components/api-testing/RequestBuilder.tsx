@@ -181,7 +181,7 @@ export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
             base_url: "",
             parallel: false,
           },
-          mode: "manual",
+          mode: "automated",
         }),
       });
 
@@ -189,17 +189,29 @@ export default function RequestBuilder({ onSaveToChain }: RequestBuilderProps) {
       const data = await proxyResponse.json();
 
       // Extract the actual result from the test execution
-      const testResult = data?.execution_results?.test_results?.[0];
-      if (testResult) {
+      const testResult = data?.execution_results?.test_results?.[0] || data?.test_results?.[0];
+      if (testResult && testResult.actual_status) {
+        const responseBody = testResult.response_body ?? testResult.response_data;
+        const httpStatus = testResult.actual_status;
+        const statusText = httpStatus >= 200 && httpStatus < 300 ? "OK"
+          : httpStatus >= 300 && httpStatus < 400 ? "Redirect"
+          : httpStatus === 400 ? "Bad Request"
+          : httpStatus === 401 ? "Unauthorized"
+          : httpStatus === 403 ? "Forbidden"
+          : httpStatus === 404 ? "Not Found"
+          : httpStatus === 405 ? "Method Not Allowed"
+          : httpStatus === 429 ? "Too Many Requests"
+          : httpStatus >= 500 ? "Server Error"
+          : testResult.error || "Error";
         setResponse({
-          status: testResult.actual_status || testResult.status_code || proxyResponse.status,
-          statusText: testResult.status === "passed" ? "OK" : testResult.error || "Error",
+          status: httpStatus,
+          statusText,
           headers: testResult.response_headers || {},
-          body: typeof testResult.response_body === "string"
-            ? testResult.response_body
-            : JSON.stringify(testResult.response_body ?? data, null, 2),
-          time: testResult.response_time_ms || elapsed,
-          size: 0,
+          body: typeof responseBody === "string"
+            ? responseBody
+            : JSON.stringify(responseBody ?? data, null, 2),
+          time: Math.round(testResult.response_time_ms || elapsed),
+          size: typeof responseBody === "string" ? responseBody.length : JSON.stringify(responseBody || "").length,
         });
       } else {
         // Fallback: show the raw response
