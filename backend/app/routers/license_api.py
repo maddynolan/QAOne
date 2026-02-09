@@ -281,6 +281,10 @@ def _save_audit():
 licenses_db, activations_db = _load_licenses()
 logger.info(f"[License] Loaded {len(licenses_db)} licenses ({('PostgreSQL' if _is_postgres_available() else 'JSON file')})")
 
+# Track revoked license keys — prevents revoked keys from passing /validate
+# even though the HMAC format check would still pass
+revoked_keys: set = set()
+
 audit_log: List[Dict] = []  # Audit trail for admin actions
 
 # Rate limiting for login attempts (IP -> {attempts, last_attempt, locked_until})
@@ -566,36 +570,29 @@ async def validate_license(request: LicenseValidateRequest):
     """
     Validate a license key.
     
-    First checks the database for registered licenses,
-    then falls back to offline validation for portable licenses.
+    Only accepts licenses that exist in the database (created via admin endpoints).
+    Revoked/deleted licenses are rejected — no HMAC format fallback on the server.
     """
-    # Check database first
-    if request.licenseKey in licenses_db:
-        license_data = licenses_db[request.licenseKey]
-        
-        # Check expiry
-        if datetime.fromisoformat(license_data["expiresAt"]) < datetime.now():
-            return LicenseResponse(valid=False, error="License has expired")
-        
-        return LicenseResponse(
-            valid=True,
-            type=license_data["type"],
-            expiresAt=license_data["expiresAt"],
-            features=license_data["features"]
-        )
+    # Check if license key has been revoked
+    if request.licenseKey in revoked_keys:
+        return LicenseResponse(valid=False, error="License has been revoked")
     
-    # Fall back to offline validation
-    result = validate_license_key(request.licenseKey)
+    # Only trust the database — no offline HMAC fallback
+    if request.licenseKey not in licenses_db:
+        return LicenseResponse(valid=False, error="License key not found")
     
-    if result["valid"]:
-        return LicenseResponse(
-            valid=True,
-            type=result["type"],
-            expiresAt=result["expiresAt"],
-            features=get_features_for_type(result["type"])
-        )
+    license_data = licenses_db[request.licenseKey]
     
-    return LicenseResponse(valid=False, error=result.get("error", "Invalid license"))
+    # Check expiry
+    if datetime.fromisoformat(license_data["expiresAt"]) < datetime.now():
+        return LicenseResponse(valid=False, error="License has expired")
+    
+    return LicenseResponse(
+        valid=True,
+        type=license_data["type"],
+        expiresAt=license_data["expiresAt"],
+        features=license_data["features"]
+    )
 
 
 @router.post("/activate")
@@ -605,10 +602,9 @@ async def activate_license(request: LicenseActivateRequest):
     
     Tracks device activations and enforces activation limits.
     """
-    # Validate license first
-    validate_result = validate_license_key(request.licenseKey)
-    if not validate_result["valid"]:
-        return {"success": False, "error": validate_result.get("error")}
+    # Check if license has been revoked
+    if request.licenseKey in revoked_keys:
+        return {"success": False, "error": "License has been revoked"}
     
     # Check if license exists in DB (must be admin-created via /create or /admin/generate)
     if request.licenseKey not in licenses_db:
@@ -993,6 +989,10 @@ async def revoke_license(license_key: str, admin_email: str = Depends(verify_adm
     # Store revocation info before deleting
     revoked_data = licenses_db.pop(license_key)
     activations_db.pop(license_key, None)
+    
+    # Add to revoked set — prevents /validate from accepting this key via HMAC fallback
+    revoked_keys.add(license_key)
+    
     _save_licenses()  # Persist to disk
     
     # Audit log the revocation

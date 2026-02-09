@@ -736,18 +736,32 @@ async function initializeServices() {
     console.log(`[License] Validation result: valid=${isLicenseValid}, type=${licenseType}, expires=${licenseExpiresAt}`);
     
     if (isLicenseValid) {
-      // License is valid - also register activation with server
+      // License validated — now register activation with server
+      // Activation MUST succeed for the app to load (prevents revoked/over-limit keys)
       console.log('[License] Registering activation with server...');
       try {
-        await licenseManager.activate(effectiveLicenseKey);
-        console.log('[License] Activation registered successfully');
+        const activateResult = await licenseManager.activate(effectiveLicenseKey);
+        if (activateResult && activateResult.success === false) {
+          // Server explicitly rejected activation (revoked, limit reached, not found)
+          console.log('[License] Activation REJECTED by server:', activateResult.error);
+          isLicenseValid = false;
+          // Clear the cached license so next launch doesn't try the same key
+          licenseManager.store?.delete('licenseCache');
+        } else {
+          console.log('[License] Activation registered successfully');
+        }
       } catch (activateErr) {
-        console.log('[License] Activation registration failed (will continue anyway):', activateErr.message);
+        // Network error — allow cached license to work (offline grace period)
+        console.log('[License] Activation request failed (network error, allowing offline grace):', activateErr.message);
       }
       
-      // Proceed to load webapp
-      console.log('[License] Valid license found, loading webapp...');
-      loadWebapp();
+      if (isLicenseValid) {
+        // Proceed to load webapp
+        console.log('[License] Valid license found, loading webapp...');
+        loadWebapp();
+      } else {
+        console.log('[License] License was valid but activation was rejected — staying on license page');
+      }
     } else {
       // License exists but is invalid/expired - stay on license page
       const reason = validationResult.error || 'Invalid license';
