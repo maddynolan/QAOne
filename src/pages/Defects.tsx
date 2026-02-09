@@ -43,53 +43,40 @@ export default function Defects() {
   const loadDefects = async () => {
     try {
       setLoading(true);
-      let allDefects: Defect[] = [];
       
-      // Load from localStorage first (most recent)
-      const localDefects = JSON.parse(localStorage.getItem('defects') || '[]');
-      allDefects = [...localDefects];
-      
-      // Try API to merge
-      try {
-        const response = await fetch(`${API_BASE_URL}/defects`);
-        if (response.ok) {
-          const data = await response.json();
-          const apiDefects = (data.defects || []).map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            description: d.description,
-            severity: d.severity || d.priority || "medium",
-            status: d.status || "open",
-            priority: d.priority || d.severity || "medium",
-            createdAt: d.createdAt || d.created_at,
-            updatedAt: d.updatedAt || d.updated_at,
-            defectType: d.defect_type,
-            pageUrl: d.page_url,
-          }));
-          
-          // Merge: add API defects that aren't in local
-          const localIds = new Set(localDefects.map((d: any) => d.id));
-          for (const apiDef of apiDefects) {
-            if (!localIds.has(apiDef.id)) {
-              allDefects.push(apiDef);
-            }
-          }
-        }
-      } catch (apiError) {
-        console.warn("API fetch failed, using local storage only:", apiError);
+      // Load from persistent database API (/api/db/defects)
+      const response = await fetch(`${API_BASE_URL}/api/db/defects?limit=1000`);
+      if (response.ok) {
+        const data = await response.json();
+        const items = Array.isArray(data) ? data : [];
+        const allDefects: Defect[] = items.map((d: any) => ({
+          id: d.id,
+          title: d.title || 'Unnamed Defect',
+          description: d.description || '',
+          severity: d.severity || 'medium',
+          status: d.status || 'open',
+          priority: d.severity || 'medium',
+          createdAt: d.created_at || '',
+          updatedAt: d.updated_at || '',
+          testCaseId: d.test_case_id,
+          testRunId: d.test_run_id,
+        }));
+        
+        // Sort by createdAt descending
+        allDefects.sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA;
+        });
+        
+        setDefects(allDefects);
+      } else {
+        setDefects([]);
       }
-      
-      // Sort by createdAt descending
-      allDefects.sort((a: any, b: any) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-      
-      setDefects(allDefects);
     } catch (error) {
       console.error("Error loading defects:", error);
       toast.error("Failed to load defects");
+      setDefects([]);
     } finally {
       setLoading(false);
     }
