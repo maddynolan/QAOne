@@ -2096,6 +2096,24 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 setActiveTab("chains");
                 toast({ title: "Added to Chain", description: `${req.method} ${req.url} added as a chain step` });
               }}
+              onAddToTestSuite={(testCase) => {
+                // Add the Builder request as a test case to the test suite
+                setTestSuite((prev: any) => {
+                  if (!prev) {
+                    return { test_cases: [testCase], metadata: { total_test_cases: 1 } };
+                  }
+                  const updatedCases = [...(prev.test_cases || []), testCase];
+                  return {
+                    ...prev,
+                    test_cases: updatedCases,
+                    metadata: { ...prev.metadata, total_test_cases: updatedCases.length },
+                  };
+                });
+                toast({ 
+                  title: "Added to Test Suite", 
+                  description: `"${testCase.title}" added. Go to Execute tab to run it with all tests.` 
+                });
+              }}
             />
           </TabErrorBoundary>
         </TabsContent>

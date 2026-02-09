@@ -51,10 +51,11 @@ export interface InitialRequestData {
 
 interface RequestBuilderProps {
   onSaveToChain?: (request: RequestConfig, assertions: AssertionConfig[]) => void;
+  onAddToTestSuite?: (testCase: any) => void;
   initialRequest?: InitialRequestData | null;
 }
 
-export default function RequestBuilder({ onSaveToChain, initialRequest }: RequestBuilderProps) {
+export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initialRequest }: RequestBuilderProps) {
   const [request, setRequest] = useState<RequestConfig>(createEmptyRequest());
   const [assertions, setAssertions] = useState<AssertionConfig[]>([]);
   const [assertionResults, setAssertionResults] = useState<Array<{ passed: boolean; message: string }>>([]);
@@ -487,6 +488,51 @@ export default function RequestBuilder({ onSaveToChain, initialRequest }: Reques
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Chain
+              </Button>
+            )}
+
+            {onAddToTestSuite && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = buildUrl();
+                  if (!url) return;
+                  onAddToTestSuite({
+                    test_case_id: `builder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    title: `${request.method} ${url.replace(/https?:\/\/[^/]+/, "")}`,
+                    description: `Builder request: ${request.method} ${url}`,
+                    method: request.method,
+                    path: url,
+                    expected_status: (() => {
+                      const statusAssertion = assertions.find(a => a.type === "status_code");
+                      return statusAssertion ? parseInt(statusAssertion.expected) || 200 : 200;
+                    })(),
+                    test_type: "functional",
+                    tags: ["functional", "builder", "custom"],
+                    request: {
+                      headers: buildHeaders(),
+                      body: request.bodyType !== "none" && request.body.trim()
+                        ? (() => { try { return JSON.parse(request.body); } catch { return request.body; } })()
+                        : undefined,
+                      query: Object.fromEntries(
+                        request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
+                      ),
+                    },
+                    assertions: assertions.map(a => ({
+                      type: a.type,
+                      operator: a.operator,
+                      expected: a.expected,
+                      path: a.path,
+                      schema: a.schema,
+                    })),
+                  });
+                }}
+                title="Add this request as a test case to the Execute tab"
+                className="text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+                Add to Tests
               </Button>
             )}
           </div>
