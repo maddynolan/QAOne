@@ -78,26 +78,39 @@ class TestExecutionEngine:
         execution_config: Dict[str, Any],
         execution_id: str
     ) -> Dict[str, Any]:
-        """Execute tests in manual mode (step-by-step)"""
+        """Execute tests in manual/sequential mode - runs tests one-by-one with real HTTP calls"""
+        base_url = test_suite.get("base_url", execution_config.get("base_url", ""))
+        test_cases = test_suite.get("test_cases", [])
+        
+        # Initialize correlation session for property transfer
+        session_id = execution_config.get("session_id", execution_id)
+        self.correlation_engine.clear_session(session_id)
+        
         results = {
             "execution_id": execution_id,
             "mode": "manual",
-            "status": "in_progress",
+            "status": "running",
             "test_results": [],
-            "start_time": datetime.utcnow().isoformat()
+            "start_time": datetime.utcnow().isoformat(),
+            "base_url": base_url
         }
         
-        # In manual mode, return test cases for manual execution
-        test_cases = test_suite.get("test_cases", [])
+        # Execute tests sequentially (one-by-one) with real HTTP calls
+        # This is the key difference from automated: always sequential, never parallel
+        test_results = []
         for tc in test_cases:
-            results["test_results"].append({
-                "test_case_id": tc.get("test_case_id"),
-                "title": tc.get("title"),
-                "status": "pending",
-                "manual_execution_required": True
-            })
+            result = await self._execute_test_case(tc, base_url, execution_config, session_id)
+            test_results.append(result)
         
-        results["status"] = "ready_for_manual_execution"
+        results["test_results"] = test_results
+        results["status"] = "completed"
+        results["end_time"] = datetime.utcnow().isoformat()
+        results["summary"] = self._calculate_summary(test_results)
+        
+        # Include correlation data in results
+        correlation_data = self.correlation_engine.get_correlation_data(session_id)
+        results["correlation_data"] = correlation_data
+        
         return results
     
     async def _execute_automated(

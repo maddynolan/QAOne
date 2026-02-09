@@ -268,6 +268,18 @@ export default function EnhancedAPITesting() {
     "auth_matrix", "bola", "injection", "rate_limiting"
   ]);
 
+  // Custom test case creation state
+  const [showCreateTest, setShowCreateTest] = useState(false);
+  const [customTest, setCustomTest] = useState({
+    title: "",
+    method: "GET",
+    path: "",
+    expected_status: 200,
+    description: "",
+    test_type: "functional",
+  });
+  const [savingToTests, setSavingToTests] = useState(false);
+
   // Assertions Builder state
   const [assertions, setAssertions] = useState<any[]>([]);
   const [newAssertion, setNewAssertion] = useState({
@@ -1649,6 +1661,121 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
+  // --- Add a custom test case to the current test suite ---
+  const handleAddCustomTest = () => {
+    if (!customTest.title || !customTest.path) {
+      toast({ title: "Error", description: "Title and endpoint path are required", variant: "destructive" });
+      return;
+    }
+
+    const newTestCase = {
+      test_case_id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title: customTest.title,
+      description: customTest.description || `${customTest.method} ${customTest.path}`,
+      method: customTest.method,
+      path: customTest.path.startsWith("/") ? customTest.path : `/${customTest.path}`,
+      expected_status: customTest.expected_status,
+      test_type: customTest.test_type,
+      tags: [customTest.test_type, "custom"],
+      request: {
+        headers: { "Content-Type": "application/json" },
+        body: {},
+        query: {},
+      },
+      assertions: [
+        { type: "status_code", operator: "equals", expected: String(customTest.expected_status) },
+      ],
+    };
+
+    setTestSuite((prev: any) => {
+      if (!prev) {
+        return { test_cases: [newTestCase], metadata: { total_test_cases: 1 } };
+      }
+      const updatedCases = [...(prev.test_cases || []), newTestCase];
+      return {
+        ...prev,
+        test_cases: updatedCases,
+        metadata: { ...prev.metadata, total_test_cases: updatedCases.length },
+      };
+    });
+
+    setShowCreateTest(false);
+    setCustomTest({ title: "", method: "GET", path: "", expected_status: 200, description: "", test_type: "functional" });
+    toast({ title: "Test Added", description: `"${newTestCase.title}" added to test suite` });
+  };
+
+  // --- Save generated API tests to the main Test Cases tab ---
+  const handleSaveToTestCases = async () => {
+    if (!testSuite || !testSuite.test_cases || testSuite.test_cases.length === 0) {
+      toast({ title: "Error", description: "No test cases to save", variant: "destructive" });
+      return;
+    }
+
+    setSavingToTests(true);
+    let saved = 0;
+    let failed = 0;
+
+    try {
+      // Determine which tests to save: selected or all
+      const allTests = testSuite.test_cases || [];
+      const testsToSave = selectedTestCases.size > 0 
+        ? allTests.filter((tc: any) => {
+            const id = tc.test_id || tc.test_case_id || tc.name || tc.test_name || tc.title || tc.id;
+            return selectedTestCases.has(String(id));
+          })
+        : allTests;
+
+      for (const tc of testsToSave) {
+        try {
+          const method = (tc.method || tc.http_method || "GET").toUpperCase();
+          const path = tc.path || tc.endpoint || tc.url || "";
+          const body = {
+            name: tc.title || tc.name || tc.test_name || `API Test: ${method} ${path}`,
+            description: tc.description || `${method} ${path} - Expected: ${tc.expected_status || 200}`,
+            testType: "api",
+            priority: "medium",
+            tags: [...(tc.tags || []), "api-testing", tc.test_type || "functional"],
+            method: method,
+            endpoint: path,
+            expected_status: String(tc.expected_status || 200),
+            request_body: tc.request?.body ? JSON.stringify(tc.request.body) : "",
+            headers: tc.request?.headers ? JSON.stringify(tc.request.headers) : "",
+            steps: [
+              {
+                action: `Send ${method} request to ${path}` + 
+                  (tc.request?.body ? ` with body: ${JSON.stringify(tc.request.body).slice(0, 100)}` : ""),
+                expectedResult: `Response status is ${tc.expected_status || 200}`,
+              },
+            ],
+          };
+
+          const resp = await fetch(`${API_BASE_URL}/test-cases`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          if (resp.ok) {
+            saved++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      toast({
+        title: "Saved to Test Cases",
+        description: `${saved} test case(s) saved${failed > 0 ? `, ${failed} failed` : ""}. Go to Tests tab to view them.`,
+      });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to save test cases", variant: "destructive" });
+    } finally {
+      setSavingToTests(false);
+    }
+  };
+
   const handleCreateEnvironment = async () => {
     if (!envConfig.name || !envConfig.base_url) {
       toast({
@@ -2528,12 +2655,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="automated">Automated</SelectItem>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="ci_cd">CI/CD</SelectItem>
+                    <SelectItem value="automated">Automated (parallel)</SelectItem>
+                    <SelectItem value="manual">Sequential (one-by-one)</SelectItem>
+                    <SelectItem value="ci_cd">CI/CD (fail-fast)</SelectItem>
                     <SelectItem value="load">Load Testing</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {executionMode === "automated" && "Runs all tests in parallel for fastest results"}
+                  {executionMode === "manual" && "Runs tests one-by-one sequentially with real HTTP calls"}
+                  {executionMode === "ci_cd" && "Fast parallel execution, stops on first failure"}
+                  {executionMode === "load" && "Simulates concurrent users with configurable parameters"}
+                </p>
               </div>
               
               {/* Load Testing Controls - shown when Load Testing mode is selected */}
@@ -2773,18 +2906,127 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </>
                 )}
               </Button>
-              {testSuite?.test_cases?.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export to Postman
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export to HAR
-                  </Button>
-                </div>
-              )}
+              {/* Action Buttons Row */}
+              <div className="flex gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => setShowCreateTest(true)}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Create Custom Test
+                </Button>
+                {testSuite?.test_cases?.length > 0 && (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleSaveToTestCases}
+                      disabled={savingToTests}
+                    >
+                      {savingToTests ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                      )}
+                      {selectedTestCases.size > 0 
+                        ? `Save ${selectedTestCases.size} to Test Cases`
+                        : "Save All to Test Cases"
+                      }
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
+                      <Download className="w-4 h-4 mr-1" />
+                      Export to Postman
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
+                      <Download className="w-4 h-4 mr-1" />
+                      Export to HAR
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Create Custom Test Dialog */}
+              <Dialog open={showCreateTest} onOpenChange={setShowCreateTest}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create Custom API Test Case</DialogTitle>
+                    <DialogDescription>
+                      Add a custom test case to the current test suite
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Test Title *</Label>
+                      <Input
+                        placeholder="e.g., Verify GET /users returns 200"
+                        value={customTest.title}
+                        onChange={(e) => setCustomTest(prev => ({ ...prev, title: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-2">
+                        <Label>Method</Label>
+                        <Select value={customTest.method} onValueChange={(v) => setCustomTest(prev => ({ ...prev, method: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="GET">GET</SelectItem>
+                            <SelectItem value="POST">POST</SelectItem>
+                            <SelectItem value="PUT">PUT</SelectItem>
+                            <SelectItem value="PATCH">PATCH</SelectItem>
+                            <SelectItem value="DELETE">DELETE</SelectItem>
+                            <SelectItem value="HEAD">HEAD</SelectItem>
+                            <SelectItem value="OPTIONS">OPTIONS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2 col-span-2">
+                        <Label>Endpoint Path *</Label>
+                        <Input
+                          placeholder="/api/users"
+                          value={customTest.path}
+                          onChange={(e) => setCustomTest(prev => ({ ...prev, path: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Expected Status</Label>
+                        <Input
+                          type="number"
+                          value={customTest.expected_status}
+                          onChange={(e) => setCustomTest(prev => ({ ...prev, expected_status: parseInt(e.target.value) || 200 }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Test Type</Label>
+                        <Select value={customTest.test_type} onValueChange={(v) => setCustomTest(prev => ({ ...prev, test_type: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="functional">Functional</SelectItem>
+                            <SelectItem value="negative">Negative</SelectItem>
+                            <SelectItem value="boundary">Boundary</SelectItem>
+                            <SelectItem value="security">Security</SelectItem>
+                            <SelectItem value="performance">Performance</SelectItem>
+                            <SelectItem value="contract">Contract</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description (optional)</Label>
+                      <Textarea
+                        placeholder="Describe what this test verifies..."
+                        value={customTest.description}
+                        onChange={(e) => setCustomTest(prev => ({ ...prev, description: e.target.value }))}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowCreateTest(false)}>Cancel</Button>
+                    <Button onClick={handleAddCustomTest}>
+                      <Plus className="w-4 h-4 mr-1" /> Add Test Case
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               {!selectedEnvironment && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
