@@ -72,6 +72,64 @@ class ApiCollection(BaseModel):
     created_at: str = ""
     updated_at: str = ""
 
+
+class ApiWorkspace(BaseModel):
+    """API Testing Workspace - groups collections for multi-project testers."""
+    id: str
+    name: str
+    description: str = ""
+    collections: List[str] = []  # collection IDs
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class ApiCollectionV2(BaseModel):
+    """Granular API Collection - individual requests, folders, metadata stored properly."""
+    id: str
+    workspace_id: str = ""
+    name: str = "New Collection"
+    description: str = ""
+    base_url: str = ""
+    folders: List[Dict[str, Any]] = []  # [{id, name, parent_folder_id, request_ids, sort_order}]
+    requests: List[Dict[str, Any]] = []  # Full request objects with assertions, headers, etc.
+    chains: List[Dict[str, Any]] = []    # Saved chains (moved from localStorage)
+    environment_ids: List[str] = []
+    variables: Dict[str, str] = {}
+    metadata: Dict[str, Any] = {}
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class ApiChain(BaseModel):
+    """API Request Chain - multi-step test flows, persisted to DB instead of localStorage."""
+    id: str
+    collection_id: str = ""
+    name: str = "New Chain"
+    description: str = ""
+    steps: List[Dict[str, Any]] = []  # ChainStep objects
+    variables: Dict[str, str] = {}
+    tags: List[str] = []
+    last_run: Dict[str, Any] = {}
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class ApiTestRunRecord(BaseModel):
+    """API Test Run record - persisted execution results for history/reporting."""
+    id: str
+    collection_id: str = ""
+    name: str = ""
+    status: str = "pending"  # pending, running, passed, failed, cancelled
+    mode: str = "automated"  # manual, automated, ci_cd, load
+    environment_id: Optional[str] = None
+    request_ids: List[str] = []
+    results: List[Dict[str, Any]] = []
+    started_at: str = ""
+    completed_at: Optional[str] = None
+    duration_ms: int = 0
+    created_at: str = ""
+
+
 class TestRun(BaseModel):
     id: str
     name: str
@@ -214,7 +272,7 @@ CREATE TABLE IF NOT EXISTS test_suites (
 CREATE INDEX IF NOT EXISTS idx_test_suites_status ON test_suites(status);
 CREATE INDEX IF NOT EXISTS idx_test_suites_project ON test_suites(project_id);
 
--- API Collections (full suite payload for API tab - backend source of truth)
+-- API Collections (full suite payload for API tab - backend source of truth, legacy)
 CREATE TABLE IF NOT EXISTS api_collections (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL DEFAULT 'default',
@@ -222,6 +280,70 @@ CREATE TABLE IF NOT EXISTS api_collections (
     created_at TEXT,
     updated_at TEXT
 );
+
+-- API Workspaces (group collections for multi-project testers)
+CREATE TABLE IF NOT EXISTS api_workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    collections TEXT DEFAULT '[]',  -- JSON array of collection IDs
+    created_at TEXT,
+    updated_at TEXT
+);
+
+-- API Collections V2 (granular: individual requests, folders, chains stored properly)
+CREATE TABLE IF NOT EXISTS api_collections_v2 (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT DEFAULT '',
+    name TEXT NOT NULL DEFAULT 'New Collection',
+    description TEXT DEFAULT '',
+    base_url TEXT DEFAULT '',
+    folders TEXT DEFAULT '[]',      -- JSON array of folder objects
+    requests TEXT DEFAULT '[]',     -- JSON array of request objects
+    chains TEXT DEFAULT '[]',       -- JSON array of chain references
+    environment_ids TEXT DEFAULT '[]', -- JSON array
+    variables TEXT DEFAULT '{}',    -- JSON object
+    metadata TEXT DEFAULT '{}',     -- JSON object
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_collections_v2_workspace ON api_collections_v2(workspace_id);
+
+-- API Chains (multi-step test flows, moved from localStorage to DB)
+CREATE TABLE IF NOT EXISTS api_chains (
+    id TEXT PRIMARY KEY,
+    collection_id TEXT DEFAULT '',
+    name TEXT NOT NULL DEFAULT 'New Chain',
+    description TEXT DEFAULT '',
+    steps TEXT DEFAULT '[]',        -- JSON array of chain step objects
+    variables TEXT DEFAULT '{}',    -- JSON object
+    tags TEXT DEFAULT '[]',         -- JSON array
+    last_run TEXT DEFAULT '{}',     -- JSON object (last execution summary)
+    created_at TEXT,
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_chains_collection ON api_chains(collection_id);
+
+-- API Test Runs (persistent execution history for all flows: builder, tests tab, runs)
+CREATE TABLE IF NOT EXISTS api_test_runs (
+    id TEXT PRIMARY KEY,
+    collection_id TEXT DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    mode TEXT DEFAULT 'automated',
+    environment_id TEXT,
+    request_ids TEXT DEFAULT '[]',  -- JSON array
+    results TEXT DEFAULT '[]',      -- JSON array of result objects
+    started_at TEXT,
+    completed_at TEXT,
+    duration_ms INTEGER DEFAULT 0,
+    created_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_test_runs_collection ON api_test_runs(collection_id);
+CREATE INDEX IF NOT EXISTS idx_api_test_runs_status ON api_test_runs(status);
 
 -- Test Runs
 CREATE TABLE IF NOT EXISTS test_runs (
@@ -555,6 +677,10 @@ class DatabaseService:
         self.test_cases: Repository[TestCase] = Repository(self, 'test_cases', TestCase)
         self.test_suites: Repository[TestSuite] = Repository(self, 'test_suites', TestSuite)
         self.api_collections: Repository[ApiCollection] = Repository(self, 'api_collections', ApiCollection)
+        self.api_workspaces: Repository[ApiWorkspace] = Repository(self, 'api_workspaces', ApiWorkspace)
+        self.api_collections_v2: Repository[ApiCollectionV2] = Repository(self, 'api_collections_v2', ApiCollectionV2)
+        self.api_chains: Repository[ApiChain] = Repository(self, 'api_chains', ApiChain)
+        self.api_test_runs: Repository[ApiTestRunRecord] = Repository(self, 'api_test_runs', ApiTestRunRecord)
         self.test_runs: Repository[TestRun] = Repository(self, 'test_runs', TestRun)
         self.test_plans: Repository[TestPlan] = Repository(self, 'test_plans', TestPlan)
         self.recordings: Repository[Recording] = Repository(self, 'recordings', Recording)

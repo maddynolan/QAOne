@@ -26,6 +26,8 @@ import RequestBuilder, { type InitialRequestData } from "@/components/api-testin
 import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables, resolveVariables } from "@/components/api-testing/EnvironmentManager";
+import CollectionSidebar from "@/components/api-testing/CollectionSidebar";
+import { useApiTestingStore, useActiveCollection, useBuilderState, useSyncStatus } from "@/stores/apiTestingStore";
 
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -344,9 +346,14 @@ export default function EnhancedAPITesting() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload: testSuite }),
       }).catch(() => {});
+      
+      // Bridge: Also sync imported data into the new Zustand store for sidebar
+      if (testSuite && testSuite.test_cases?.length > 0) {
+        store.importCollection(testSuite, testSuite.name || 'Imported Collection').catch(() => {});
+      }
     }, 1500);
     return () => clearTimeout(t);
-  }, [testSuite]);
+  }, [testSuite]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Environment state
   const [environments, setEnvironments] = useState<any[]>([]);
@@ -373,6 +380,50 @@ export default function EnhancedAPITesting() {
 
   // Builder pre-population state (for "Try It" buttons)
   const [builderInitialRequest, setBuilderInitialRequest] = useState<any>(null);
+
+  // ===== Zustand store integration (API testing sidebar, workspaces, collections) =====
+  const store = useApiTestingStore();
+  const activeCollection = useActiveCollection();
+  const builderState = useBuilderState();
+  useEffect(() => {
+    store.initialize();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (builderState.initial_data) {
+      setBuilderInitialRequest(builderState.initial_data);
+      if (store.active_tab === 'builder') setActiveTab('builder');
+    }
+  }, [builderState.initial_data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeCollection && activeCollection.requests.length > 0) {
+      const legacySuite = {
+        name: activeCollection.name,
+        base_url: activeCollection.base_url,
+        test_cases: activeCollection.requests.map((r: any) => ({
+          test_case_id: r.id,
+          name: r.name,
+          title: r.name,
+          method: r.method,
+          path: r.path || r.url,
+          endpoint: r.url,
+          expected_status: r.expected_status,
+          description: r.description,
+          test_type: r.test_type,
+          assertions: r.assertions,
+          request: {
+            headers: (r.headers || []).reduce((acc: any, h: any) => {
+              if (h.key) acc[h.key] = h.value;
+              return acc;
+            }, {}),
+            body: r.body || undefined,
+          },
+        })),
+        folders: (activeCollection.folders || []).map((f: any) => ({ id: f.id, name: f.name, test_case_ids: f.request_ids || [] })),
+      };
+      if (String(testSuite?.test_cases?.length) !== String(legacySuite.test_cases.length)) setTestSuite(legacySuite);
+    }
+  }, [activeCollection]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ===== END store integration =====
 
   // Custom test case creation state
   const [showCreateTest, setShowCreateTest] = useState(false);
@@ -2137,194 +2188,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         </div>
 
       <div className="flex min-h-[420px] gap-0 -mx-6">
-        {/* Left sidebar - collection tree (Postman-style); persists across tabs */}
-        <aside
-          className={`flex flex-col border-r border-border bg-muted/30 overflow-hidden transition-[width] shrink-0 ${
-            sidebarOpen ? "w-64 min-w-[220px]" : "w-12 min-w-[48px]"
-          }`}
-        >
-          <div className="flex items-center justify-between h-10 px-2 border-b border-border shrink-0">
-            {sidebarOpen && <span className="text-xs font-medium text-muted-foreground truncate">Collection</span>}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => setSidebarOpen((o) => !o)}
-              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            >
-              {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-            </Button>
-          </div>
-          {sidebarOpen && (
-            <ScrollArea className="flex-1">
-              <div className="p-2 space-y-1">
-                {suiteLoading ? (
-                  <p className="text-xs text-muted-foreground px-2 py-4 flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    Loading collection…
-                  </p>
-                ) : !testSuite || (() => {
-                  const base = testSuite.test_cases || [];
-                  const fromCat = (testSuite.test_categories && typeof testSuite.test_categories === "object")
-                    ? Object.values(testSuite.test_categories).flat().filter(Boolean)
-                    : [];
-                  const hasAny = base.length > 0 || fromCat.length > 0 || (testSuite.folders?.length ?? 0) > 0;
-                  return !hasAny;
-                })() ? (
-                  <p className="text-xs text-muted-foreground px-2 py-4">
-                    No requests yet. Import a collection or add requests from Builder to see them here.
-                  </p>
-                ) : (
-                  (() => {
-                    const baseTestCases: any[] = testSuite.test_cases || [];
-                    const testCategories = testSuite.test_categories || {};
-                    const categoryList = Object.values(testCategories).flat().filter((x: any) => x && (x.method || x.path || x.endpoint || x.title || x.name));
-                    const allIds = new Set<string>();
-                    const allTestCases: any[] = [];
-                    baseTestCases.forEach((tc: any) => {
-                      const id = tc.test_case_id || tc.test_id || tc.id || tc.name || tc.title;
-                      if (id && !allIds.has(String(id))) {
-                        allIds.add(String(id));
-                        allTestCases.push(tc);
-                      } else if (!id) {
-                        allTestCases.push(tc);
-                      }
-                    });
-                    categoryList.forEach((tc: any) => {
-                      const id = tc.test_case_id || tc.test_id || tc.id || tc.name || tc.title;
-                      if (id && !allIds.has(String(id))) {
-                        allIds.add(String(id));
-                        allTestCases.push(tc);
-                      } else if (!id) {
-                        allTestCases.push(tc);
-                      }
-                    });
-                    const endpointOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
-                    const pathOnly = (p: string) => (p || "").trim().replace(/^https?:\/\/[^/]+/, "") || "/";
-                    const byEndpoint = new Map<string, any[]>();
-                    for (const tc of allTestCases) {
-                      const method = (tc.method || "GET").toUpperCase();
-                      const path = pathOnly(tc.path || tc.endpoint || "");
-                      const key = `${method} ${path}`;
-                      if (!byEndpoint.has(key)) byEndpoint.set(key, []);
-                      byEndpoint.get(key)!.push(tc);
-                    }
-                    const sortedEndpoints = Array.from(byEndpoint.entries()).sort(([a], [b]) => {
-                      const [ma, pa] = a.split(" ", 2);
-                      const [mb, pb] = b.split(" ", 2);
-                      const oa = endpointOrder[ma] ?? 99;
-                      const ob = endpointOrder[mb] ?? 99;
-                      if (oa !== ob) return oa - ob;
-                      return (pa || "").localeCompare(pb || "");
-                    });
-                    const openInBuilder = (tc: any) => {
-                      const method = tc.method || "GET";
-                      const path = tc.path || tc.endpoint || "";
-                      const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
-                      const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
-                      const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-                      const tcId = tc.test_case_id || tc.test_id || tc.id;
-                      setBuilderInitialRequest({
-                        method,
-                        url: fullPath,
-                        headers: tc.request?.headers || { "Content-Type": "application/json" },
-                        body: tc.request?.body || undefined,
-                        assertions: Array.isArray(tc.assertions) ? tc.assertions : undefined,
-                        editingTestCaseId: tcId,
-                        title: tc.title || tc.name,
-                      });
-                      setActiveTab("builder");
-                    };
-                    return (
-                      <>
-                        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
-                          <FolderOpen className="w-4 h-4 text-primary shrink-0" />
-                          <span className="text-sm font-medium truncate">{testSuite.name || "My Collection"}</span>
-                          <span className="text-xs text-muted-foreground shrink-0">({allTestCases.length} tests, {byEndpoint.size} endpoints)</span>
-                        </div>
-                        <div className="pl-1 pt-1">
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground">
-                            <Link2 className="w-3.5 h-3.5 shrink-0" />
-                            <span className="text-xs font-medium">Endpoints</span>
-                            <span className="text-xs">({byEndpoint.size})</span>
-                          </div>
-                          <div className="pl-1 space-y-0.5">
-                            {sortedEndpoints.map(([endpointKey, cases]) => {
-                              const [method, path] = endpointKey.split(" ", 2);
-                              return (
-                                <div key={endpointKey} className="pl-1">
-                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
-                                    <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                    <span className="text-xs font-medium truncate font-mono">{method} {path}</span>
-                                    <span className="text-xs text-muted-foreground">({cases.length})</span>
-                                  </div>
-                                  <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
-                                    {cases.map((tc: any, idx: number) => {
-                                      const tcId = tc.test_case_id || tc.test_id || tc.id || `ep_${idx}`;
-                                      const label = tc.title || tc.name || `${tc.method || "GET"} ${tc.path || tc.endpoint || ""}` || "Request";
-                                      return (
-                                        <button
-                                          key={tcId}
-                                          type="button"
-                                          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
-                                          onClick={() => openInBuilder(tc)}
-                                        >
-                                          <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
-                                            {tc.method || "GET"}
-                                          </Badge>
-                                          <span className="truncate">{label}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        {(testSuite.folders || []).length > 0 && (
-                          <div className="pl-1 pt-2 border-t border-border mt-1">
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground">
-                              <Folder className="w-3.5 h-3.5 shrink-0" />
-                              <span className="text-xs font-medium">Folders</span>
-                            </div>
-                            {(testSuite.folders || []).map((f: any) => {
-                              const idsInFolder = new Set(f.test_case_ids || []);
-                              const casesInFolder = allTestCases.filter(
-                                (tc: any) => idsInFolder.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
-                              );
-                              if (casesInFolder.length === 0) return null;
-                              return (
-                                <div key={f.id} className="pl-3 border-l border-border ml-1.5 mt-0.5">
-                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
-                                    <span className="text-xs truncate">{f.name || "Folder"}</span>
-                                    <span className="text-xs text-muted-foreground">({casesInFolder.length})</span>
-                                  </div>
-                                  <div className="pl-2 space-y-0.5">
-                                    {casesInFolder.map((tc: any, idx: number) => {
-                                      const tcId = tc.test_case_id || tc.test_id || tc.id || `f_${idx}`;
-                                      const label = tc.title || tc.name || `${tc.method || "GET"} ${tc.path || tc.endpoint || ""}` || "Request";
-                                      return (
-                                        <button key={tcId} type="button" className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-left hover:bg-muted/70 text-xs truncate" onClick={() => openInBuilder(tc)}>
-                                          <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">{tc.method || "GET"}</Badge>
-                                          <span className="truncate">{label}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()
-                )}
-              </div>
-            </ScrollArea>
-          )}
-        </aside>
+        {/* NEW: Extracted memoized sidebar with workspace/collection switching */}
+        <CollectionSidebar />
 
         <div className="flex-1 min-w-0 overflow-auto">
       <div className="max-w-7xl mx-auto p-6 space-y-6">

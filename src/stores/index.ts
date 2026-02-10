@@ -5,6 +5,7 @@
  */
 
 export * from './testDataStore';
+export * from './apiTestingStore';
 
 
 

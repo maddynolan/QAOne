@@ -413,6 +413,149 @@ export const adminApi = {
   },
 };
 
+// ==================== API WORKSPACES ====================
+
+export const apiWorkspacesApi = {
+  async getAll(): Promise<any[]> {
+    return fetchApi<any[]>('/api-workspaces', undefined, 'api_workspaces', 30000);
+  },
+
+  async create(data: { name: string; description?: string }): Promise<any> {
+    cache.invalidate('api_workspaces');
+    return fetchApi<any>('/api-workspaces', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async update(id: string, data: any): Promise<any> {
+    cache.invalidate('api_workspaces');
+    return fetchApi<any>(`/api-workspaces/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async delete(id: string): Promise<void> {
+    cache.invalidate('api_workspaces');
+    await fetchApi(`/api-workspaces/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ==================== API COLLECTIONS V2 ====================
+
+export const apiCollectionsApi = {
+  async getAll(workspaceId?: string): Promise<any[]> {
+    const params = workspaceId ? `?workspace_id=${workspaceId}` : '';
+    return fetchApi<any[]>(`/api-collections-v2${params}`, undefined, `api_collections_${workspaceId}`, 15000);
+  },
+
+  async get(id: string): Promise<any> {
+    return fetchApi<any>(`/api-collections-v2/${id}`, undefined, `api_collection_${id}`, 10000);
+  },
+
+  async create(data: any): Promise<any> {
+    cache.invalidate('api_collection');
+    return fetchApi<any>('/api-collections-v2', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async update(id: string, data: any): Promise<any> {
+    cache.invalidate(`api_collection_${id}`);
+    cache.invalidate('api_collection');
+    return fetchApi<any>(`/api-collections-v2/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async delete(id: string): Promise<void> {
+    cache.invalidate('api_collection');
+    await fetchApi(`/api-collections-v2/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ==================== API CHAINS ====================
+
+export const apiChainsApi = {
+  async getAll(collectionId?: string): Promise<any[]> {
+    const params = collectionId ? `?collection_id=${collectionId}` : '';
+    return fetchApi<any[]>(`/api-chains${params}`, undefined, `api_chains_${collectionId}`, 15000);
+  },
+
+  async get(id: string): Promise<any> {
+    return fetchApi<any>(`/api-chains/${id}`, undefined, `api_chain_${id}`);
+  },
+
+  async create(data: any): Promise<any> {
+    cache.invalidate('api_chain');
+    return fetchApi<any>('/api-chains', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async update(id: string, data: any): Promise<any> {
+    cache.invalidate(`api_chain_${id}`);
+    cache.invalidate('api_chain');
+    return fetchApi<any>(`/api-chains/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async delete(id: string): Promise<void> {
+    cache.invalidate('api_chain');
+    await fetchApi(`/api-chains/${id}`, { method: 'DELETE' });
+  },
+};
+
+// ==================== API TEST RUNS ====================
+
+export const apiTestRunsApi = {
+  async getAll(filters?: { collection_id?: string; status?: string; limit?: number }): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (filters?.collection_id) params.set('collection_id', filters.collection_id);
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.limit) params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return fetchApi<any[]>(
+      `/api-test-runs${query ? `?${query}` : ''}`,
+      undefined,
+      `api_test_runs_${query}`,
+      10000
+    );
+  },
+
+  async get(id: string): Promise<any> {
+    return fetchApi<any>(`/api-test-runs/${id}`, undefined, `api_test_run_${id}`, 5000);
+  },
+
+  async create(data: any): Promise<any> {
+    cache.invalidate('api_test_run');
+    return fetchApi<any>('/api-test-runs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async update(id: string, data: any): Promise<any> {
+    cache.invalidate(`api_test_run_${id}`);
+    cache.invalidate('api_test_run');
+    return fetchApi<any>(`/api-test-runs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async delete(id: string): Promise<void> {
+    cache.invalidate('api_test_run');
+    await fetchApi(`/api-test-runs/${id}`, { method: 'DELETE' });
+  },
+};
+
 // ==================== UNIFIED SERVICE ====================
 
 export const databaseService = {
@@ -422,6 +565,12 @@ export const databaseService = {
   recordings: recordingsApi,
   elements: elementsApi,
   admin: adminApi,
+  
+  // API Testing specific
+  apiWorkspaces: apiWorkspacesApi,
+  apiCollections: apiCollectionsApi,
+  apiChains: apiChainsApi,
+  apiTestRuns: apiTestRunsApi,
   
   // Clear all caches
   clearCache: () => cache.invalidate(),

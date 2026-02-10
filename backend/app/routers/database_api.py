@@ -14,7 +14,8 @@ import uuid
 from ..services.storage.database_service import (
     db, init_database,
     TestCase, TestSuite, TestRun, TestPlan, Recording, Element, Defect,
-    Environment, TestCaseVersion, GlobalVariable, ApiCollection
+    Environment, TestCaseVersion, GlobalVariable, ApiCollection,
+    ApiWorkspace, ApiCollectionV2, ApiChain, ApiTestRunRecord
 )
 
 logger = logging.getLogger(__name__)
@@ -361,6 +362,251 @@ async def save_default_api_collection(request: SaveApiCollectionRequest):
     return created.model_dump()
 
 
+# ==================== API WORKSPACES (multi-collection support) ====================
+
+@router.get("/api-workspaces", response_model=List[Dict[str, Any]])
+async def get_api_workspaces():
+    """List all API testing workspaces."""
+    items = await db.api_workspaces.get_all(limit=100, offset=0)
+    return [item.model_dump() for item in items]
+
+@router.post("/api-workspaces", response_model=Dict[str, Any])
+async def create_api_workspace(request: Dict[str, Any]):
+    """Create a new API testing workspace."""
+    now = datetime.utcnow().isoformat() + "Z"
+    ws = ApiWorkspace(
+        id=request.get("id", str(uuid.uuid4())),
+        name=request.get("name", "My Workspace"),
+        description=request.get("description", ""),
+        collections=request.get("collections", []),
+        created_at=request.get("created_at", now),
+        updated_at=now,
+    )
+    created = await db.api_workspaces.create(ws)
+    return created.model_dump()
+
+@router.put("/api-workspaces/{workspace_id}", response_model=Dict[str, Any])
+async def update_api_workspace(workspace_id: str, request: Dict[str, Any]):
+    """Update an API testing workspace."""
+    now = datetime.utcnow().isoformat() + "Z"
+    request["updated_at"] = now
+    await db.api_workspaces.update(workspace_id, request)
+    updated = await db.api_workspaces.get(workspace_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return updated.model_dump()
+
+@router.delete("/api-workspaces/{workspace_id}")
+async def delete_api_workspace(workspace_id: str):
+    """Delete an API testing workspace and its collections."""
+    await db.api_workspaces.delete(workspace_id)
+    return {"status": "deleted", "id": workspace_id}
+
+
+# ==================== API COLLECTIONS V2 (granular, workspace-scoped) ====================
+
+@router.get("/api-collections-v2", response_model=List[Dict[str, Any]])
+async def get_api_collections_v2(
+    workspace_id: Optional[str] = Query(None),
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    """List API collections, optionally filtered by workspace."""
+    items = await db.api_collections_v2.get_all(limit=limit, offset=offset)
+    result = [item.model_dump() for item in items]
+    if workspace_id:
+        result = [c for c in result if c.get("workspace_id") == workspace_id]
+    return result
+
+@router.get("/api-collections-v2/{collection_id}", response_model=Dict[str, Any])
+async def get_api_collection_v2(collection_id: str):
+    """Get a single API collection with all its requests, folders, and chains."""
+    item = await db.api_collections_v2.get(collection_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return item.model_dump()
+
+@router.post("/api-collections-v2", response_model=Dict[str, Any])
+async def create_api_collection_v2(request: Dict[str, Any]):
+    """Create a new API collection."""
+    now = datetime.utcnow().isoformat() + "Z"
+    coll = ApiCollectionV2(
+        id=request.get("id", str(uuid.uuid4())),
+        workspace_id=request.get("workspace_id", ""),
+        name=request.get("name", "New Collection"),
+        description=request.get("description", ""),
+        base_url=request.get("base_url", ""),
+        folders=request.get("folders", []),
+        requests=request.get("requests", []),
+        chains=request.get("chains", []),
+        environment_ids=request.get("environment_ids", []),
+        variables=request.get("variables", {}),
+        metadata=request.get("metadata", {}),
+        created_at=request.get("created_at", now),
+        updated_at=now,
+    )
+    created = await db.api_collections_v2.create(coll)
+    return created.model_dump()
+
+@router.put("/api-collections-v2/{collection_id}", response_model=Dict[str, Any])
+async def update_api_collection_v2(collection_id: str, request: Dict[str, Any]):
+    """Update an API collection (supports partial updates)."""
+    now = datetime.utcnow().isoformat() + "Z"
+    request["updated_at"] = now
+    await db.api_collections_v2.update(collection_id, request)
+    updated = await db.api_collections_v2.get(collection_id)
+    if not updated:
+        # If not found, create it (upsert behavior for frontend compatibility)
+        request["id"] = collection_id
+        request["created_at"] = request.get("created_at", now)
+        coll = ApiCollectionV2(**request)
+        created = await db.api_collections_v2.create(coll)
+        return created.model_dump()
+    return updated.model_dump()
+
+@router.delete("/api-collections-v2/{collection_id}")
+async def delete_api_collection_v2(collection_id: str):
+    """Delete an API collection and its chains."""
+    # Also delete associated chains
+    try:
+        chains = await db.api_chains.get_all(limit=1000, offset=0)
+        for chain in chains:
+            if chain.collection_id == collection_id:
+                await db.api_chains.delete(chain.id)
+    except Exception:
+        pass
+    await db.api_collections_v2.delete(collection_id)
+    return {"status": "deleted", "id": collection_id}
+
+
+# ==================== API CHAINS (DB-persisted, replaces localStorage) ====================
+
+@router.get("/api-chains", response_model=List[Dict[str, Any]])
+async def get_api_chains(
+    collection_id: Optional[str] = Query(None),
+    limit: int = Query(100, le=1000),
+):
+    """List API chains, optionally filtered by collection."""
+    items = await db.api_chains.get_all(limit=limit, offset=0)
+    result = [item.model_dump() for item in items]
+    if collection_id:
+        result = [c for c in result if c.get("collection_id") == collection_id]
+    return result
+
+@router.get("/api-chains/{chain_id}", response_model=Dict[str, Any])
+async def get_api_chain(chain_id: str):
+    """Get a single API chain."""
+    item = await db.api_chains.get(chain_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Chain not found")
+    return item.model_dump()
+
+@router.post("/api-chains", response_model=Dict[str, Any])
+async def create_api_chain(request: Dict[str, Any]):
+    """Create a new API chain."""
+    now = datetime.utcnow().isoformat() + "Z"
+    chain = ApiChain(
+        id=request.get("id", str(uuid.uuid4())),
+        collection_id=request.get("collection_id", ""),
+        name=request.get("name", "New Chain"),
+        description=request.get("description", ""),
+        steps=request.get("steps", []),
+        variables=request.get("variables", {}),
+        tags=request.get("tags", []),
+        last_run=request.get("last_run", {}),
+        created_at=request.get("created_at", now),
+        updated_at=now,
+    )
+    created = await db.api_chains.create(chain)
+    return created.model_dump()
+
+@router.put("/api-chains/{chain_id}", response_model=Dict[str, Any])
+async def update_api_chain(chain_id: str, request: Dict[str, Any]):
+    """Update an API chain."""
+    now = datetime.utcnow().isoformat() + "Z"
+    request["updated_at"] = now
+    await db.api_chains.update(chain_id, request)
+    updated = await db.api_chains.get(chain_id)
+    if not updated:
+        request["id"] = chain_id
+        request["created_at"] = request.get("created_at", now)
+        chain = ApiChain(**request)
+        created = await db.api_chains.create(chain)
+        return created.model_dump()
+    return updated.model_dump()
+
+@router.delete("/api-chains/{chain_id}")
+async def delete_api_chain(chain_id: str):
+    """Delete an API chain."""
+    await db.api_chains.delete(chain_id)
+    return {"status": "deleted", "id": chain_id}
+
+
+# ==================== API TEST RUNS (persistent execution history) ====================
+
+@router.get("/api-test-runs", response_model=List[Dict[str, Any]])
+async def get_api_test_runs(
+    collection_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """List API test runs with optional filtering. Sorted by created_at descending."""
+    items = await db.api_test_runs.get_all(limit=limit, offset=offset)
+    result = [item.model_dump() for item in items]
+    if collection_id:
+        result = [r for r in result if r.get("collection_id") == collection_id]
+    if status:
+        result = [r for r in result if r.get("status") == status]
+    # Sort by created_at descending for most recent first
+    result.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return result
+
+@router.get("/api-test-runs/{run_id}", response_model=Dict[str, Any])
+async def get_api_test_run(run_id: str):
+    """Get a single API test run with full results."""
+    item = await db.api_test_runs.get(run_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Test run not found")
+    return item.model_dump()
+
+@router.post("/api-test-runs", response_model=Dict[str, Any])
+async def create_api_test_run(request: Dict[str, Any]):
+    """Create a new API test run record."""
+    now = datetime.utcnow().isoformat() + "Z"
+    run = ApiTestRunRecord(
+        id=request.get("id", str(uuid.uuid4())),
+        collection_id=request.get("collection_id", ""),
+        name=request.get("name", ""),
+        status=request.get("status", "pending"),
+        mode=request.get("mode", "automated"),
+        environment_id=request.get("environment_id"),
+        request_ids=request.get("request_ids", []),
+        results=request.get("results", []),
+        started_at=request.get("started_at", now),
+        completed_at=request.get("completed_at"),
+        duration_ms=request.get("duration_ms", 0),
+        created_at=request.get("created_at", now),
+    )
+    created = await db.api_test_runs.create(run)
+    return created.model_dump()
+
+@router.put("/api-test-runs/{run_id}", response_model=Dict[str, Any])
+async def update_api_test_run(run_id: str, request: Dict[str, Any]):
+    """Update an API test run (status, results, completion)."""
+    await db.api_test_runs.update(run_id, request)
+    updated = await db.api_test_runs.get(run_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Test run not found")
+    return updated.model_dump()
+
+@router.delete("/api-test-runs/{run_id}")
+async def delete_api_test_run(run_id: str):
+    """Delete an API test run."""
+    await db.api_test_runs.delete(run_id)
+    return {"status": "deleted", "id": run_id}
+
+
 # ==================== TEST RUNS ====================
 
 @router.get("/test-runs", response_model=List[Dict[str, Any]])
@@ -627,7 +873,7 @@ async def migrate_from_json():
 @router.post("/clear-all")
 async def clear_all_data():
     """Clear ALL test data from all tables. Use with caution - enterprise reset."""
-    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings", "environments", "test_case_versions", "global_variables", "api_collections"]
+    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings", "environments", "test_case_versions", "global_variables", "api_collections", "api_workspaces", "api_collections_v2", "api_chains", "api_test_runs"]
     deleted = {}
     
     for table in tables:
