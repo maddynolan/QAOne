@@ -2223,11 +2223,15 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
                       const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
                       const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+                      const tcId = tc.test_case_id || tc.test_id || tc.id;
                       setBuilderInitialRequest({
                         method,
                         url: fullPath,
                         headers: tc.request?.headers || { "Content-Type": "application/json" },
                         body: tc.request?.body || undefined,
+                        assertions: Array.isArray(tc.assertions) ? tc.assertions : undefined,
+                        editingTestCaseId: tcId,
+                        title: tc.title || tc.name,
                       });
                       setActiveTab("builder");
                     };
@@ -2497,19 +2501,42 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 toast({ title: "Added to Chain", description: `${req.method} ${req.url} added as a chain step` });
               }}
               onAddToTestSuite={async (testCase) => {
-                // 1) Add to Execute tab test suite (in-memory)
+                const isUpdate = !!(testCase as any).editingTestCaseId;
+                const editingId = (testCase as any).editingTestCaseId;
+
+                // 1) Add or update in Execute tab test suite (in-memory)
                 setTestSuite((prev: any) => {
-                  const next = !prev
-                    ? { test_cases: [testCase], metadata: { total_test_cases: 1 } }
-                    : {
-                        ...prev,
-                        test_cases: [...(prev.test_cases || []), testCase],
-                        metadata: { ...prev.metadata, total_test_cases: (prev.test_cases?.length || 0) + 1 },
-                      };
-                  return ensureTestSuiteFolders(next);
+                  if (!prev) {
+                    return ensureTestSuiteFolders({ test_cases: [testCase], metadata: { total_test_cases: 1 } });
+                  }
+                  const idMatch = (tc: any) => String(tc.test_case_id || tc.test_id || tc.id || tc.title || tc.name) === String(editingId);
+                  if (isUpdate && editingId) {
+                    const updatedCases = (prev.test_cases || []).map((tc: any) => idMatch(tc) ? { ...tc, ...testCase, test_case_id: tc.test_case_id || tc.test_id || tc.id, editingTestCaseId: undefined } : tc);
+                    const updatedCategories: Record<string, any[]> = {};
+                    if (prev.test_categories && typeof prev.test_categories === "object") {
+                      for (const [cat, list] of Object.entries(prev.test_categories)) {
+                        updatedCategories[cat] = (list as any[]).map((tc: any) => idMatch(tc) ? { ...tc, ...testCase, test_case_id: tc.test_case_id || tc.test_id || tc.id, editingTestCaseId: undefined } : tc);
+                      }
+                    }
+                    return ensureTestSuiteFolders({
+                      ...prev,
+                      test_cases: updatedCases,
+                      test_categories: Object.keys(updatedCategories).length ? { ...prev.test_categories, ...updatedCategories } : prev.test_categories,
+                      metadata: { ...prev.metadata, total_test_cases: updatedCases.length || (prev.test_cases?.length || 0) },
+                    });
+                  }
+                  return ensureTestSuiteFolders({
+                    ...prev,
+                    test_cases: [...(prev.test_cases || []), testCase],
+                    metadata: { ...prev.metadata, total_test_cases: (prev.test_cases?.length || 0) + 1 },
+                  });
                 });
 
-                // 2) Save to backend /test-cases AND localStorage so it shows on Tests page
+                // 2) If new test, save to backend; if update, only in-memory (collection)
+                if (isUpdate) {
+                  toast({ title: "Test updated", description: `"${testCase.title || testCase.method + " " + (testCase.path || "")}" updated in collection.` });
+                  return;
+                }
                 try {
                   const testName = testCase.title || `${testCase.method} ${testCase.path}`;
                   const payload = {

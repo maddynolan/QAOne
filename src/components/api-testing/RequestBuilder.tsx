@@ -99,6 +99,10 @@ export interface InitialRequestData {
   headers?: Record<string, string>;
   body?: any;
   bodyType?: string;
+  /** When loading a test case from the collection, pass its assertions so they can be edited */
+  assertions?: Array<{ id?: string; type?: string; name?: string; expected?: string; path?: string; operator?: string; schema?: string }>;
+  /** When set, "Add to Tests" will update this test case in the collection instead of adding new */
+  editingTestCaseId?: string;
 }
 
 interface RequestBuilderProps {
@@ -138,7 +142,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     } catch {}
   }, [cookieJar]);
 
-  // --- Load initial request when prop changes (e.g. from "Try It" button) ---
+  // --- Load initial request when prop changes (e.g. from collection test case click) ---
   useEffect(() => {
     if (initialRequest) {
       const headers: KeyValuePair[] = [];
@@ -164,6 +168,20 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       setResponse(null);
       setError(null);
       setAssertionResults([]);
+      if (initialRequest.assertions && Array.isArray(initialRequest.assertions) && initialRequest.assertions.length > 0) {
+        const normalized: AssertionConfig[] = initialRequest.assertions.map((a: any, i: number) => ({
+          id: a.id || generateId(),
+          type: a.type || "status_code",
+          name: a.name || `${a.type || "assertion"} ${i + 1}`,
+          expected: a.expected != null ? String(a.expected) : "",
+          path: a.path != null ? String(a.path) : "",
+          operator: a.operator != null ? String(a.operator) : "equals",
+          schema: a.schema != null ? (typeof a.schema === "string" ? a.schema : JSON.stringify(a.schema)) : "",
+        }));
+        setAssertions(normalized);
+      } else {
+        setAssertions([]);
+      }
     }
   }, [initialRequest]);
   const [savedRequests, setSavedRequests] = useState<SavedRequest[]>(() => {
@@ -632,7 +650,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       const url = buildUrl();
       const pathOnly = url ? (url.replace(/^https?:\/\/[^/]+/, "") || "/") : "/";
       onAddToTestSuite({
-        test_case_id: `builder_${saved.id}`,
+        test_case_id: (initialRequest as any)?.editingTestCaseId || `builder_${saved.id}`,
+        editingTestCaseId: (initialRequest as any)?.editingTestCaseId,
         title: saved.name,  // Use the user-provided name, NOT the endpoint path
         description: `Custom test: ${request.method} ${url}`,
         method: request.method,
@@ -894,11 +913,13 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   const url = buildUrl();
                   if (!url) return;
                   const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
-                  const defaultName = `${request.method} ${pathOnly}`;
-                  const userTitle = prompt("Enter a name for this test case:", defaultName);
+                  const isEditing = !!(initialRequest as any)?.editingTestCaseId;
+                  const defaultName = isEditing && initialRequest ? (initialRequest as any).title : `${request.method} ${pathOnly}`;
+                  const userTitle = prompt(isEditing ? "Edit test case name:" : "Enter a name for this test case:", defaultName || `${request.method} ${pathOnly}`);
                   if (!userTitle) return; // cancelled
                   onAddToTestSuite({
-                    test_case_id: `builder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    test_case_id: (initialRequest as any)?.editingTestCaseId || `builder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    editingTestCaseId: (initialRequest as any)?.editingTestCaseId,
                     title: userTitle.trim(),
                     description: `Custom test: ${request.method} ${url}`,
                     method: request.method,
@@ -929,11 +950,11 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     })),
                   });
                 }}
-                title="Add this request as a test case to the Execute tab and Tests page"
+                title={(initialRequest as any)?.editingTestCaseId ? "Update this test case in the collection" : "Add this request as a test case to the Execute tab and Tests page"}
                 className="text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950"
               >
                 <CheckCircle2 className="w-4 h-4 mr-1" />
-                Add to Tests
+                {(initialRequest as any)?.editingTestCaseId ? "Update test" : "Add to Tests"}
               </Button>
             )}
           </div>
