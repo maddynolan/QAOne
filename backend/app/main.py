@@ -161,7 +161,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware (with allow_credentials=True, "*" is invalid; list origins explicitly)
+# Middleware ordering: last added = outermost = processes request first.
+# CORS must be outermost so headers are added to ALL responses (including errors).
+
+# Trace logging (innermost — runs closest to the app)
+from app.middleware.trace_logging_middleware import TraceLoggingMiddleware
+app.add_middleware(TraceLoggingMiddleware)
+
+# Tenant Context Middleware (for RLS enforcement)
+from app.middleware.tenant_middleware import TenantContextMiddleware
+app.add_middleware(TenantContextMiddleware)
+
+# RBAC Middleware (for permission checking)
+from app.middleware.rbac_middleware import RBACMiddleware
+app.add_middleware(RBACMiddleware)
+
+# CORS middleware — MUST be added LAST so it's the outermost middleware.
+# This ensures CORS headers are present on ALL responses, including error responses
+# from inner middleware/routes. Without this, BaseHTTPMiddleware exceptions can
+# bypass CORS header injection, causing browser CORS blocks on legitimate origins.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -177,18 +195,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Trace logging (trace_id per request for issue tracking; add first so it runs last)
-from app.middleware.trace_logging_middleware import TraceLoggingMiddleware
-app.add_middleware(TraceLoggingMiddleware)
-
-# Tenant Context Middleware (for RLS enforcement)
-from app.middleware.tenant_middleware import TenantContextMiddleware
-app.add_middleware(TenantContextMiddleware)
-
-# RBAC Middleware (for permission checking)
-from app.middleware.rbac_middleware import RBACMiddleware
-app.add_middleware(RBACMiddleware)
 
 # Pydantic models
 class GenerateTestsRequest(BaseModel):

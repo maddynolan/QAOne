@@ -1464,9 +1464,22 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             
             set((s) => { s.sync_status = 'syncing'; });
             
+            // Retry helper: try up to 2 times with 1s delay for transient CORS/network failures
+            const tryFetch = async (url: string, opts: RequestInit, retries = 1): Promise<Response> => {
+              try {
+                return await fetch(url, opts);
+              } catch (err) {
+                if (retries > 0) {
+                  await new Promise(r => setTimeout(r, 1000));
+                  return tryFetch(url, opts, retries - 1);
+                }
+                throw err;
+              }
+            };
+            
             try {
               // Save to new granular endpoint
-              const res = await fetch(`${API_BASE_URL}/api/db/api-collections-v2/${collectionId}`, {
+              const res = await tryFetch(`${API_BASE_URL}/api/db/api-collections-v2/${collectionId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(coll),
@@ -1474,7 +1487,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               
               if (!res.ok) {
                 // Fallback: save to legacy endpoint (e.g. v2 table empty)
-                await fetch(`${API_BASE_URL}/api/db/api-collections/default`, {
+                await tryFetch(`${API_BASE_URL}/api/db/api-collections/default`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -1507,7 +1520,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                       })),
                     },
                   }),
-                });
+                }, 0); // No retry on fallback
               }
               
               set((s) => {
@@ -1515,7 +1528,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 s.last_sync = nowISO();
               });
             } catch (err) {
-              console.error('[ApiTestingStore] Failed to save collection:', err);
+              console.warn('[ApiTestingStore] Failed to save collection (will retry on next change):', (err as Error).message);
               set((s) => { s.sync_status = 'error'; });
             }
           },
