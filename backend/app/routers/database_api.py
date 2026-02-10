@@ -450,19 +450,28 @@ async def create_api_collection_v2(request: Dict[str, Any]):
 
 @router.put("/api-collections-v2/{collection_id}", response_model=Dict[str, Any])
 async def update_api_collection_v2(collection_id: str, request: Dict[str, Any]):
-    """Update an API collection (supports partial updates)."""
+    """Update an API collection (supports partial updates / upsert)."""
     now = datetime.utcnow().isoformat() + "Z"
     request["updated_at"] = now
-    await db.api_collections_v2.update(collection_id, request)
-    updated = await db.api_collections_v2.get(collection_id)
-    if not updated:
-        # If not found, create it (upsert behavior for frontend compatibility)
+    
+    try:
+        await db.api_collections_v2.update(collection_id, request)
+        updated = await db.api_collections_v2.get(collection_id)
+        if updated:
+            return updated.model_dump()
+    except Exception as e:
+        logger.warning(f"Error updating collection {collection_id}: {e}")
+    
+    # Not found or update failed — upsert: create the collection
+    try:
         request["id"] = collection_id
         request["created_at"] = request.get("created_at", now)
         coll = ApiCollectionV2(**request)
         created = await db.api_collections_v2.create(coll)
         return created.model_dump()
-    return updated.model_dump()
+    except Exception as e:
+        logger.error(f"Error creating collection {collection_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save collection: {str(e)}")
 
 @router.delete("/api-collections-v2/{collection_id}")
 async def delete_api_collection_v2(collection_id: str):

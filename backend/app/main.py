@@ -196,6 +196,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler: ensures unhandled exceptions return JSON (not plain text)
+# so that CORSMiddleware can properly add headers to the response.
+from starlette.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all for unhandled exceptions. Returns JSON so CORS middleware can add headers."""
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
 # Pydantic models
 class GenerateTestsRequest(BaseModel):
     org_id: str

@@ -590,15 +590,18 @@ class Repository(Generic[T]):
     
     async def update(self, id: str, updates: Dict[str, Any]) -> Optional[T]:
         """Update existing item."""
-        updates['updated_at'] = datetime.utcnow().isoformat()
+        # Work on a COPY so we don't mutate the caller's dict
+        # (caller may reuse the dict, e.g. for fallback create after a no-op update)
+        row_data = dict(updates)
+        row_data['updated_at'] = datetime.utcnow().isoformat()
         
-        # Serialize lists and dicts
-        for key, value in updates.items():
+        # Serialize lists and dicts for SQLite storage
+        for key, value in row_data.items():
             if isinstance(value, (list, dict)):
-                updates[key] = json.dumps(value)
+                row_data[key] = json.dumps(value)
         
-        set_clause = ', '.join([f"{k} = ?" for k in updates.keys()])
-        values = list(updates.values()) + [id]
+        set_clause = ', '.join([f"{k} = ?" for k in row_data.keys()])
+        values = list(row_data.values()) + [id]
         
         async with self.db.connection() as conn:
             await conn.execute(
