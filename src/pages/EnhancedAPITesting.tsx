@@ -2163,113 +2163,158 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                     Loading collection…
                   </p>
-                ) : !testSuite || (!(testSuite.test_cases?.length) && !(testSuite.folders?.length)) ? (
+                ) : !testSuite || (() => {
+                  const base = testSuite.test_cases || [];
+                  const fromCat = (testSuite.test_categories && typeof testSuite.test_categories === "object")
+                    ? Object.values(testSuite.test_categories).flat().filter(Boolean)
+                    : [];
+                  const hasAny = base.length > 0 || fromCat.length > 0 || (testSuite.folders?.length ?? 0) > 0;
+                  return !hasAny;
+                })() ? (
                   <p className="text-xs text-muted-foreground px-2 py-4">
                     No requests yet. Import a collection or add requests from Builder to see them here.
                   </p>
                 ) : (
-                  <>
-                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
-                      <FolderOpen className="w-4 h-4 text-primary shrink-0" />
-                      <span className="text-sm font-medium truncate">{testSuite.name || "My Collection"}</span>
-                    </div>
-                    {(testSuite.folders || []).map((f: any) => {
-                      const idsInFolder = new Set(f.test_case_ids || []);
-                      const casesInFolder = (testSuite.test_cases || []).filter(
-                        (tc: any) => idsInFolder.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
-                      );
-                      return (
-                        <div key={f.id} className="pl-1">
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
-                            <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-xs font-medium truncate">{f.name || "Folder"}</span>
-                            <span className="text-xs text-muted-foreground">({casesInFolder.length})</span>
-                          </div>
-                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
-                            {casesInFolder.map((tc: any, idx: number) => {
-                              const tcId = tc.test_case_id || tc.test_id || tc.id || `tc_${idx}`;
-                              const method = tc.method || "GET";
-                              const path = tc.path || tc.endpoint || "";
-                              const label = tc.title || tc.name || `${method} ${path}` || "Request";
-                              return (
-                                <button
-                                  key={tcId}
-                                  type="button"
-                                  className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
-                                  onClick={() => {
-                                    const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
-                                    const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
-                                    const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-                                    setBuilderInitialRequest({
-                                      method,
-                                      url: fullPath,
-                                      headers: tc.request?.headers || { "Content-Type": "application/json" },
-                                      body: tc.request?.body || undefined,
-                                    });
-                                    setActiveTab("builder");
-                                  }}
-                                >
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
-                                    {method}
-                                  </Badge>
-                                  <span className="truncate">{label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                  (() => {
+                    const baseTestCases: any[] = testSuite.test_cases || [];
+                    const testCategories = testSuite.test_categories || {};
+                    const categoryList = Object.values(testCategories).flat().filter((x: any) => x && (x.method || x.path || x.endpoint || x.title || x.name));
+                    const allIds = new Set<string>();
+                    const allTestCases: any[] = [];
+                    baseTestCases.forEach((tc: any) => {
+                      const id = tc.test_case_id || tc.test_id || tc.id || tc.name || tc.title;
+                      if (id && !allIds.has(String(id))) {
+                        allIds.add(String(id));
+                        allTestCases.push(tc);
+                      } else if (!id) {
+                        allTestCases.push(tc);
+                      }
+                    });
+                    categoryList.forEach((tc: any) => {
+                      const id = tc.test_case_id || tc.test_id || tc.id || tc.name || tc.title;
+                      if (id && !allIds.has(String(id))) {
+                        allIds.add(String(id));
+                        allTestCases.push(tc);
+                      } else if (!id) {
+                        allTestCases.push(tc);
+                      }
+                    });
+                    const endpointOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
+                    const byEndpoint = new Map<string, any[]>();
+                    for (const tc of allTestCases) {
+                      const method = (tc.method || "GET").toUpperCase();
+                      const path = (tc.path || tc.endpoint || "").trim() || "/";
+                      const key = `${method} ${path}`;
+                      if (!byEndpoint.has(key)) byEndpoint.set(key, []);
+                      byEndpoint.get(key)!.push(tc);
+                    }
+                    const sortedEndpoints = Array.from(byEndpoint.entries()).sort(([a], [b]) => {
+                      const [ma, pa] = a.split(" ", 2);
+                      const [mb, pb] = b.split(" ", 2);
+                      const oa = endpointOrder[ma] ?? 99;
+                      const ob = endpointOrder[mb] ?? 99;
+                      if (oa !== ob) return oa - ob;
+                      return (pa || "").localeCompare(pb || "");
+                    });
+                    const openInBuilder = (tc: any) => {
+                      const method = tc.method || "GET";
+                      const path = tc.path || tc.endpoint || "";
+                      const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
+                      const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
+                      const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+                      setBuilderInitialRequest({
+                        method,
+                        url: fullPath,
+                        headers: tc.request?.headers || { "Content-Type": "application/json" },
+                        body: tc.request?.body || undefined,
+                      });
+                      setActiveTab("builder");
+                    };
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
+                          <FolderOpen className="w-4 h-4 text-primary shrink-0" />
+                          <span className="text-sm font-medium truncate">{testSuite.name || "My Collection"}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">({allTestCases.length} tests, {byEndpoint.size} endpoints)</span>
                         </div>
-                      );
-                    })}
-                    {/* Uncategorized requests */}
-                    {(() => {
-                      const idsInFolders = new Set((testSuite.folders || []).flatMap((f: any) => f.test_case_ids || []));
-                      const uncategorized = (testSuite.test_cases || []).filter(
-                        (tc: any) => !idsInFolders.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
-                      );
-                      if (uncategorized.length === 0) return null;
-                      return (
                         <div className="pl-1 pt-1">
                           <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground">
-                            <FileCode className="w-3.5 h-3.5 shrink-0" />
-                            <span className="text-xs">Requests</span>
-                            <span className="text-xs">({uncategorized.length})</span>
+                            <Link2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="text-xs font-medium">Endpoints</span>
+                            <span className="text-xs">({byEndpoint.size})</span>
                           </div>
-                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
-                            {uncategorized.map((tc: any, idx: number) => {
-                              const tcId = tc.test_case_id || tc.test_id || tc.id || `tc_${idx}`;
-                              const method = tc.method || "GET";
-                              const path = tc.path || tc.endpoint || "";
-                              const label = tc.title || tc.name || `${method} ${path}` || "Request";
+                          <div className="pl-1 space-y-0.5">
+                            {sortedEndpoints.map(([endpointKey, cases]) => {
+                              const [method, path] = endpointKey.split(" ", 2);
                               return (
-                                <button
-                                  key={tcId}
-                                  type="button"
-                                  className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
-                                  onClick={() => {
-                                    const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
-                                    const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
-                                    const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
-                                    setBuilderInitialRequest({
-                                      method,
-                                      url: fullPath,
-                                      headers: tc.request?.headers || { "Content-Type": "application/json" },
-                                      body: tc.request?.body || undefined,
-                                    });
-                                    setActiveTab("builder");
-                                  }}
-                                >
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
-                                    {method}
-                                  </Badge>
-                                  <span className="truncate">{label}</span>
-                                </button>
+                                <div key={endpointKey} className="pl-1">
+                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
+                                    <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                    <span className="text-xs font-medium truncate font-mono">{method} {path}</span>
+                                    <span className="text-xs text-muted-foreground">({cases.length})</span>
+                                  </div>
+                                  <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
+                                    {cases.map((tc: any, idx: number) => {
+                                      const tcId = tc.test_case_id || tc.test_id || tc.id || `ep_${idx}`;
+                                      const label = tc.title || tc.name || `${tc.method || "GET"} ${tc.path || tc.endpoint || ""}` || "Request";
+                                      return (
+                                        <button
+                                          key={tcId}
+                                          type="button"
+                                          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
+                                          onClick={() => openInBuilder(tc)}
+                                        >
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
+                                            {tc.method || "GET"}
+                                          </Badge>
+                                          <span className="truncate">{label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>
                         </div>
-                      );
-                    })()}
-                  </>
+                        {(testSuite.folders || []).length > 0 && (
+                          <div className="pl-1 pt-2 border-t border-border mt-1">
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground">
+                              <Folder className="w-3.5 h-3.5 shrink-0" />
+                              <span className="text-xs font-medium">Folders</span>
+                            </div>
+                            {(testSuite.folders || []).map((f: any) => {
+                              const idsInFolder = new Set(f.test_case_ids || []);
+                              const casesInFolder = allTestCases.filter(
+                                (tc: any) => idsInFolder.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
+                              );
+                              if (casesInFolder.length === 0) return null;
+                              return (
+                                <div key={f.id} className="pl-3 border-l border-border ml-1.5 mt-0.5">
+                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
+                                    <span className="text-xs truncate">{f.name || "Folder"}</span>
+                                    <span className="text-xs text-muted-foreground">({casesInFolder.length})</span>
+                                  </div>
+                                  <div className="pl-2 space-y-0.5">
+                                    {casesInFolder.map((tc: any, idx: number) => {
+                                      const tcId = tc.test_case_id || tc.test_id || tc.id || `f_${idx}`;
+                                      const label = tc.title || tc.name || `${tc.method || "GET"} ${tc.path || tc.endpoint || ""}` || "Request";
+                                      return (
+                                        <button key={tcId} type="button" className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-left hover:bg-muted/70 text-xs truncate" onClick={() => openInBuilder(tc)}>
+                                          <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">{tc.method || "GET"}</Badge>
+                                          <span className="truncate">{label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()
                 )}
               </div>
             </ScrollArea>
