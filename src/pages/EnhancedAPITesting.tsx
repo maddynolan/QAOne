@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -242,16 +242,9 @@ export default function EnhancedAPITesting() {
   const [specContent, setSpecContent] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
-  const [testSuite, setTestSuite] = useState<any>(() => {
-    try {
-      const raw = localStorage.getItem(API_TEST_SUITE_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && (parsed.test_cases?.length || parsed.folders?.length)) return ensureTestSuiteFolders(parsed);
-      }
-    } catch {}
-    return null;
-  });
+  const [testSuite, setTestSuite] = useState<any>(null);
+  const [suiteLoading, setSuiteLoading] = useState(true);
+  const suiteLoadedFromBackend = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Database state
