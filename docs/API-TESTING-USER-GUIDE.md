@@ -69,6 +69,13 @@ This guide documents **all built features** in the API Testing tab with **day-to
   - **Save:** Click Save icon → Enter name → request and assertions stored in **Saved Requests**; expand **Saved Requests** and click to load.  
   - **Chain:** Click **Chain** → request and assertions are added to the Chains flow.  
   - **Add to Tests:** Click **Add to Tests** → Enter test name → case appears in Execute tab and Tests page.
+
+#### Builder → Execute tab & Tests tab
+
+- **Add to Tests** does two things: (1) adds the test to the **Execute** tab in memory so you can run it immediately, and (2) saves it to the app database via `POST /api/db/test-cases` with `category: "api"`, tags including `api-testing`, and `metadata.type: "automated"` so it is treated as an API test (automation status **full**).
+- **Tests tab:** The Tests section (Test Repository) loads test cases from several sources: Electron storage, localStorage, and **the same database** (`GET /api/db/test-cases`). So tests you add from Builder are persisted and appear in the Tests tab once the list is refreshed.
+- **To see new API tests in Tests:** Open the **Tests** tab and click **Refresh** (↻). That reloads all sources (including API tests from the database). API tests are identifiable by tag `api-testing`, category `api`, and automation status **full**; you can filter by these if your Tests UI supports it.
+
 - **Example:** Save “Get user 1” and “Create user” for quick reload; or add “Get user 1” to Tests for regression runs.
 
 ---

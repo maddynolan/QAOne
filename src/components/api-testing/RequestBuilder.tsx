@@ -442,7 +442,11 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     request.params.filter(p => p.enabled && p.key.trim()).map(p => [p.key, p.value])
                   ),
                 },
-                expected_status: 200,
+                expected_status: (() => {
+                  const statusAssertion = assertions.find(a => a.type === "status_code");
+                  if (statusAssertion) return parseInt(String(statusAssertion.expected), 10) || 200;
+                  return request.method === "POST" ? 201 : 200;
+                })(),
                 assertions: assertions.map(a => ({
                   type: a.type,
                   operator: a.operator,
@@ -634,7 +638,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         path: url,
         expected_status: (() => {
           const sa = assertions.find(a => a.type === "status_code");
-          return sa ? parseInt(sa.expected) || 200 : 200;
+          if (sa) return parseInt(String(sa.expected), 10) || 200;
+          return request.method === "POST" ? 201 : 200;
         })(),
         test_type: "functional",
         tags: ["functional", "builder", "custom"],

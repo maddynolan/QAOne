@@ -55,6 +55,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ADDITIONAL TYPES FOR SUITES, RELEASES, RUNS, DEFECTS
@@ -1630,6 +1631,40 @@ export default function TestRepository() {
             });
           }
         } catch (e) {}
+      }
+
+      // 4. From persistent database API (/api/db/test-cases) - API tests saved from Builder "Add to Tests"
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/db/test-cases?limit=1000`);
+        if (response.ok) {
+          const dbCases = await response.json();
+          const list = Array.isArray(dbCases) ? dbCases : dbCases.items || dbCases.test_cases || [];
+          for (const row of list) {
+            const id = row.id || row.test_case_id;
+            if (!id || seenIds.has(id) || isDeleted(id)) continue;
+            seenIds.add(id);
+            const meta = row.metadata || {};
+            const isApi = row.category === 'api' || meta.type === 'automated';
+            allCases.push({
+              id,
+              name: row.name || row.title || 'Untitled',
+              description: row.description || '',
+              folderId: row.folder_id || row.folderId || null,
+              priority: (row.priority as TestCase['priority']) || 'medium',
+              status: (row.status as TestCase['status']) || 'draft',
+              type: (row.category === 'api' ? 'functional' : row.type) as TestCase['type'],
+              automationStatus: isApi ? 'full' : (meta.automationStatus as TestCase['automationStatus']) || calculateAutomationStatus({ steps: row.steps }),
+              tags: [...new Set([...(Array.isArray(row.tags) ? row.tags : row.tags ? [row.tags] : []), ...(row.category === 'api' ? ['api-testing'] : [])])],
+              steps: row.steps || [],
+              createdAt: row.created_at || row.createdAt,
+              updatedAt: row.updated_at || row.updatedAt,
+              unified_data: { ...meta, method: meta.method, endpoint: meta.endpoint, assertions: meta.assertions },
+            });
+          }
+          console.log('[Repository] Loaded from /api/db/test-cases:', list.length, 'test cases');
+        }
+      } catch (e) {
+        console.log('[Repository] /api/db/test-cases not available:', (e as Error).message);
       }
       
       // Deduplicate by name - keep the most recently updated version
@@ -3393,26 +3428,12 @@ export default function TestRepository() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={async () => {
-                    console.log('[Repository] Manual refresh triggered - checking backend for scale data');
-                    toast.info('Checking for scale data...');
-                    try {
-                      const response = await fetch('http://localhost:8000/test-cases/scale-data');
-                      if (response.ok) {
-                        const data = await response.json();
-                        if (data.testCases && data.testCases.length > 100) {
-                          localStorage.setItem('use_scale_db', 'true');
-                          console.log('[Repository] Scale data found:', data.testCases.length, 'test cases - enabling backend load');
-                          toast.success(`Found ${data.testCases.length} test cases in database!`);
-                        }
-                      }
-                    } catch (e) {
-                      console.log('[Repository] Backend not available');
-                    }
+                  onClick={() => {
+                    toast.info('Refreshing test cases...');
                     window.dispatchEvent(new CustomEvent('reload-test-cases'));
                   }}
                   className="border-gray-300 dark:border-border text-gray-600 dark:text-foreground hover:bg-accent"
-                  title="Refresh test cases from storage"
+                  title="Refresh test cases (localStorage, API tests from Builder, scale data if enabled)"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </Button>
