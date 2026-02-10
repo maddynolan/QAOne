@@ -1617,6 +1617,24 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               width: state.sidebar.width,
             },
           }),
+          // Deep merge so partial persisted sidebar doesn't overwrite Sets/defaults
+          merge: (persisted: any, current: any) => {
+            if (!persisted) return current;
+            return {
+              ...current,
+              ...persisted,
+              // Deep-merge sidebar: keep Sets from current, apply persisted scalars
+              sidebar: {
+                ...current.sidebar,
+                ...(persisted.sidebar || {}),
+                // ALWAYS ensure Sets exist (they cannot survive JSON serialization)
+                expanded_folders: current.sidebar?.expanded_folders ?? new Set<string>(),
+                expanded_endpoints: current.sidebar?.expanded_endpoints ?? new Set<string>(),
+              },
+              // Ensure other Sets survive rehydration
+              selected_test_case_ids: current.selected_test_case_ids ?? new Set<string>(),
+            };
+          },
           // Safe storage: never throw so rehydration cannot crash the app
           storage: {
             getItem: (name) => {
@@ -1776,7 +1794,19 @@ async function migrateLegacyData(get: () => ApiTestingState & ApiTestingActions,
 // ============================================================================
 
 /** Subscribe to only sidebar state - sidebar won't re-render when other state changes */
-export const useSidebarState = () => useApiTestingStore((s) => s.sidebar);
+const _emptySidebarFolders = new Set<string>();
+const _emptySidebarEndpoints = new Set<string>();
+export const useSidebarState = () => useApiTestingStore((s) => {
+  const sb = s.sidebar;
+  // Defensive: ensure Sets exist even if rehydration/merge lost them
+  if (!sb.expanded_folders || typeof sb.expanded_folders.has !== 'function') {
+    return { ...sb, expanded_folders: _emptySidebarFolders, expanded_endpoints: _emptySidebarEndpoints };
+  }
+  if (!sb.expanded_endpoints || typeof sb.expanded_endpoints.has !== 'function') {
+    return { ...sb, expanded_endpoints: _emptySidebarEndpoints };
+  }
+  return sb;
+});
 
 /** Subscribe to only active collection ID (stable primitive) */
 export const useActiveCollectionId = () => useApiTestingStore((s) => s.active_collection_id);
