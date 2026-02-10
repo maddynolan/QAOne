@@ -297,12 +297,19 @@ const WorkspaceCollectionSwitcher = memo(() => {
   const createCollection = useApiTestingStore(s => s.createCollection);
   
   const wsCollections = useMemo(() => {
-    return Object.values(collections).filter(c => c.workspace_id === activeWsId);
+    // Show all collections when workspace is not set, or match workspace
+    return Object.values(collections).filter(c => 
+      !activeWsId || !c.workspace_id || c.workspace_id === activeWsId
+    );
   }, [collections, activeWsId]);
   
   const handleNewCollection = useCallback(async () => {
-    const coll = await createCollection({ name: 'New Collection' });
-    switchCollection(coll.id);
+    try {
+      const coll = await createCollection({ name: 'New Collection' });
+      if (coll?.id) switchCollection(coll.id);
+    } catch (err) {
+      console.error('[CollectionSidebar] Failed to create collection:', err);
+    }
   }, [createCollection, switchCollection]);
   
   return (
@@ -380,10 +387,112 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const renameFolder = useApiTestingStore(s => s.renameFolder);
   const deleteFolder = useApiTestingStore(s => s.deleteFolder);
   const addRequest = useApiTestingStore(s => s.addRequest);
+  const createCollection = useApiTestingStore(s => s.createCollection);
+  const switchCollection = useApiTestingStore(s => s.switchCollection);
+  const importCollection = useApiTestingStore(s => s.importCollection);
   
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  
+  // Handler: "New" button — ensure a collection exists, then add a request and open it in builder
+  const handleNewRequest = useCallback(async () => {
+    let collId = useApiTestingStore.getState().active_collection_id;
+    
+    // Create a collection first if none exists
+    if (!collId) {
+      const coll = await createCollection({ name: 'My Collection' });
+      switchCollection(coll.id);
+      collId = coll.id;
+    }
+    
+    // Add a new blank request and open it
+    const reqId = addRequest({ method: 'GET', name: 'New Request', url: '' });
+    if (reqId) {
+      openRequestInBuilder(reqId);
+    }
+  }, [createCollection, switchCollection, addRequest, openRequestInBuilder]);
+  
+  // Handler: "Import" button — open file picker to import Postman/OpenAPI collection JSON
+  const handleImportClick = useCallback(() => {
+    importFileRef.current?.click();
+  }, []);
+  
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      
+      // Detect format and build import payload
+      let payload: any;
+      let name = file.name.replace(/\.(json|yaml|yml)$/i, '');
+      
+      if (json.info && json.item) {
+        // Postman Collection v2.1 format
+        name = json.info?.name || name;
+        const extractRequests = (items: any[]): any[] => {
+          const reqs: any[] = [];
+          for (const item of items) {
+            if (item.item) {
+              // Folder — recurse
+              reqs.push(...extractRequests(item.item));
+            } else if (item.request) {
+              const r = item.request;
+              reqs.push({
+                name: item.name || 'Untitled',
+                method: (typeof r === 'string' ? 'GET' : r.method) || 'GET',
+                endpoint: typeof r === 'string' ? r : (typeof r.url === 'string' ? r.url : r.url?.raw || ''),
+                path: typeof r.url === 'object' ? '/' + (r.url.path || []).join('/') : '',
+                description: r.description || '',
+              });
+            }
+          }
+          return reqs;
+        };
+        payload = { test_cases: extractRequests(json.item || []) };
+      } else if (json.openapi || json.swagger) {
+        // OpenAPI/Swagger format
+        name = json.info?.title || name;
+        const paths = json.paths || {};
+        const testCases: any[] = [];
+        for (const [path, methods] of Object.entries(paths)) {
+          for (const [method, details] of Object.entries(methods as Record<string, any>)) {
+            if (['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(method)) {
+              testCases.push({
+                name: details.summary || details.operationId || `${method.toUpperCase()} ${path}`,
+                method: method.toUpperCase(),
+                endpoint: path,
+                path: path,
+                description: details.description || '',
+              });
+            }
+          }
+        }
+        payload = { test_cases: testCases };
+      } else if (json.test_cases || json.requests) {
+        // Native QAOne format
+        payload = json;
+      } else if (Array.isArray(json)) {
+        // Array of requests
+        payload = { test_cases: json };
+      } else {
+        // Try as single collection object
+        payload = { test_cases: json.test_cases || json.requests || [] };
+      }
+      
+      // Import into store
+      await importCollection(payload, name);
+    } catch (err) {
+      console.error('[CollectionSidebar] Import failed:', err);
+    }
+    
+    // Reset file input so the same file can be re-imported
+    if (importFileRef.current) importFileRef.current.value = '';
+  }, [importCollection]);
   
   // Memoized endpoint grouping
   const endpointGroups = useMemo(() => {
@@ -538,13 +647,21 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                     No requests yet. Import a collection or add requests from Builder.
                   </p>
                   <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleImportClick}>
                       <Upload className="w-3 h-3 mr-1" /> Import
                     </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleNewRequest}>
                       <Plus className="w-3 h-3 mr-1" /> New
                     </Button>
                   </div>
+                  {/* Hidden file input for import */}
+                  <input
+                    ref={importFileRef}
+                    type="file"
+                    accept=".json,.yaml,.yml"
+                    className="hidden"
+                    onChange={handleImportFile}
+                  />
                 </div>
               ) : (
                 <>
@@ -557,6 +674,15 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                     <span className="text-[10px] text-muted-foreground shrink-0">
                       {totalRequests} req
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0 shrink-0"
+                      onClick={handleNewRequest}
+                      title="Add request"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
                   </div>
                   
                   {/* Folders section */}
