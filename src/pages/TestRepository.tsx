@@ -2131,10 +2131,65 @@ export default function TestRepository() {
   // Run test - Shows dialog to add to run or create new run
   const [showRunTestDialog, setShowRunTestDialog] = useState(false);
   const [testCaseToRun, setTestCaseToRun] = useState<TestCase | null>(null);
-  
+  const [apiRunResult, setApiRunResult] = useState<{ passed: boolean; message: string; detail?: string } | null>(null);
+
+  const isApiTest = useCallback((tc: TestCase) => {
+    return tc.tags?.includes('api-testing') === true ||
+      (tc as any).category === 'api' ||
+      (tc as any).type === 'api' ||
+      !!(tc.unified_data?.method && (tc.unified_data?.endpoint || tc.unified_data?.path));
+  }, []);
+
   const handleRunTest = useCallback((testCase: TestCase) => {
     setTestCaseToRun(testCase);
+    setApiRunResult(null);
     setShowRunTestDialog(true);
+  }, []);
+
+  const runApiTestFromRepository = useCallback(async (tc: TestCase): Promise<{ passed: boolean; message: string }> => {
+    const ud = tc.unified_data || {};
+    const method = ud.method || 'GET';
+    const endpoint = ud.endpoint || ud.path || (tc as any).path || '';
+    const isFullUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
+    const testPath = isFullUrl ? endpoint : (endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
+    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      if (ud.headers) headers = typeof ud.headers === 'string' ? JSON.parse(ud.headers) : ud.headers;
+    } catch { /* keep default */ }
+    let body: any = undefined;
+    try {
+      if (ud.request_body != null) body = typeof ud.request_body === 'string' ? JSON.parse(ud.request_body) : ud.request_body;
+    } catch { /* leave undefined */ }
+    const assertions = Array.isArray(ud.assertions) ? ud.assertions : [];
+    const expectedStatus = ud.expected_status != null ? parseInt(String(ud.expected_status), 10) : (method === 'POST' ? 201 : 200);
+    const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        test_suite: {
+          test_cases: [{
+            test_case_id: tc.id,
+            title: tc.name || 'API Test',
+            method,
+            path: testPath,
+            request: { headers, body },
+            expected_status: expectedStatus,
+            assertions,
+            test_type: 'functional',
+          }],
+          base_url: isFullUrl ? '' : '',
+        },
+        execution_config: { base_url: '', parallel: false },
+        mode: 'automated',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const tr = data?.execution_results?.test_results?.[0];
+    const passed = tr?.status === 'passed';
+    const message = passed ? `Passed (${tr?.actual_status} in ${tr?.response_time_ms ?? 0}ms)` : (tr?.error || `Failed: ${tr?.actual_status} (expected ${expectedStatus})`);
+    setApiRunResult({ passed, message, detail: tr?.response_body ? String(tr.response_body).slice(0, 200) : undefined });
+    if (passed) toast.success(message); else toast.error(message);
+    return { passed, message };
   }, []);
 
   // Edit test steps in builder
@@ -2862,6 +2917,38 @@ export default function TestRepository() {
     if (!testCase) {
       toast.error('Test case not found');
       return false;
+    }
+
+    // API tests: run via backend, not Playwright
+    if (isApiTest(testCase)) {
+      setExecutingRunId(runId);
+      setTestRuns(prev => prev.map(r => r.id === runId ? { ...r, status: 'running' as const, startTime: new Date().toISOString() } : r));
+      try {
+        const { passed } = await runApiTestFromRepository(testCase);
+        const stepName = `${(testCase.unified_data?.method || 'GET')} ${testCase.unified_data?.endpoint || testCase.unified_data?.path || ''}`;
+        setTestRuns(prev => {
+          const updated = prev.map(r =>
+            r.id === runId
+              ? {
+                  ...r,
+                  status: passed ? 'passed' : 'failed',
+                  stepResults: [{ stepIndex: 0, stepName, status: passed ? 'passed' : 'failed', timestamp: new Date().toISOString() }],
+                }
+              : r
+          );
+          localStorage.setItem('test_execution_history', JSON.stringify(updated));
+          return updated;
+        });
+      } catch (e) {
+        setTestRuns(prev => {
+          const updated = prev.map(r => r.id === runId ? { ...r, status: 'failed' as const } : r);
+          localStorage.setItem('test_execution_history', JSON.stringify(updated));
+          return updated;
+        });
+        toast.error('API test execution failed');
+      }
+      setExecutingRunId(null);
+      return true;
     }
     
     // Use unified_data.steps if available (has full qword/args), otherwise fall back to steps
@@ -6136,83 +6223,107 @@ export default function TestRepository() {
           <DialogHeader>
             <DialogTitle>Run Test Case</DialogTitle>
           </DialogHeader>
-          {testCaseToRun && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                How would you like to run <strong className="text-gray-900 dark:text-white">{testCaseToRun.name}</strong>?
-              </p>
-              
-              {/* Quick Run Option - Actually executes */}
-              <button
-                onClick={() => {
-                  // Create run record and navigate to builder to execute
-                  const runId = `run_${Date.now()}`;
-                  const newRun: TestRun = {
-                    id: runId,
-                    name: `Quick Run: ${testCaseToRun.name}`,
-                    testCaseId: testCaseToRun.id,
-                    mode: 'automated',
-                    status: 'running',
-                    startTime: new Date().toISOString()
-                  };
-                  setTestRuns(prev => {
-                    const updated = [newRun, ...prev];
-                    localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                    return updated;
-                  });
-                  setShowRunTestDialog(false);
-                  // Navigate to builder with autoRun to actually execute
-                  navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}&autoRun=true&runId=${runId}`);
-                }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
-              >
-                <div className="p-2 rounded-lg bg-green-600">
-                  <Play className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-white">Quick Run (Execute Now)</p>
-                  <p className="text-xs text-gray-500">Opens builder and runs test immediately</p>
-                </div>
-              </button>
-              
-              {/* Debug Option */}
-              <button
-                onClick={() => {
-                  navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
-                  setShowRunTestDialog(false);
-                }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-amber-500/50 hover:bg-accent transition-all text-left"
-              >
-                <div className="p-2 rounded-lg bg-blue-600">
-                  <Pencil className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-white">Open in Builder</p>
-                  <p className="text-xs text-gray-500">Edit steps, then run manually when ready</p>
-                </div>
-              </button>
+          {testCaseToRun && (() => {
+            const apiTest = isApiTest(testCaseToRun);
+            return (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  How would you like to run <strong className="text-gray-900 dark:text-white">{testCaseToRun.name}</strong>?
+                </p>
+                {apiTest && (
+                  <Badge variant="secondary" className="text-xs">API test — runs via API Testing engine</Badge>
+                )}
 
-              {/* Add to Test Run */}
-              <button
-                onClick={() => {
-                  setShowRunTestDialog(false);
-                  // Pre-select this test case for the new run dialog
-                  setNewRunTestCases([testCaseToRun.id]);
-                  setNewRunName(`Test Run: ${testCaseToRun.name}`);
-                  setShowCreateRunDialog(true);
-                }}
-                className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left"
-              >
-                <div className="p-2 rounded-lg bg-purple-600">
-                  <Plus className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-white">Add to Test Run</p>
-                  <p className="text-xs text-gray-500">Create or add to a formal test run with more cases</p>
-                </div>
-              </button>
-            </div>
-          )}
+                {apiTest ? (
+                  <button
+                    onClick={async () => { await runApiTestFromRepository(testCaseToRun); }}
+                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
+                  >
+                    <div className="p-2 rounded-lg bg-green-600">
+                      <Play className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-white">Quick Run (Execute Now)</p>
+                      <p className="text-xs text-gray-500">Runs this API test and shows result here</p>
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const runId = `run_${Date.now()}`;
+                      const newRun: TestRun = {
+                        id: runId,
+                        name: `Quick Run: ${testCaseToRun.name}`,
+                        testCaseId: testCaseToRun.id,
+                        mode: 'automated',
+                        status: 'running',
+                        startTime: new Date().toISOString()
+                      };
+                      setTestRuns(prev => {
+                        const updated = [newRun, ...prev];
+                        localStorage.setItem('test_execution_history', JSON.stringify(updated));
+                        return updated;
+                      });
+                      setShowRunTestDialog(false);
+                      navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}&autoRun=true&runId=${runId}`);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
+                  >
+                    <div className="p-2 rounded-lg bg-green-600">
+                      <Play className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-white">Quick Run (Execute Now)</p>
+                      <p className="text-xs text-gray-500">Opens builder and runs test immediately</p>
+                    </div>
+                  </button>
+                )}
+
+                {apiRunResult && (
+                  <div className={cn('rounded-lg border p-3 text-sm', apiRunResult.passed ? 'border-green-500/50 bg-green-500/10' : 'border-red-500/50 bg-red-500/10')}>
+                    <p className="font-medium">{apiRunResult.passed ? 'Passed' : 'Failed'}</p>
+                    <p className="text-muted-foreground">{apiRunResult.message}</p>
+                    {apiRunResult.detail && <pre className="mt-1 text-xs overflow-auto max-h-20">{apiRunResult.detail}</pre>}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setShowRunTestDialog(false);
+                    if (apiTest) navigate('/api');
+                    else navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
+                  }}
+                  className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-amber-500/50 hover:bg-accent transition-all text-left"
+                >
+                  <div className="p-2 rounded-lg bg-blue-600">
+                    <Pencil className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-white">{apiTest ? 'Open in API Testing' : 'Open in Builder'}</p>
+                    <p className="text-xs text-gray-500">{apiTest ? 'Edit request, assertions, and run in API tab' : 'Edit steps, then run manually when ready'}</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowRunTestDialog(false);
+                    setNewRunTestCases([testCaseToRun.id]);
+                    setNewRunName(`Test Run: ${testCaseToRun.name}`);
+                    setShowCreateRunDialog(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left"
+                >
+                  <div className="p-2 rounded-lg bg-purple-600">
+                    <Plus className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-white">Add to Test Run</p>
+                    <p className="text-xs text-gray-500">Create or add to a formal test run with more cases</p>
+                  </div>
+                </button>
+              </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRunTestDialog(false)} className="border-border">
               Cancel

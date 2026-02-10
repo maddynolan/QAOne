@@ -82,7 +82,8 @@ class EnhancedAssertionEngine:
             "database",
             "performance",
             "header",
-            "cookie"
+            "cookie",
+            "matches_baseline"
         ]
     
     def evaluate_assertions(
@@ -285,6 +286,9 @@ class EnhancedAssertionEngine:
             
             elif assertion_type == "cookie":
                 return self._assert_cookie(assertion, response_headers, assertion_name)
+            
+            elif assertion_type == "matches_baseline":
+                return self._assert_matches_baseline(assertion, response_data, assertion_name)
             
             else:
                 return AssertionResult(
@@ -850,6 +854,61 @@ class EnhancedAssertionEngine:
             expected=expected,
             actual=set_cookie[:100] if set_cookie else None,
             message=f"Cookie '{cookie_name}' {'found' if passed else 'not found'}"
+        )
+    
+    def _assert_matches_baseline(
+        self,
+        assertion: Dict[str, Any],
+        response_data: Any,
+        name: str
+    ) -> AssertionResult:
+        """
+        Regression assertion: compare current response body to a stored baseline (expected).
+        Use when you want to detect any change from a known-good response.
+        """
+        baseline_raw = assertion.get("baseline") or assertion.get("expected") or assertion.get("schema")
+        if baseline_raw is None or (isinstance(baseline_raw, str) and not baseline_raw.strip()):
+            return AssertionResult(
+                "matches_baseline",
+                name,
+                False,
+                error="No baseline provided",
+                message="Matches baseline requires a baseline JSON (paste previous response or use Save as baseline)"
+            )
+        try:
+            if isinstance(response_data, str):
+                current = json.loads(response_data)
+            else:
+                current = response_data if isinstance(response_data, (dict, list)) else json.loads(str(response_data))
+        except Exception as e:
+            return AssertionResult(
+                "matches_baseline",
+                name,
+                False,
+                error=str(e),
+                message=f"Current response is not valid JSON: {e}"
+            )
+        try:
+            if isinstance(baseline_raw, str):
+                baseline = json.loads(baseline_raw)
+            else:
+                baseline = baseline_raw
+        except Exception as e:
+            return AssertionResult(
+                "matches_baseline",
+                name,
+                False,
+                error=str(e),
+                message=f"Baseline is not valid JSON: {e}"
+            )
+        passed = current == baseline
+        return AssertionResult(
+            "matches_baseline",
+            name,
+            passed,
+            expected="<baseline>",
+            actual=json.dumps(current)[:500] if not passed else None,
+            message="Response matches baseline" if passed else "Response differs from baseline (regression)"
         )
     
     def _to_string(self, data: Any) -> str:

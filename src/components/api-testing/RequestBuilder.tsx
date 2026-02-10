@@ -1348,7 +1348,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
             {/* Assertions */}
             <TabsContent value="assertions" className="p-4 mt-0">
-              <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} />
+              <AssertionsPanel assertions={assertions} onChange={setAssertions} results={assertionResults.length > 0 ? assertionResults : undefined} currentResponseBody={response?.body} />
               {assertionResults.length > 0 && (
                 <div className="mt-3 space-y-1">
                   {assertionResults.map((r, i) => (

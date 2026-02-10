@@ -75,6 +75,7 @@ This guide documents **all built features** in the API Testing tab with **day-to
 - **Add to Tests** does two things: (1) adds the test to the **Execute** tab in memory so you can run it immediately, and (2) saves it to the app database via `POST /api/db/test-cases` with `category: "api"`, tags including `api-testing`, and `metadata.type: "automated"` so it is treated as an API test (automation status **full**).
 - **Tests tab:** The Tests section (Test Repository) loads test cases from several sources: Electron storage, localStorage, and **the same database** (`GET /api/db/test-cases`). So tests you add from Builder are persisted and appear in the Tests tab once the list is refreshed.
 - **To see new API tests in Tests:** Open the **Tests** tab and click **Refresh** (↻). That reloads all sources (including API tests from the database). API tests are identifiable by tag `api-testing`, category `api`, and automation status **full**; you can filter by these if your Tests UI supports it.
+- **Running API tests from the Tests tab:** When you click **Run** on an API test, the Run dialog shows “API test” and two behaviors: **Quick Run** runs the test via the API Testing engine (no UI builder) and shows pass/fail in the dialog; **Open in API Testing** opens the API tab so you can edit and run there. UI (Playwright) tests still open the regular builder and run there. So API and UI tests stay in one list; the app chooses the right runner by test type.
 
 - **Example:** Save “Get user 1” and “Create user” for quick reload; or add “Get user 1” to Tests for regression runs.
 
@@ -177,7 +178,30 @@ If an assertion from Assert Builder fails with **“got undefined”**:
 
 ---
 
-## 9. Quick Reference — Where to Do What
+## 9. Validating Many Fields and Regression (Compare to Previous)
+
+### 9.1 Validating many fields (avoid one-by-one assertions)
+
+When a response has many fields (e.g. 100), **do not** add 100 separate JSONPath assertions. Prefer:
+
+- **JSON Schema assertion:** Add one assertion of type **JSON Schema**. Put a JSON Schema in the schema field (e.g. `{"type":"object","properties":{"id":{"type":"number"},"name":{"type":"string"},...}}`). The engine validates the **entire** response (or a subtree) in one go — structure, types, required fields. This is the right way to “loop” over all fields declaratively.
+- **Script assertion (advanced):** If you need custom logic (e.g. “every item in the array must have a non-empty `title`”), use a **Script** assertion and write a small loop in code. Use Schema when possible; use Script only when you need behavior Schema can’t express.
+
+So: **one Schema assertion** (or one per logical section) instead of one assertion per field.
+
+### 9.2 Comparing to a previous response (regression)
+
+Real testing is both **functional** (does it work?) and **regression** (did we break something that worked before?). To compare the **current** response to a **previous** (baseline) response:
+
+1. **Matches baseline assertion:** Add an assertion of type **Matches Baseline**. You provide the “expected” response (baseline) as JSON.
+2. **Capture baseline:** Run the request once when the API is known good → in the Assertions panel, for the “Matches baseline” assertion click **Use current as baseline**. That stores the last response body as the baseline.
+3. **Later runs:** On subsequent runs, the engine compares the current response to that baseline. If they differ, the assertion fails (regression). If they match, it passes.
+
+Use this to catch unintended changes in response shape or values (e.g. after a backend deploy). For intentional changes, update the baseline by running again and clicking **Use current as baseline**, or paste the new expected JSON.
+
+---
+
+## 10. Quick Reference — Where to Do What
 
 | Goal                         | Where / How                                      |
 |------------------------------|--------------------------------------------------|
@@ -194,6 +218,8 @@ If an assertion from Assert Builder fails with **“got undefined”**:
 | Run with CSV/JSON rows       | Execute → Run with data (upload/preview/run)      |
 | Mock an API                  | Mock tab → Create server → Add endpoint → Start   |
 | Verify mock was called       | Mock tab → Verify (method/path/count/body)        |
+| Validate many fields at once | Assertions → type **JSON Schema** (one assertion)  |
+| Regression: compare to last | Assertions → type **Matches Baseline** + Use current as baseline |
 
 ---
 

@@ -51,6 +51,7 @@ export const ASSERTION_TYPES = [
   { value: "header", label: "Header Value", icon: "MailIcon", description: "Validate response header" },
   { value: "equals", label: "Equals", icon: "EqualIcon", description: "Exact value match" },
   { value: "xpath", label: "XPath", icon: "TagIcon", description: "Extract and validate XML values" },
+  { value: "matches_baseline", label: "Matches Baseline", icon: "EqualIcon", description: "Regression: compare response to saved baseline JSON" },
 ] as const;
 
 // --- Assertion Operators ---

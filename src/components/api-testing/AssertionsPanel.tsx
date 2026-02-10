@@ -44,9 +44,11 @@ interface AssertionsPanelProps {
   onChange: (assertions: AssertionConfig[]) => void;
   results?: AssertionResult[];
   compact?: boolean;
+  /** When set, "Matches baseline" assertions show "Use current as baseline" to fill from last response */
+  currentResponseBody?: string;
 }
 
-export default function AssertionsPanel({ assertions, onChange, results, compact = false }: AssertionsPanelProps) {
+export default function AssertionsPanel({ assertions, onChange, results, compact = false, currentResponseBody }: AssertionsPanelProps) {
   const addAssertion = () => {
     onChange([
       ...assertions,
@@ -196,7 +198,7 @@ export default function AssertionsPanel({ assertions, onChange, results, compact
                   />
                 )}
 
-                {assertion.type !== "schema" && (
+                {assertion.type !== "schema" && assertion.type !== "matches_baseline" && (
                   <Input
                     className="h-8 text-xs font-mono flex-1"
                     placeholder={
@@ -218,6 +220,28 @@ export default function AssertionsPanel({ assertions, onChange, results, compact
                     value={assertion.schema}
                     onChange={e => updateAssertion(assertion.id, "schema", e.target.value)}
                   />
+                )}
+
+                {assertion.type === "matches_baseline" && (
+                  <div className="space-y-1.5 w-full">
+                    {currentResponseBody != null && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => updateAssertion(assertion.id, "schema", currentResponseBody)}
+                      >
+                        Use current as baseline
+                      </Button>
+                    )}
+                    <textarea
+                      className="min-h-[80px] w-full rounded border bg-background px-2 py-1.5 text-xs font-mono"
+                      placeholder='Paste baseline JSON (e.g. previous response). In Builder, use "Use current as baseline" after Send.'
+                      value={assertion.schema}
+                      onChange={e => updateAssertion(assertion.id, "schema", e.target.value)}
+                    />
+                  </div>
                 )}
               </div>
 
