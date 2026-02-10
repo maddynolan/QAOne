@@ -394,6 +394,27 @@ function nowISO(): string {
 
 const DEBOUNCE_MS = 800;  // Faster than old 1500ms but still batches
 
+/**
+ * Ensure sidebar Sets exist (they can be lost during persist rehydration
+ * because JSON.stringify(Set) → "{}" and rehydration does shallow merge).
+ * Call this inside any immer `set()` callback that touches sidebar Sets.
+ */
+function ensureSidebarSets(s: any): void {
+  if (!s.sidebar.expanded_folders || typeof s.sidebar.expanded_folders.has !== 'function') {
+    s.sidebar.expanded_folders = new Set<string>();
+  }
+  if (!s.sidebar.expanded_endpoints || typeof s.sidebar.expanded_endpoints.has !== 'function') {
+    s.sidebar.expanded_endpoints = new Set<string>();
+  }
+}
+
+/** Ensure selected_test_case_ids Set exists. */
+function ensureTestCaseSet(s: any): void {
+  if (!s.selected_test_case_ids || typeof s.selected_test_case_ids.has !== 'function') {
+    s.selected_test_case_ids = new Set<string>();
+  }
+}
+
 // ============================================================================
 // STORE IMPLEMENTATION
 // ============================================================================
@@ -724,6 +745,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               if (!coll) return;
               coll.folders.push(folder);
               coll.updated_at = nowISO();
+              ensureSidebarSets(s);
               s.sidebar.expanded_folders.add(folder.id);
             });
             
@@ -772,6 +794,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               
               coll.folders = coll.folders.filter(f => f.id !== folderId);
               coll.updated_at = nowISO();
+              ensureSidebarSets(s);
               s.sidebar.expanded_folders.delete(folderId);
             });
             
@@ -795,6 +818,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           
           toggleFolderExpanded: (folderId) => {
             set((s) => {
+              ensureSidebarSets(s);
               if (s.sidebar.expanded_folders.has(folderId)) {
                 s.sidebar.expanded_folders.delete(folderId);
               } else {
@@ -1125,6 +1149,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           
           toggleEndpointExpanded: (endpointKey) => {
             set((s) => {
+              ensureSidebarSets(s);
               if (s.sidebar.expanded_endpoints.has(endpointKey)) {
                 s.sidebar.expanded_endpoints.delete(endpointKey);
               } else {
@@ -1254,6 +1279,7 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           
           toggleTestCaseSelection: (id) => {
             set((s) => {
+              ensureTestCaseSet(s);
               if (s.selected_test_case_ids.has(id)) {
                 s.selected_test_case_ids.delete(id);
               } else {
