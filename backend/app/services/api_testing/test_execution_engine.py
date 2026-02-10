@@ -335,7 +335,16 @@ class TestExecutionEngine:
                     raise ValueError(f"Unsupported HTTP method: {method}")
                 
                 response_time_ms = (time.time() - start_time) * 1000
-                passed = status_code == expected_status
+                assertions_list = test_case.get("assertions", [])
+                has_status_assertion = any(
+                    (isinstance(a, dict) and a.get("type") == "status_code") for a in assertions_list
+                )
+                # Only fail on status when the user added an explicit status_code assertion
+                if has_status_assertion:
+                    status_passed = status_code == expected_status
+                else:
+                    status_passed = 200 <= status_code < 300  # any 2xx is OK when not asserting status
+                passed = status_passed
                 
                 # Extract correlation data from response (property transfer)
                 response_headers_dict = dict(response.headers)
@@ -375,10 +384,12 @@ class TestExecutionEngine:
                     response_time_ms
                 )
                 
+                assertions_passed = assertions_result["passed"]
+                overall_passed = passed and assertions_passed
                 return {
                     "test_case_id": test_id,
                     "title": test_case.get("title", ""),
-                    "status": "passed" if passed and assertions_result["passed"] else "failed",
+                    "status": "passed" if overall_passed else "failed",
                     "method": method,
                     "url": url,
                     "expected_status": expected_status,

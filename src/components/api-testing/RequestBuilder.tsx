@@ -902,7 +902,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     path: url,
                     expected_status: (() => {
                       const statusAssertion = assertions.find(a => a.type === "status_code");
-                      return statusAssertion ? parseInt(statusAssertion.expected) || 200 : 200;
+                      if (statusAssertion) return parseInt(statusAssertion.expected) || 200;
+                      return request.method === "POST" ? 201 : 200;
                     })(),
                     test_type: "functional",
                     tags: ["functional", "builder", "custom"],
