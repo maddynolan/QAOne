@@ -1765,10 +1765,22 @@ async function migrateLegacyData(get: () => ApiTestingState & ApiTestingActions,
 /** Subscribe to only sidebar state - sidebar won't re-render when other state changes */
 export const useSidebarState = () => useApiTestingStore((s) => s.sidebar);
 
-/** Subscribe to only active collection */
+/** Subscribe to only active collection ID (stable primitive) */
+export const useActiveCollectionId = () => useApiTestingStore((s) => s.active_collection_id);
+
+/** Subscribe to only active collection - uses shallow compare to avoid infinite getSnapshot loop */
 export const useActiveCollection = () => useApiTestingStore((s) => {
   if (!s.active_collection_id) return null;
   return s.collections[s.active_collection_id] || null;
+}, (a, b) => {
+  // Deep-stable comparison: same ID + same request count + same name means "equal"
+  if (a === b) return true;
+  if (!a || !b) return a === b;
+  return a.id === b.id
+    && a.name === b.name
+    && a.requests.length === b.requests.length
+    && a.folders.length === b.folders.length
+    && a.updated_at === b.updated_at;
 });
 
 /** Subscribe to workspace list */
@@ -1781,7 +1793,7 @@ export const useActiveTab = () => useApiTestingStore((s) => s.active_tab);
 export const useApiEnvironments = () => useApiTestingStore((s) => s.environments);
 
 /** Subscribe to loading states */
-export const useApiLoadingState = () => useApiTestingStore((s) => s.loading);
+export const useApiLoadingState = () => useApiTestingStore((s) => s.loading, shallow);
 
 /** Subscribe to test runs */
 export const useApiTestRuns = () => useApiTestingStore((s) => s.test_runs);
@@ -1803,4 +1815,20 @@ export const useBuilderState = () => useApiTestingStore((s) => ({
 export const useSyncStatus = () => useApiTestingStore((s) => ({
   status: s.sync_status,
   last_sync: s.last_sync,
+}), shallow);
+
+/** Get store actions only (stable reference, never triggers re-render) */
+export const useApiTestingActions = () => useApiTestingStore((s) => ({
+  initialize: s.initialize,
+  importCollection: s.importCollection,
+  openRequestInBuilder: s.openRequestInBuilder,
+  switchCollection: s.switchCollection,
+  createCollection: s.createCollection,
+  deleteCollection: s.deleteCollection,
+  addRequest: s.addRequest,
+  updateRequest: s.updateRequest,
+  deleteRequest: s.deleteRequest,
+  createFolder: s.createFolder,
+  setSidebarOpen: s.setSidebarOpen,
+  setSidebarSearch: s.setSidebarSearch,
 }), shallow);

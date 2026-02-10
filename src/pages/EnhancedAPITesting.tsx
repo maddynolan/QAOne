@@ -27,7 +27,7 @@ import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables, resolveVariables } from "@/components/api-testing/EnvironmentManager";
 import CollectionSidebar from "@/components/api-testing/CollectionSidebar";
-import { useApiTestingStore, useActiveCollection, useBuilderState, useSyncStatus } from "@/stores/apiTestingStore";
+import { useApiTestingStore } from "@/stores/apiTestingStore";
 
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -337,32 +337,18 @@ export default function EnhancedAPITesting() {
     return () => { cancelled = true; };
   }, []);
 
-  // Guard to prevent testSuite ↔ activeCollection infinite cycle
-  const syncingFromStore = useRef(false);
-  const lastImportedSuiteRef = useRef<string | null>(null);
-  
-  // Persist test suite to backend (debounced) so collection/folders/requests stick across sessions
+  // Persist test suite to backend (debounced, ONE-WAY: local → backend only)
+  // IMPORTANT: Do NOT call store.importCollection here — that creates an infinite
+  // cycle: testSuite → importCollection → activeCollection → setTestSuite → repeat.
+  // The sidebar store loads its own data via store.initialize().
   useEffect(() => {
     if (!suiteLoadedFromBackend.current || !testSuite) return;
-    // Skip if this testSuite came from the store (prevent cycle)
-    if (syncingFromStore.current) {
-      syncingFromStore.current = false;
-      return;
-    }
-    const suiteFingerprint = `${testSuite.name}_${testSuite.test_cases?.length || 0}`;
     const t = setTimeout(() => {
       fetch(`${API_BASE_URL}/api/db/api-collections/default`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload: testSuite }),
       }).catch(() => {});
-      
-      // Bridge: Also sync imported data into the new Zustand store for sidebar
-      // Only import if we haven't already imported this exact suite
-      if (testSuite && testSuite.test_cases?.length > 0 && lastImportedSuiteRef.current !== suiteFingerprint) {
-        lastImportedSuiteRef.current = suiteFingerprint;
-        store.importCollection(testSuite, testSuite.name || 'Imported Collection').catch(() => {});
-      }
     }, 1500);
     return () => clearTimeout(t);
   }, [testSuite]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -394,54 +380,26 @@ export default function EnhancedAPITesting() {
   const [builderInitialRequest, setBuilderInitialRequest] = useState<any>(null);
 
   // ===== Zustand store integration (API testing sidebar, workspaces, collections) =====
-  const store = useApiTestingStore();
-  const activeCollection = useActiveCollection();
-  const builderState = useBuilderState();
+  // CRITICAL: We use the store IMPERATIVELY (getState()) instead of hooks to avoid
+  // the "getSnapshot should be cached" infinite loop in Zustand v5 + immer.
+  // The sidebar (CollectionSidebar) uses its own Zustand hooks - that's fine because
+  // it's wrapped in React.memo and uses targeted selectors.
+  
+  // Initialize store once on mount (imperative — no hook subscription)
   useEffect(() => {
+    const store = useApiTestingStore.getState();
     store.initialize();
+    
+    // Subscribe to builder_initial_data changes for "open in builder" clicks
+    const unsub = useApiTestingStore.subscribe(
+      (state) => {
+        if (state.builder_initial_data) {
+          setBuilderInitialRequest(state.builder_initial_data);
+        }
+      }
+    );
+    return unsub;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (builderState.initial_data) {
-      setBuilderInitialRequest(builderState.initial_data);
-      if (store.active_tab === 'builder') setActiveTab('builder');
-    }
-  }, [builderState.initial_data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lastActiveCollectionIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (activeCollection && activeCollection.requests.length > 0) {
-      // Only sync from store → testSuite if the active collection actually changed (by ID)
-      if (lastActiveCollectionIdRef.current === activeCollection.id) return;
-      lastActiveCollectionIdRef.current = activeCollection.id;
-      
-      const legacySuite = {
-        name: activeCollection.name,
-        base_url: activeCollection.base_url,
-        test_cases: activeCollection.requests.map((r: any) => ({
-          test_case_id: r.id,
-          name: r.name,
-          title: r.name,
-          method: r.method,
-          path: r.path || r.url,
-          endpoint: r.url,
-          expected_status: r.expected_status,
-          description: r.description,
-          test_type: r.test_type,
-          assertions: r.assertions,
-          request: {
-            headers: (r.headers || []).reduce((acc: any, h: any) => {
-              if (h.key) acc[h.key] = h.value;
-              return acc;
-            }, {}),
-            body: r.body || undefined,
-          },
-        })),
-        folders: (activeCollection.folders || []).map((f: any) => ({ id: f.id, name: f.name, test_case_ids: f.request_ids || [] })),
-      };
-      // Mark that this testSuite came from the store to prevent import cycle
-      syncingFromStore.current = true;
-      setTestSuite(legacySuite);
-    }
-  }, [activeCollection]); // eslint-disable-line react-hooks/exhaustive-deps
   // ===== END store integration =====
 
   // Custom test case creation state
@@ -972,41 +930,36 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
-  // Save an environment to the database (single PUT - avoids extra GET check)
+  // Save an environment to the database
+  // Best-effort: silently fails if backend is down or CORS blocks
   const saveEnvironmentToDb = async (env: any) => {
     try {
       const envId = env.environment_id || env.id;
+      if (!envId || !env.name) return; // Skip invalid environments
       const payload = {
+        id: envId,
         name: env.name,
         env_type: env.type || env.env_type || "development",
         base_url: env.base_url || "",
-        variables: env.variables || [],
-        auth: env.auth || {},
+        variables: Array.isArray(env.variables) ? env.variables : [],
+        auth: (env.auth && typeof env.auth === "object") ? env.auth : {},
       };
-      // Try PUT first (update/upsert), fall back to POST if not found
-      const putResp = await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
-        method: "PUT",
+      // Try POST (create) — backend should handle "already exists" gracefully
+      const resp = await fetch(`${API_BASE_URL}/api/db/environments`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!putResp.ok && putResp.status === 404) {
-        // Environment doesn't exist yet, create it
-        await fetch(`${API_BASE_URL}/api/db/environments`, {
-          method: "POST",
+      // If 409 Conflict (already exists), try PUT to update
+      if (resp.status === 409 || resp.status === 422) {
+        await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        });
+        }).catch(() => {});
       }
-    } catch (err) {
-      // CORS or backend down (e.g. when flowstral.com calls Railway); envs still work locally
-      console.warn("Environment save skipped (backend unreachable or CORS):", err);
-    }
-  };
-
-  // Sync all environments to database
-  const syncEnvironmentsToDb = async (envs: any[]) => {
-    for (const env of envs) {
-      await saveEnvironmentToDb(env);
+    } catch {
+      // Silently ignore — envs work from localStorage as fallback
     }
   };
 
