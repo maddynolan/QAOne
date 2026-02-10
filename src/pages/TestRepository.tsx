@@ -3402,52 +3402,131 @@ export default function TestRepository() {
     }
   }, [testCases, convertStepToExecutorFormat]);
 
-  // Load suites, plans, releases, runs
+  // Load suites, plans, runs, defects from backend first (so all testers see same data), then fallback to localStorage
   useEffect(() => {
-    const loadRelatedData = () => {
-      const savedSuites = localStorage.getItem('test_suites');
-      if (savedSuites) {
-        try {
-          const parsed = JSON.parse(savedSuites);
-          console.log('[Repository] Loading suites from localStorage:', parsed.length);
-          setSuites(parsed);
-        } catch (e) {}
+    const mapSuiteFromApi = (row: Record<string, unknown>): TestSuite => ({
+      id: String(row.id ?? ''),
+      name: String(row.name ?? ''),
+      description: row.description != null ? String(row.description) : undefined,
+      testCaseIds: Array.isArray(row.test_case_ids) ? row.test_case_ids as string[] : [],
+      status: (row.status as TestSuite['status']) ?? 'active',
+    });
+    const mapPlanFromApi = (row: Record<string, unknown>): TestPlan => ({
+      id: String(row.id ?? ''),
+      name: String(row.name ?? ''),
+      description: row.description != null ? String(row.description) : undefined,
+      suiteIds: Array.isArray(row.suite_ids) ? row.suite_ids as string[] : [],
+      testCaseIds: Array.isArray(row.test_case_ids) ? row.test_case_ids as string[] : [],
+      status: (row.status as TestPlan['status']) ?? 'draft',
+    });
+    const mapRunFromApi = (row: Record<string, unknown>): TestRun => ({
+      id: String(row.id ?? ''),
+      name: String(row.name ?? ''),
+      suiteId: row.suite_id != null ? String(row.suite_id) : undefined,
+      testCaseIds: Array.isArray(row.test_case_ids) ? row.test_case_ids as string[] : [],
+      mode: 'automated',
+      status: (row.status as TestRun['status']) ?? 'pending',
+      startTime: String(row.started_at ?? row.created_at ?? new Date().toISOString()),
+      endTime: row.completed_at != null ? String(row.completed_at) : undefined,
+      results: (row.results as TestRun['results']) ?? undefined,
+      browser: row.browser != null ? String(row.browser) : undefined,
+      environment: row.environment != null ? String(row.environment) : undefined,
+    });
+    const mapDefectFromApi = (row: Record<string, unknown>): Defect => ({
+      id: String(row.id ?? ''),
+      title: String(row.title ?? ''),
+      description: row.description != null ? String(row.description) : undefined,
+      severity: (row.severity as Defect['severity']) ?? 'major',
+      priority: 'medium',
+      status: (row.status as Defect['status']) ?? 'open',
+      linkedTestCaseIds: row.test_case_id ? [String(row.test_case_id)] : undefined,
+      linkedRunIds: row.test_run_id ? [String(row.test_run_id)] : undefined,
+    });
+
+    const loadRelatedData = async () => {
+      let apiSuitesOk = false, apiPlansOk = false, apiRunsOk = false, apiDefectsOk = false;
+      try {
+        const [suitesRes, plansRes, runsRes, defectsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/db/test-suites?limit=1000`),
+          fetch(`${API_BASE_URL}/api/db/test-plans?limit=1000`),
+          fetch(`${API_BASE_URL}/api/db/test-runs?limit=1000`),
+          fetch(`${API_BASE_URL}/api/db/defects?limit=1000`),
+        ]);
+        if (suitesRes.ok) {
+          const list = await suitesRes.json().catch(() => []);
+          const arr = Array.isArray(list) ? list : list.items ?? [];
+          setSuites(arr.map((r: Record<string, unknown>) => mapSuiteFromApi(r)));
+          apiSuitesOk = true;
+          console.log('[Repository] Loaded suites from /api/db/test-suites:', arr.length);
+        }
+        if (plansRes.ok) {
+          const list = await plansRes.json().catch(() => []);
+          const arr = Array.isArray(list) ? list : list.items ?? [];
+          setTestPlans(arr.map((r: Record<string, unknown>) => mapPlanFromApi(r)));
+          apiPlansOk = true;
+          console.log('[Repository] Loaded plans from /api/db/test-plans:', arr.length);
+        }
+        if (runsRes.ok) {
+          const list = await runsRes.json().catch(() => []);
+          const arr = Array.isArray(list) ? list : list.items ?? [];
+          setTestRuns(arr.map((r: Record<string, unknown>) => mapRunFromApi(r)));
+          apiRunsOk = true;
+          console.log('[Repository] Loaded runs from /api/db/test-runs:', arr.length);
+        }
+        if (defectsRes.ok) {
+          const list = await defectsRes.json().catch(() => []);
+          const arr = Array.isArray(list) ? list : list.items ?? [];
+          setDefects(arr.map((r: Record<string, unknown>) => mapDefectFromApi(r)));
+          apiDefectsOk = true;
+          console.log('[Repository] Loaded defects from /api/db/defects:', arr.length);
+        }
+      } catch (e) {
+        console.log('[Repository] Backend not available for related data, using localStorage');
       }
-      
-      const savedPlans = localStorage.getItem('test_plans');
-      if (savedPlans) {
-        try {
-          const parsed = JSON.parse(savedPlans);
-          console.log('[Repository] Loading plans from localStorage:', parsed.length);
-          setTestPlans(parsed);
-        } catch (e) {}
-      }
-      
+      // Releases: no backend endpoint yet; always from localStorage
       const savedReleases = localStorage.getItem('test_releases');
       if (savedReleases) {
         try {
-          const parsed = JSON.parse(savedReleases);
-          console.log('[Repository] Loading releases from localStorage:', parsed.length);
-          setReleases(parsed);
+          setReleases(JSON.parse(savedReleases));
         } catch (e) {}
       }
-      
-      const savedRuns = localStorage.getItem('test_execution_history');
-      if (savedRuns) setTestRuns(JSON.parse(savedRuns));
-      
-      const savedDefects = localStorage.getItem('test_defects');
-      if (savedDefects) {
-        try {
-          const parsed = JSON.parse(savedDefects);
-          console.log('[Repository] Loading defects from localStorage:', parsed.length);
-          setDefects(parsed);
-        } catch (e) {}
+      // Fallback to localStorage only when API did not succeed
+      if (!apiSuitesOk) {
+        const savedSuites = localStorage.getItem('test_suites');
+        if (savedSuites) {
+          try {
+            setSuites(JSON.parse(savedSuites));
+          } catch (e) {}
+        }
+      }
+      if (!apiPlansOk) {
+        const savedPlans = localStorage.getItem('test_plans');
+        if (savedPlans) {
+          try {
+            setTestPlans(JSON.parse(savedPlans));
+          } catch (e) {}
+        }
+      }
+      if (!apiRunsOk) {
+        const savedRuns = localStorage.getItem('test_execution_history');
+        if (savedRuns) {
+          try {
+            setTestRuns(JSON.parse(savedRuns));
+          } catch (e) {}
+        }
+      }
+      if (!apiDefectsOk) {
+        const savedDefects = localStorage.getItem('test_defects');
+        if (savedDefects) {
+          try {
+            setDefects(JSON.parse(savedDefects));
+          } catch (e) {}
+        }
       }
     };
-    
+
     loadRelatedData();
-    
-    // Also reload when scale data is loaded
+
     const handleReloadRelated = () => loadRelatedData();
     window.addEventListener('reload-related-data', handleReloadRelated);
     return () => window.removeEventListener('reload-related-data', handleReloadRelated);
@@ -3516,11 +3595,12 @@ export default function TestRepository() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    toast.info('Refreshing test cases...');
+                    toast.info('Refreshing test cases and related data...');
                     window.dispatchEvent(new CustomEvent('reload-test-cases'));
+                    window.dispatchEvent(new CustomEvent('reload-related-data'));
                   }}
                   className="border-gray-300 dark:border-border text-gray-600 dark:text-foreground hover:bg-accent"
-                  title="Refresh test cases (localStorage, API tests from Builder, scale data if enabled)"
+                  title="Refresh test cases and related data (from backend DB when available)"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </Button>

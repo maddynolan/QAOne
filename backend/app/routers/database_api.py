@@ -14,7 +14,7 @@ import uuid
 from ..services.storage.database_service import (
     db, init_database,
     TestCase, TestSuite, TestRun, TestPlan, Recording, Element, Defect,
-    Environment, TestCaseVersion, GlobalVariable
+    Environment, TestCaseVersion, GlobalVariable, ApiCollection
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,10 @@ class CreateTestSuiteRequest(BaseModel):
     description: Optional[str] = ""
     test_case_ids: List[str] = []
     project_id: Optional[str] = None
+
+class SaveApiCollectionRequest(BaseModel):
+    """Full API test suite payload (test_cases, folders, base_url, metadata, etc.)."""
+    payload: Dict[str, Any] = {}
 
 class CreateTestRunRequest(BaseModel):
     name: str
@@ -314,6 +318,47 @@ async def add_test_case_to_suite(id: str, test_case_id: str):
     await db.test_cases.update(test_case_id, {'suite_id': id})
     
     return {"status": "added", "suite_id": id, "test_case_id": test_case_id}
+
+
+# ==================== API COLLECTIONS (API tab source of truth) ====================
+
+DEFAULT_API_COLLECTION_ID = "default"
+
+@router.get("/api-collections", response_model=List[Dict[str, Any]])
+async def get_api_collections(
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    """List all API collections (stored test suites for API Testing tab)."""
+    items = await db.api_collections.get_all(limit=limit, offset=offset)
+    return [item.model_dump() for item in items]
+
+@router.get("/api-collections/default", response_model=Dict[str, Any])
+async def get_default_api_collection():
+    """Get the default API collection payload. Returns empty suite if none saved yet."""
+    item = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
+    if not item:
+        return {"id": DEFAULT_API_COLLECTION_ID, "name": "default", "payload": {}, "created_at": "", "updated_at": ""}
+    return item.model_dump()
+
+@router.put("/api-collections/default", response_model=Dict[str, Any])
+async def save_default_api_collection(request: SaveApiCollectionRequest):
+    """Create or update the default API collection (full test suite from API tab)."""
+    now = datetime.utcnow().isoformat() + "Z"
+    existing = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
+    if existing:
+        await db.api_collections.update(DEFAULT_API_COLLECTION_ID, {"payload": request.payload, "updated_at": now})
+        updated = await db.api_collections.get(DEFAULT_API_COLLECTION_ID)
+        return updated.model_dump()
+    coll = ApiCollection(
+        id=DEFAULT_API_COLLECTION_ID,
+        name="default",
+        payload=request.payload,
+        created_at=now,
+        updated_at=now,
+    )
+    created = await db.api_collections.create(coll)
+    return created.model_dump()
 
 
 # ==================== TEST RUNS ====================
@@ -582,7 +627,7 @@ async def migrate_from_json():
 @router.post("/clear-all")
 async def clear_all_data():
     """Clear ALL test data from all tables. Use with caution - enterprise reset."""
-    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings", "environments", "test_case_versions", "global_variables"]
+    tables = ["test_cases", "test_suites", "test_runs", "test_plans", "defects", "recordings", "environments", "test_case_versions", "global_variables", "api_collections"]
     deleted = {}
     
     for table in tables:

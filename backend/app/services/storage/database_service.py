@@ -63,6 +63,15 @@ class TestSuite(BaseModel):
     updated_at: str = ""
     project_id: Optional[str] = None
 
+
+class ApiCollection(BaseModel):
+    """Stores full API test suite (collection + folders + test cases) for backend as source of truth."""
+    id: str
+    name: str = "default"
+    payload: Any = None  # JSON: { test_cases, folders, base_url, metadata, ... } (stored as string in DB)
+    created_at: str = ""
+    updated_at: str = ""
+
 class TestRun(BaseModel):
     id: str
     name: str
@@ -204,6 +213,15 @@ CREATE TABLE IF NOT EXISTS test_suites (
 
 CREATE INDEX IF NOT EXISTS idx_test_suites_status ON test_suites(status);
 CREATE INDEX IF NOT EXISTS idx_test_suites_project ON test_suites(project_id);
+
+-- API Collections (full suite payload for API tab - backend source of truth)
+CREATE TABLE IF NOT EXISTS api_collections (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'default',
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT,
+    updated_at TEXT
+);
 
 -- Test Runs
 CREATE TABLE IF NOT EXISTS test_runs (
@@ -536,6 +554,7 @@ class DatabaseService:
         # Initialize repositories
         self.test_cases: Repository[TestCase] = Repository(self, 'test_cases', TestCase)
         self.test_suites: Repository[TestSuite] = Repository(self, 'test_suites', TestSuite)
+        self.api_collections: Repository[ApiCollection] = Repository(self, 'api_collections', ApiCollection)
         self.test_runs: Repository[TestRun] = Repository(self, 'test_runs', TestRun)
         self.test_plans: Repository[TestPlan] = Repository(self, 'test_plans', TestPlan)
         self.recordings: Repository[Recording] = Repository(self, 'recordings', Recording)

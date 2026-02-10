@@ -14,7 +14,7 @@ import {
   Zap, Shield, Activity, Globe, Loader2, Eye, Copy, X,
   FileCode, Rocket, BookOpen, Network, MessageSquare, Radio,
   Workflow, RefreshCw, Link, ExternalLink, Trash2, Plus,
-  Send, Link2, ChevronDown, ChevronRight
+  Send, Link2, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, FolderOpen, Folder
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -242,7 +242,17 @@ export default function EnhancedAPITesting() {
   const [specContent, setSpecContent] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
-  const [testSuite, setTestSuite] = useState<any>(null);
+  const [testSuite, setTestSuite] = useState<any>(() => {
+    try {
+      const raw = localStorage.getItem(API_TEST_SUITE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.test_cases?.length || parsed.folders?.length)) return ensureTestSuiteFolders(parsed);
+      }
+    } catch {}
+    return null;
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   
   // Database state
   const [dbConnections, setDbConnections] = useState<any[]>([]);
@@ -305,6 +315,45 @@ export default function EnhancedAPITesting() {
     setCollectionVariables(v);
     try { localStorage.setItem(VAR_COLLECTION_KEY, JSON.stringify(v)); } catch {}
   };
+
+  // Load API collection from backend on mount (single source of truth)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/db/api-collections/default`);
+        if (cancelled) return;
+        const data = await res.json().catch(() => ({}));
+        const payload = data?.payload ?? {};
+        if (payload && (payload.test_cases?.length || payload.folders?.length || Object.keys(payload).length > 0)) {
+          setTestSuite(ensureTestSuiteFolders(payload));
+        } else {
+          setTestSuite(null);
+        }
+      } catch {
+        if (!cancelled) setTestSuite(null);
+      } finally {
+        if (!cancelled) {
+          setSuiteLoading(false);
+          suiteLoadedFromBackend.current = true;
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist test suite to backend (debounced) so collection/folders/requests stick across sessions
+  useEffect(() => {
+    if (!suiteLoadedFromBackend.current || !testSuite) return;
+    const t = setTimeout(() => {
+      fetch(`${API_BASE_URL}/api/db/api-collections/default`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: testSuite }),
+      }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [testSuite]);
   
   // Environment state
   const [environments, setEnvironments] = useState<any[]>([]);
@@ -2093,6 +2142,149 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             Enterprise Grade
           </Badge>
         </div>
+
+      <div className="flex min-h-[420px] gap-0 -mx-6">
+        {/* Left sidebar - collection tree (Postman-style); persists across tabs */}
+        <aside
+          className={`flex flex-col border-r border-border bg-muted/30 overflow-hidden transition-[width] shrink-0 ${
+            sidebarOpen ? "w-64 min-w-[220px]" : "w-12 min-w-[48px]"
+          }`}
+        >
+          <div className="flex items-center justify-between h-10 px-2 border-b border-border shrink-0">
+            {sidebarOpen && <span className="text-xs font-medium text-muted-foreground truncate">Collection</span>}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setSidebarOpen((o) => !o)}
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+            </Button>
+          </div>
+          {sidebarOpen && (
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1">
+                {suiteLoading ? (
+                  <p className="text-xs text-muted-foreground px-2 py-4 flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    Loading collection…
+                  </p>
+                ) : !testSuite || (!(testSuite.test_cases?.length) && !(testSuite.folders?.length)) ? (
+                  <p className="text-xs text-muted-foreground px-2 py-4">
+                    No requests yet. Import a collection or add requests from Builder to see them here.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
+                      <FolderOpen className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-sm font-medium truncate">{testSuite.name || "My Collection"}</span>
+                    </div>
+                    {(testSuite.folders || []).map((f: any) => {
+                      const idsInFolder = new Set(f.test_case_ids || []);
+                      const casesInFolder = (testSuite.test_cases || []).filter(
+                        (tc: any) => idsInFolder.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
+                      );
+                      return (
+                        <div key={f.id} className="pl-1">
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50">
+                            <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-xs font-medium truncate">{f.name || "Folder"}</span>
+                            <span className="text-xs text-muted-foreground">({casesInFolder.length})</span>
+                          </div>
+                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
+                            {casesInFolder.map((tc: any, idx: number) => {
+                              const tcId = tc.test_case_id || tc.test_id || tc.id || `tc_${idx}`;
+                              const method = tc.method || "GET";
+                              const path = tc.path || tc.endpoint || "";
+                              const label = tc.title || tc.name || `${method} ${path}` || "Request";
+                              return (
+                                <button
+                                  key={tcId}
+                                  type="button"
+                                  className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
+                                  onClick={() => {
+                                    const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
+                                    const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
+                                    const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+                                    setBuilderInitialRequest({
+                                      method,
+                                      url: fullPath,
+                                      headers: tc.request?.headers || { "Content-Type": "application/json" },
+                                      body: tc.request?.body || undefined,
+                                    });
+                                    setActiveTab("builder");
+                                  }}
+                                >
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
+                                    {method}
+                                  </Badge>
+                                  <span className="truncate">{label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Uncategorized requests */}
+                    {(() => {
+                      const idsInFolders = new Set((testSuite.folders || []).flatMap((f: any) => f.test_case_ids || []));
+                      const uncategorized = (testSuite.test_cases || []).filter(
+                        (tc: any) => !idsInFolders.has(tc.test_case_id || tc.test_id || tc.title || tc.name || tc.id)
+                      );
+                      if (uncategorized.length === 0) return null;
+                      return (
+                        <div className="pl-1 pt-1">
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground">
+                            <FileCode className="w-3.5 h-3.5 shrink-0" />
+                            <span className="text-xs">Requests</span>
+                            <span className="text-xs">({uncategorized.length})</span>
+                          </div>
+                          <div className="pl-3 border-l border-border ml-1.5 space-y-0.5">
+                            {uncategorized.map((tc: any, idx: number) => {
+                              const tcId = tc.test_case_id || tc.test_id || tc.id || `tc_${idx}`;
+                              const method = tc.method || "GET";
+                              const path = tc.path || tc.endpoint || "";
+                              const label = tc.title || tc.name || `${method} ${path}` || "Request";
+                              return (
+                                <button
+                                  key={tcId}
+                                  type="button"
+                                  className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left hover:bg-muted/70 text-xs"
+                                  onClick={() => {
+                                    const selectedEnv = environments.find((e: any) => e.environment_id === selectedEnvironment);
+                                    const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
+                                    const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+                                    setBuilderInitialRequest({
+                                      method,
+                                      url: fullPath,
+                                      headers: tc.request?.headers || { "Content-Type": "application/json" },
+                                      body: tc.request?.body || undefined,
+                                    });
+                                    setActiveTab("builder");
+                                  }}
+                                >
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0 font-mono">
+                                    {method}
+                                  </Badge>
+                                  <span className="truncate">{label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </aside>
+
+        <div className="flex-1 min-w-0 overflow-auto">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
 
       {/* Banner for pending API requests from Record tab */}
       {showPendingBanner && pendingApiRequests.length > 0 && (
@@ -5108,6 +5300,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+      </div>
+      </div>
       </div>
     </div>
   );
