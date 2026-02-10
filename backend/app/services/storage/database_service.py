@@ -670,4 +670,3 @@ async def get_database() -> DatabaseService:
     if not db._initialized:
         await db.initialize()
     return db
-
