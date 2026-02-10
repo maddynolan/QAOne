@@ -81,6 +81,12 @@ This guide documents **all built features** in the API Testing tab with **day-to
 
 ---
 
+#### Collection sidebar — where new tests appear
+
+- The **Collection** sidebar (left) shows **Endpoints** first, then test cases under each endpoint (method + path). All test cases — from **Generate**, **Import**, or **Add to Tests** — are included and grouped by endpoint.
+- When you click **Add to Tests**, the new test is added to the collection and appears under the **correct endpoint** (e.g. `POST /posts`). The app uses the path part of the URL (e.g. `/posts`) for grouping, so tests from Builder and from generated suites line up under the same endpoint.
+- **Steps to add a custom test to the collection:** (1) In **Builder**, set method and URL (or `{{base_url}}/path`), add headers/body/assertions if needed. (2) Click **Add to Tests**. (3) Enter a name when prompted. (4) The test is added to the suite and to the database; it appears in the sidebar under the matching endpoint and on the **Tests** tab after refresh.
+
 ## 2. Response — Viewing and Using the Response
 
 ### 2.1 Body and Headers tabs
@@ -201,7 +207,15 @@ Use this to catch unintended changes in response shape or values (e.g. after a b
 
 ---
 
-## 10. Quick Reference — Where to Do What
+## 10. Collection Sidebar (Postman-Style)
+
+- **What:** A left sidebar shows your current collection: **My Collection** (or the imported collection name), **folders** (if you added any in the Execute tab), and all **requests** (test cases). It stays visible when you switch between Builder, Execute, Import, Mock, etc., so endpoints and tests don’t “disappear.”
+- **How:** Import a collection or add requests from Builder (“Add to Tests”). The sidebar updates with the collection tree. Click a request to open it in the Builder tab with URL, method, headers, and body filled. Use the **collapse/expand** button at the top of the sidebar to show or hide it.
+- **Persistence:** The collection (test suite) is saved to your browser’s local storage, so it survives tab switches and page refresh. Create folders in the Execute tab (Add folder) and assign test cases to them via the Folder column; the sidebar reflects that structure.
+
+---
+
+## 11. Quick Reference — Where to Do What
 
 | Goal                         | Where / How                                      |
 |------------------------------|--------------------------------------------------|
@@ -220,6 +234,7 @@ Use this to catch unintended changes in response shape or values (e.g. after a b
 | Verify mock was called       | Mock tab → Verify (method/path/count/body)        |
 | Validate many fields at once | Assertions → type **JSON Schema** (one assertion)  |
 | Regression: compare to last | Assertions → type **Matches Baseline** + Use current as baseline |
+| See all endpoints/requests in one place | **Left sidebar** — shows collection, folders, and requests; persists across tabs and refresh |
 
 ---
 

@@ -2200,10 +2200,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       }
                     });
                     const endpointOrder: Record<string, number> = { GET: 0, POST: 1, PUT: 2, PATCH: 3, DELETE: 4 };
+                    const pathOnly = (p: string) => (p || "").trim().replace(/^https?:\/\/[^/]+/, "") || "/";
                     const byEndpoint = new Map<string, any[]>();
                     for (const tc of allTestCases) {
                       const method = (tc.method || "GET").toUpperCase();
-                      const path = (tc.path || tc.endpoint || "").trim() || "/";
+                      const path = pathOnly(tc.path || tc.endpoint || "");
                       const key = `${method} ${path}`;
                       if (!byEndpoint.has(key)) byEndpoint.set(key, []);
                       byEndpoint.get(key)!.push(tc);

@@ -630,12 +630,14 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     // Save to Execute suite AND database (via the callback in EnhancedAPITesting)
     if (onAddToTestSuite) {
       const url = buildUrl();
+      const pathOnly = url ? (url.replace(/^https?:\/\/[^/]+/, "") || "/") : "/";
       onAddToTestSuite({
         test_case_id: `builder_${saved.id}`,
         title: saved.name,  // Use the user-provided name, NOT the endpoint path
         description: `Custom test: ${request.method} ${url}`,
         method: request.method,
-        path: url,
+        path: pathOnly,
+        endpoint: pathOnly,
         expected_status: (() => {
           const sa = assertions.find(a => a.type === "status_code");
           if (sa) return parseInt(String(sa.expected), 10) || 200;
@@ -891,7 +893,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 onClick={() => {
                   const url = buildUrl();
                   if (!url) return;
-                  const defaultName = `${request.method} ${url.replace(/https?:\/\/[^/]+/, "")}`;
+                  const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+                  const defaultName = `${request.method} ${pathOnly}`;
                   const userTitle = prompt("Enter a name for this test case:", defaultName);
                   if (!userTitle) return; // cancelled
                   onAddToTestSuite({
@@ -899,7 +902,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     title: userTitle.trim(),
                     description: `Custom test: ${request.method} ${url}`,
                     method: request.method,
-                    path: url,
+                    path: pathOnly,
+                    endpoint: pathOnly,
                     expected_status: (() => {
                       const statusAssertion = assertions.find(a => a.type === "status_code");
                       if (statusAssertion) return parseInt(statusAssertion.expected) || 200;
