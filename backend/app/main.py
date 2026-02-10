@@ -161,7 +161,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware (with allow_credentials=True, "*" is invalid; list origins explicitly)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -170,7 +170,8 @@ app.add_middleware(
         "http://localhost:8081",  # Tools server (Flowstral recorder)
         "http://127.0.0.1:8081",  # Tools server (alternative)
         "http://127.0.0.1:8080",  # Frontend (alternative)
-        "*"  # Allow all origins for development (remove in production)
+        "https://flowstral.com",   # Production site
+        "https://www.flowstral.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],

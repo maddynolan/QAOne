@@ -986,7 +986,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         });
       }
     } catch (err) {
-      console.error("Failed to save environment to DB:", err);
+      // CORS or backend down (e.g. when flowstral.com calls Railway); envs still work locally
+      console.warn("Environment save skipped (backend unreachable or CORS):", err);
     }
   };
 
