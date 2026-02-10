@@ -32,7 +32,7 @@ const _isFileProtocol = typeof window !== 'undefined' && (
   !!(window as any).flowstral
 );
 const Router = _isFileProtocol ? HashRouter : BrowserRouter;
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, Suspense, lazy } from "react";
 
 // Layout
 import { StreamlinedLayout } from "./components/StreamlinedLayout";
@@ -49,7 +49,8 @@ import { AIProvider } from "./contexts/AIContext";
 // Core Pages
 import PlaywrightRecorderPage from "./pages/PlaywrightRecorderPage";
 import UnifiedWorkflowEditor from "./pages/UnifiedWorkflowEditor";
-import EnhancedAPITesting from "./pages/EnhancedAPITesting";
+// Lazy-load API Testing so a bug there cannot crash the whole site (e.g. flowstral.com)
+const EnhancedAPITesting = lazy(() => import("./pages/EnhancedAPITesting"));
 import VirtualUserGenerator from "./pages/VirtualUserGenerator";
 import SalesforceToolsPage from "./pages/SalesforceToolsPage";
 import MobileTestingPage from "./pages/MobileTestingPage";
@@ -272,10 +273,10 @@ const App = () => {
                       3. API TESTING MODULE
                       REST, GraphQL, and API endpoint testing
                       ───────────────────────────────────────────────────────── */}
-                  <Route path="/api" element={<EnhancedAPITesting />} />
-                  <Route path="/api/collections" element={<EnhancedAPITesting />} />
-                  <Route path="/api/history" element={<EnhancedAPITesting />} />
-                  <Route path="/api/environments" element={<EnhancedAPITesting />} />
+                  <Route path="/api" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/collections" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/history" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
+                  <Route path="/api/environments" element={<Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><span className="text-muted-foreground">Loading API Testing...</span></div>}><EnhancedAPITesting /></Suspense>} />
                   
                   {/* Legacy routes */}
                   <Route path="/enhanced-api-testing" element={<Navigate to="/api" replace />} />

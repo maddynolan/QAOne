@@ -21,6 +21,9 @@
 
 import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
+// Force immer into this chunk so production bundle has it (fixes "immer is not defined")
+import 'immer';
 import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
@@ -1600,18 +1603,26 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               width: state.sidebar.width,
             },
           }),
-          // Custom serialization for Sets
+          // Safe storage: never throw so rehydration cannot crash the app
           storage: {
             getItem: (name) => {
-              const raw = localStorage.getItem(name);
-              if (!raw) return null;
-              return JSON.parse(raw);
+              try {
+                const raw = localStorage.getItem(name);
+                if (!raw) return null;
+                return JSON.parse(raw);
+              } catch {
+                return null;
+              }
             },
             setItem: (name, value) => {
-              localStorage.setItem(name, JSON.stringify(value));
+              try {
+                localStorage.setItem(name, JSON.stringify(value));
+              } catch { /* ignore */ }
             },
             removeItem: (name) => {
-              localStorage.removeItem(name);
+              try {
+                localStorage.removeItem(name);
+              } catch { /* ignore */ }
             },
           },
         }

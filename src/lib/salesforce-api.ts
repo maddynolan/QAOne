@@ -14,6 +14,8 @@
  * - Rate limiting and error handling
  */
 
+import { API_BASE_URL } from '@/lib/api-config';
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -227,7 +229,7 @@ class SalesforceApiService {
   async autoConnectFromBackend(): Promise<boolean> {
     try {
       // Check if backend has a configured org
-      const statusResponse = await fetch('http://localhost:8000/api/salesforce/auth/status');
+      const statusResponse = await fetch(`${this.getBackendUrl()}/api/salesforce/auth/status`);
       if (!statusResponse.ok) return false;
       
       const status = await statusResponse.json();
@@ -237,7 +239,7 @@ class SalesforceApiService {
       }
       
       // Get a token from the backend
-      const tokenResponse = await fetch('http://localhost:8000/api/salesforce/auth/token', {
+      const tokenResponse = await fetch(`${this.getBackendUrl()}/api/salesforce/auth/token`, {
         method: 'POST',
       });
       
@@ -389,7 +391,7 @@ class SalesforceApiService {
     
     try {
       // Use backend proxy to avoid CORS issues
-      const response = await fetch('http://localhost:8000/api/salesforce/connect', {
+      const response = await fetch(`${this.getBackendUrl()}/api/salesforce/connect`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -519,7 +521,7 @@ class SalesforceApiService {
    */
   private async autoRefreshFromBackend(): Promise<boolean> {
     try {
-      const response = await fetch('http://localhost:8000/api/salesforce/auth/token', {
+      const response = await fetch(`${this.getBackendUrl()}/api/salesforce/auth/token`, {
         method: 'POST',
       });
       
@@ -573,7 +575,7 @@ class SalesforceApiService {
     }
     
     // Use backend proxy with local token
-    const proxyUrl = 'http://localhost:8000/api/salesforce/proxy';
+    const proxyUrl = `${this.getBackendUrl()}/api/salesforce/proxy`;
     
     const response = await fetch(proxyUrl, {
       method: 'POST',
@@ -635,7 +637,7 @@ class SalesforceApiService {
   ): Promise<T> {
     console.log('[SF API] Using auto-proxy (backend auth)');
     
-    const autoProxyUrl = 'http://localhost:8000/api/salesforce/auto-proxy';
+    const autoProxyUrl = `${this.getBackendUrl()}/api/salesforce/auto-proxy`;
     
     const response = await fetch(autoProxyUrl, {
       method: 'POST',
@@ -1295,9 +1297,9 @@ class SalesforceApiService {
     return response.json();
   }
 
-  // Helper to get backend URL
+  // Helper to get backend URL (same as web app API; avoids CORS to localhost from flowstral.com)
   private getBackendUrl(): string {
-    return import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+    return import.meta.env.VITE_BACKEND_URL || API_BASE_URL;
   }
 }
 
