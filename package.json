@@ -24,10 +24,10 @@
     "desktop:start": "cd flowstral-desktop && npm start",
     "start:all": "start cmd /c \"npm run dev\" && timeout /t 3 && cd flowstral-desktop && npm run dev",
     "electron:dev": "vite build && electron electron/main.js",
-    "electron:build": "vite build && electron-builder --config electron-builder.config.js",
-    "electron:build:win": "vite build && electron-builder --config electron-builder.config.js --win",
-    "electron:build:mac": "vite build && electron-builder --config electron-builder.config.js --mac",
-    "electron:build:linux": "vite build && electron-builder --config electron-builder.config.js --linux"
+    "electron:build": "vite build && electron-builder --config electron-builder.config.cjs",
+    "electron:build:win": "vite build && electron-builder --config electron-builder.config.cjs --win",
+    "electron:build:mac": "vite build && electron-builder --config electron-builder.config.cjs --mac",
+    "electron:build:linux": "vite build && electron-builder --config electron-builder.config.cjs --linux"
   },
   "keywords": [
     "playwright",
@@ -83,6 +83,8 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
     "@types/jest": "^29.5.10",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.43",
