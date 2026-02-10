@@ -22,6 +22,7 @@
 import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { shallow } from 'zustand/shallow';
 // Force immer into this chunk so production bundle has it (fixes "immer is not defined")
 import 'immer';
 import { API_BASE_URL } from '@/lib/api-config';
@@ -1790,16 +1791,16 @@ export const useApiExecutionState = () => useApiTestingStore((s) => ({
   executing: s.executing,
   execution_results: s.execution_results,
   execution_mode: s.execution_mode,
-}));
+}), shallow);
 
 /** Subscribe to builder state */
 export const useBuilderState = () => useApiTestingStore((s) => ({
   request_id: s.builder_request_id,
   initial_data: s.builder_initial_data,
-}));
+}), shallow);
 
 /** Subscribe to sync status */
 export const useSyncStatus = () => useApiTestingStore((s) => ({
   status: s.sync_status,
   last_sync: s.last_sync,
-}));
+}), shallow);

@@ -337,9 +337,19 @@ export default function EnhancedAPITesting() {
     return () => { cancelled = true; };
   }, []);
 
+  // Guard to prevent testSuite ↔ activeCollection infinite cycle
+  const syncingFromStore = useRef(false);
+  const lastImportedSuiteRef = useRef<string | null>(null);
+  
   // Persist test suite to backend (debounced) so collection/folders/requests stick across sessions
   useEffect(() => {
     if (!suiteLoadedFromBackend.current || !testSuite) return;
+    // Skip if this testSuite came from the store (prevent cycle)
+    if (syncingFromStore.current) {
+      syncingFromStore.current = false;
+      return;
+    }
+    const suiteFingerprint = `${testSuite.name}_${testSuite.test_cases?.length || 0}`;
     const t = setTimeout(() => {
       fetch(`${API_BASE_URL}/api/db/api-collections/default`, {
         method: "PUT",
@@ -348,7 +358,9 @@ export default function EnhancedAPITesting() {
       }).catch(() => {});
       
       // Bridge: Also sync imported data into the new Zustand store for sidebar
-      if (testSuite && testSuite.test_cases?.length > 0) {
+      // Only import if we haven't already imported this exact suite
+      if (testSuite && testSuite.test_cases?.length > 0 && lastImportedSuiteRef.current !== suiteFingerprint) {
+        lastImportedSuiteRef.current = suiteFingerprint;
         store.importCollection(testSuite, testSuite.name || 'Imported Collection').catch(() => {});
       }
     }, 1500);
@@ -394,8 +406,13 @@ export default function EnhancedAPITesting() {
       if (store.active_tab === 'builder') setActiveTab('builder');
     }
   }, [builderState.initial_data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lastActiveCollectionIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (activeCollection && activeCollection.requests.length > 0) {
+      // Only sync from store → testSuite if the active collection actually changed (by ID)
+      if (lastActiveCollectionIdRef.current === activeCollection.id) return;
+      lastActiveCollectionIdRef.current = activeCollection.id;
+      
       const legacySuite = {
         name: activeCollection.name,
         base_url: activeCollection.base_url,
@@ -420,7 +437,9 @@ export default function EnhancedAPITesting() {
         })),
         folders: (activeCollection.folders || []).map((f: any) => ({ id: f.id, name: f.name, test_case_ids: f.request_ids || [] })),
       };
-      if (String(testSuite?.test_cases?.length) !== String(legacySuite.test_cases.length)) setTestSuite(legacySuite);
+      // Mark that this testSuite came from the store to prevent import cycle
+      syncingFromStore.current = true;
+      setTestSuite(legacySuite);
     }
   }, [activeCollection]); // eslint-disable-line react-hooks/exhaustive-deps
   // ===== END store integration =====
@@ -953,36 +972,29 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     }
   };
 
-  // Save an environment to the database
+  // Save an environment to the database (single PUT - avoids extra GET check)
   const saveEnvironmentToDb = async (env: any) => {
     try {
-      // Check if it exists
-      const checkResp = await fetch(`${API_BASE_URL}/api/db/environments/${env.environment_id || env.id}`);
-      if (checkResp.ok) {
-        // Update
-        await fetch(`${API_BASE_URL}/api/db/environments/${env.environment_id || env.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: env.name,
-            env_type: env.type || env.env_type || "development",
-            base_url: env.base_url || "",
-            variables: env.variables || [],
-            auth: env.auth || {},
-          }),
-        });
-      } else {
-        // Create
+      const envId = env.environment_id || env.id;
+      const payload = {
+        name: env.name,
+        env_type: env.type || env.env_type || "development",
+        base_url: env.base_url || "",
+        variables: env.variables || [],
+        auth: env.auth || {},
+      };
+      // Try PUT first (update/upsert), fall back to POST if not found
+      const putResp = await fetch(`${API_BASE_URL}/api/db/environments/${envId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!putResp.ok && putResp.status === 404) {
+        // Environment doesn't exist yet, create it
         await fetch(`${API_BASE_URL}/api/db/environments`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: env.name,
-            env_type: env.type || env.env_type || "development",
-            base_url: env.base_url || "",
-            variables: env.variables || [],
-            auth: env.auth || {},
-          }),
+          body: JSON.stringify(payload),
         });
       }
     } catch (err) {
@@ -1221,13 +1233,23 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       const allEnvs = [...normalized];
       
       // Add any localStorage envs that aren't in DB yet (one-time migration)
+      // Migrate sequentially to avoid flooding the network with parallel requests
+      const envsToMigrate: any[] = [];
       for (const p of persisted) {
         const pId = p.environment_id || p.id;
-        if (!allEnvs.find(e => e.environment_id === pId)) {
+        // Check by ID or name to avoid duplicates
+        if (!allEnvs.find(e => e.environment_id === pId || e.name === p.name)) {
           allEnvs.push(p);
-          // Migrate to DB
-          saveEnvironmentToDb(p);
+          envsToMigrate.push(p);
         }
+      }
+      // Migrate up to 5 environments to DB in the background (sequential, not parallel)
+      if (envsToMigrate.length > 0) {
+        (async () => {
+          for (const env of envsToMigrate.slice(0, 5)) {
+            try { await saveEnvironmentToDb(env); } catch {}
+          }
+        })();
       }
 
       if (allEnvs.length > 0) {
@@ -4098,8 +4120,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             onEnvironmentsChange={(envs) => {
               setEnvironments(envs);
               saveEnvironmentsToLocalStorage(envs);
-              // Sync to database for enterprise persistence
-              syncEnvironmentsToDb(envs);
+              // Note: Individual environment saves to DB are handled by EnvironmentManager itself
+              // (create/update/delete). No need to re-sync ALL environments here.
             }}
             onSelectedChange={(id) => {
               setSelectedEnvironment(id);
