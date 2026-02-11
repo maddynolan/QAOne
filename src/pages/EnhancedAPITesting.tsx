@@ -199,7 +199,7 @@ input StringQueryOperatorInput {
 export default function EnhancedAPITesting() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("builder");
+  const [activeTab, setActiveTab] = useState("import");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -242,7 +242,7 @@ export default function EnhancedAPITesting() {
   const [specFormat, setSpecFormat] = useState("openapi");
   const [protocol, setProtocol] = useState("REST");
   const [specContent, setSpecContent] = useState("");
-  const [showTemplatesInImport, setShowTemplatesInImport] = useState(false);
+  // const [showTemplatesInImport, setShowTemplatesInImport] = useState(false); // Removed - templates section removed
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
   const [testSuite, setTestSuite] = useState<any>(null);
@@ -2382,13 +2382,13 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex w-full bg-card border border-border p-1 overflow-x-auto">
-          <TabsTrigger value="builder" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Send className="w-4 h-4 mr-1" />
-            Builder
-          </TabsTrigger>
           <TabsTrigger value="import" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Upload className="w-4 h-4 mr-1" />
             Import
+          </TabsTrigger>
+          <TabsTrigger value="builder" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
+            <Send className="w-4 h-4 mr-1" />
+            Builder
           </TabsTrigger>
           <TabsTrigger value="chains" className="flex-1 min-w-0 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-500 text-muted-foreground">
             <Link2 className="w-4 h-4 mr-1" />
@@ -2398,12 +2398,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <Play className="w-4 h-4 mr-1" />
             Execute
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex-1 min-w-0 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
-            <Shield className="w-4 h-4 mr-1" />
-            Security
-          </TabsTrigger>
           <TabsTrigger value="environments" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
-          <TabsTrigger value="mock" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Mock</TabsTrigger>
           <TabsTrigger value="results" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
         </TabsList>
 
@@ -2693,259 +2688,13 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
         {/* Import Tab */}
         <TabsContent value="import" className="space-y-4">
-          {/* Quick Import: Sample Collections */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Rocket className="w-5 h-5" />
-                Quick Import - Sample Collections
-              </CardTitle>
-              <CardDescription>
-                Import sample Postman collections or public API specs to get started instantly
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {/* Postman Sample: JSONPlaceholder */}
-                <Button
-                  variant="outline"
-                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-orange-500/50"
-                  disabled={loading}
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const postmanCollection = {
-                        info: { name: "JSONPlaceholder API", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json", description: "REST API for testing" },
-                        variable: [{ key: "base_url", value: "https://jsonplaceholder.typicode.com" }],
-                        item: [
-                          { name: "Get All Posts", request: { method: "GET", url: { raw: "{{base_url}}/posts", host: ["{{base_url}}"], path: ["posts"] } } },
-                          { name: "Get Single Post", request: { method: "GET", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] } } },
-                          { name: "Create Post", request: { method: "POST", url: { raw: "{{base_url}}/posts", host: ["{{base_url}}"], path: ["posts"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ title: "Test Post", body: "This is a test", userId: 1 }) } } },
-                          { name: "Update Post", request: { method: "PUT", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ id: 1, title: "Updated Post", body: "Updated content", userId: 1 }) } } },
-                          { name: "Delete Post", request: { method: "DELETE", url: { raw: "{{base_url}}/posts/1", host: ["{{base_url}}"], path: ["posts", "1"] } } },
-                          { name: "Get Users", request: { method: "GET", url: { raw: "{{base_url}}/users", host: ["{{base_url}}"], path: ["users"] } } },
-                          { name: "Get Comments", request: { method: "GET", url: { raw: "{{base_url}}/comments", host: ["{{base_url}}"], path: ["comments"] } } },
-                          { name: "Get Todos", request: { method: "GET", url: { raw: "{{base_url}}/todos", host: ["{{base_url}}"], path: ["todos"] } } },
-                          { name: "Get Albums", request: { method: "GET", url: { raw: "{{base_url}}/albums", host: ["{{base_url}}"], path: ["albums"] } } },
-                          { name: "Get Photos", request: { method: "GET", url: { raw: "{{base_url}}/photos", host: ["{{base_url}}"], path: ["photos"] } } }
-                        ]
-                      };
-                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ spec_content: JSON.stringify(postmanCollection), spec_format: "postman", content_type: "json" }),
-                      });
-                      if (!parseRes.ok) throw new Error("Failed to parse");
-                      const parseData = await parseRes.json();
-                      setParsedSpec(parseData.parsed_spec);
-                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "postman", protocol: "REST", test_options: {} }),
-                      });
-                      if (!enhRes.ok) throw new Error("Failed to generate tests");
-                      const enhData = await enhRes.json();
-                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
-                      toast({ title: "Imported JSONPlaceholder Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases from Postman collection` });
-                      setActiveTab("execute");
-                    } catch (e: any) {
-                      toast({ title: "Error", description: e.message, variant: "destructive" });
-                    } finally { setLoading(false); }
-                  }}
-                >
-                  <span className="font-semibold text-orange-600">Postman: JSONPlaceholder</span>
-                  <span className="text-xs text-muted-foreground">10 endpoints - REST CRUD</span>
-                </Button>
-
-                {/* Postman Sample: ReqRes Auth */}
-                <Button
-                  variant="outline"
-                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-orange-500/50"
-                  disabled={loading}
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const postmanCollection = {
-                        info: { name: "ReqRes Auth API", schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
-                        variable: [{ key: "base_url", value: "https://reqres.in" }],
-                        item: [
-                          { name: "List Users", request: { method: "GET", url: { raw: "{{base_url}}/api/users?page=2", host: ["{{base_url}}"], path: ["api", "users"], query: [{ key: "page", value: "2" }] } } },
-                          { name: "Get Single User", request: { method: "GET", url: { raw: "{{base_url}}/api/users/2", host: ["{{base_url}}"], path: ["api", "users", "2"] } } },
-                          { name: "Create User", request: { method: "POST", url: { raw: "{{base_url}}/api/users", host: ["{{base_url}}"], path: ["api", "users"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ name: "morpheus", job: "leader" }) } } },
-                          { name: "Login", request: { method: "POST", url: { raw: "{{base_url}}/api/login", host: ["{{base_url}}"], path: ["api", "login"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ email: "eve.holt@reqres.in", password: "cityslicka" }) } } },
-                          { name: "Register", request: { method: "POST", url: { raw: "{{base_url}}/api/register", host: ["{{base_url}}"], path: ["api", "register"] }, header: [{ key: "Content-Type", value: "application/json" }], body: { mode: "raw", raw: JSON.stringify({ email: "eve.holt@reqres.in", password: "pistol" }) } } },
-                          { name: "Delete User", request: { method: "DELETE", url: { raw: "{{base_url}}/api/users/2", host: ["{{base_url}}"], path: ["api", "users", "2"] } } },
-                          { name: "Delayed Response", request: { method: "GET", url: { raw: "{{base_url}}/api/users?delay=3", host: ["{{base_url}}"], path: ["api", "users"], query: [{ key: "delay", value: "3" }] } } }
-                        ]
-                      };
-                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ spec_content: JSON.stringify(postmanCollection), spec_format: "postman", content_type: "json" }),
-                      });
-                      if (!parseRes.ok) throw new Error("Failed to parse");
-                      const parseData = await parseRes.json();
-                      setParsedSpec(parseData.parsed_spec);
-                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "postman", protocol: "REST", test_options: {} }),
-                      });
-                      if (!enhRes.ok) throw new Error("Failed to generate tests");
-                      const enhData = await enhRes.json();
-                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
-                      toast({ title: "Imported ReqRes Collection", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
-                      setActiveTab("execute");
-                    } catch (e: any) {
-                      toast({ title: "Error", description: e.message, variant: "destructive" });
-                    } finally { setLoading(false); }
-                  }}
-                >
-                  <span className="font-semibold text-orange-600">Postman: ReqRes Auth</span>
-                  <span className="text-xs text-muted-foreground">7 endpoints - Auth + CRUD</span>
-                </Button>
-
-                {/* OpenAPI Petstore */}
-                <Button
-                  variant="outline"
-                  className="h-auto p-4 flex flex-col items-start gap-1 hover:border-blue-500/50"
-                  disabled={loading}
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const petstoreSpec = {
-                        openapi: "3.0.0",
-                        info: { title: "Petstore", version: "1.0.0" },
-                        servers: [{ url: "https://petstore.swagger.io/v2" }],
-                        paths: {
-                          "/pet": { post: { operationId: "addPet", summary: "Add a new pet", requestBody: { content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, status: { type: "string" } } } } } }, responses: { "200": { description: "Success" } } } },
-                          "/pet/{petId}": { get: { operationId: "getPetById", summary: "Find pet by ID", parameters: [{ name: "petId", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Success" } } }, delete: { operationId: "deletePet", summary: "Delete a pet", parameters: [{ name: "petId", in: "path", required: true, schema: { type: "integer" } }], responses: { "200": { description: "Success" } } } },
-                          "/pet/findByStatus": { get: { operationId: "findByStatus", summary: "Find by status", parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["available", "pending", "sold"] } }], responses: { "200": { description: "Success" } } } },
-                          "/store/order": { post: { operationId: "placeOrder", summary: "Place order", requestBody: { content: { "application/json": { schema: { type: "object", properties: { petId: { type: "integer" }, quantity: { type: "integer" } } } } } }, responses: { "200": { description: "Success" } } } },
-                          "/store/inventory": { get: { operationId: "getInventory", summary: "Get inventory", responses: { "200": { description: "Success" } } } },
-                          "/user/login": { get: { operationId: "loginUser", summary: "Login user", parameters: [{ name: "username", in: "query", schema: { type: "string" } }, { name: "password", in: "query", schema: { type: "string" } }], responses: { "200": { description: "Success" } } } }
-                        }
-                      };
-                      const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ spec_content: JSON.stringify(petstoreSpec), spec_format: "openapi", content_type: "json" }),
-                      });
-                      if (!parseRes.ok) throw new Error("Failed to parse");
-                      const parseData = await parseRes.json();
-                      setParsedSpec(parseData.parsed_spec);
-                      const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ api_spec: parseData.parsed_spec, spec_format: "openapi", protocol: "REST", test_options: {} }),
-                      });
-                      if (!enhRes.ok) throw new Error("Failed to generate tests");
-                      const enhData = await enhRes.json();
-                      setTestSuite(ensureTestSuiteFolders(enhData.test_suite));
-                      toast({ title: "Imported Petstore API", description: `Generated ${enhData.summary?.total_test_cases || enhData.test_suite?.test_cases?.length || 0} test cases` });
-                      setActiveTab("execute");
-                    } catch (e: any) {
-                      toast({ title: "Error", description: e.message, variant: "destructive" });
-                    } finally { setLoading(false); }
-                  }}
-                >
-                  <span className="font-semibold text-blue-600">OpenAPI: Petstore</span>
-                  <span className="text-xs text-muted-foreground">7 endpoints - Full CRUD + auth</span>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quick Start Templates (collapsed by default, absorbed from old Templates tab) */}
-          <Card>
-            <CardHeader className="cursor-pointer" onClick={() => setShowTemplatesInImport(prev => !prev)}>
-              <CardTitle className="flex items-center gap-2 text-base">
-                {showTemplatesInImport ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                <Rocket className="w-5 h-5" />
-                Quick Start Templates
-              </CardTitle>
-              <CardDescription>Pre-built API specs (REST, GraphQL, SOAP) for instant test generation</CardDescription>
-            </CardHeader>
-            {showTemplatesInImport && (
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(PROTOCOL_TEMPLATES).map(([key, template]) => (
-                    <Card key={key} className="border cursor-pointer hover:border-primary/50 transition-all">
-                      <CardHeader className="py-3 px-4">
-                        <CardTitle className="flex items-center gap-2 text-sm">
-                          <span className="text-lg">{template.icon}</span>
-                          {template.name}
-                        </CardTitle>
-                        <CardDescription className="text-xs">{template.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-3 pt-0">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={async () => {
-                              setProtocol(template.protocol);
-                              setSpecFormat(template.format);
-                              const content = typeof template.spec === 'string' 
-                                ? template.spec 
-                                : JSON.stringify(template.spec, null, 2);
-                              setSpecContent(content);
-                              
-                              // Create environment for this template
-                              const envName = `${template.name} - Test`;
-                              const existingEnv = environments.find(e => e.name === envName);
-                              if (!existingEnv) {
-                                const newEnv = {
-                                  environment_id: `env_${key}_${Date.now()}`,
-                                  name: envName,
-                                  type: "development" as const,
-                                  base_url: template.baseUrl,
-                                  variables: [] as any[],
-                                };
-                                const updatedEnvs = [...environments, newEnv];
-                                setEnvironments(updatedEnvs);
-                                saveEnvironmentsToLocalStorage(updatedEnvs);
-                                setSelectedEnvironment(newEnv.environment_id);
-                              }
-                              
-                              toast({
-                                title: "Template Loaded",
-                                description: `${template.name} loaded into the import form below. Click "Import Specification" to generate tests.`,
-                              });
-                              setShowTemplatesInImport(false);
-                            }}
-                          >
-                            <FileCode className="w-3 h-3 mr-1" />
-                            Load
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const content = typeof template.spec === 'string' 
-                                ? template.spec 
-                                : JSON.stringify(template.spec, null, 2);
-                              navigator.clipboard.writeText(content);
-                              toast({ title: "Copied", description: "Template spec copied to clipboard" });
-                            }}
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
+          {/* Quick Import samples and Templates removed for cleaner UX — import via spec/URL/file below */}
           {/* Main Import Card */}
           <Card>
             <CardHeader>
               <CardTitle>Import API Specification</CardTitle>
               <CardDescription>
-                Import OpenAPI, Swagger, WSDL, Postman Collection, GraphQL, or HAR (from recorder/desktop)
+                Import OpenAPI, Swagger, Postman Collection, WSDL, GraphQL, or HAR to generate test cases and add them to your collection.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -3104,18 +2853,24 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   placeholder="Paste your API specification here (OpenAPI JSON/YAML, Postman Collection JSON, WSDL XML, GraphQL SDL, HAR JSON)..."
                   className="min-h-[200px] font-mono text-sm"
                 />
-                <div className="flex gap-2">
-                  <Button onClick={handleTextImport} disabled={loading || !specContent.trim()} className="flex-1">
-                    {loading ? "Importing..." : "Import Specification"}
-                  </Button>
-                  <Button variant="outline" onClick={exportToPostman} disabled={!testSuite?.test_cases?.length}>
-                    Export Postman
-                  </Button>
-                  <Button variant="outline" onClick={exportToHAR} disabled={!testSuite?.test_cases?.length}>
-                    Export HAR
-                  </Button>
-                </div>
               </div>
+
+              {/* Base URL override */}
+              <div className="space-y-2">
+                <Label>Base URL (auto-detected, editable)</Label>
+                <Input
+                  id="import-base-url"
+                  placeholder="https://api.example.com"
+                  defaultValue={parsedSpec?.base_url || parsedSpec?.servers?.[0]?.url || ''}
+                />
+                <p className="text-xs text-muted-foreground">
+                  This base URL will be attached to all imported endpoints including security tests.
+                </p>
+              </div>
+
+              <Button onClick={handleTextImport} disabled={loading || !specContent.trim()} className="w-full">
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Parsing...</> : "Parse Specification"}
+              </Button>
             </CardContent>
           </Card>
 
@@ -3199,6 +2954,139 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       )}
                     </TableBody>
                   </Table>
+                </div>
+
+                {/* Import to Collection button */}
+                <div className="pt-4">
+                  <Button
+                    className="w-full"
+                    disabled={loading}
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        const baseUrlInput = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || '';
+                        
+                        // Extract Postman folder hierarchy if applicable
+                        let postmanFolders: { name: string; endpoints: string[] }[] = [];
+                        try {
+                          const specJson = JSON.parse(specContent);
+                          if (specJson.info && specJson.item) {
+                            // Postman collection - extract folder structure
+                            for (const item of specJson.item) {
+                              if (item.item && Array.isArray(item.item)) {
+                                // This is a folder
+                                const folderEndpoints = item.item
+                                  .filter((sub: any) => sub.request)
+                                  .map((sub: any) => sub.name || 'Untitled');
+                                postmanFolders.push({ name: item.name || 'Folder', endpoints: folderEndpoints });
+                              }
+                            }
+                          }
+                        } catch { /* Not JSON or not Postman - ignore */ }
+                        
+                        // Generate test suite with enhanced tests
+                        const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ api_spec: parsedSpec, spec_format: specFormat, protocol, test_options: {} }),
+                        });
+                        
+                        let payload: any;
+                        
+                        if (enhRes.ok) {
+                          const enhData = await enhRes.json();
+                          const suite = enhData.test_suite;
+                          const allTestCases: any[] = [...(suite?.test_cases || [])];
+                          const folders: any[] = [];
+                          
+                          if (suite?.test_categories && typeof suite.test_categories === 'object') {
+                            const seenIds = new Set(allTestCases.map((tc: any) => tc.test_case_id || tc.title || tc.name));
+                            for (const [cat, catTests] of Object.entries(suite.test_categories) as [string, any][]) {
+                              const folderTestIds: string[] = [];
+                              for (const tc of (catTests || [])) {
+                                const tcId = tc.test_case_id || tc.title || tc.name;
+                                // Ensure base URL is attached to ALL tests
+                                if (baseUrlInput && tc.endpoint && !tc.endpoint.startsWith('http')) {
+                                  tc.endpoint = `${baseUrlInput.replace(/\/$/, '')}${tc.endpoint.startsWith('/') ? tc.endpoint : `/${tc.endpoint}`}`;
+                                }
+                                if (baseUrlInput && tc.path && !tc.path.startsWith('http')) {
+                                  tc.path = `${baseUrlInput.replace(/\/$/, '')}${tc.path.startsWith('/') ? tc.path : `/${tc.path}`}`;
+                                }
+                                if (!seenIds.has(tcId)) {
+                                  allTestCases.push(tc);
+                                  seenIds.add(tcId);
+                                }
+                                folderTestIds.push(tcId);
+                              }
+                              if (folderTestIds.length > 0) {
+                                folders.push({
+                                  id: `folder_${cat}_${Date.now()}`,
+                                  name: cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' '),
+                                  test_case_ids: folderTestIds,
+                                });
+                              }
+                            }
+                          }
+                          
+                          // Ensure base URL on all test cases
+                          allTestCases.forEach(tc => {
+                            if (baseUrlInput && tc.endpoint && !tc.endpoint.startsWith('http')) {
+                              tc.endpoint = `${baseUrlInput.replace(/\/$/, '')}${tc.endpoint.startsWith('/') ? tc.endpoint : `/${tc.endpoint}`}`;
+                            }
+                            if (baseUrlInput && tc.path && !tc.path.startsWith('http')) {
+                              tc.path = `${baseUrlInput.replace(/\/$/, '')}${tc.path.startsWith('/') ? tc.path : `/${tc.path}`}`;
+                            }
+                          });
+                          
+                        // Also add Postman folder hierarchy if detected
+                        if (postmanFolders.length > 0) {
+                          for (const pf of postmanFolders) {
+                            const matchingTestIds = allTestCases
+                              .filter((tc: any) => pf.endpoints.some(ep => 
+                                (tc.name || tc.title || '').includes(ep) || ep.includes(tc.name || tc.title || '')
+                              ))
+                              .map((tc: any) => tc.test_case_id || tc.title || tc.name);
+                            if (matchingTestIds.length > 0) {
+                              folders.push({
+                                id: `folder_postman_${pf.name.replace(/\s+/g, '_')}_${Date.now()}`,
+                                name: pf.name,
+                                test_case_ids: matchingTestIds,
+                              });
+                            }
+                          }
+                        }
+                        
+                        payload = { test_cases: allTestCases, base_url: baseUrlInput, folders };
+                      } else {
+                          const testCases = Object.entries(parsedSpec.paths || {}).flatMap(([path, methods]: [string, any]) =>
+                            Object.entries(methods || {}).map(([method, op]: [string, any]) => ({
+                              name: op?.summary || `${method.toUpperCase()} ${path}`,
+                              method: method.toUpperCase(),
+                              endpoint: baseUrlInput ? `${baseUrlInput.replace(/\/$/, '')}${path}` : path,
+                              path: path,
+                            }))
+                          );
+                          payload = { test_cases: testCases, base_url: baseUrlInput };
+                        }
+                        
+                        setTestSuite(ensureTestSuiteFolders({ ...payload }));
+                        
+                        const collName = parsedSpec.info?.title || parsedSpec.title || 'Imported Collection';
+                        await useApiTestingStore.getState().importCollection(payload, collName);
+                        
+                        toast({ 
+                          title: "Imported to Collection", 
+                          description: `Added ${payload.test_cases.length} test cases to "${collName}". Switch to Execute tab to run them.` 
+                        });
+                        setActiveTab("execute");
+                      } catch (e: any) {
+                        toast({ title: "Import Failed", description: e.message, variant: "destructive" });
+                      } finally { setLoading(false); }
+                    }}
+                  >
+                    <Database className="w-4 h-4 mr-2" />
+                    Import to Collection ({Object.entries(parsedSpec.paths || {}).reduce((sum: number, [, methods]: [string, any]) => sum + Object.keys(methods || {}).length, 0)} endpoints)
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -3589,7 +3477,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <CardHeader>
               <CardTitle>Execute Tests</CardTitle>
               <CardDescription>
-                Execute test suite in various modes
+                Select and run test cases from your collection or imported spec
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -3631,40 +3519,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 )}
               </div>
 
-              {/* Execution Mode */}
-              <div className="space-y-2">
-                <Label>Execution Mode</Label>
-                <Select value={executionMode} onValueChange={setExecutionMode}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="automated">Automated (parallel)</SelectItem>
-                    <SelectItem value="manual">Sequential (one-by-one)</SelectItem>
-                    <SelectItem value="ci_cd">CI/CD (fail-fast)</SelectItem>
-                    <SelectItem value="load">Load Testing</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {executionMode === "automated" && "Runs all tests in parallel for fastest results"}
-                  {executionMode === "manual" && "Runs tests one-by-one sequentially with real HTTP calls"}
-                  {executionMode === "ci_cd" && "Fast parallel execution, stops on first failure"}
-                  {executionMode === "load" && "Simulates concurrent users with configurable parameters"}
-                </p>
-              </div>
+              {/* Simplified: Sequential execution */}
               
-              {/* Advanced: Load Testing + Data-Driven (collapsible) */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-xs text-muted-foreground"
-                onClick={() => setShowAdvancedExec(!showAdvancedExec)}
-              >
-                {showAdvancedExec ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
-                Advanced Options (Load Testing, Data-Driven)
-              </Button>
+              {/* Advanced options removed - simplified execution */}
               
-              {showAdvancedExec && executionMode === "load" && (
+              {false && showAdvancedExec && executionMode === "load" && (
                 <Card className="border-orange-500/20 bg-orange-50/50 dark:bg-orange-950/10">
                   <CardContent className="pt-4 space-y-3">
                     <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Load Test Configuration</p>
@@ -3717,8 +3576,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </Card>
               )}
 
-              {/* Data-driven: CSV/JSON upload, preview, run (zero-code — no scripts) */}
-              {showAdvancedExec && testSuite && testSuite.test_cases?.length > 0 && (
+              {/* Data-driven: removed from simplified Execute tab */}
+              {false && showAdvancedExec && testSuite && testSuite.test_cases?.length > 0 && (
                 <Card className="border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/10">
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm font-medium">Run with data (data-driven)</CardTitle>
@@ -3952,46 +3811,6 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                             onChange={(e) => setExecuteFilter(e.target.value)}
                             className="h-8 w-40 text-xs"
                           />
-                          {/* Collection folders (zero-code hierarchy) */}
-                          {testSuite && (testSuite.folders?.length ?? 0) >= 0 && (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                placeholder="New folder name"
-                                className="w-36 h-8 text-xs"
-                                id="new-folder-name"
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    const input = document.getElementById("new-folder-name") as HTMLInputElement;
-                                    const name = input?.value?.trim();
-                                    if (name) {
-                                      setTestSuite((prev: any) => ensureTestSuiteFolders({
-                                        ...prev,
-                                        folders: [...(prev.folders || []), { id: `f_${Date.now()}`, name, test_case_ids: [] }],
-                                      }));
-                                      input.value = "";
-                                    }
-                                  }
-                                }}
-                              />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8"
-                                onClick={() => {
-                                  const input = document.getElementById("new-folder-name") as HTMLInputElement;
-                                  const name = input?.value?.trim() || "New folder";
-                                  setTestSuite((prev: any) => ensureTestSuiteFolders({
-                                    ...prev,
-                                    folders: [...(prev.folders || []), { id: `f_${Date.now()}`, name, test_case_ids: [] }],
-                                  }));
-                                  if (input) input.value = "";
-                                  toast({ title: "Folder added", description: `"${name}" created. Assign tests via the Folder column.` });
-                                }}
-                              >
-                                Add folder
-                              </Button>
-                            </div>
-                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -4051,7 +3870,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                               <TableHead>Test Case</TableHead>
                               <TableHead>Type</TableHead>
                               <TableHead>Endpoint</TableHead>
-                              <TableHead className="w-32">Folder</TableHead>
+                              <TableHead className="w-16">Status</TableHead>
                               <TableHead className="w-24">Action</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -4119,38 +3938,17 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                     </span>
                                   </TableCell>
                                   <TableCell>
-                                    <Select
-                                      value={
-                                        (testSuite?.folders || []).find((f: any) => (f.test_case_ids || []).includes(testId))?.id ?? "__none__"
-                                      }
-                                      onValueChange={(folderId) => {
-                                        if (!testSuite) return; // Can't organize collection-only tests into folders here
-                                        setTestSuite((prev: any) => {
-                                          if (!prev) return prev;
-                                          const folders = (prev.folders || []).map((f: any) => ({
-                                            ...f,
-                                            test_case_ids: (f.test_case_ids || []).filter((id: string) => id !== testId),
-                                          }));
-                                          if (folderId && folderId !== "__none__") {
-                                            const idx = folders.findIndex((f: any) => f.id === folderId);
-                                            if (idx >= 0) {
-                                              folders[idx] = { ...folders[idx], test_case_ids: [...(folders[idx].test_case_ids || []), testId] };
-                                            }
-                                          }
-                                          return { ...prev, folders };
-                                        });
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs w-full">
-                                        <SelectValue placeholder="Uncategorized" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__none__">Uncategorized</SelectItem>
-                                        {(testSuite?.folders || []).map((f: any) => (
-                                          <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    {(() => {
+                                      const result = executionResults?.results?.find?.((r: any) => 
+                                        r.test_id === testId || r.test_case_id === testId || r.name === (testCase.name || testCase.test_name)
+                                      );
+                                      if (!result) return <span className="text-xs text-muted-foreground">--</span>;
+                                      return (
+                                        <Badge variant={result.status === 'passed' ? 'default' : 'destructive'} className="text-[10px]">
+                                          {result.status === 'passed' ? 'Pass' : 'Fail'}
+                                        </Badge>
+                                      );
+                                    })()}
                                   </TableCell>
                                   <TableCell>
                                     <Button
@@ -4270,9 +4068,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                               test_cases: testCases,
                             },
                             execution_config: {
-                              mode: executionMode,
-                              parallel: executionMode === 'automated',
-                              max_workers: 5,
+                              mode: 'manual',
+                              parallel: false,
+                              max_workers: 1,
                             },
                           }),
                         });
@@ -4300,44 +4098,22 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   </Button>
                 );
               })()}
-              {/* Action Buttons Row */}
-              <div className="flex gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={() => setShowCreateTest(true)}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Create Custom Test
-                </Button>
-                {testSuite?.test_cases?.length > 0 && (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handleSaveToTestCases}
-                      disabled={savingToTests}
-                    >
-                      {savingToTests ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 mr-1" />
-                      )}
-                      {selectedTestCases.size > 0 
-                        ? `Save ${selectedTestCases.size} to Test Cases`
-                        : "Save All to Test Cases"
-                      }
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
-                      <Download className="w-4 h-4 mr-1" />
-                      Export to Postman
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
-                      <Download className="w-4 h-4 mr-1" />
-                      Export to HAR
-                    </Button>
-                  </>
-                )}
-              </div>
+              {/* Export row */}
+              {testSuite?.test_cases?.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export Postman
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
+                    <Download className="w-4 h-4 mr-1" />
+                    Export HAR
+                  </Button>
+                </div>
+              )}
 
-              {/* Create Custom Test Dialog */}
-              <Dialog open={showCreateTest} onOpenChange={setShowCreateTest}>
+              {/* Create Custom Test Dialog - removed from simplified Execute */}
+              {false && <Dialog open={showCreateTest} onOpenChange={setShowCreateTest}>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Create Custom API Test Case</DialogTitle>
@@ -4420,7 +4196,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     </Button>
                   </DialogFooter>
                 </DialogContent>
-              </Dialog>
+              </Dialog>}
               {!selectedEnvironment && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -4434,7 +4210,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
-        {/* Security Tab - OWASP API Security Testing */}
+        {/* Security Tab - OWASP API Security Testing (hidden - tab trigger removed) */}
         <TabsContent value="security" className="space-y-4">
           <Alert className="bg-red-500/10 border-red-500/30">
             <Shield className="h-4 w-4 text-red-500" />

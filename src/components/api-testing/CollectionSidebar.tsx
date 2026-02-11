@@ -25,10 +25,13 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle
+} from '@/components/ui/dialog';
+import {
   PanelLeftClose, PanelLeftOpen, FolderOpen, Folder, FolderPlus,
   Link2, Plus, Search, Loader2, MoreHorizontal, ChevronRight,
   ChevronDown, Trash2, Copy, Edit3, ArrowRight, FileText,
-  Layers, RefreshCw, Download, Upload, AlertCircle, CheckCircle2,
+  Layers, RefreshCw, Download, AlertCircle, CheckCircle2,
   Play, PlayCircle
 } from 'lucide-react';
 import {
@@ -65,17 +68,32 @@ MethodBadge.displayName = 'MethodBadge';
 interface RequestItemProps {
   request: ApiRequest;
   isSelected: boolean;
+  isDragging?: boolean;
+  isDropTarget?: boolean;
   onClick: (id: string) => void;
   onContextAction: (action: string, id: string) => void;
+  onDragStart?: (e: React.DragEvent, id: string) => void;
+  onDragOver?: (e: React.DragEvent, id: string) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent, id: string, folderId: string | null) => void;
+  onDragEnd?: () => void;
 }
 
-const RequestItem = memo(({ request, isSelected, onClick, onContextAction }: RequestItemProps) => {
+const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, onClick, onContextAction, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: RequestItemProps) => {
   const label = request.name || `${request.method} ${request.path || request.url || '/'}`;
   const endpointPath = request.path || request.url || '';
   const showPath = request.name && endpointPath && endpointPath !== request.name;
   
   return (
-    <div className="group relative">
+    <div
+      className={`group relative ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'border-t-2 border-primary' : ''}`}
+      draggable
+      onDragStart={(e) => onDragStart?.(e, request.id)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.(e, request.id); }}
+      onDragLeave={() => onDragLeave?.()}
+      onDrop={(e) => onDrop?.(e, request.id, request.folder_id)}
+      onDragEnd={() => onDragEnd?.()}
+    >
       <button
         type="button"
         className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs transition-colors ${
@@ -144,21 +162,37 @@ interface FolderNodeProps {
   onRequestContextAction: (action: string, id: string) => void;
   onFolderAction: (action: string, id: string) => void;
   depth: number;
+  dropTargetId?: string | null;
+  dragRequestId?: string | null;
+  onDragStart?: (e: React.DragEvent, id: string) => void;
+  onDragOver?: (e: React.DragEvent, id: string) => void;
+  onDragLeave?: () => void;
+  onDropOnFolder?: (e: React.DragEvent, folderId: string | null) => void;
+  onDropReorder?: (e: React.DragEvent, targetId: string, folderId: string | null) => void;
+  onDragEnd?: () => void;
 }
 
 const FolderNode = memo(({
   folder, requests, allFolders, selectedRequestId, expandedFolders,
-  onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction, depth
+  onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction, depth,
+  dropTargetId, dragRequestId, onDragStart, onDragOver, onDragLeave, onDropOnFolder, onDropReorder, onDragEnd
 }: FolderNodeProps) => {
   const isExpanded = expandedFolders.has(folder.id);
-  const folderRequests = requests.filter(r => r.folder_id === folder.id);
+  const folderRequests = requests.filter(r => r.folder_id === folder.id)
+    .sort((a, b) => a.sort_order - b.sort_order);
   const childFolders = allFolders.filter(f => f.parent_folder_id === folder.id);
   const totalCount = folderRequests.length + childFolders.reduce((sum, cf) => 
     sum + requests.filter(r => r.folder_id === cf.id).length, 0);
+  const isFolderDropTarget = dropTargetId === `folder_${folder.id}`;
   
   return (
     <div className={depth > 0 ? 'pl-2 border-l border-border ml-1.5' : ''}>
-      <div className="group flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 cursor-pointer">
+      <div
+        className={`group flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 cursor-pointer ${isFolderDropTarget ? 'bg-primary/10 ring-1 ring-primary/40' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); onDragOver?.(e, `folder_${folder.id}`); }}
+        onDragLeave={() => onDragLeave?.()}
+        onDrop={(e) => { e.stopPropagation(); onDropOnFolder?.(e, folder.id); }}
+      >
         <button
           type="button"
           className="flex items-center gap-1.5 flex-1 min-w-0"
@@ -219,6 +253,14 @@ const FolderNode = memo(({
               onRequestContextAction={onRequestContextAction}
               onFolderAction={onFolderAction}
               depth={depth + 1}
+              dropTargetId={dropTargetId}
+              dragRequestId={dragRequestId}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDropOnFolder={onDropOnFolder}
+              onDropReorder={onDropReorder}
+              onDragEnd={onDragEnd}
             />
           ))}
           {/* Then requests */}
@@ -227,8 +269,15 @@ const FolderNode = memo(({
               key={req.id}
               request={req}
               isSelected={selectedRequestId === req.id}
+              isDragging={dragRequestId === req.id}
+              isDropTarget={dropTargetId === req.id}
               onClick={onRequestClick}
               onContextAction={onRequestContextAction}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDropReorder}
+              onDragEnd={onDragEnd}
             />
           ))}
           {folderRequests.length === 0 && childFolders.length === 0 && (
@@ -355,22 +404,56 @@ const WorkspaceCollectionSwitcher = memo(() => {
   const switchWorkspace = useApiTestingStore(s => s.switchWorkspace);
   const switchCollection = useApiTestingStore(s => s.switchCollection);
   const createCollection = useApiTestingStore(s => s.createCollection);
+  const updateCollection = useApiTestingStore(s => s.updateCollection);
+  const deleteCollection = useApiTestingStore(s => s.deleteCollection);
+  
+  const [renamingCollId, setRenamingCollId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const collRenameRef = useRef<HTMLInputElement>(null);
   
   const wsCollections = useMemo(() => {
-    // Show all collections when workspace is not set, or match workspace
     return Object.values(collections).filter(c => 
       !activeWsId || !c.workspace_id || c.workspace_id === activeWsId
     );
   }, [collections, activeWsId]);
   
   const handleNewCollection = useCallback(async () => {
+    // Prompt-style: create then immediately rename
     try {
-      const coll = await createCollection({ name: 'New Collection' });
-      if (coll?.id) switchCollection(coll.id);
+      const name = `Collection ${wsCollections.length + 1}`;
+      const coll = await createCollection({ name });
+      if (coll?.id) {
+        switchCollection(coll.id);
+        // Open rename inline
+        setRenamingCollId(coll.id);
+        setRenameValue(name);
+        setTimeout(() => collRenameRef.current?.focus(), 100);
+      }
     } catch (err) {
       console.error('[CollectionSidebar] Failed to create collection:', err);
     }
-  }, [createCollection, switchCollection]);
+  }, [createCollection, switchCollection, wsCollections.length]);
+
+  const handleRenameSubmit = useCallback(() => {
+    if (renamingCollId && renameValue.trim()) {
+      updateCollection(renamingCollId, { name: renameValue.trim() });
+    }
+    setRenamingCollId(null);
+    setRenameValue('');
+  }, [renamingCollId, renameValue, updateCollection]);
+
+  const handleDeleteCollection = useCallback(async (collId: string) => {
+    const coll = collections[collId];
+    if (!coll) return;
+    const confirmed = window.confirm(`Delete collection "${coll.name}"? This cannot be undone.`);
+    if (!confirmed) return;
+    await deleteCollection(collId);
+    // Switch to another collection if available
+    const remaining = Object.values(collections).filter(c => c.id !== collId);
+    if (remaining.length > 0) {
+      switchCollection(remaining[0].id);
+    }
+  }, [collections, deleteCollection, switchCollection]);
   
   return (
     <div className="space-y-1.5 px-2 pt-2">
@@ -391,7 +474,7 @@ const WorkspaceCollectionSwitcher = memo(() => {
         </Select>
       )}
       
-      {/* Collection selector (always visible) */}
+      {/* Collection selector with rename/delete */}
       <div className="flex items-center gap-1">
         <Select value={activeCollId || ''} onValueChange={switchCollection}>
           <SelectTrigger className="h-7 text-xs flex-1">
@@ -406,16 +489,60 @@ const WorkspaceCollectionSwitcher = memo(() => {
             ))}
           </SelectContent>
         </Select>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 shrink-0"
-          onClick={handleNewCollection}
-          title="New collection"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </Button>
+        
+        {/* Collection actions: rename, delete, new */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0">
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={handleNewCollection}>
+              <Plus className="w-3.5 h-3.5 mr-2" /> New Collection
+            </DropdownMenuItem>
+            {activeCollId && (
+              <>
+                <DropdownMenuItem onClick={() => {
+                  const coll = collections[activeCollId];
+                  if (coll) {
+                    setRenamingCollId(activeCollId);
+                    setRenameValue(coll.name);
+                    setTimeout(() => collRenameRef.current?.focus(), 100);
+                  }
+                }}>
+                  <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => handleDeleteCollection(activeCollId)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete Collection
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      
+      {/* Inline rename input */}
+      {renamingCollId && (
+        <div className="flex gap-1">
+          <Input
+            ref={collRenameRef}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRenameSubmit();
+              if (e.key === 'Escape') { setRenamingCollId(null); setRenameValue(''); }
+            }}
+            onBlur={handleRenameSubmit}
+            className="h-7 text-xs"
+            placeholder="Collection name"
+          />
+        </div>
+      )}
     </div>
   );
 });
@@ -447,14 +574,18 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const renameFolder = useApiTestingStore(s => s.renameFolder);
   const deleteFolder = useApiTestingStore(s => s.deleteFolder);
   const addRequest = useApiTestingStore(s => s.addRequest);
+  const moveRequest = useApiTestingStore(s => s.moveRequest);
+  const reorderRequest = useApiTestingStore(s => s.reorderRequest);
   const createCollection = useApiTestingStore(s => s.createCollection);
   const switchCollection = useApiTestingStore(s => s.switchCollection);
-  const importCollection = useApiTestingStore(s => s.importCollection);
   
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  const [moveDialogRequestId, setMoveDialogRequestId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const importFileRef = useRef<HTMLInputElement>(null);
+  // Drag-and-drop state
+  const [dragRequestId, setDragRequestId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   // Resizable sidebar width
   const SIDEBAR_MIN = 220;
@@ -520,190 +651,6 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     }
   }, [createCollection, switchCollection, addRequest, openRequestInBuilder]);
   
-  // Handler: "Import" button — open file picker to import Postman/OpenAPI collection JSON
-  const handleImportClick = useCallback(() => {
-    importFileRef.current?.click();
-  }, []);
-  
-  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    try {
-      const text = await file.text();
-      const json = JSON.parse(text);
-      
-      // Detect format and build import payload
-      let payload: any;
-      let name = file.name.replace(/\.(json|yaml|yml)$/i, '');
-      
-      if (json.info && json.item) {
-        // Postman Collection v2.1 format
-        name = json.info?.name || name;
-        
-        // Extract base_url from Postman collection variables (e.g. {{base_url}})
-        const postmanVars: any[] = json.variable || [];
-        const baseUrlVar = postmanVars.find((v: any) => v.key === 'base_url' || v.key === 'baseUrl' || v.key === 'BASE_URL');
-        const collectionBaseUrl = baseUrlVar?.value || '';
-        
-        const extractRequests = (items: any[]): any[] => {
-          const reqs: any[] = [];
-          for (const item of items) {
-            if (item.item) {
-              // Folder — recurse
-              reqs.push(...extractRequests(item.item));
-            } else if (item.request) {
-              const r = item.request;
-              // Get the raw URL and resolve {{base_url}} if we have a value
-              let rawUrl = typeof r === 'string' ? r : (typeof r.url === 'string' ? r.url : r.url?.raw || '');
-              if (collectionBaseUrl) {
-                rawUrl = rawUrl.replace(/\{\{base_url\}\}/gi, collectionBaseUrl);
-              }
-              const pathStr = typeof r.url === 'object' ? '/' + (r.url.path || []).join('/') : '';
-              reqs.push({
-                name: item.name || 'Untitled',
-                method: (typeof r === 'string' ? 'GET' : r.method) || 'GET',
-                endpoint: rawUrl,
-                path: pathStr,
-                description: r.description || '',
-                // Pass request body/headers for richer import
-                request: {
-                  headers: Array.isArray(r.header) 
-                    ? r.header.reduce((acc: any, h: any) => { if (h.key) acc[h.key] = h.value; return acc; }, {})
-                    : {},
-                  body: r.body?.raw ? (() => { try { return JSON.parse(r.body.raw); } catch { return r.body.raw; } })() : undefined,
-                },
-              });
-            }
-          }
-          return reqs;
-        };
-        payload = { test_cases: extractRequests(json.item || []), base_url: collectionBaseUrl };
-      } else if (json.openapi || json.swagger) {
-        // OpenAPI/Swagger format
-        name = json.info?.title || name;
-        
-        // Extract base_url from OpenAPI servers or Swagger host+basePath
-        let openApiBaseUrl = '';
-        if (json.servers && json.servers.length > 0) {
-          openApiBaseUrl = json.servers[0].url || '';
-        } else if (json.host) {
-          // Swagger 2.0 format
-          const scheme = (json.schemes || ['https'])[0];
-          openApiBaseUrl = `${scheme}://${json.host}${json.basePath || ''}`;
-        }
-        
-        const paths = json.paths || {};
-        const testCases: any[] = [];
-        for (const [path, methods] of Object.entries(paths)) {
-          for (const [method, details] of Object.entries(methods as Record<string, any>)) {
-            if (['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].includes(method)) {
-              testCases.push({
-                name: details.summary || details.operationId || `${method.toUpperCase()} ${path}`,
-                method: method.toUpperCase(),
-                endpoint: path,
-                path: path,
-                description: details.description || '',
-              });
-            }
-          }
-        }
-        payload = { test_cases: testCases, base_url: openApiBaseUrl };
-      } else if (json.test_cases || json.requests) {
-        // Native QAOne format
-        payload = json;
-      } else if (Array.isArray(json)) {
-        // Array of requests
-        payload = { test_cases: json };
-      } else {
-        // Try as single collection object
-        payload = { test_cases: json.test_cases || json.requests || [] };
-      }
-      
-      // Try backend pipeline to auto-generate comprehensive tests (Happy Path, Missing Required, etc.)
-      let enhancedPayload = payload;
-      try {
-        // Determine spec format for backend
-        const specFormat = (json.info && json.item) ? 'postman' 
-          : (json.openapi || json.swagger) ? 'openapi' 
-          : null;
-        
-        if (specFormat) {
-          // Step 1: Parse spec via backend
-          const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ spec_content: text, spec_format: specFormat, content_type: 'json' }),
-          });
-          
-          if (parseRes.ok) {
-            const parseData = await parseRes.json();
-            
-            // Step 2: Generate comprehensive test suite
-            const genRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                api_spec: parseData.parsed_spec,
-                spec_format: specFormat,
-                protocol: 'REST',
-                test_options: {},
-              }),
-            });
-            
-            if (genRes.ok) {
-              const genData = await genRes.json();
-              const suite = genData.test_suite;
-              
-              if (suite?.test_cases?.length) {
-                // Merge auto-generated test cases with base_url
-                const allTestCases = suite.test_cases || [];
-                
-                // Also gather categorized test cases if available
-                if (suite.test_categories && typeof suite.test_categories === 'object') {
-                  const seenIds = new Set(allTestCases.map((tc: any) => tc.test_case_id || tc.title || tc.name));
-                  for (const catTests of Object.values(suite.test_categories) as any[][]) {
-                    for (const tc of (catTests || [])) {
-                      const tcId = tc.test_case_id || tc.title || tc.name;
-                      if (!seenIds.has(tcId)) {
-                        allTestCases.push(tc);
-                        seenIds.add(tcId);
-                      }
-                    }
-                  }
-                }
-                
-                enhancedPayload = {
-                  ...payload,
-                  test_cases: allTestCases,
-                  base_url: payload.base_url || suite.base_url || '',
-                  // Create folders from categories if available
-                  folders: suite.test_categories ? Object.keys(suite.test_categories).map((cat: string, idx: number) => ({
-                    id: `folder_${cat}_${Date.now()}`,
-                    name: cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' '),
-                    test_case_ids: ((suite.test_categories as any)[cat] || []).map((tc: any) => tc.test_case_id || tc.title || tc.name),
-                  })) : [],
-                };
-                console.log(`[CollectionSidebar] Auto-generated ${allTestCases.length} test cases from ${specFormat} spec`);
-              }
-            }
-          }
-        }
-      } catch (genErr) {
-        console.warn('[CollectionSidebar] Backend auto-generation failed, using client-side import:', genErr);
-        // Fall back to basic client-side payload (already set)
-      }
-      
-      // Import into store (enhanced or basic)
-      await importCollection(enhancedPayload, name);
-    } catch (err) {
-      console.error('[CollectionSidebar] Import failed:', err);
-    }
-    
-    // Reset file input so the same file can be re-imported
-    if (importFileRef.current) importFileRef.current.value = '';
-  }, [importCollection]);
-  
   // Memoized endpoint grouping
   const endpointGroups = useMemo(() => {
     if (!collection) return [];
@@ -759,9 +706,63 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
       case 'edit': openRequestInBuilder(requestId); break;
       case 'duplicate': duplicateRequest(requestId); break;
       case 'delete': deleteRequest(requestId); break;
-      case 'move': /* TODO: show move dialog */ break;
+      case 'move': setMoveDialogRequestId(requestId); break;
     }
   }, [openRequestInBuilder, duplicateRequest, deleteRequest]);
+
+  // Drag-and-drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, requestId: string) => {
+    e.dataTransfer.setData('text/plain', requestId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragRequestId(requestId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetId(targetId);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTargetId(null);
+  }, []);
+
+  const handleDropOnFolder = useCallback((e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    const reqId = e.dataTransfer.getData('text/plain');
+    if (reqId) {
+      moveRequest(reqId, folderId);
+    }
+    setDragRequestId(null);
+    setDropTargetId(null);
+  }, [moveRequest]);
+
+  const handleDropReorder = useCallback((e: React.DragEvent, targetRequestId: string, folderId: string | null) => {
+    e.preventDefault();
+    const reqId = e.dataTransfer.getData('text/plain');
+    if (!reqId || reqId === targetRequestId) {
+      setDragRequestId(null);
+      setDropTargetId(null);
+      return;
+    }
+    // Find the target index in the scope
+    const coll = collection;
+    if (!coll) return;
+    const scopeRequests = coll.requests
+      .filter(r => r.folder_id === folderId)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const targetIdx = scopeRequests.findIndex(r => r.id === targetRequestId);
+    if (targetIdx >= 0) {
+      reorderRequest(reqId, targetIdx, folderId);
+    }
+    setDragRequestId(null);
+    setDropTargetId(null);
+  }, [collection, reorderRequest]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragRequestId(null);
+    setDropTargetId(null);
+  }, []);
   
   // Add a new test case pre-filled with the endpoint's method/path and open in builder
   const handleAddTestCase = useCallback((method: string, path: string) => {
@@ -785,13 +786,10 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     const envId = store.active_environment_id;
     const collId = store.active_collection_id;
     if (!collId || requestIds.length === 0) return;
-    store.createTestRun(`Endpoint run ${new Date().toLocaleTimeString()}`, requestIds, envId || undefined);
-    // executeTestRun will be called via the Runs/Tests tab
-    const runs = useApiTestingStore.getState().test_runs;
-    const latestRun = runs[runs.length - 1];
-    if (latestRun) {
-      store.executeTestRun(latestRun.id);
-    }
+    store.createTestRun(`Endpoint run ${new Date().toLocaleTimeString()}`, requestIds, envId || undefined)
+      .then((createdRun) => {
+        if (createdRun) store.executeTestRun(createdRun.id);
+      });
   }, []);
   
   const handleFolderAction = useCallback((action: string, folderId: string) => {
@@ -893,24 +891,16 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
               ) : !collection || (totalRequests === 0 && rootFolders.length === 0) ? (
                 <div className="px-2 py-4 space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    No requests yet. Import a collection or add requests from Builder.
+                    No requests yet. Use the Import tab to import a collection, or add requests from Builder.
                   </p>
                   <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleImportClick}>
-                      <Upload className="w-3 h-3 mr-1" /> Import
-                    </Button>
                     <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleNewRequest}>
-                      <Plus className="w-3 h-3 mr-1" /> New
+                      <Plus className="w-3 h-3 mr-1" /> New Request
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={handleCreateFolder}>
+                      <FolderPlus className="w-3 h-3 mr-1" /> New Folder
                     </Button>
                   </div>
-                  {/* Hidden file input for import */}
-                  <input
-                    ref={importFileRef}
-                    type="file"
-                    accept=".json,.yaml,.yml"
-                    className="hidden"
-                    onChange={handleImportFile}
-                  />
                 </div>
               ) : (
                 <>
@@ -985,6 +975,14 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             onRequestContextAction={handleRequestContextAction}
                             onFolderAction={handleFolderAction}
                             depth={0}
+                            dropTargetId={dropTargetId}
+                            dragRequestId={dragRequestId}
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDropOnFolder={handleDropOnFolder}
+                            onDropReorder={handleDropReorder}
+                            onDragEnd={handleDragEnd}
                           />
                         ))}
                       </div>
@@ -993,7 +991,12 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                   
                   {/* Endpoints section (unfiled requests grouped by endpoint) */}
                   {endpointGroups.length > 0 && (
-                    <div className={rootFolders.length > 0 ? 'pt-2 border-t border-border mt-1' : 'pt-1'}>
+                    <div
+                      className={`${rootFolders.length > 0 ? 'pt-2 border-t border-border mt-1' : 'pt-1'} ${dropTargetId === 'root' ? 'bg-primary/5 ring-1 ring-primary/30 rounded' : ''}`}
+                      onDragOver={(e) => { e.preventDefault(); handleDragOver(e, 'root'); }}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDropOnFolder(e, null)}
+                    >
                       <div className="flex items-center justify-between px-2 py-1">
                         <div className="flex items-center gap-1.5 text-muted-foreground">
                           <Link2 className="w-3.5 h-3.5 shrink-0" />
@@ -1052,10 +1055,8 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                     `${collection.name} - Full Run`,
                     allIds,
                     store.active_environment_id || undefined
-                  ).then(() => {
-                    const runs = useApiTestingStore.getState().test_runs;
-                    const latestRun = runs[runs.length - 1];
-                    if (latestRun) store.executeTestRun(latestRun.id);
+                  ).then((createdRun) => {
+                    if (createdRun) store.executeTestRun(createdRun.id);
                   });
                 }}
               >
@@ -1071,6 +1072,49 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
           )}
         </>
       )}
+
+      {/* Move to folder dialog */}
+      <Dialog open={!!moveDialogRequestId} onOpenChange={(open) => { if (!open) setMoveDialogRequestId(null); }}>
+        <DialogContent className="sm:max-w-[340px]">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Move to Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-60 overflow-y-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-xs h-8"
+              onClick={() => {
+                if (moveDialogRequestId) moveRequest(moveDialogRequestId, null);
+                setMoveDialogRequestId(null);
+              }}
+            >
+              <FolderOpen className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+              Root (unfiled)
+            </Button>
+            {(collection?.folders || []).map(f => (
+              <Button
+                key={f.id}
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-xs h-8"
+                onClick={() => {
+                  if (moveDialogRequestId) moveRequest(moveDialogRequestId, f.id);
+                  setMoveDialogRequestId(null);
+                }}
+              >
+                <Folder className="w-3.5 h-3.5 mr-2 text-amber-500/70" />
+                {f.name}
+              </Button>
+            ))}
+            {(!collection?.folders || collection.folders.length === 0) && (
+              <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                No folders yet. Create one first.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Resize drag handle on right edge */}
       {sidebar.open && (

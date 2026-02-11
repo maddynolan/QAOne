@@ -329,6 +329,7 @@ interface ApiTestingActions {
   updateRequest: (requestId: string, updates: Partial<ApiRequest>) => void;
   deleteRequest: (requestId: string) => void;
   moveRequest: (requestId: string, targetFolderId: string | null) => void;
+  reorderRequest: (requestId: string, newIndex: number, folderId?: string | null) => void;
   duplicateRequest: (requestId: string) => string;
   openRequestInBuilder: (requestId: string) => void;
   
@@ -980,6 +981,38 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 const targetFolder = coll.folders.find(f => f.id === targetFolderId);
                 if (targetFolder) targetFolder.request_ids.push(requestId);
               }
+              
+              coll.updated_at = nowISO();
+            });
+            
+            get()._debouncedSaveCollection(collId);
+          },
+          
+          reorderRequest: (requestId, newIndex, folderId) => {
+            const collId = get().active_collection_id;
+            if (!collId) return;
+            
+            set((s) => {
+              const coll = s.collections[collId];
+              if (!coll) return;
+              
+              // Get requests in the same scope (same folder or root)
+              const scopeRequests = coll.requests
+                .filter(r => folderId !== undefined ? r.folder_id === folderId : r.folder_id === null)
+                .sort((a, b) => a.sort_order - b.sort_order);
+              
+              const oldIdx = scopeRequests.findIndex(r => r.id === requestId);
+              if (oldIdx < 0 || oldIdx === newIndex) return;
+              
+              // Remove from old position and insert at new
+              const [moved] = scopeRequests.splice(oldIdx, 1);
+              scopeRequests.splice(newIndex, 0, moved);
+              
+              // Re-assign sort_order
+              scopeRequests.forEach((r, idx) => {
+                const req = coll.requests.find(cr => cr.id === r.id);
+                if (req) req.sort_order = idx;
+              });
               
               coll.updated_at = nowISO();
             });
