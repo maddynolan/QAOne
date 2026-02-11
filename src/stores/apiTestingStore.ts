@@ -655,11 +655,23 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               
               set((s) => {
                 for (const c of colls) {
-                  s.collections[c.id] = c;
+                  // Only overwrite if backend version is newer or local version doesn't exist
+                  const existing = s.collections[c.id];
+                  if (!existing) {
+                    s.collections[c.id] = c;
+                  } else {
+                    // Compare timestamps - keep the newer version
+                    const backendTime = new Date(c.updated_at || 0).getTime();
+                    const localTime = new Date(existing.updated_at || 0).getTime();
+                    if (backendTime >= localTime) {
+                      s.collections[c.id] = c;
+                    }
+                    // else: local version is newer (e.g. recent delete/add), keep it
+                  }
                 }
                 // If active_collection_id is unset or points to a non-existent collection, pick the first one
                 const currentActive = s.active_collection_id;
-                const activeExists = currentActive && colls.some(c => c.id === currentActive);
+                const activeExists = currentActive && (s.collections[currentActive] != null || colls.some(c => c.id === currentActive));
                 if (!activeExists && colls.length > 0) {
                   s.active_collection_id = colls[0].id;
                 }
@@ -788,7 +800,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               s.sidebar.expanded_folders.add(folder.id);
             });
             
-            get()._debouncedSaveCollection(collId);
+            // Save immediately so new folders persist
+            get()._saveCollectionNow(collId);
           },
           
           renameFolder: (folderId, newName) => {
@@ -837,7 +850,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               s.sidebar.expanded_folders.delete(folderId);
             });
             
-            get()._debouncedSaveCollection(collId);
+            // Save IMMEDIATELY on delete so deletions persist through refresh
+            get()._saveCollectionNow(collId);
           },
           
           moveFolder: (folderId, newParentId) => {
@@ -914,7 +928,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               coll.updated_at = nowISO();
             });
             
-            get()._debouncedSaveCollection(collId);
+            // Save immediately so new requests persist through refresh
+            get()._saveCollectionNow(collId);
             return id;
           },
           
@@ -956,7 +971,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               }
             });
             
-            get()._debouncedSaveCollection(collId);
+            // Save IMMEDIATELY on delete (not debounced) so deletions persist through refresh
+            get()._saveCollectionNow(collId);
           },
           
           moveRequest: (requestId, targetFolderId) => {
@@ -985,7 +1001,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               coll.updated_at = nowISO();
             });
             
-            get()._debouncedSaveCollection(collId);
+            // Save immediately so move persists
+            get()._saveCollectionNow(collId);
           },
           
           reorderRequest: (requestId, newIndex, folderId) => {
@@ -1551,7 +1568,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                     error: result.error || null,
                   }));
                 }
-                s.execution_results = rawResp;
+                // Store the UNWRAPPED execution results (not the full response wrapper)
+                // so the Results tab can directly access .summary, .test_results, etc.
+                s.execution_results = execResults;
                 s.executing = false;
               });
               

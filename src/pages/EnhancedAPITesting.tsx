@@ -397,13 +397,11 @@ export default function EnhancedAPITesting() {
     // Subscribe to store changes for sidebar → builder interactions
     const unsub = useApiTestingStore.subscribe(
       (state, prevState) => {
-        // When a request is opened in builder (sidebar click)
+        // When a request is opened in builder (sidebar click or openRequestInBuilder)
+        // ALWAYS switch to builder tab when builder_initial_data changes
         if (state.builder_initial_data && state.builder_initial_data !== prevState?.builder_initial_data) {
           setBuilderInitialRequest(state.builder_initial_data);
-        }
-        // When the store requests a tab switch (e.g. openRequestInBuilder sets active_tab)
-        if (state.active_tab && state.active_tab !== prevState?.active_tab) {
-          setActiveTab(state.active_tab);
+          setActiveTab("builder");
         }
         // When store execution completes, route results to the Results tab
         if (state.execution_results && state.execution_results !== prevState?.execution_results && !state.executing) {
@@ -2383,7 +2381,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         </Card>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); useApiTestingStore.getState().setActiveTab(tab); }} className="space-y-4">
         <TabsList className="flex w-full bg-card border border-border p-1 overflow-x-auto">
           <TabsTrigger value="import" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Upload className="w-4 h-4 mr-1" />

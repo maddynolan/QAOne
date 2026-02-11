@@ -370,57 +370,73 @@ interface EndpointGroupProps {
   requests: ApiRequest[];
   selectedRequestId: string | null;
   isExpanded: boolean;
+  lastResultMap?: Record<string, RequestResultInfo>;
   onToggleExpand: (key: string) => void;
   onRequestClick: (id: string) => void;
   onRequestContextAction: (action: string, id: string) => void;
   onAddTestCase?: (method: string, path: string) => void;
   onRunEndpoint?: (requestIds: string[]) => void;
+  onRunRequest?: (id: string) => void;
+  onDragStart?: (e: React.DragEvent, id: string) => void;
+  onDragOver?: (e: React.DragEvent, id: string) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent, targetId: string, folderId: string | null) => void;
+  onDragEnd?: () => void;
+  dragRequestId?: string | null;
+  dropTargetId?: string | null;
 }
 
 const EndpointGroup = memo(({
-  endpointKey, requests, selectedRequestId, isExpanded,
+  endpointKey, requests, selectedRequestId, isExpanded, lastResultMap,
   onToggleExpand, onRequestClick, onRequestContextAction,
-  onAddTestCase, onRunEndpoint
+  onAddTestCase, onRunEndpoint, onRunRequest,
+  onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
+  dragRequestId, dropTargetId
 }: EndpointGroupProps) => {
   const [method, ...pathParts] = endpointKey.split(' ');
   const path = pathParts.join(' ') || '/';
   
-  // If only 1 request, clicking the row opens it directly in builder
-  const handleClick = () => {
-    onToggleExpand(endpointKey);
-    if (requests.length === 1) {
-      onRequestClick(requests[0].id);
-    }
-  };
+  // For single-request endpoints, render a RequestItem directly with full context menu
+  if (requests.length === 1) {
+    return (
+      <RequestItem
+        key={requests[0].id}
+        request={requests[0]}
+        isSelected={selectedRequestId === requests[0].id}
+        isDragging={dragRequestId === requests[0].id}
+        isDropTarget={dropTargetId === requests[0].id}
+        lastResult={lastResultMap?.[requests[0].id] || null}
+        onClick={onRequestClick}
+        onContextAction={onRequestContextAction}
+        onRun={onRunRequest}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
+      />
+    );
+  }
   
+  // Multi-request endpoint group with expand/collapse
   return (
     <div>
       <div className="group/endpoint relative">
         <button
           type="button"
-          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors ${
-            requests.length === 1 && selectedRequestId === requests[0]?.id 
-              ? 'bg-primary/10 text-primary border border-primary/20' 
-              : ''
-          }`}
-          onClick={handleClick}
+          className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors"
+          onClick={() => onToggleExpand(endpointKey)}
         >
-          {requests.length > 1 ? (
-            isExpanded ? (
-              <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
-            ) : (
-              <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
-            )
+          {isExpanded ? (
+            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
           ) : (
-            <span className="w-3 h-3 shrink-0" /> 
+            <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
           )}
           <MethodBadge method={method} />
           <span className="text-xs font-medium truncate font-mono flex-1 text-left">{path}</span>
-          {requests.length > 1 && (
-            <span className="text-[10px] text-muted-foreground shrink-0 group-hover/endpoint:hidden">({requests.length})</span>
-          )}
+          <span className="text-[10px] text-muted-foreground shrink-0 group-hover/endpoint:hidden">({requests.length})</span>
         </button>
-        {/* Hover actions: Add test case + Run endpoint */}
+        {/* Hover actions: Run all + Add test case */}
         <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover/endpoint:flex items-center gap-0.5">
           {onRunEndpoint && (
             <button
@@ -445,15 +461,24 @@ const EndpointGroup = memo(({
         </div>
       </div>
       
-      {isExpanded && requests.length > 1 && (
+      {isExpanded && (
         <div className="pl-5 border-l border-border ml-2.5 space-y-0.5">
           {requests.map(req => (
             <RequestItem
               key={req.id}
               request={req}
               isSelected={selectedRequestId === req.id}
+              isDragging={dragRequestId === req.id}
+              isDropTarget={dropTargetId === req.id}
+              lastResult={lastResultMap?.[req.id] || null}
               onClick={onRequestClick}
               onContextAction={onRequestContextAction}
+              onRun={onRunRequest}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onDragEnd={onDragEnd}
             />
           ))}
         </div>
@@ -1137,11 +1162,20 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             requests={requests}
                             selectedRequestId={sidebar.selected_request_id}
                             isExpanded={sidebar.expanded_endpoints.has(endpointKey)}
+                            lastResultMap={lastResultMap}
                             onToggleExpand={toggleEndpointExpanded}
                             onRequestClick={handleRequestClick}
                             onRequestContextAction={handleRequestContextAction}
                             onAddTestCase={handleAddTestCase}
                             onRunEndpoint={handleRunEndpoint}
+                            onRunRequest={handleRunRequest}
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDropReorder}
+                            onDragEnd={handleDragEnd}
+                            dragRequestId={dragRequestId}
+                            dropTargetId={dropTargetId}
                           />
                         ))}
                       </div>
