@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { useMobileTestingStore, useFilteredFlows, useActiveFlow } from '@/stores/mobileTestingStore';
+import { useMobileTestingStore, computeFilteredFlows } from '@/stores/mobileTestingStore';
 import type { MobileTestFlow, FlowPriority, MobilePlatform } from '@/stores/mobileTestingStore';
 import { mobile, isElectron } from '@/lib/electron-bridge';
 import { toast } from 'sonner';
@@ -72,36 +72,42 @@ export default function MobileTestFlows() {
   const isDark = theme !== 'light';
   const inElectron = isElectron();
 
-  const {
-    flows,
-    folders,
-    activeFlowId,
-    flowSearchQuery,
-    flowFilterPlatform,
-    flowFilterPriority,
-    selectedPlatform,
-    selectedDevice,
-    maestroInstalled,
-    isRunningTest,
-    createFlow,
-    updateFlow,
-    deleteFlow,
-    duplicateFlow,
-    setActiveFlow,
-    setFlowSearch,
-    setFlowFilterPlatform,
-    setFlowFilterPriority,
-    createFolder,
-    deleteFolder,
-    toggleFolder,
-    setIsRunningTest,
-    addTestRun,
-    addStudioOutput,
-    clearStudioOutput,
-  } = useMobileTestingStore();
+  // Individual selectors to avoid re-render storms
+  const flows = useMobileTestingStore(s => s.flows);
+  const folders = useMobileTestingStore(s => s.folders);
+  const activeFlowId = useMobileTestingStore(s => s.activeFlowId);
+  const flowSearchQuery = useMobileTestingStore(s => s.flowSearchQuery);
+  const flowFilterPlatform = useMobileTestingStore(s => s.flowFilterPlatform);
+  const flowFilterPriority = useMobileTestingStore(s => s.flowFilterPriority);
+  const selectedPlatform = useMobileTestingStore(s => s.selectedPlatform);
+  const selectedDevice = useMobileTestingStore(s => s.selectedDevice);
+  const maestroInstalled = useMobileTestingStore(s => s.maestroInstalled);
+  const isRunningTest = useMobileTestingStore(s => s.isRunningTest);
+  const createFlow = useMobileTestingStore(s => s.createFlow);
+  const updateFlow = useMobileTestingStore(s => s.updateFlow);
+  const deleteFlow = useMobileTestingStore(s => s.deleteFlow);
+  const duplicateFlow = useMobileTestingStore(s => s.duplicateFlow);
+  const setActiveFlow = useMobileTestingStore(s => s.setActiveFlow);
+  const setFlowSearch = useMobileTestingStore(s => s.setFlowSearch);
+  const setFlowFilterPlatform = useMobileTestingStore(s => s.setFlowFilterPlatform);
+  const setFlowFilterPriority = useMobileTestingStore(s => s.setFlowFilterPriority);
+  const createFolder = useMobileTestingStore(s => s.createFolder);
+  const deleteFolder = useMobileTestingStore(s => s.deleteFolder);
+  const toggleFolder = useMobileTestingStore(s => s.toggleFolder);
+  const setIsRunningTest = useMobileTestingStore(s => s.setIsRunningTest);
+  const addTestRun = useMobileTestingStore(s => s.addTestRun);
+  const addStudioOutput = useMobileTestingStore(s => s.addStudioOutput);
+  const clearStudioOutput = useMobileTestingStore(s => s.clearStudioOutput);
 
-  const filteredFlows = useFilteredFlows();
-  const activeFlow = useActiveFlow();
+  // Compute filtered flows with useMemo — stable reference
+  const filteredFlows = useMemo(
+    () => computeFilteredFlows(flows, flowSearchQuery, flowFilterPlatform, flowFilterPriority, 'all'),
+    [flows, flowSearchQuery, flowFilterPlatform, flowFilterPriority]
+  );
+  const activeFlow = useMemo(
+    () => activeFlowId ? flows.find(f => f.id === activeFlowId) ?? null : null,
+    [flows, activeFlowId]
+  );
 
   const [isCreating, setIsCreating] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');

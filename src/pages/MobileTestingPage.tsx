@@ -11,11 +11,12 @@
  * 6. ADVANCED TOOLS - Deep links, push notifications, biometrics, network, geolocation
  */
 
-import React, { useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { useMobileTestingStore, useTestRunStats } from '@/stores/mobileTestingStore';
+import { useMobileTestingStore, computeTestRunStats } from '@/stores/mobileTestingStore';
+import { shallow } from 'zustand/shallow';
 import type { MobileTab } from '@/stores/mobileTestingStore';
 import {
   MobileTestStudio,
@@ -43,101 +44,69 @@ interface TabConfig {
   label: string;
   icon: React.FC<any>;
   description: string;
-  badge?: () => React.ReactNode;
 }
 
 export default function MobileTestingPage() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
 
-  const {
-    activeTab,
-    setActiveTab,
-    isStudioRunning,
-    flows,
-    testRuns,
-    isRunningTest,
-  } = useMobileTestingStore();
+  // Use individual selectors — NEVER destructure the whole store
+  const activeTab = useMobileTestingStore(s => s.activeTab);
+  const setActiveTab = useMobileTestingStore(s => s.setActiveTab);
+  const isStudioRunning = useMobileTestingStore(s => s.isStudioRunning);
+  const isRunningTest = useMobileTestingStore(s => s.isRunningTest);
+  const flowsCount = useMobileTestingStore(s => s.flows.length);
+  const testRuns = useMobileTestingStore(s => s.testRuns);
 
-  const stats = useTestRunStats();
+  // Compute stats with useMemo to avoid creating new objects on every render
+  const stats = useMemo(() => computeTestRunStats(testRuns), [testRuns]);
 
-  const tabs: TabConfig[] = [
-    {
-      id: 'studio',
-      label: 'Test Studio',
-      icon: Video,
-      description: 'Record & run native app tests',
-      badge: () => isStudioRunning ? (
-        <Badge className="text-[9px] h-4 bg-red-500 text-white animate-pulse ml-1">REC</Badge>
-      ) : isRunningTest ? (
-        <Badge className="text-[9px] h-4 bg-sky-500 text-white ml-1">Running</Badge>
-      ) : null,
-    },
-    {
-      id: 'flows',
-      label: 'Test Flows',
-      icon: FileCode,
-      description: 'Manage saved test flows',
-      badge: () => flows.length > 0 ? (
-        <Badge variant="outline" className="text-[9px] h-4 ml-1">{flows.length}</Badge>
-      ) : null,
-    },
-    {
-      id: 'device-lab',
-      label: 'Device Lab',
-      icon: Smartphone,
-      description: 'Manage devices & apps',
-    },
-    {
-      id: 'runs',
-      label: 'Test Runs',
-      icon: Activity,
-      description: 'Execution history & reports',
-      badge: () => testRuns.length > 0 ? (
-        <span className="flex items-center gap-1 ml-1.5">
-          {stats.passed > 0 && <span className="flex items-center text-emerald-500 text-[10px]"><CheckCircle2 className="w-3 h-3 mr-0.5" />{stats.passed}</span>}
-          {stats.failed > 0 && <span className="flex items-center text-red-500 text-[10px]"><XCircle className="w-3 h-3 mr-0.5" />{stats.failed}</span>}
-        </span>
-      ) : null,
-    },
-    {
-      id: 'inspector',
-      label: 'Inspector',
-      icon: Layers,
-      description: 'Element hierarchy & selectors',
-    },
-    {
-      id: 'tools',
-      label: 'Advanced Tools',
-      icon: Wrench,
-      description: 'Deep links, notifications & more',
-    },
-  ];
+  const tabs: TabConfig[] = useMemo(() => [
+    { id: 'studio' as const, label: 'Test Studio', icon: Video, description: 'Record & run native app tests' },
+    { id: 'flows' as const, label: 'Test Flows', icon: FileCode, description: 'Manage saved test flows' },
+    { id: 'device-lab' as const, label: 'Device Lab', icon: Smartphone, description: 'Manage devices & apps' },
+    { id: 'runs' as const, label: 'Test Runs', icon: Activity, description: 'Execution history & reports' },
+    { id: 'inspector' as const, label: 'Inspector', icon: Layers, description: 'Element hierarchy & selectors' },
+    { id: 'tools' as const, label: 'Advanced Tools', icon: Wrench, description: 'Deep links, notifications & more' },
+  ], []);
 
-  const renderTabContent = () => {
-    switch (activeTab) {
+  const renderBadge = useCallback((tabId: MobileTab) => {
+    switch (tabId) {
       case 'studio':
-        return <MobileTestStudio />;
+        if (isStudioRunning) return <Badge className="text-[9px] h-4 bg-red-500 text-white animate-pulse ml-1">REC</Badge>;
+        if (isRunningTest) return <Badge className="text-[9px] h-4 bg-sky-500 text-white ml-1">Running</Badge>;
+        return null;
       case 'flows':
-        return <MobileTestFlows />;
-      case 'device-lab':
-        return <MobileDeviceLab />;
+        return flowsCount > 0 ? <Badge variant="outline" className="text-[9px] h-4 ml-1">{flowsCount}</Badge> : null;
       case 'runs':
-        return <MobileTestRuns />;
-      case 'inspector':
-        return <MobileInspector />;
-      case 'tools':
-        return <MobileAdvancedTools />;
+        if (testRuns.length > 0) {
+          return (
+            <span className="flex items-center gap-1 ml-1.5">
+              {stats.passed > 0 && <span className="flex items-center text-emerald-500 text-[10px]"><CheckCircle2 className="w-3 h-3 mr-0.5" />{stats.passed}</span>}
+              {stats.failed > 0 && <span className="flex items-center text-red-500 text-[10px]"><XCircle className="w-3 h-3 mr-0.5" />{stats.failed}</span>}
+            </span>
+          );
+        }
+        return null;
       default:
-        return <MobileTestStudio />;
+        return null;
     }
-  };
+  }, [isStudioRunning, isRunningTest, flowsCount, testRuns.length, stats.passed, stats.failed]);
+
+  const renderTabContent = useCallback(() => {
+    switch (activeTab) {
+      case 'studio': return <MobileTestStudio />;
+      case 'flows': return <MobileTestFlows />;
+      case 'device-lab': return <MobileDeviceLab />;
+      case 'runs': return <MobileTestRuns />;
+      case 'inspector': return <MobileInspector />;
+      case 'tools': return <MobileAdvancedTools />;
+      default: return <MobileTestStudio />;
+    }
+  }, [activeTab]);
 
   return (
-    <div className={cn(
-      "min-h-screen",
-      isDark ? 'bg-gray-950' : 'bg-gray-50'
-    )}>
+    <div className={cn("min-h-screen", isDark ? 'bg-gray-950' : 'bg-gray-50')}>
       {/* Header */}
       <div className={cn(
         "border-b px-6 py-4",
@@ -145,10 +114,7 @@ export default function MobileTestingPage() {
       )}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-10 h-10 rounded-xl flex items-center justify-center",
-              "bg-gradient-to-br from-violet-500 to-purple-600"
-            )}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-violet-500 to-purple-600">
               <MonitorSmartphone className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -203,7 +169,7 @@ export default function MobileTestingPage() {
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
-                {tab.badge?.()}
+                {renderBadge(tab.id)}
               </button>
             );
           })}

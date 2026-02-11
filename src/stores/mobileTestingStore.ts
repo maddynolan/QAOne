@@ -15,6 +15,7 @@
 import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { shallow } from 'zustand/shallow';
 
 // ============================================================================
 // TYPES
@@ -621,14 +622,24 @@ export const useMobileTestingStore = create<MobileTestingState & MobileTestingAc
 );
 
 // ============================================================================
-// SELECTORS
+// SELECTORS (use shallow to prevent infinite re-render loops)
 // ============================================================================
 
-export const useFilteredFlows = () => useMobileTestingStore((state) => {
-  let filtered = [...state.flows];
+/**
+ * Pure function to compute filtered flows — use with useMemo in components.
+ * Do NOT call this inside a Zustand selector (creates new array = infinite loop).
+ */
+export function computeFilteredFlows(
+  flows: MobileTestFlow[],
+  searchQuery: string,
+  filterPlatform: string,
+  filterPriority: string,
+  filterStatus: string
+): MobileTestFlow[] {
+  let filtered = flows;
 
-  if (state.flowSearchQuery) {
-    const q = state.flowSearchQuery.toLowerCase();
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
     filtered = filtered.filter(f =>
       f.name.toLowerCase().includes(q) ||
       f.description.toLowerCase().includes(q) ||
@@ -636,33 +647,37 @@ export const useFilteredFlows = () => useMobileTestingStore((state) => {
     );
   }
 
-  if (state.flowFilterPlatform !== 'all') {
-    filtered = filtered.filter(f => f.platform === state.flowFilterPlatform);
+  if (filterPlatform !== 'all') {
+    filtered = filtered.filter(f => f.platform === filterPlatform);
   }
 
-  if (state.flowFilterPriority !== 'all') {
-    filtered = filtered.filter(f => f.priority === state.flowFilterPriority);
+  if (filterPriority !== 'all') {
+    filtered = filtered.filter(f => f.priority === filterPriority);
   }
 
-  if (state.flowFilterStatus !== 'all') {
-    filtered = filtered.filter(f => f.last_run_status === state.flowFilterStatus);
+  if (filterStatus !== 'all') {
+    filtered = filtered.filter(f => f.last_run_status === filterStatus);
   }
 
   return filtered;
-});
+}
 
-export const useActiveFlow = () => useMobileTestingStore((state) => {
-  if (!state.activeFlowId) return null;
-  return state.flows.find(f => f.id === state.activeFlowId) ?? null;
-});
-
-export const useTestRunStats = () => useMobileTestingStore((state) => {
-  const runs = state.testRuns;
-  const total = runs.length;
-  const passed = runs.filter(r => r.status === 'passed').length;
-  const failed = runs.filter(r => r.status === 'failed').length;
-  const errors = runs.filter(r => r.status === 'error').length;
+/**
+ * Pure function to compute test run statistics — use with useMemo in components.
+ */
+export function computeTestRunStats(testRuns: MobileTestRun[]) {
+  const total = testRuns.length;
+  const passed = testRuns.filter(r => r.status === 'passed').length;
+  const failed = testRuns.filter(r => r.status === 'failed').length;
+  const errors = testRuns.filter(r => r.status === 'error').length;
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-  const avgDuration = total > 0 ? Math.round(runs.reduce((sum, r) => sum + r.duration_ms, 0) / total) : 0;
+  const avgDuration = total > 0 ? Math.round(testRuns.reduce((sum, r) => sum + r.duration_ms, 0) / total) : 0;
   return { total, passed, failed, errors, passRate, avgDuration };
-});
+}
+
+/**
+ * Select individual primitive/stable values from the store.
+ * Always use individual selectors or shallow comparison — never destructure the full store.
+ */
+export const useMobileTab = () => useMobileTestingStore(s => s.activeTab);
+export const useMobileSetActiveTab = () => useMobileTestingStore(s => s.setActiveTab);

@@ -148,16 +148,13 @@ export default function MobileInspector() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
 
-  const {
-    elementTree,
-    selectedElementId,
-    isInspecting,
-    selectedPlatform,
-    selectedDevice,
-    setElementTree,
-    setSelectedElement,
-    setIsInspecting,
-  } = useMobileTestingStore();
+  // Individual selectors
+  const elementTree = useMobileTestingStore(s => s.elementTree);
+  const selectedElementId = useMobileTestingStore(s => s.selectedElementId);
+  const isInspecting = useMobileTestingStore(s => s.isInspecting);
+  const setElementTree = useMobileTestingStore(s => s.setElementTree);
+  const setSelectedElement = useMobileTestingStore(s => s.setSelectedElement);
+  const setIsInspecting = useMobileTestingStore(s => s.setIsInspecting);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root', 'toolbar', 'content']));

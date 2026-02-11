@@ -58,22 +58,21 @@ export default function MobileAdvancedTools() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
 
-  const {
-    deepLinks,
-    savedLocations,
-    networkProfiles,
-    activeNetworkProfile,
-    currentLocation,
-    pushNotificationPayload,
-    selectedPlatform,
-    addDeepLink,
-    deleteDeepLink,
-    setCurrentLocation,
-    setActiveNetworkProfile,
-    setPushNotificationPayload,
-    addSavedLocation,
-    deleteSavedLocation,
-  } = useMobileTestingStore();
+  // Individual selectors
+  const deepLinks = useMobileTestingStore(s => s.deepLinks);
+  const savedLocations = useMobileTestingStore(s => s.savedLocations);
+  const networkProfiles = useMobileTestingStore(s => s.networkProfiles);
+  const activeNetworkProfile = useMobileTestingStore(s => s.activeNetworkProfile);
+  const currentLocation = useMobileTestingStore(s => s.currentLocation);
+  const pushNotificationPayload = useMobileTestingStore(s => s.pushNotificationPayload);
+  const selectedPlatform = useMobileTestingStore(s => s.selectedPlatform);
+  const addDeepLink = useMobileTestingStore(s => s.addDeepLink);
+  const deleteDeepLink = useMobileTestingStore(s => s.deleteDeepLink);
+  const setCurrentLocation = useMobileTestingStore(s => s.setCurrentLocation);
+  const setActiveNetworkProfile = useMobileTestingStore(s => s.setActiveNetworkProfile);
+  const setPushNotificationPayload = useMobileTestingStore(s => s.setPushNotificationPayload);
+  const addSavedLocation = useMobileTestingStore(s => s.addSavedLocation);
+  const deleteSavedLocation = useMobileTestingStore(s => s.deleteSavedLocation);
 
   const [activeSection, setActiveSection] = useState<ToolSection>('deeplinks');
   const [newLinkName, setNewLinkName] = useState('');

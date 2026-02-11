@@ -58,22 +58,21 @@ export default function MobileDeviceLab() {
   const inElectron = isElectron();
   const logRef = useRef<HTMLDivElement>(null);
 
-  const {
-    selectedPlatform,
-    selectedDevice,
-    nativeDevices,
-    isLoadingDevices,
-    maestroInstalled,
-    installedApps,
-    appBundleId,
-    setSelectedPlatform,
-    setSelectedDevice,
-    setNativeDevices,
-    setIsLoadingDevices,
-    addInstalledApp,
-    removeInstalledApp,
-    setAppBundleId,
-  } = useMobileTestingStore();
+  // Individual selectors
+  const selectedPlatform = useMobileTestingStore(s => s.selectedPlatform);
+  const selectedDevice = useMobileTestingStore(s => s.selectedDevice);
+  const nativeDevices = useMobileTestingStore(s => s.nativeDevices);
+  const isLoadingDevices = useMobileTestingStore(s => s.isLoadingDevices);
+  const maestroInstalled = useMobileTestingStore(s => s.maestroInstalled);
+  const installedApps = useMobileTestingStore(s => s.installedApps);
+  const appBundleId = useMobileTestingStore(s => s.appBundleId);
+  const setSelectedPlatform = useMobileTestingStore(s => s.setSelectedPlatform);
+  const setSelectedDevice = useMobileTestingStore(s => s.setSelectedDevice);
+  const setNativeDevices = useMobileTestingStore(s => s.setNativeDevices);
+  const setIsLoadingDevices = useMobileTestingStore(s => s.setIsLoadingDevices);
+  const addInstalledApp = useMobileTestingStore(s => s.addInstalledApp);
+  const removeInstalledApp = useMobileTestingStore(s => s.removeInstalledApp);
+  const setAppBundleId = useMobileTestingStore(s => s.setAppBundleId);
 
   const [deviceLogs, setDeviceLogs] = useState<string[]>([]);
   const [isCapturingLogs, setIsCapturingLogs] = useState(false);

@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { useMobileTestingStore, useTestRunStats } from '@/stores/mobileTestingStore';
+import { useMobileTestingStore, computeTestRunStats } from '@/stores/mobileTestingStore';
 import type { MobileTestRun, TestRunStatus } from '@/stores/mobileTestingStore';
 import { toast } from 'sonner';
 import {
@@ -62,8 +62,11 @@ export default function MobileTestRuns() {
   const { theme } = useTheme();
   const isDark = theme !== 'light';
 
-  const { testRuns, clearTestRuns, deleteTestRun } = useMobileTestingStore();
-  const stats = useTestRunStats();
+  // Individual selectors to prevent re-render loops
+  const testRuns = useMobileTestingStore(s => s.testRuns);
+  const clearTestRuns = useMobileTestingStore(s => s.clearTestRuns);
+  const deleteTestRun = useMobileTestingStore(s => s.deleteTestRun);
+  const stats = useMemo(() => computeTestRunStats(testRuns), [testRuns]);
 
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<TestRunStatus | 'all'>('all');
