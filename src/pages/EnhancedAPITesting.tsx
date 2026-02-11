@@ -2774,9 +2774,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
-                      <CardTitle className="text-lg">Parsed Endpoints & Generated Tests</CardTitle>
+                      <CardTitle className="text-lg">Parsed Endpoints</CardTitle>
                       <CardDescription>
-                        {endpointList.length} endpoints + {generatedTests.length} auto-generated tests from {parsedSpec.format || specFormat} spec
+                        {endpointList.length} endpoints from {parsedSpec.format || specFormat} spec
                         {parsedSpec.base_url && ` | Base URL: ${parsedSpec.base_url}`}
                       </CardDescription>
                     </div>
