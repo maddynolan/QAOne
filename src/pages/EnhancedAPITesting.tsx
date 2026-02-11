@@ -266,9 +266,11 @@ export default function EnhancedAPITesting() {
   const [executionMode, setExecutionMode] = useState("automated");
   const [executionResults, setExecutionResults] = useState<any>(null);
   const [executing, setExecuting] = useState(false);
+  const [showAdvancedExec, setShowAdvancedExec] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("");
   const [reportViewTab, setReportViewTab] = useState<"summary" | "html" | "junit" | "json" | "allure">("summary");
   const [selectedTestCases, setSelectedTestCases] = useState<Set<string>>(new Set());
+  const [executeFilter, setExecuteFilter] = useState("");
   const [viewingTestCase, setViewingTestCase] = useState<any>(null);
   const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
 
@@ -3554,134 +3556,35 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         <TabsContent value="execute" className="space-y-4">
           <TabErrorBoundary tabName="Execute">
           
-          {/* Run from Collection — sidebar requests */}
-          {(() => {
+          {/* Empty state: no tests AND no collection */}
+          {!testSuite && (() => {
             const store = useApiTestingStore.getState();
             const collId = store.active_collection_id;
             const coll = collId ? store.collections[collId] : null;
-            const requests = coll?.requests || [];
-            if (requests.length === 0) return null;
+            const hasCollRequests = (coll?.requests?.length || 0) > 0;
+            if (hasCollRequests) return null; // collection tests will show below
             return (
-              <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10">
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Play className="w-4 h-4 text-purple-600" />
-                    Run from Collection: {coll?.name || "Active Collection"}
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Execute requests from the sidebar collection. Results will appear in the Results tab.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="max-h-48 overflow-y-auto border rounded-md">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Method</TableHead>
-                          <TableHead>Name / URL</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {requests.slice(0, 50).map((req: any) => (
-                          <TableRow key={req.id}>
-                            <TableCell>
-                              <Badge variant="outline" className="font-mono text-xs">
-                                {req.method}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {req.name || req.url || req.path || "Unnamed"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+              <Card className="border-dashed border-2 border-muted-foreground/25">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Play className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Tests to Execute</h3>
+                  <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+                    Import an API specification, add tests to a collection, or build requests to get started.
+                  </p>
+                  <div className="flex gap-3">
+                    <Button variant="outline" onClick={() => setActiveTab("import")}>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import Spec
+                    </Button>
+                    <Button variant="default" onClick={() => setActiveTab("builder")}>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Build Request
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={executing}
-                    onClick={async () => {
-                      setExecuting(true);
-                      try {
-                        const storeNow = useApiTestingStore.getState();
-                        const envId = storeNow.active_environment_id;
-                        const env = storeNow.environments.find(e => e.id === envId);
-                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
-                        const baseUrl = env?.base_url || selectedEnv?.base_url || coll?.base_url || '';
-                        
-                        const testCases = requests.map((req: any) => ({
-                          test_case_id: req.id,
-                          name: req.name,
-                          method: req.method,
-                          path: req.url || req.path,
-                          expected_status: req.expected_status || 200,
-                          assertions: req.assertions,
-                          request: {
-                            headers: req.headers?.reduce((acc: any, h: any) => {
-                              if (h.key && h.enabled !== false) acc[h.key] = h.value;
-                              return acc;
-                            }, {}) || { 'Content-Type': 'application/json' },
-                            body: req.body || undefined,
-                          },
-                        }));
-
-                        const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            test_suite: {
-                              name: coll?.name || 'Collection Run',
-                              base_url: baseUrl,
-                              test_cases: testCases,
-                            },
-                            execution_config: {
-                              mode: executionMode,
-                              parallel: executionMode === 'automated',
-                              max_workers: 5,
-                            },
-                          }),
-                        });
-                        const rawResp = await res.json();
-                        setExecutionResults(rawResp?.execution_results || rawResp);
-                        setActiveTab("results");
-                        toast({ title: "Collection run complete", description: "Results are shown in the Results tab." });
-                      } catch (err: any) {
-                        toast({ title: "Execution Error", description: err.message, variant: "destructive" });
-                      } finally {
-                        setExecuting(false);
-                      }
-                    }}
-                  >
-                    {executing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
-                    Run All Collection Requests ({requests.length})
-                  </Button>
                 </CardContent>
               </Card>
             );
           })()}
-          
-          {!testSuite && (
-            <Card className="border-dashed border-2 border-muted-foreground/25">
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <Play className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Test Suite Ready</h3>
-                <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                  Import an API specification or use a template to generate test cases before executing.
-                </p>
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setActiveTab("import")}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import Spec
-                  </Button>
-                  <Button variant="default" onClick={() => setActiveTab("builder")}>
-                    <Zap className="w-4 h-4 mr-2" />
-                    Build Request
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
           <Card>
             <CardHeader>
               <CardTitle>Execute Tests</CardTitle>
@@ -3750,8 +3653,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 </p>
               </div>
               
-              {/* Load Testing Controls - shown when Load Testing mode is selected (React state, zero-code) */}
-              {executionMode === "load" && (
+              {/* Advanced: Load Testing + Data-Driven (collapsible) */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-xs text-muted-foreground"
+                onClick={() => setShowAdvancedExec(!showAdvancedExec)}
+              >
+                {showAdvancedExec ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
+                Advanced Options (Load Testing, Data-Driven)
+              </Button>
+              
+              {showAdvancedExec && executionMode === "load" && (
                 <Card className="border-orange-500/20 bg-orange-50/50 dark:bg-orange-950/10">
                   <CardContent className="pt-4 space-y-3">
                     <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Load Test Configuration</p>
@@ -3805,7 +3718,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               )}
 
               {/* Data-driven: CSV/JSON upload, preview, run (zero-code — no scripts) */}
-              {testSuite && testSuite.test_cases?.length > 0 && (
+              {showAdvancedExec && testSuite && testSuite.test_cases?.length > 0 && (
                 <Card className="border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/10">
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm font-medium">Run with data (data-driven)</CardTitle>
@@ -3920,72 +3833,63 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               )}
               
               {testSuite && (
-                <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
-                  <CardContent className="py-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                        <span className="font-semibold text-green-800 dark:text-green-300">
-                          Test Suite Ready
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        {parsedSpec && (
-                          <Button variant="ghost" size="sm" onClick={() => setActiveTab("import")} className="text-xs">
-                            View Spec
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {testSuite.metadata?.total_test_cases || testSuite.test_cases?.length || 0}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Total Tests</div>
-                      </div>
-                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {testSuite.endpoints?.length || Object.keys(testSuite.paths || parsedSpec?.paths || {}).length || 0}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Endpoints</div>
-                      </div>
-                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
-                        <div className="text-2xl font-bold text-orange-600">
-                          {testSuite.test_categories ? Object.keys(testSuite.test_categories).filter(k => {
-                            const tests = testSuite.test_categories[k];
-                            return Array.isArray(tests) && tests.length > 0;
-                          }).length : 0}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Categories</div>
-                      </div>
-                      <div className="bg-white dark:bg-gray-900 rounded p-2 text-center border">
-                        <div className="text-2xl font-bold text-green-600">
-                          {selectedTestCases.size > 0 ? selectedTestCases.size : "All"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Selected</div>
-                      </div>
-                    </div>
-                    {testSuite.test_categories && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {Object.entries(testSuite.test_categories)
-                          .filter(([, tests]: [string, any]) => Array.isArray(tests) && tests.length > 0)
-                          .map(([cat, tests]: [string, any]) => (
-                            <Badge key={cat} variant="outline" className="text-xs">
-                              {tests.length} {cat}
-                            </Badge>
+                <div className="flex items-center gap-3 p-2 bg-green-50/50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  <span className="text-sm text-green-800 dark:text-green-300 font-medium">
+                    Test Suite: {testSuite.metadata?.total_test_cases || testSuite.test_cases?.length || 0} tests, 
+                    {' '}{testSuite.endpoints?.length || Object.keys(testSuite.paths || parsedSpec?.paths || {}).length || 0} endpoints
+                    {selectedTestCases.size > 0 && ` — ${selectedTestCases.size} selected`}
+                  </span>
+                  {parsedSpec && (
+                    <Button variant="ghost" size="sm" onClick={() => setActiveTab("import")} className="text-xs ml-auto">
+                      View Spec
+                    </Button>
+                  )}
+                  {testSuite.test_categories && (
+                    <div className="flex flex-wrap gap-1 ml-auto">
+                      {Object.entries(testSuite.test_categories)
+                        .filter(([, tests]: [string, any]) => Array.isArray(tests) && tests.length > 0)
+                        .map(([cat, tests]: [string, any]) => (
+                          <Badge key={cat} variant="outline" className="text-xs">
+                            {tests.length} {cat}
+                          </Badge>
                           ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                </div>
               )}
 
-              {/* Test Cases View/Selector */}
-              {testSuite && (() => {
-                // Get all test cases - combine test_cases and test_categories
-                const baseTestCases: any[] = testSuite.test_cases || [];
-                const testCategories = testSuite.test_categories || {};
+              {/* Test Cases View/Selector — from test suite OR collection */}
+              {(() => {
+                // Get all test cases - combine test_cases, test_categories, AND collection requests
+                const baseTestCases: any[] = testSuite?.test_cases || [];
+                const testCategories = testSuite?.test_categories || {};
+                
+                // Also include collection requests (sidebar) if they exist
+                const store = useApiTestingStore.getState();
+                const collId = store.active_collection_id;
+                const coll = collId ? store.collections[collId] : null;
+                const collRequests: any[] = (coll?.requests || []).map((req: any) => ({
+                  test_id: req.id,
+                  test_case_id: req.id,
+                  name: req.name || `${req.method} ${req.url || req.path || '/'}`,
+                  method: req.method,
+                  endpoint: req.url || req.path,
+                  path: req.url || req.path,
+                  expected_status: req.expected_status || 200,
+                  test_type: req.test_type || 'functional',
+                  category: req.test_type || 'functional',
+                  description: req.description || '',
+                  assertions: req.assertions,
+                  request: {
+                    headers: req.headers?.reduce((acc: any, h: any) => {
+                      if (h.key && h.enabled !== false) acc[h.key] = h.value;
+                      return acc;
+                    }, {}) || { 'Content-Type': 'application/json' },
+                    body: req.body || undefined,
+                  },
+                  _source: 'collection',
+                }));
                 
                 // Flatten all test cases from categories
                 const categoryTestCases: any[] = [];
@@ -4010,19 +3914,46 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   allTestCasesMap.set(id, tc);
                 });
                 
+                // Add collection requests (if they're not already in the test suite)
+                collRequests.forEach((tc) => {
+                  if (!allTestCasesMap.has(tc.test_id)) {
+                    allTestCasesMap.set(tc.test_id, tc);
+                  }
+                });
+                
                 const allTestCases = Array.from(allTestCasesMap.values());
                 const totalCount = allTestCases.length;
                 
                 if (totalCount === 0) return null;
                 
+                // Apply filter
+                const filterLower = executeFilter.toLowerCase();
+                const filteredTestCases = filterLower 
+                  ? allTestCases.filter((tc: any) => {
+                      const name = (tc.name || tc.test_name || tc.title || '').toLowerCase();
+                      const method = (tc.method || '').toLowerCase();
+                      const path = (tc.endpoint || tc.url || tc.path || '').toLowerCase();
+                      const type = (tc.test_type || tc.category || '').toLowerCase();
+                      return name.includes(filterLower) || method.includes(filterLower) 
+                        || path.includes(filterLower) || type.includes(filterLower);
+                    })
+                  : allTestCases;
+                
                 return (
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <CardTitle className="text-lg">Test Cases ({totalCount})</CardTitle>
-                        <div className="flex gap-2 flex-wrap">
+                        <CardTitle className="text-lg">Test Cases ({totalCount}){selectedTestCases.size > 0 ? ` — ${selectedTestCases.size} selected` : ''}</CardTitle>
+                        <div className="flex gap-2 flex-wrap items-center">
+                          {/* Search/filter */}
+                          <Input
+                            placeholder="Filter tests..."
+                            value={executeFilter}
+                            onChange={(e) => setExecuteFilter(e.target.value)}
+                            className="h-8 w-40 text-xs"
+                          />
                           {/* Collection folders (zero-code hierarchy) */}
-                          {(testSuite.folders?.length ?? 0) >= 0 && (
+                          {testSuite && (testSuite.folders?.length ?? 0) >= 0 && (
                             <div className="flex items-center gap-2">
                               <Input
                                 placeholder="New folder name"
@@ -4125,7 +4056,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {allTestCases.slice(0, 100).map((testCase: any, idx: number) => {
+                            {filteredTestCases.slice(0, 100).map((testCase: any, idx: number) => {
                               // Generate consistent test ID - must match filtering logic
                               const testId = testCase.test_id || 
                                            testCase.test_case_id || 
@@ -4190,10 +4121,12 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                   <TableCell>
                                     <Select
                                       value={
-                                        (testSuite.folders || []).find((f: any) => (f.test_case_ids || []).includes(testId))?.id ?? "__none__"
+                                        (testSuite?.folders || []).find((f: any) => (f.test_case_ids || []).includes(testId))?.id ?? "__none__"
                                       }
                                       onValueChange={(folderId) => {
+                                        if (!testSuite) return; // Can't organize collection-only tests into folders here
                                         setTestSuite((prev: any) => {
+                                          if (!prev) return prev;
                                           const folders = (prev.folders || []).map((f: any) => ({
                                             ...f,
                                             test_case_ids: (f.test_case_ids || []).filter((id: string) => id !== testId),
@@ -4213,7 +4146,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="__none__">Uncategorized</SelectItem>
-                                        {(testSuite.folders || []).map((f: any) => (
+                                        {(testSuite?.folders || []).map((f: any) => (
                                           <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                                         ))}
                                       </SelectContent>
@@ -4248,9 +4181,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                             })}
                           </TableBody>
                         </Table>
-                        {totalCount > 100 && (
+                        {filteredTestCases.length > 100 && (
                           <div className="p-4 text-center text-sm text-muted-foreground">
-                            Showing first 100 of {totalCount} test cases
+                            Showing first 100 of {filteredTestCases.length} test cases{executeFilter ? ` (filtered from ${totalCount})` : ''}
+                          </div>
+                        )}
+                        {executeFilter && filteredTestCases.length === 0 && (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            No tests match "{executeFilter}"
                           </div>
                         )}
                       </div>
@@ -4259,26 +4197,109 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 );
               })()}
               
-              <Button 
-                onClick={handleExecuteTests} 
-                disabled={!testSuite || executing || !selectedEnvironment}
-                className="w-full"
-              >
-                {executing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Executing...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 mr-2" />
-                    {selectedTestCases.size > 0 && selectedTestCases.size < (testSuite?.test_cases?.length || 0)
-                      ? `Execute ${selectedTestCases.size} Selected Tests`
-                      : "Execute All Tests"
-                    }
-                  </>
-                )}
-              </Button>
+              {/* Execute from test suite */}
+              {testSuite && (
+                <Button 
+                  onClick={handleExecuteTests} 
+                  disabled={executing || !selectedEnvironment}
+                  className="w-full"
+                >
+                  {executing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Executing...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      {selectedTestCases.size > 0 && selectedTestCases.size < (testSuite?.test_cases?.length || 0)
+                        ? `Execute ${selectedTestCases.size} Selected Tests`
+                        : "Execute All Tests"
+                      }
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {/* Execute from collection (when no test suite but collection has tests) */}
+              {!testSuite && (() => {
+                const storeSnap = useApiTestingStore.getState();
+                const collId = storeSnap.active_collection_id;
+                const coll = collId ? storeSnap.collections[collId] : null;
+                const collReqs = coll?.requests || [];
+                if (collReqs.length === 0) return null;
+                
+                // Filter by selected test cases if any
+                const toExecute = selectedTestCases.size > 0 
+                  ? collReqs.filter((r: any) => selectedTestCases.has(r.id))
+                  : collReqs;
+                
+                return (
+                  <Button
+                    className="w-full"
+                    disabled={executing || !selectedEnvironment || toExecute.length === 0}
+                    onClick={async () => {
+                      setExecuting(true);
+                      try {
+                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
+                        const baseUrl = selectedEnv?.base_url || coll?.base_url || '';
+                        
+                        const testCases = toExecute.map((req: any) => ({
+                          test_case_id: req.id,
+                          name: req.name,
+                          method: req.method,
+                          path: req.url || req.path,
+                          expected_status: req.expected_status || 200,
+                          assertions: req.assertions,
+                          request: {
+                            headers: req.headers?.reduce((acc: any, h: any) => {
+                              if (h.key && h.enabled !== false) acc[h.key] = h.value;
+                              return acc;
+                            }, {}) || { 'Content-Type': 'application/json' },
+                            body: req.body || undefined,
+                          },
+                        }));
+
+                        const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            test_suite: {
+                              name: coll?.name || 'Collection Run',
+                              base_url: baseUrl,
+                              test_cases: testCases,
+                            },
+                            execution_config: {
+                              mode: executionMode,
+                              parallel: executionMode === 'automated',
+                              max_workers: 5,
+                            },
+                          }),
+                        });
+                        const rawResp = await res.json();
+                        setExecutionResults(rawResp?.execution_results || rawResp);
+                        setActiveTab("results");
+                        toast({ title: "Execution complete", description: `Ran ${toExecute.length} tests. See Results tab.` });
+                      } catch (err: any) {
+                        toast({ title: "Execution Error", description: err.message, variant: "destructive" });
+                      } finally {
+                        setExecuting(false);
+                      }
+                    }}
+                  >
+                    {executing ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Executing...</>
+                    ) : (
+                      <><Play className="w-4 h-4 mr-2" />
+                        {selectedTestCases.size > 0
+                          ? `Execute ${toExecute.length} Selected Tests`
+                          : `Execute All ${collReqs.length} Collection Tests`
+                        }
+                      </>
+                    )}
+                  </Button>
+                );
+              })()}
               {/* Action Buttons Row */}
               <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" size="sm" onClick={() => setShowCreateTest(true)}>

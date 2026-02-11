@@ -489,10 +489,23 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               // Load environments
               await get().loadEnvironments();
               
-              // If we have an active workspace, load its collections
-              const activeWs = get().active_workspace_id;
-              if (activeWs) {
-                await get().loadCollections(activeWs);
+              // Ensure we have a workspace (always)
+              let activeWs = get().active_workspace_id;
+              if (!activeWs) {
+                const ws = await get().createWorkspace('My Workspace', 'Default API testing workspace');
+                activeWs = ws.id;
+                set((s) => { s.active_workspace_id = ws.id; });
+              }
+              
+              // Load collections for active workspace
+              await get().loadCollections(activeWs);
+              
+              // If still no collection after load, create a default one
+              if (!get().active_collection_id || Object.keys(get().collections).length === 0) {
+                const coll = await get().createCollection({ name: 'My Collection' });
+                set((s) => {
+                  s.active_collection_id = coll.id;
+                });
               }
               
               // Migrate legacy localStorage data if exists
@@ -621,7 +634,24 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 return;
               }
               
-              const colls: ApiCollection[] = await res.json();
+              let colls: ApiCollection[] = await res.json();
+              
+              // If workspace query returned empty, also try loading the persisted active collection directly
+              if (colls.length === 0) {
+                const persistedId = get().active_collection_id;
+                if (persistedId) {
+                  try {
+                    const directRes = await fetch(`${API_BASE_URL}/api/db/api-collections-v2/${persistedId}`);
+                    if (directRes.ok) {
+                      const directColl = await directRes.json();
+                      if (directColl && directColl.id) {
+                        colls = [directColl];
+                      }
+                    }
+                  } catch { /* ignore */ }
+                }
+              }
+              
               set((s) => {
                 for (const c of colls) {
                   s.collections[c.id] = c;
@@ -1382,14 +1412,22 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             
             try {
               const run = get().test_runs.find(r => r.id === runId);
-              if (!run) return;
+              if (!run) {
+                set((s) => { s.executing = false; });
+                return;
+              }
               
-              const collId = run.collection_id;
-              const coll = get().collections[collId];
-              if (!coll) return;
+              const collId = run.collection_id || get().active_collection_id;
+              const coll = get().collections[collId || ''];
+              if (!coll) {
+                console.error('[ApiTestingStore] executeTestRun: no collection found for', collId);
+                set((s) => { s.executing = false; });
+                return;
+              }
               
-              // Gather test cases from requests
-              const testCases = run.request_ids
+              // Gather test cases from requests (use all if request_ids is empty)
+              const requestIds = run.request_ids?.length > 0 ? run.request_ids : coll.requests.map(r => r.id);
+              const testCases = requestIds
                 .map(rid => coll.requests.find(r => r.id === rid))
                 .filter(Boolean)
                 .map((req: any) => ({
@@ -1401,15 +1439,35 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                   assertions: req.assertions,
                   request: {
                     headers: req.headers?.reduce((acc: any, h: KeyValuePair) => {
-                      if (h.key && h.enabled) acc[h.key] = h.value;
+                      if (h.key && h.enabled !== false) acc[h.key] = h.value;
                       return acc;
                     }, {}),
                     body: req.body || undefined,
                   },
                 }));
               
-              // Resolve environment
-              const env = get().environments.find(e => e.id === run.environment_id);
+              if (testCases.length === 0) {
+                console.error('[ApiTestingStore] executeTestRun: no test cases to run');
+                set((s) => { s.executing = false; });
+                return;
+              }
+              
+              // Resolve environment (try store envs, then page's localStorage envs)
+              const envId = run.environment_id || get().active_environment_id;
+              let env = get().environments.find(e => e.id === envId);
+              let baseUrl = env?.base_url || coll.base_url || '';
+              
+              // Fallback: try page's localStorage environment
+              if (!baseUrl) {
+                try {
+                  const savedEnvId = localStorage.getItem('apex_selected_environment');
+                  if (savedEnvId) {
+                    const savedEnvs = JSON.parse(localStorage.getItem('apex_environments') || '[]');
+                    const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
+                    if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
+                  }
+                } catch { /* ignore */ }
+              }
               
               const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
                 method: 'POST',
@@ -1417,16 +1475,21 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 body: JSON.stringify({
                   test_suite: {
                     name: run.name,
-                    base_url: env?.base_url || coll.base_url || '',
+                    base_url: baseUrl,
                     test_cases: testCases,
                   },
                   execution_config: {
-                    mode: run.mode,
-                    parallel: run.mode === 'automated',
+                    mode: run.mode || 'automated',
+                    parallel: (run.mode || 'automated') === 'automated',
                     max_workers: 5,
                   },
                 }),
               });
+              
+              if (!res.ok) {
+                const errText = await res.text().catch(() => 'Unknown error');
+                throw new Error(`Execution failed (HTTP ${res.status}): ${errText.slice(0, 200)}`);
+              }
               
               const rawResp = await res.json();
               // Backend wraps in { status, execution_results: { test_results, summary, ... } }
@@ -1701,7 +1764,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
         })),
         {
           name: 'api-testing-store',
-          // Only persist UI state, not full data (data comes from DB)
+          // Persist UI state + collections as local cache (backend is source of truth but
+          // localStorage ensures collections survive refresh even when backend is slow)
           partialize: (state) => ({
             active_workspace_id: state.active_workspace_id,
             active_collection_id: state.active_collection_id,
@@ -1709,6 +1773,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             active_environment_id: state.active_environment_id,
             global_variables: state.global_variables,
             execution_mode: state.execution_mode,
+            collections: state.collections,
+            workspaces: state.workspaces,
             sidebar: {
               open: state.sidebar.open,
               width: state.sidebar.width,
@@ -1730,6 +1796,9 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               },
               // Ensure other Sets survive rehydration
               selected_test_case_ids: current.selected_test_case_ids ?? new Set<string>(),
+              // Ensure collections object survives rehydration
+              collections: { ...(current.collections || {}), ...(persisted.collections || {}) },
+              workspaces: persisted.workspaces?.length > 0 ? persisted.workspaces : current.workspaces,
             };
           },
           // Safe storage: never throw so rehydration cannot crash the app
