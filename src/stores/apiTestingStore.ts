@@ -980,10 +980,23 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
             const request = coll?.requests.find(r => r.id === requestId);
             if (!request) return;
             
-            // Resolve full URL with environment
+            // Resolve full URL with environment (try multiple sources for base URL)
             const envId = get().active_environment_id;
             const env = get().environments.find(e => e.id === envId);
-            const baseUrl = env?.base_url || coll?.base_url || '';
+            let baseUrl = env?.base_url || coll?.base_url || '';
+            
+            // Extra fallback: try page's localStorage environment if store env lookup failed
+            if (!baseUrl) {
+              try {
+                const savedEnvId = localStorage.getItem('apex_selected_environment');
+                if (savedEnvId) {
+                  const savedEnvs = JSON.parse(localStorage.getItem('apex_environments') || '[]');
+                  const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
+                  if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
+                }
+              } catch { /* ignore */ }
+            }
+            
             const url = request.url || request.path;
             const fullUrl = url.startsWith('http') ? url : `${baseUrl.replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
             
@@ -1568,6 +1581,49 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 s.sync_status = 'idle';
                 s.last_sync = nowISO();
               });
+              
+              // Sync test cases to Test Repository (/api/db/test-cases) in the background
+              try {
+                for (const req of coll.requests) {
+                  const tcPayload = {
+                    title: req.name || `${req.method} ${req.path || req.url || '/'}`,
+                    description: req.description || '',
+                    category: 'api',
+                    priority: 'medium',
+                    status: 'active',
+                    type: req.test_type || 'functional',
+                    tags: [req.method?.toLowerCase(), 'api-collection', coll.name].filter(Boolean),
+                    steps: [{
+                      step: 1,
+                      action: `${req.method} ${req.url || req.path || '/'}`,
+                      expected: `Status ${req.expected_status || 200}`,
+                    }],
+                    metadata: {
+                      source: 'api-collection',
+                      collection_id: collectionId,
+                      request_id: req.id,
+                      method: req.method,
+                      endpoint: req.url || req.path,
+                      headers: req.headers?.reduce((acc: any, h: KeyValuePair) => {
+                        if (h.key && h.enabled) acc[h.key] = h.value;
+                        return acc;
+                      }, {}),
+                      body: req.body || undefined,
+                      assertions: req.assertions,
+                      expected_status: req.expected_status || 200,
+                    },
+                  };
+                  
+                  await fetch(`${API_BASE_URL}/api/db/test-cases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(tcPayload),
+                  }).catch(() => {}); // Silently ignore per-request failures
+                }
+              } catch {
+                // Non-critical: don't block collection save if sync fails
+                console.warn('[ApiTestingStore] Test Repository sync failed (non-critical)');
+              }
             } catch (err) {
               console.warn('[ApiTestingStore] Failed to save collection (will retry on next change):', (err as Error).message);
               set((s) => { s.sync_status = 'error'; });

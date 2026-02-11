@@ -242,6 +242,7 @@ export default function EnhancedAPITesting() {
   const [specFormat, setSpecFormat] = useState("openapi");
   const [protocol, setProtocol] = useState("REST");
   const [specContent, setSpecContent] = useState("");
+  const [showTemplatesInImport, setShowTemplatesInImport] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
   const [testSuite, setTestSuite] = useState<any>(null);
@@ -401,11 +402,80 @@ export default function EnhancedAPITesting() {
         if (state.active_tab && state.active_tab !== prevState?.active_tab) {
           setActiveTab(state.active_tab);
         }
+        // When store execution completes, route results to the Results tab
+        if (state.execution_results && state.execution_results !== prevState?.execution_results && !state.executing) {
+          setExecutionResults(state.execution_results);
+          setActiveTab("results");
+        }
       }
     );
     return unsub;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // ===== END store integration =====
+
+  // Sync page selectedEnvironment → store active_environment_id (fixes base URL resolution)
+  useEffect(() => {
+    if (!selectedEnvironment) return;
+    const store = useApiTestingStore.getState();
+    // Push the selected page environment into the store so openRequestInBuilder can find it
+    const pageEnv = environments.find(e => e.environment_id === selectedEnvironment);
+    if (pageEnv) {
+      // Ensure this environment exists in the store (map environment_id → id)
+      const storeEnvs = store.environments;
+      const existsInStore = storeEnvs.some(e => e.id === pageEnv.environment_id || e.id === selectedEnvironment);
+      if (!existsInStore) {
+        // Push it into the store
+        store.createEnvironment({
+          id: pageEnv.environment_id,
+          name: pageEnv.name,
+          type: pageEnv.type || 'development',
+          base_url: pageEnv.base_url,
+          variables: pageEnv.variables ? Object.fromEntries(
+            pageEnv.variables.filter((v: any) => v.enabled !== false).map((v: any) => [v.key, v.value])
+          ) : {},
+        });
+      }
+      store.setActiveEnvironment(pageEnv.environment_id);
+    }
+  }, [selectedEnvironment, environments]);
+
+  // Bridge testSuite → sidebar collection: when Import/Templates generates a testSuite,
+  // push its test cases into the active sidebar collection so they appear in the sidebar.
+  useEffect(() => {
+    if (!testSuite) return;
+    const testCases: any[] = testSuite.test_cases || [];
+    if (testCases.length === 0) return;
+    
+    const store = useApiTestingStore.getState();
+    const collId = store.active_collection_id;
+    if (!collId || !store.collections[collId]) return;
+    
+    // Only bridge if collection has no requests yet (avoid duplicating on re-renders)
+    const existing = store.collections[collId].requests.length;
+    if (existing > 0) return;
+    
+    const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
+    const baseUrl = selectedEnv?.base_url || testSuite.base_url || '';
+    
+    // Add each test case as a request in the sidebar collection
+    for (const tc of testCases.slice(0, 200)) { // cap at 200 to avoid performance issues
+      const method = (tc.method || 'GET').toUpperCase();
+      const path = tc.endpoint || tc.url || tc.path || (tc.request?.url) || '/';
+      store.addRequest({
+        method,
+        url: path.startsWith('http') ? path : `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`,
+        name: tc.name || tc.test_name || tc.title || `${method} ${path}`,
+        headers: tc.request?.headers 
+          ? Object.entries(tc.request.headers).map(([k, v]: any) => ({ key: k, value: v, enabled: true })) 
+          : [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+        body: tc.request?.body ? (typeof tc.request.body === 'string' ? tc.request.body : JSON.stringify(tc.request.body, null, 2)) : undefined,
+        expected_status: tc.expected_status || 200,
+        test_type: tc.test_type || tc.category || 'functional',
+        description: tc.description || '',
+        assertions: tc.assertions || [],
+      });
+    }
+  }, [testSuite]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Custom test case creation state
   const [showCreateTest, setShowCreateTest] = useState(false);
@@ -2314,24 +2384,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <Send className="w-4 h-4 mr-1" />
             Builder
           </TabsTrigger>
-          <TabsTrigger value="templates" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <Rocket className="w-4 h-4 mr-1" />
-            Templates
+          <TabsTrigger value="import" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
+            <Upload className="w-4 h-4 mr-1" />
+            Import
           </TabsTrigger>
-          <TabsTrigger value="import" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Import</TabsTrigger>
           <TabsTrigger value="chains" className="flex-1 min-w-0 data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-500 text-muted-foreground">
             <Link2 className="w-4 h-4 mr-1" />
             Chains
           </TabsTrigger>
-          <TabsTrigger value="tests" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
-            <FileText className="w-4 h-4 mr-1" />
-            Tests
-          </TabsTrigger>
-          <TabsTrigger value="runs" className="flex-1 min-w-0 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-500 text-muted-foreground">
+          <TabsTrigger value="execute" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
             <Play className="w-4 h-4 mr-1" />
-            Runs
+            Execute
           </TabsTrigger>
-          <TabsTrigger value="execute" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
           <TabsTrigger value="security" className="flex-1 min-w-0 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
             <Shield className="w-4 h-4 mr-1" />
             Security
@@ -2493,8 +2557,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
-        {/* Templates Tab - Quick Start */}
-        <TabsContent value="templates" className="space-y-4">
+        {/* Templates Tab - REMOVED (absorbed into Import tab) */}
+        <TabsContent value="templates" className="space-y-4 hidden">
           <Alert className="bg-card border-border text-foreground">
             <Rocket className="h-4 w-4 text-primary" />
             <AlertDescription>
@@ -2790,6 +2854,90 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             </CardContent>
           </Card>
 
+          {/* Quick Start Templates (collapsed by default, absorbed from old Templates tab) */}
+          <Card>
+            <CardHeader className="cursor-pointer" onClick={() => setShowTemplatesInImport(prev => !prev)}>
+              <CardTitle className="flex items-center gap-2 text-base">
+                {showTemplatesInImport ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <Rocket className="w-5 h-5" />
+                Quick Start Templates
+              </CardTitle>
+              <CardDescription>Pre-built API specs (REST, GraphQL, SOAP) for instant test generation</CardDescription>
+            </CardHeader>
+            {showTemplatesInImport && (
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(PROTOCOL_TEMPLATES).map(([key, template]) => (
+                    <Card key={key} className="border cursor-pointer hover:border-primary/50 transition-all">
+                      <CardHeader className="py-3 px-4">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <span className="text-lg">{template.icon}</span>
+                          {template.name}
+                        </CardTitle>
+                        <CardDescription className="text-xs">{template.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3 pt-0">
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={async () => {
+                              setProtocol(template.protocol);
+                              setSpecFormat(template.format);
+                              const content = typeof template.spec === 'string' 
+                                ? template.spec 
+                                : JSON.stringify(template.spec, null, 2);
+                              setSpecContent(content);
+                              
+                              // Create environment for this template
+                              const envName = `${template.name} - Test`;
+                              const existingEnv = environments.find(e => e.name === envName);
+                              if (!existingEnv) {
+                                const newEnv = {
+                                  environment_id: `env_${key}_${Date.now()}`,
+                                  name: envName,
+                                  type: "development" as const,
+                                  base_url: template.baseUrl,
+                                  variables: [] as any[],
+                                };
+                                const updatedEnvs = [...environments, newEnv];
+                                setEnvironments(updatedEnvs);
+                                saveEnvironmentsToLocalStorage(updatedEnvs);
+                                setSelectedEnvironment(newEnv.environment_id);
+                              }
+                              
+                              toast({
+                                title: "Template Loaded",
+                                description: `${template.name} loaded into the import form below. Click "Import Specification" to generate tests.`,
+                              });
+                              setShowTemplatesInImport(false);
+                            }}
+                          >
+                            <FileCode className="w-3 h-3 mr-1" />
+                            Load
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const content = typeof template.spec === 'string' 
+                                ? template.spec 
+                                : JSON.stringify(template.spec, null, 2);
+                              navigator.clipboard.writeText(content);
+                              toast({ title: "Copied", description: "Template spec copied to clipboard" });
+                            }}
+                          >
+                            <Copy className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* Main Import Card */}
           <Card>
             <CardHeader>
@@ -3062,8 +3210,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
-        {/* Tests Tab — List all collection test cases with edit/run/bulk-select */}
-        <TabsContent value="tests" className="space-y-4">
+        {/* Tests Tab — REMOVED (use Test Repository at /test-cases instead) */}
+        <TabsContent value="tests" className="space-y-4 hidden">
           <TabErrorBoundary tabName="Tests">
           {(() => {
             const store = useApiTestingStore.getState();
@@ -3222,8 +3370,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
-        {/* Runs Tab — Test execution history with results */}
-        <TabsContent value="runs" className="space-y-4">
+        {/* Runs Tab — REMOVED (merged into Execute -> Results flow) */}
+        <TabsContent value="runs" className="space-y-4 hidden">
           <TabErrorBoundary tabName="Runs">
           {(() => {
             const store = useApiTestingStore.getState();
@@ -3405,6 +3553,114 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         {/* Execute Tab */}
         <TabsContent value="execute" className="space-y-4">
           <TabErrorBoundary tabName="Execute">
+          
+          {/* Run from Collection — sidebar requests */}
+          {(() => {
+            const store = useApiTestingStore.getState();
+            const collId = store.active_collection_id;
+            const coll = collId ? store.collections[collId] : null;
+            const requests = coll?.requests || [];
+            if (requests.length === 0) return null;
+            return (
+              <Card className="border-purple-200 dark:border-purple-900 bg-purple-50/30 dark:bg-purple-950/10">
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Play className="w-4 h-4 text-purple-600" />
+                    Run from Collection: {coll?.name || "Active Collection"}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Execute requests from the sidebar collection. Results will appear in the Results tab.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="max-h-48 overflow-y-auto border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Name / URL</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {requests.slice(0, 50).map((req: any) => (
+                          <TableRow key={req.id}>
+                            <TableCell>
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {req.method}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {req.name || req.url || req.path || "Unnamed"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={executing}
+                    onClick={async () => {
+                      setExecuting(true);
+                      try {
+                        const storeNow = useApiTestingStore.getState();
+                        const envId = storeNow.active_environment_id;
+                        const env = storeNow.environments.find(e => e.id === envId);
+                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
+                        const baseUrl = env?.base_url || selectedEnv?.base_url || coll?.base_url || '';
+                        
+                        const testCases = requests.map((req: any) => ({
+                          test_case_id: req.id,
+                          name: req.name,
+                          method: req.method,
+                          path: req.url || req.path,
+                          expected_status: req.expected_status || 200,
+                          assertions: req.assertions,
+                          request: {
+                            headers: req.headers?.reduce((acc: any, h: any) => {
+                              if (h.key && h.enabled !== false) acc[h.key] = h.value;
+                              return acc;
+                            }, {}) || { 'Content-Type': 'application/json' },
+                            body: req.body || undefined,
+                          },
+                        }));
+
+                        const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            test_suite: {
+                              name: coll?.name || 'Collection Run',
+                              base_url: baseUrl,
+                              test_cases: testCases,
+                            },
+                            execution_config: {
+                              mode: executionMode,
+                              parallel: executionMode === 'automated',
+                              max_workers: 5,
+                            },
+                          }),
+                        });
+                        const rawResp = await res.json();
+                        setExecutionResults(rawResp?.execution_results || rawResp);
+                        setActiveTab("results");
+                        toast({ title: "Collection run complete", description: "Results are shown in the Results tab." });
+                      } catch (err: any) {
+                        toast({ title: "Execution Error", description: err.message, variant: "destructive" });
+                      } finally {
+                        setExecuting(false);
+                      }
+                    }}
+                  >
+                    {executing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                    Run All Collection Requests ({requests.length})
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })()}
+          
           {!testSuite && (
             <Card className="border-dashed border-2 border-muted-foreground/25">
               <CardContent className="flex flex-col items-center justify-center py-16">
@@ -3414,10 +3670,6 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   Import an API specification or use a template to generate test cases before executing.
                 </p>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setActiveTab("templates")}>
-                    <Rocket className="w-4 h-4 mr-2" />
-                    Load Template
-                  </Button>
                   <Button variant="outline" onClick={() => setActiveTab("import")}>
                     <Upload className="w-4 h-4 mr-2" />
                     Import Spec

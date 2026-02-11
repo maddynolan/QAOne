@@ -12,7 +12,7 @@
  * 7. NO RELOAD - Collection switching is instant, sidebar state preserved
  */
 
-import React, { memo, useCallback, useMemo, useState, useRef } from 'react';
+import React, { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +71,8 @@ interface RequestItemProps {
 
 const RequestItem = memo(({ request, isSelected, onClick, onContextAction }: RequestItemProps) => {
   const label = request.name || `${request.method} ${request.path || request.url || '/'}`;
+  const endpointPath = request.path || request.url || '';
+  const showPath = request.name && endpointPath && endpointPath !== request.name;
   
   return (
     <div className="group relative">
@@ -84,7 +86,14 @@ const RequestItem = memo(({ request, isSelected, onClick, onContextAction }: Req
         onClick={() => onClick(request.id)}
       >
         <MethodBadge method={request.method} />
-        <span className="truncate flex-1">{label}</span>
+        <span className="truncate flex-1">
+          {label}
+          {showPath && (
+            <span className="block text-[10px] text-muted-foreground truncate font-mono opacity-70">
+              {endpointPath}
+            </span>
+          )}
+        </span>
       </button>
       
       {/* Context menu on hover */}
@@ -96,6 +105,9 @@ const RequestItem = memo(({ request, isSelected, onClick, onContextAction }: Req
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onClick={() => onContextAction('edit', request.id)}>
+              <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit in Builder
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onContextAction('duplicate', request.id)}>
               <Copy className="w-3.5 h-3.5 mr-2" /> Duplicate
             </DropdownMenuItem>
@@ -443,6 +455,52 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const [newFolderName, setNewFolderName] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  // Resizable sidebar width
+  const SIDEBAR_MIN = 220;
+  const SIDEBAR_MAX = 600;
+  const SIDEBAR_DEFAULT = 260;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('apex_sidebar_width');
+      return saved ? Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Number(saved))) : SIDEBAR_DEFAULT;
+    } catch { return SIDEBAR_DEFAULT; }
+  });
+  const isResizing = useRef(false);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(SIDEBAR_DEFAULT);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = sidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, resizeStartWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      if (!isResizing.current) return;
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Persist
+      try { localStorage.setItem('apex_sidebar_width', String(sidebarWidth)); } catch {}
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [sidebarWidth]);
   
   // Handler: "New" button — ensure a collection exists, then add a request and open it in builder
   const handleNewRequest = useCallback(async () => {
@@ -698,11 +756,12 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   
   const handleRequestContextAction = useCallback((action: string, requestId: string) => {
     switch (action) {
+      case 'edit': openRequestInBuilder(requestId); break;
       case 'duplicate': duplicateRequest(requestId); break;
       case 'delete': deleteRequest(requestId); break;
       case 'move': /* TODO: show move dialog */ break;
     }
-  }, [duplicateRequest, deleteRequest]);
+  }, [openRequestInBuilder, duplicateRequest, deleteRequest]);
   
   // Add a new test case pre-filled with the endpoint's method/path and open in builder
   const handleAddTestCase = useCallback((method: string, path: string) => {
@@ -772,9 +831,10 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   
   return (
     <aside
-      className={`flex flex-col border-r border-border bg-muted/30 overflow-hidden transition-[width] duration-200 shrink-0 ${
-        sidebar.open ? 'w-64 min-w-[220px]' : 'w-12 min-w-[48px]'
+      className={`relative flex flex-col border-r border-border bg-muted/30 overflow-hidden shrink-0 ${
+        sidebar.open ? '' : 'w-12 min-w-[48px]'
       } ${className}`}
+      style={sidebar.open ? { width: sidebarWidth, minWidth: SIDEBAR_MIN, maxWidth: SIDEBAR_MAX } : undefined}
     >
       {/* Header */}
       <div className="flex items-center justify-between h-10 px-2 border-b border-border shrink-0">
@@ -1010,6 +1070,17 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
             </div>
           )}
         </>
+      )}
+
+      {/* Resize drag handle on right edge */}
+      {sidebar.open && (
+        <div
+          className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-20 group/resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+          onMouseDown={handleResizeStart}
+          title="Drag to resize sidebar"
+        >
+          <div className="absolute inset-y-0 right-0 w-px bg-border group-hover/resize:bg-primary/50 group-active/resize:bg-primary transition-colors" />
+        </div>
       )}
     </aside>
   );
