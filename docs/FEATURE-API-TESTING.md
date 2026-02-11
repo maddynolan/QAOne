@@ -70,6 +70,14 @@ A full-featured HTTP request builder (Postman-like):
   - JSONPath assertions for all top-level response fields (equals for primitives, exists for objects/arrays)
   - Array length assertion (if response is an array)
 - Response Tree Explorer with click-to-assert on individual fields
+- **Response Snapshot & Diff**: save a baseline response, re-send to instantly see added/removed/changed fields. Detects endpoint changes immediately.
+- **Schema Assert** button: auto-generates a JSON Schema from the actual response structure as a contract assertion. If the API changes its shape (new fields, removed fields, type changes), the assertion fails.
+- **Negative Test Generator** dropdown: one-click to create common negative test variations from the current request:
+  - Wrong HTTP method (405)
+  - Missing authentication (401)
+  - Malformed JSON body (400)
+  - Empty body (400)
+  - Non-existent resource (404)
 - **Resizable response panel** (drag handle, 150px-800px)
 - Save/Load requests, "Add to Chain" button
 
