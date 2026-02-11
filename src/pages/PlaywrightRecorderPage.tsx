@@ -4082,8 +4082,8 @@ Recorded Test
       eventCleanups.push(unsubStepStart);
       
       // Listen for step complete events
-      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; newSelector?: string }) => {
-        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗');
+      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; newSelector?: string; aiResolved?: string | false; aiDetails?: any }) => {
+        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗', data.aiResolved ? `[AI: ${data.aiResolved}]` : '');
         setTestExecutionResult(prev => {
           if (!prev) return prev;
           const newResults = [...prev.stepResults];
@@ -4093,7 +4093,9 @@ Recorded Test
             error: data.error,
             screenshot: data.screenshot,
             workingSelector: data.workingSelector,
-            strategyType: data.strategyType
+            strategyType: data.strategyType,
+            aiResolved: data.aiResolved || false,
+            aiDetails: data.aiDetails || null,
           };
           return {
             ...prev,
@@ -9301,6 +9303,33 @@ Recorded Test
                                 return getDisplayDescription(displayAction);
                               })()}
                               {isPasswordField(action) && <span className="ml-1">🔒</span>}
+                              {/* Show AI resolution badge when AI was used to find/verify/correct this step */}
+                              {stepResult?.aiResolved && (
+                                <span 
+                                  className={cn(
+                                    "ml-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5",
+                                    stepResult.aiResolved === 'ai-dom' && "bg-purple-500/20 text-purple-400 border border-purple-500/30",
+                                    stepResult.aiResolved === 'ai-vision' && "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+                                    stepResult.aiResolved === 'ai-corrected' && "bg-amber-500/20 text-amber-400 border border-amber-500/30",
+                                    stepResult.aiResolved === 'ai-verified' && "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30",
+                                  )}
+                                  title={
+                                    stepResult.aiResolved === 'ai-dom' ? 'AI analyzed DOM to find this element' :
+                                    stepResult.aiResolved === 'ai-vision' ? 'AI used screenshot vision to find this element' :
+                                    stepResult.aiResolved === 'ai-corrected' ? 'AI detected and corrected a false positive' :
+                                    stepResult.aiResolved === 'ai-verified' ? 'AI verified this step (possible false positive)' :
+                                    'AI assisted with this step'
+                                  }
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
+                                    <path d="M8 1a.75.75 0 0 1 .75.75v.5a3.25 3.25 0 0 1 2.5 2.5h.5a.75.75 0 0 1 0 1.5h-.5a3.25 3.25 0 0 1-2.5 2.5v.5a.75.75 0 0 1-1.5 0v-.5a3.25 3.25 0 0 1-2.5-2.5h-.5a.75.75 0 0 1 0-1.5h.5a3.25 3.25 0 0 1 2.5-2.5v-.5A.75.75 0 0 1 8 1Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM3.5 12.5a.75.75 0 0 1 .75.75v.25h.25a.75.75 0 0 1 0 1.5h-.25v.25a.75.75 0 0 1-1.5 0V15h-.25a.75.75 0 0 1 0-1.5h.25v-.25a.75.75 0 0 1 .75-.75Zm9 0a.75.75 0 0 1 .75.75v.25h.25a.75.75 0 0 1 0 1.5h-.25v.25a.75.75 0 0 1-1.5 0V15h-.25a.75.75 0 0 1 0-1.5h.25v-.25a.75.75 0 0 1 .75-.75Z" />
+                                  </svg>
+                                  {stepResult.aiResolved === 'ai-dom' ? 'AI' :
+                                   stepResult.aiResolved === 'ai-vision' ? 'AI Vision' :
+                                   stepResult.aiResolved === 'ai-corrected' ? 'AI Fixed' :
+                                   stepResult.aiResolved === 'ai-verified' ? 'AI Check' : 'AI'}
+                                </span>
+                              )}
                               {/* Show false positive badge if flagged */}
                               {action.id && falsePositiveSteps.has(action.id) && (
                                 <span className="ml-1 text-xs bg-amber-500/20 text-amber-400 px-1 rounded">🚩</span>
@@ -9481,6 +9510,16 @@ Recorded Test
                       ({testExecutionResult?.stepResults.filter(r => r.status === 'skipped').length} skipped)
                     </span>
                   )}
+                  {/* AI involvement summary */}
+                  {(() => {
+                    const aiSteps = testExecutionResult?.stepResults.filter((r: any) => r.aiResolved) || [];
+                    if (aiSteps.length === 0) return null;
+                    return (
+                      <span className="text-purple-400 ml-2" title={`AI assisted ${aiSteps.length} step(s): ${aiSteps.map((r: any) => `#${r.index + 1} (${r.aiResolved})`).join(', ')}`}>
+                        AI: {aiSteps.length} step{aiSteps.length > 1 ? 's' : ''}
+                      </span>
+                    );
+                  })()}
                 </span>
                 <div className="flex items-center gap-2">
                   {testExecutionResult?.status === 'failed' && (() => {

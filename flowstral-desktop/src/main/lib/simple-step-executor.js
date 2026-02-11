@@ -10,25 +10,36 @@
  * │     YES → Use SimpleElementFinder (Playwright auto-wait, parallel)   │
  * │           → If not found: heal with SmartFinder                      │
  * │           → If still not found: iframe search                        │
- * │           → If still not found: AI vision fallback                   │
+ * │           → If still not found: AI DOM Resolver (text LLM)           │
+ * │           → If still not found: AI Vision fallback (screenshot)      │
  * │           → Execute the action on the found element                  │
+ * │           → Post-action verification (catch false positives)         │
+ * │           → Auto-correction if verification fails                    │
  * │                                                                      │
  * │  2. IS IT A NON-ELEMENT ACTION? (navigate/wait/press/tab/SF/etc.)   │
  * │     YES → Delegate to existing ActionHandlers UNCHANGED              │
  * │           → These handlers already work correctly                    │
+ * │                                                                      │
+ * │  AI STEP GUARANTOR:                                                  │
+ * │  - Phase 4.5: AI DOM Resolver (pruned DOM → GPT-4o-mini → selector) │
+ * │  - Phase 5: AI Vision (screenshot → GPT-4o-mini → coordinates)      │
+ * │  - Post-Action: Verify fills, clicks, selects actually worked        │
+ * │  - Auto-Correct: Fix false positives with alternative methods        │
+ * │  - AI Flags: aiResolved field on every step result                   │
+ * │  - Strategy Cache: AI selectors saved for future fast-path runs      │
  * │                                                                      │
  * │  WHAT'S DIFFERENT FROM executeAction:                                │
  * │  - NO manual count()+isVisible() snapshots for element finding       │
  * │  - NO 300ms DOM stability wait (Playwright waitFor handles it)       │
  * │  - NO sequential Quick Scan (replaced by parallel tier racing)       │
  * │  - Element finding is 3-10x faster on happy path                     │
+ * │  - AI GUARANTOR makes steps pass when all else fails                 │
  * │                                                                      │
  * │  WHAT'S THE SAME:                                                    │
  * │  - All action handlers (click mechanics, fill logic, dropdown, etc.) │
  * │  - Tab switching, iframe scoping                                     │
  * │  - Lock Locators tracking (workingSelector, strategyType)            │
  * │  - Self-healing (updates locked selector when healing succeeds)      │
- * │  - AI Vision fallback                                                │
  * │  - All SF/PWA/comprehensive UI handlers                              │
  * └───────────────────────────────────────────────────────────────────────┘
  * 
@@ -47,6 +58,7 @@
 
 const { SimpleElementFinder } = require('./simple-element-finder');
 const { getManualOverrideSelector, getLockedSelector } = require('./override-and-locked');
+const { getAIStepGuarantor, AI_RESOLUTION } = require('./ai-step-guarantor');
 
 // Action types that require finding an element on the page
 const ELEMENT_ACTIONS = new Set([
@@ -123,6 +135,17 @@ class SimpleStepExecutor {
       debug: true,
       tier1Timeout: 3000,
       tier2Timeout: 5000,
+    });
+    
+    // AI Step Guarantor — makes steps pass when all deterministic methods fail
+    this.aiGuarantor = getAIStepGuarantor({
+      enabled: ctx.enableAIFallback !== false,
+      enableDomResolver: true,
+      enableVisionFallback: true,
+      enableVerification: true,
+      enableAutoCorrection: true,
+      maxAICallsPerRun: ctx.maxAICallsPerRun || 15,
+      debug: true,
     });
   }
 
@@ -255,28 +278,63 @@ class SimpleStepExecutor {
     }
 
     // ────────────────────────────────────────────────────────────
-    // PHASE 4: AI Vision fallback (only if enabled and not found)
+    // PHASE 4+5: AI Step Guarantor (DOM Resolver → Vision Fallback)
+    // Replaces the old Phase 4 with a 2-tier AI pipeline:
+    //   4.5: AI DOM Resolver (text LLM, returns real selectors)
+    //   5:   AI Vision Fallback (screenshot, returns coordinates)
     // ────────────────────────────────────────────────────────────
-    if (!findResult && this.ctx.enableAIFallback && !this.ctx._skipCoordinateFallback) {
-      console.log('[SimpleStepExecutor] Phase 4: AI Vision fallback...');
-      const label = action.label || action.text || action.description || '';
-      const aiResult = await this.ctx.findElementWithAI(label, actionType).catch(() => null);
+    let aiResolved = AI_RESOLUTION.NONE;
+    let aiDetails = null;
+    
+    if (!findResult) {
+      console.log('[SimpleStepExecutor] Phase 4+5: AI Step Guarantor...');
+      const recipe = this._buildRecipeFromAction(action);
+      const aiResult = await this.aiGuarantor.resolveElement(this.ctx.page, action, {
+        actionType,
+        recipe,
+        scope,
+      });
+      
       if (aiResult) {
-        // AI returns coordinates — execute directly
-        return await this._executeWithCoordinates(aiResult, action, actionType);
+        aiResolved = aiResult.aiResolved;
+        aiDetails = aiResult.aiDetails;
+        
+        if (aiResult.coordinates) {
+          // AI Vision found coordinates — execute directly with AI flags
+          const coordResult = await this._executeWithCoordinates(aiResult.coordinates, action, actionType);
+          return {
+            ...coordResult,
+            aiResolved,
+            aiDetails,
+          };
+        } else if (aiResult.locator) {
+          // AI DOM Resolver found a real locator — use it like a normal find
+          findResult = {
+            locator: aiResult.locator,
+            strategy: aiResult.strategy,
+            selector: aiResult.selector,
+          };
+          console.log(`[SimpleStepExecutor] ✓ AI found element: ${aiResult.strategy} → "${aiResult.selector}"`);
+        }
       }
     }
 
     // ────────────────────────────────────────────────────────────
-    // ELEMENT NOT FOUND — return failure
+    // ELEMENT NOT FOUND — return failure (all phases exhausted)
     // ────────────────────────────────────────────────────────────
     if (!findResult) {
       const label = action.label || action.text || '';
       return { 
         success: false, 
-        error: `Element not found: "${label}" (tried ${this.finder.lastSuccessfulStrategy || 'all strategies'})` 
+        error: `Element not found: "${label}" (tried all strategies + AI)`,
+        aiResolved: AI_RESOLUTION.NONE,
       };
     }
+
+    // ────────────────────────────────────────────────────────────
+    // PRE-ACTION: Capture state for post-action verification
+    // ────────────────────────────────────────────────────────────
+    const preState = await this.aiGuarantor.capturePreState(this.ctx.page, actionType);
 
     // ────────────────────────────────────────────────────────────
     // EXECUTE THE ACTION on the found element
@@ -287,41 +345,61 @@ class SimpleStepExecutor {
     this.ctx._lastWorkingSelector = findResult.selector;
     this.ctx._lastStrategyType = findResult.strategy;
 
+    let actionResult;
     try {
       if (isFill) {
-        return await this._executeFill(locator, action, findResult, healed, newSelector);
+        actionResult = await this._executeFill(locator, action, findResult, healed, newSelector);
       } else if (isSelect) {
-        // Select actions are complex (dropdowns) — delegate to existing handler
-        // but with the element already found
-        return await this._executeSelect(action, findResult, healed, newSelector);
+        actionResult = await this._executeSelect(action, findResult, healed, newSelector);
       } else if (isCheck) {
-        return await this._executeCheck(locator, action, actionType === 'uncheck', findResult, healed, newSelector);
+        actionResult = await this._executeCheck(locator, action, actionType === 'uncheck', findResult, healed, newSelector);
       } else if (isDblClick) {
         await locator.dblclick({ timeout: 5000 });
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else if (isRightClick) {
         await locator.click({ button: 'right', timeout: 5000 });
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else if (isHover) {
         await locator.hover({ timeout: 5000 });
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else if (isClear) {
         await locator.clear({ timeout: 5000 });
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else if (isFocus) {
         await locator.focus({ timeout: 5000 });
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else if (isBlur) {
         await locator.evaluate(el => el.blur());
-        return this._successResult(findResult, healed, newSelector);
+        actionResult = this._successResult(findResult, healed, newSelector);
       } else {
         // Default: click
-        return await this._executeClick(locator, action, findResult, healed, newSelector);
+        actionResult = await this._executeClick(locator, action, findResult, healed, newSelector);
       }
     } catch (actionError) {
       console.error(`[SimpleStepExecutor] Action execution failed: ${actionError.message}`);
-      return { success: false, error: actionError.message };
+      actionResult = { success: false, error: actionError.message };
     }
+
+    // ────────────────────────────────────────────────────────────
+    // POST-ACTION: AI Verification + Auto-Correction
+    // Catches false positives and corrects them transparently
+    // ────────────────────────────────────────────────────────────
+    if (actionResult.success) {
+      actionResult = await this.aiGuarantor.verifyAndCorrect(
+        this.ctx.page, locator, action, actionType, preState, actionResult
+      );
+    }
+
+    // Attach AI resolution flags
+    if (aiResolved !== AI_RESOLUTION.NONE) {
+      actionResult.aiResolved = actionResult.aiResolved || aiResolved;
+      actionResult.aiDetails = actionResult.aiDetails || aiDetails;
+    }
+    
+    // Track step in guarantor stats
+    this.aiGuarantor.stats.stepsProcessed++;
+
+    return actionResult;
   }
 
   // ════════════════════════════════════════════════════════════════

@@ -3594,6 +3594,9 @@ class PlaywrightRecorder extends EventEmitter {
     this.aiCallsThisRun = 0;
     // Reset SimpleStepExecutor for this test run
     this._simpleStepExecutor = null;
+    // Reset AI Step Guarantor for this test run
+    const { resetAIStepGuarantor } = require('./lib/ai-step-guarantor');
+    resetAIStepGuarantor();
     
     // CRITICAL: Set flag to prevent recording navigations during test run
     this._isRunningTest = true;
@@ -3993,16 +3996,23 @@ class PlaywrightRecorder extends EventEmitter {
           const healed = result.healed || false;
           const newSelector = result.newSelector || null;
           
+          // AI Step Guarantor flags
+          const aiResolved = result.aiResolved || false;
+          const aiDetails = result.aiDetails || null;
+          
           passedSteps++;
           // Track step result with workingSelector for Lock Locators
           // Include healing info so frontend can auto-update locked selectors
+          // Include AI flags so frontend shows AI badges on AI-assisted steps
           stepResults[i] = { 
             index: i, 
             status: 'passed', 
             workingSelector, 
             strategyType,
             healed,       // TRUE if locked selector failed but SmartFinder worked
-            newSelector   // The new selector to use (auto-update locked selector)
+            newSelector,  // The new selector to use (auto-update locked selector)
+            aiResolved,   // AI resolution type: false | 'ai-dom' | 'ai-vision' | 'ai-corrected' | 'ai-verified'
+            aiDetails     // AI details: { method, latencyMs, reason, model, estimatedCost }
           };
           this.emit('test-step-complete', { 
             stepIndex: i, 
@@ -4010,7 +4020,9 @@ class PlaywrightRecorder extends EventEmitter {
             workingSelector, 
             strategyType,
             healed,
-            newSelector
+            newSelector,
+            aiResolved,
+            aiDetails
           });
           
           // Wait between steps - use slowMo for playback speed control
@@ -4238,6 +4250,22 @@ class PlaywrightRecorder extends EventEmitter {
         }
       }
       
+      // ═══════════════════════════════════════════════════════════════════
+      // AI STEP GUARANTOR: Print run summary
+      // ═══════════════════════════════════════════════════════════════════
+      try {
+        const { getAIStepGuarantor } = require('./lib/ai-step-guarantor');
+        const guarantor = getAIStepGuarantor();
+        const aiStats = guarantor.getStats();
+        const aiSteps = stepResults.filter(s => s.aiResolved);
+        if (aiSteps.length > 0 || aiStats.verificationsRun > 0) {
+          console.log('\n' + guarantor.generateSummary());
+          console.log(`[AI Guarantor] Steps with AI: ${aiSteps.map(s => `#${s.index + 1}(${s.aiResolved})`).join(', ') || 'none'}`);
+        }
+      } catch (e) {
+        // AI Guarantor not available — skip summary
+      }
+      
       // Emit test-complete with stepResults INCLUDING workingSelector for Lock Locators
       this.emit('test-complete', { 
         success, 
@@ -4245,7 +4273,7 @@ class PlaywrightRecorder extends EventEmitter {
         failedStep, 
         error: failError, 
         totalSteps: steps.length,
-        stepResults,  // CRITICAL: Include stepResults with workingSelector
+        stepResults,  // CRITICAL: Include stepResults with workingSelector + aiResolved flags
         browserKeptOpen: this._keepBrowserOpenOnFailure,
         failureScreenshot: this._lastFailureState?.screenshot
       });

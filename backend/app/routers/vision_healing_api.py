@@ -293,6 +293,110 @@ async def suggest_better_selectors(request: SuggestSelectorsRequest):
 
 
 # ============================================================================
+# AI DOM Resolution Endpoint (text-based, no vision)
+# ============================================================================
+
+class DOMResolveElementRequest(BaseModel):
+    """Request to resolve an element using DOM analysis (text LLM, not vision)"""
+    system_prompt: str = Field(..., description="System prompt for the LLM")
+    user_prompt: str = Field(..., description="User prompt with pruned DOM and element description")
+    model: str = Field(default="gpt-4o-mini", description="LLM model to use")
+    max_tokens: int = Field(default=200, description="Max tokens for response")
+
+
+class DOMResolveElementResponse(BaseModel):
+    """Response from DOM element resolution"""
+    found: bool
+    selector: Optional[str] = None
+    confidence: float = 0.0
+    reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/dom/resolve-element", response_model=DOMResolveElementResponse,
+             tags=["ai-dom-resolver"])
+async def resolve_element_from_dom(request: DOMResolveElementRequest):
+    """
+    Resolve an element from pruned DOM using text LLM (GPT-4o-mini).
+    
+    This is 10x CHEAPER than vision-based resolution because it uses text-only
+    input (pruned DOM HTML) instead of screenshot images.
+    
+    **How it works:**
+    1. The Electron desktop app prunes the DOM to ~2K tokens of relevant elements
+    2. Sends pruned DOM + element recipe description to this endpoint
+    3. GPT-4o-mini analyzes the DOM structure and returns a CSS selector
+    4. The selector is validated on the client side before use
+    
+    **Cost:** ~$0.0003 per call (vs ~$0.003 for vision)
+    
+    **When to use:** As Phase 4.5 in the element finding pipeline, before
+    falling back to expensive vision-based resolution.
+    """
+    try:
+        import os
+        api_key = _ai_config.get("api_key", "") or os.getenv("OPENAI_API_KEY", "")
+        
+        if not api_key:
+            return DOMResolveElementResponse(
+                found=False,
+                error="No OpenAI API key configured"
+            )
+        
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            return DOMResolveElementResponse(
+                found=False,
+                error="OpenAI package not installed"
+            )
+        
+        client = AsyncOpenAI(api_key=api_key)
+        
+        response = await client.chat.completions.create(
+            model=request.model,
+            messages=[
+                {"role": "system", "content": request.system_prompt},
+                {"role": "user", "content": request.user_prompt}
+            ],
+            max_tokens=request.max_tokens,
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+        
+        content = response.choices[0].message.content or ""
+        
+        import json
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError:
+            # Try to extract JSON
+            import re
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                result = json.loads(json_match.group())
+            else:
+                return DOMResolveElementResponse(
+                    found=False,
+                    error=f"Failed to parse LLM response: {content[:200]}"
+                )
+        
+        return DOMResolveElementResponse(
+            found=result.get("found", False),
+            selector=result.get("selector"),
+            confidence=result.get("confidence", 0.0),
+            reason=result.get("reason", "")
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in DOM resolution: {e}", exc_info=True)
+        return DOMResolveElementResponse(
+            found=False,
+            error=str(e)
+        )
+
+
+# ============================================================================
 # AI Configuration Endpoint
 # ============================================================================
 
