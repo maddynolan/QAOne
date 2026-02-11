@@ -80,13 +80,12 @@ A full-featured HTTP request builder (Postman-like):
 4. Frontend extracts `actual_status`, `response_body`, `response_headers`, `response_time_ms`
 5. Displays formatted response with proper HTTP status text (200 OK, 404 Not Found, etc.)
 
-**Assert Builder (ResponseTreeExplorer):**
-- Browse JSON response as a collapsible tree
-- **Click any field** to add a JSONPath assertion (leaf = value assert, parent = exists)
-- **Save as variable**: click to store a response value as `{{name}}` for use in next request/chain
-- **Quick Assert panel**: one-click assertions for status, time, and suggested top-level fields
-- **"Assert All Top-Level Fields"** button: bulk-add assertions for all first-level response fields
-- **Resizable panel**: drag handle at bottom edge to adjust tree height
+**Assert Builder (ResponseTreeExplorer) - 4 views:**
+- **Body (Tree)**: Browse JSON response as a collapsible tree. Click any field to add a JSONPath assertion (leaf = value assert, parent = exists). Save as variable: click to store a response value as `{{name}}` for use in next request/chain.
+- **Table**: Flat spreadsheet view of all leaf fields showing field name, type, value, JSONPath, and one-click assert button per row. Best for quickly scanning and selecting fields to assert.
+- **Headers**: All response headers with one-click assert buttons.
+- **Quick Assert**: One-click assertions for status, time, and suggested top-level fields. "Assert All Top-Level Fields" button for bulk add.
+- **Resizable panel**: drag handle at bottom edge to adjust height (150px-800px)
 - **Overflow-safe**: action buttons (assert, save, copy) are grouped in a shrink-0 container, never hidden by long text values
 
 ### 2. Import (Specification Import)
@@ -109,7 +108,7 @@ A full-featured HTTP request builder (Postman-like):
 3. Frontend displays parsed endpoints in a table with method badges, paths, and summaries
 4. User clicks "Add All Endpoints" or selects specific ones with "Add Selected"
 5. Each endpoint becomes one clean request in the sidebar collection (with proper base URL, sample body for POST/PUT/PATCH, Content-Type header)
-6. **No auto-generated test categories** - user builds assertions from real responses in Builder
+6. **No test generation call** - the enhanced test suite generation endpoint is NOT called during import. No "Happy Path"/"Invalid Data Type" suffixed names. Clean endpoint names only.
 
 **Tip displayed to users:** "Add endpoints to the collection, then click any in the sidebar to open in Builder. Send the request, see the live response, and click response fields to add real assertions."
 
