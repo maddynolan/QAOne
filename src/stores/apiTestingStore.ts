@@ -23,8 +23,11 @@ import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { shallow } from 'zustand/shallow';
-// Force immer into this chunk so production bundle has it (fixes "immer is not defined")
-import 'immer';
+// Enable Map/Set support in immer — MUST be called before any immer producer runs.
+// Without this, all Set operations (expanded_folders, expanded_endpoints, etc.)
+// crash with "Immer error nr: 0" because immer can't create proxies for Sets.
+import { enableMapSet } from 'immer';
+enableMapSet();
 import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================

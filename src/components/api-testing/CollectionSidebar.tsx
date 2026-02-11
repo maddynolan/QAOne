@@ -248,24 +248,42 @@ const EndpointGroup = memo(({
   const [method, ...pathParts] = endpointKey.split(' ');
   const path = pathParts.join(' ') || '/';
   
+  // If only 1 request, clicking the row opens it directly in builder
+  const handleClick = () => {
+    onToggleExpand(endpointKey);
+    if (requests.length === 1) {
+      onRequestClick(requests[0].id);
+    }
+  };
+  
   return (
     <div>
       <button
         type="button"
-        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50"
-        onClick={() => onToggleExpand(endpointKey)}
+        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors ${
+          requests.length === 1 && selectedRequestId === requests[0]?.id 
+            ? 'bg-primary/10 text-primary border border-primary/20' 
+            : ''
+        }`}
+        onClick={handleClick}
       >
-        {isExpanded ? (
-          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+        {requests.length > 1 ? (
+          isExpanded ? (
+            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+          )
         ) : (
-          <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+          <span className="w-3 h-3 shrink-0" /> 
         )}
         <MethodBadge method={method} />
         <span className="text-xs font-medium truncate font-mono">{path}</span>
-        <span className="text-[10px] text-muted-foreground shrink-0">({requests.length})</span>
+        {requests.length > 1 && (
+          <span className="text-[10px] text-muted-foreground shrink-0">({requests.length})</span>
+        )}
       </button>
       
-      {isExpanded && (
+      {isExpanded && requests.length > 1 && (
         <div className="pl-5 border-l border-border ml-2.5 space-y-0.5">
           {requests.map(req => (
             <RequestItem

@@ -390,11 +390,16 @@ export default function EnhancedAPITesting() {
     const store = useApiTestingStore.getState();
     store.initialize();
     
-    // Subscribe to builder_initial_data changes for "open in builder" clicks
+    // Subscribe to store changes for sidebar → builder interactions
     const unsub = useApiTestingStore.subscribe(
-      (state) => {
-        if (state.builder_initial_data) {
+      (state, prevState) => {
+        // When a request is opened in builder (sidebar click)
+        if (state.builder_initial_data && state.builder_initial_data !== prevState?.builder_initial_data) {
           setBuilderInitialRequest(state.builder_initial_data);
+        }
+        // When the store requests a tab switch (e.g. openRequestInBuilder sets active_tab)
+        if (state.active_tab && state.active_tab !== prevState?.active_tab) {
+          setActiveTab(state.active_tab);
         }
       }
     );
