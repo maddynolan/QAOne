@@ -1724,7 +1724,7 @@ function legacyPayloadToCollection(payload: any, workspaceId: string, name?: str
     folder_id: null,
     name: tc.title || tc.name || `${tc.method || 'GET'} ${tc.path || tc.endpoint || '/'}`,
     method: (tc.method || 'GET').toUpperCase(),
-    url: tc.path || tc.endpoint || '',
+    url: tc.endpoint || tc.path || '',
     path: tc.path || tc.endpoint || '',
     headers: tc.request?.headers 
       ? Object.entries(tc.request.headers).map(([k, v]) => ({ key: k, value: String(v), enabled: true }))

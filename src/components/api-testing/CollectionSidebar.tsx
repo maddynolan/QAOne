@@ -452,6 +452,12 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
       if (json.info && json.item) {
         // Postman Collection v2.1 format
         name = json.info?.name || name;
+        
+        // Extract base_url from Postman collection variables (e.g. {{base_url}})
+        const postmanVars: any[] = json.variable || [];
+        const baseUrlVar = postmanVars.find((v: any) => v.key === 'base_url' || v.key === 'baseUrl' || v.key === 'BASE_URL');
+        const collectionBaseUrl = baseUrlVar?.value || '';
+        
         const extractRequests = (items: any[]): any[] => {
           const reqs: any[] = [];
           for (const item of items) {
@@ -460,21 +466,45 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
               reqs.push(...extractRequests(item.item));
             } else if (item.request) {
               const r = item.request;
+              // Get the raw URL and resolve {{base_url}} if we have a value
+              let rawUrl = typeof r === 'string' ? r : (typeof r.url === 'string' ? r.url : r.url?.raw || '');
+              if (collectionBaseUrl) {
+                rawUrl = rawUrl.replace(/\{\{base_url\}\}/gi, collectionBaseUrl);
+              }
+              const pathStr = typeof r.url === 'object' ? '/' + (r.url.path || []).join('/') : '';
               reqs.push({
                 name: item.name || 'Untitled',
                 method: (typeof r === 'string' ? 'GET' : r.method) || 'GET',
-                endpoint: typeof r === 'string' ? r : (typeof r.url === 'string' ? r.url : r.url?.raw || ''),
-                path: typeof r.url === 'object' ? '/' + (r.url.path || []).join('/') : '',
+                endpoint: rawUrl,
+                path: pathStr,
                 description: r.description || '',
+                // Pass request body/headers for richer import
+                request: {
+                  headers: Array.isArray(r.header) 
+                    ? r.header.reduce((acc: any, h: any) => { if (h.key) acc[h.key] = h.value; return acc; }, {})
+                    : {},
+                  body: r.body?.raw ? (() => { try { return JSON.parse(r.body.raw); } catch { return r.body.raw; } })() : undefined,
+                },
               });
             }
           }
           return reqs;
         };
-        payload = { test_cases: extractRequests(json.item || []) };
+        payload = { test_cases: extractRequests(json.item || []), base_url: collectionBaseUrl };
       } else if (json.openapi || json.swagger) {
         // OpenAPI/Swagger format
         name = json.info?.title || name;
+        
+        // Extract base_url from OpenAPI servers or Swagger host+basePath
+        let openApiBaseUrl = '';
+        if (json.servers && json.servers.length > 0) {
+          openApiBaseUrl = json.servers[0].url || '';
+        } else if (json.host) {
+          // Swagger 2.0 format
+          const scheme = (json.schemes || ['https'])[0];
+          openApiBaseUrl = `${scheme}://${json.host}${json.basePath || ''}`;
+        }
+        
         const paths = json.paths || {};
         const testCases: any[] = [];
         for (const [path, methods] of Object.entries(paths)) {
@@ -490,7 +520,7 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
             }
           }
         }
-        payload = { test_cases: testCases };
+        payload = { test_cases: testCases, base_url: openApiBaseUrl };
       } else if (json.test_cases || json.requests) {
         // Native QAOne format
         payload = json;

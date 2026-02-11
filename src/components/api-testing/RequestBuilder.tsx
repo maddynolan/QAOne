@@ -490,9 +490,12 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
       // Extract the actual result from the test execution
       const testResult = data?.execution_results?.test_results?.[0] || data?.test_results?.[0];
-      if (testResult && testResult.actual_status) {
+      // Accept actual_status OR status_code OR http_status as the HTTP status indicator
+      const httpStatus = testResult?.actual_status ?? testResult?.status_code ?? testResult?.http_status;
+      
+      if (testResult && httpStatus) {
+        // SUCCESS PATH: backend made the HTTP request and returned full details
         const responseBody = testResult.response_body ?? testResult.response_data;
-        const httpStatus = testResult.actual_status;
         const statusText = httpStatus >= 200 && httpStatus < 300 ? "OK"
           : httpStatus >= 300 && httpStatus < 400 ? "Redirect"
           : httpStatus === 400 ? "Bad Request"
@@ -609,8 +612,27 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
           }
           setAssertionResults(results);
         }
+      } else if (testResult && testResult.error) {
+        // ERROR PATH: backend failed to make the HTTP request (invalid URL, network error, etc.)
+        const errorMsg = String(testResult.error);
+        const isUrlError = errorMsg.includes("URL") || errorMsg.includes("host") || !url.startsWith("http");
+        setResponse({
+          status: 0,
+          statusText: isUrlError ? "Invalid URL" : "Request Failed",
+          headers: {},
+          body: isUrlError
+            ? `Error: The URL "${url}" is not a valid HTTP URL.\n\nThe request path needs a base URL. Please either:\n1. Set a base URL in the Environment settings (Env tab)\n2. Enter the full URL (e.g., https://api.example.com${url.startsWith('/') ? url : '/' + url})\n\nBackend error: ${errorMsg}`
+            : `Request failed: ${errorMsg}`,
+          time: Math.round(testResult.response_time_ms || elapsed),
+          size: 0,
+        });
+        setError(isUrlError
+          ? `Invalid URL: "${url}" — set a base URL in Environment settings or enter the full URL`
+          : `Request failed: ${errorMsg}`
+        );
+        pushHistory(request.method, url);
       } else {
-        // Fallback: show the raw response
+        // FALLBACK: unexpected response format — show raw but with correct status
         setResponse({
           status: proxyResponse.status,
           statusText: proxyResponse.statusText,
