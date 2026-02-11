@@ -17,6 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Plus, Trash2, Loader2, Copy, Save, Clock, History, Code,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Wand2,
+  Camera, GitCompare, FlaskConical, Shield,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -247,6 +248,12 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
   // Saved from response (zero-code): store node values for use as {{name}} in next request
   const [savedFromResponse, setSavedFromResponse] = useState<Record<string, unknown>>({});
+  
+  // Response Snapshot: save a baseline response to detect endpoint changes
+  const [responseSnapshot, setResponseSnapshot] = useState<{
+    body: any; status: number; headers: Record<string, string>; savedAt: string;
+  } | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
 
   // Before request (zero-code): set variables before send — Static, $timestamp, $randomUUID, etc.
   type BeforeRequestVarType = "static" | "$timestamp" | "$randomUUID" | "$randomInt" | "$randomEmail" | "$randomFullName";
@@ -979,6 +986,161 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 {(initialRequest as any)?.editingTestCaseId ? "Update test" : "Add to Tests"}
               </Button>
             )}
+
+            {/* Negative Test Generator: create common negative variations from current request */}
+            {response && onAddToTestSuite && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-orange-600 border-orange-500/30 hover:bg-orange-500/5">
+                    <FlaskConical className="w-4 h-4 mr-1" />
+                    Generate Negative Tests
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Create test variations from this request</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => {
+                    const url = buildUrl();
+                    const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+                    const variations: Array<{ name: string; method: string; url: string; body?: string; headers?: Record<string, string>; expectedStatus: number; description: string }> = [];
+                    
+                    // 1. Wrong HTTP method
+                    const altMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"].filter(m => m !== request.method);
+                    variations.push({
+                      name: `${altMethods[0]} ${pathOnly} - Wrong Method`,
+                      method: altMethods[0],
+                      url, expectedStatus: 405,
+                      description: `Send ${altMethods[0]} instead of ${request.method} - expect 405 Method Not Allowed`,
+                    });
+                    
+                    // 2. Missing auth header
+                    variations.push({
+                      name: `${request.method} ${pathOnly} - No Auth`,
+                      method: request.method,
+                      url, expectedStatus: 401,
+                      headers: { "Content-Type": "application/json" },
+                      description: "Send without authentication - expect 401 Unauthorized",
+                    });
+                    
+                    // 3. Invalid body (for POST/PUT/PATCH)
+                    if (["POST", "PUT", "PATCH"].includes(request.method)) {
+                      variations.push({
+                        name: `${request.method} ${pathOnly} - Malformed JSON`,
+                        method: request.method,
+                        url, body: "{invalid-json",
+                        expectedStatus: 400,
+                        description: "Send malformed JSON body - expect 400 Bad Request",
+                      });
+                      variations.push({
+                        name: `${request.method} ${pathOnly} - Empty Body`,
+                        method: request.method,
+                        url, body: "",
+                        expectedStatus: 400,
+                        description: "Send empty body - expect 400 Bad Request",
+                      });
+                    }
+                    
+                    // 4. Non-existent resource (404)
+                    const notFoundUrl = url.replace(/\/(\d+|[a-f0-9-]{36})(\?|$)/i, "/99999999$2");
+                    if (notFoundUrl !== url) {
+                      variations.push({
+                        name: `${request.method} ${pathOnly} - Not Found`,
+                        method: request.method,
+                        url: notFoundUrl, expectedStatus: 404,
+                        description: "Request non-existent resource - expect 404 Not Found",
+                      });
+                    }
+                    
+                    // Add all variations to collection
+                    let added = 0;
+                    for (const v of variations) {
+                      onAddToTestSuite({
+                        test_case_id: `neg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        title: v.name,
+                        name: v.name,
+                        method: v.method,
+                        path: pathOnly,
+                        endpoint: pathOnly,
+                        expected_status: v.expectedStatus,
+                        description: v.description,
+                        test_type: "negative",
+                        request: {
+                          url: v.url,
+                          method: v.method,
+                          headers: v.headers || Object.fromEntries(request.headers.filter(h => h.enabled).map(h => [h.key, h.value])),
+                          body: v.body !== undefined ? v.body : request.body,
+                        },
+                        assertions: [
+                          { type: "status_code", operator: "equals", expected: String(v.expectedStatus) },
+                        ],
+                      });
+                      added++;
+                    }
+                    
+                    toast({
+                      title: "Negative Tests Generated",
+                      description: `${added} negative test variations created in your collection. Run them to verify error handling.`,
+                    });
+                  }}>
+                    <FlaskConical className="w-4 h-4 mr-2" />
+                    All Negative Tests ({["POST", "PUT", "PATCH"].includes(request.method) ? "4-5" : "2-3"} variations)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    const url = buildUrl();
+                    const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+                    const altMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"].filter(m => m !== request.method);
+                    onAddToTestSuite({
+                      test_case_id: `neg_method_${Date.now()}`,
+                      title: `${altMethods[0]} ${pathOnly} - Wrong Method`,
+                      name: `${altMethods[0]} ${pathOnly} - Wrong Method`,
+                      method: altMethods[0], path: pathOnly, endpoint: pathOnly,
+                      expected_status: 405, test_type: "negative",
+                      description: `Send ${altMethods[0]} instead of ${request.method}`,
+                      request: { url, method: altMethods[0], headers: Object.fromEntries(request.headers.filter(h => h.enabled).map(h => [h.key, h.value])) },
+                      assertions: [{ type: "status_code", operator: "equals", expected: "405" }],
+                    });
+                    toast({ title: "Added", description: "Wrong method test added to collection" });
+                  }}>
+                    Wrong HTTP Method (405)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    const url = buildUrl();
+                    const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+                    onAddToTestSuite({
+                      test_case_id: `neg_noauth_${Date.now()}`,
+                      title: `${request.method} ${pathOnly} - No Auth`,
+                      name: `${request.method} ${pathOnly} - No Auth`,
+                      method: request.method, path: pathOnly, endpoint: pathOnly,
+                      expected_status: 401, test_type: "negative",
+                      description: "Send without authentication",
+                      request: { url, method: request.method, headers: { "Content-Type": "application/json" } },
+                      assertions: [{ type: "status_code", operator: "equals", expected: "401" }],
+                    });
+                    toast({ title: "Added", description: "No auth test added to collection" });
+                  }}>
+                    Missing Authentication (401)
+                  </DropdownMenuItem>
+                  {["POST", "PUT", "PATCH"].includes(request.method) && (
+                    <DropdownMenuItem onClick={() => {
+                      const url = buildUrl();
+                      const pathOnly = url.replace(/^https?:\/\/[^/]+/, "") || "/";
+                      onAddToTestSuite({
+                        test_case_id: `neg_badjson_${Date.now()}`,
+                        title: `${request.method} ${pathOnly} - Malformed JSON`,
+                        name: `${request.method} ${pathOnly} - Malformed JSON`,
+                        method: request.method, path: pathOnly, endpoint: pathOnly,
+                        expected_status: 400, test_type: "negative",
+                        description: "Send malformed JSON body",
+                        request: { url, method: request.method, headers: Object.fromEntries(request.headers.filter(h => h.enabled).map(h => [h.key, h.value])), body: "{invalid-json" },
+                        assertions: [{ type: "status_code", operator: "equals", expected: "400" }],
+                      });
+                      toast({ title: "Added", description: "Malformed JSON test added to collection" });
+                    }}>
+                      Malformed JSON Body (400)
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           {showSaveInput && (
@@ -1559,6 +1721,68 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                     } catch { return 3; }
                   })()})
                 </Button>
+                {/* Snapshot: save baseline response */}
+                <Button
+                  variant={responseSnapshot ? "outline" : "ghost"}
+                  size="sm"
+                  className={responseSnapshot ? "border-amber-500/50 text-amber-600" : ""}
+                  onClick={() => {
+                    try {
+                      const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+                      setResponseSnapshot({
+                        body: parsed,
+                        status: response.status,
+                        headers: { ...response.headers },
+                        savedAt: new Date().toLocaleTimeString(),
+                      });
+                      toast({ title: "Snapshot Saved", description: "Baseline response saved. Re-send to see a diff of any changes." });
+                    } catch {
+                      toast({ title: "Error", description: "Response is not valid JSON for snapshot", variant: "destructive" });
+                    }
+                  }}
+                >
+                  <Camera className="w-4 h-4 mr-1" />
+                  {responseSnapshot ? "Update Snapshot" : "Snapshot"}
+                </Button>
+                {/* Diff toggle (only visible when snapshot exists) */}
+                {responseSnapshot && (
+                  <Button
+                    variant={showDiff ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setShowDiff(!showDiff)}
+                  >
+                    <GitCompare className="w-4 h-4 mr-1" />
+                    Diff
+                  </Button>
+                )}
+                {/* Schema Assert */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    try {
+                      const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+                      const schema = generateJsonSchema(parsed);
+                      const schemaStr = JSON.stringify(schema, null, 2);
+                      setAssertions(prev => [...prev, {
+                        id: generateId(),
+                        type: "jsonpath",
+                        name: "Response matches schema (contract)",
+                        path: "$",
+                        operator: "json_schema",
+                        expected: "",
+                        schema: schemaStr,
+                      }]);
+                      setActiveSection("assertions");
+                      toast({ title: "Schema Assert Added", description: "Contract assertion created from response structure. If the API changes its shape, this assertion fails." });
+                    } catch {
+                      toast({ title: "Error", description: "Response is not valid JSON", variant: "destructive" });
+                    }
+                  }}
+                >
+                  <Shield className="w-4 h-4 mr-1" />
+                  Schema
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1590,6 +1814,66 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   Assert Builder
                 </TabsTrigger>
               </TabsList>
+
+              {/* Snapshot Diff Panel */}
+              {showDiff && responseSnapshot && (() => {
+                try {
+                  const currentBody = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+                  const diffs = diffJson(responseSnapshot.body, currentBody);
+                  const statusChanged = responseSnapshot.status !== response.status;
+                  const totalChanges = diffs.length + (statusChanged ? 1 : 0);
+                  return (
+                    <div className="border-b bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <GitCompare className="w-4 h-4 text-amber-600" />
+                          Response Diff vs Snapshot
+                          <span className="text-xs text-muted-foreground font-normal">(saved at {responseSnapshot.savedAt})</span>
+                        </h4>
+                        <Badge variant={totalChanges === 0 ? "secondary" : "destructive"} className="text-xs">
+                          {totalChanges === 0 ? "No changes" : `${totalChanges} change${totalChanges > 1 ? "s" : ""}`}
+                        </Badge>
+                      </div>
+                      {statusChanged && (
+                        <div className="text-xs flex items-center gap-2 font-mono bg-red-500/10 rounded px-2 py-1">
+                          <span className="text-muted-foreground">Status:</span>
+                          <span className="line-through text-red-500">{responseSnapshot.status}</span>
+                          <span className="text-green-600">{response.status}</span>
+                        </div>
+                      )}
+                      {diffs.length > 0 ? (
+                        <ScrollArea className="max-h-[200px]">
+                          <div className="space-y-0.5">
+                            {diffs.slice(0, 50).map((d, i) => (
+                              <div key={i} className="text-xs font-mono flex items-center gap-2 px-2 py-0.5 rounded hover:bg-muted/50">
+                                <Badge variant="outline" className={`text-[9px] px-1 ${
+                                  d.type === "added" ? "text-green-600 border-green-500/30" :
+                                  d.type === "removed" ? "text-red-600 border-red-500/30" :
+                                  "text-amber-600 border-amber-500/30"
+                                }`}>{d.type}</Badge>
+                                <span className="text-muted-foreground">{d.path}</span>
+                                {d.type === "changed" && (
+                                  <>
+                                    <span className="line-through text-red-500 truncate max-w-[100px]">{JSON.stringify(d.oldVal)}</span>
+                                    <span className="text-green-600 truncate max-w-[100px]">{JSON.stringify(d.newVal)}</span>
+                                  </>
+                                )}
+                                {d.type === "added" && <span className="text-green-600 truncate max-w-[200px]">{JSON.stringify(d.newVal)}</span>}
+                                {d.type === "removed" && <span className="line-through text-red-500 truncate max-w-[200px]">{JSON.stringify(d.oldVal)}</span>}
+                              </div>
+                            ))}
+                            {diffs.length > 50 && <p className="text-xs text-muted-foreground px-2">...and {diffs.length - 50} more</p>}
+                          </div>
+                        </ScrollArea>
+                      ) : !statusChanged ? (
+                        <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Response matches snapshot exactly</p>
+                      ) : null}
+                    </div>
+                  );
+                } catch {
+                  return <div className="border-b bg-red-500/5 p-3 text-xs text-red-500">Cannot diff - response is not valid JSON</div>;
+                }
+              })()}
 
               <TabsContent value="console" className="mt-0 p-4 space-y-4">
                 <div className="space-y-2">
@@ -1742,6 +2026,56 @@ function tryParseJSON(text: string): any {
   } catch {
     return text;
   }
+}
+
+/** Compare two JSON objects and return a list of changes (added/removed/changed fields) */
+function diffJson(baseline: any, current: any, path: string = "$"): Array<{ path: string; type: "added" | "removed" | "changed"; oldVal?: any; newVal?: any }> {
+  const diffs: Array<{ path: string; type: "added" | "removed" | "changed"; oldVal?: any; newVal?: any }> = [];
+  if (baseline === current) return diffs;
+  if (baseline == null && current != null) return [{ path, type: "added", newVal: current }];
+  if (baseline != null && current == null) return [{ path, type: "removed", oldVal: baseline }];
+  if (typeof baseline !== typeof current) return [{ path, type: "changed", oldVal: baseline, newVal: current }];
+  if (Array.isArray(baseline) && Array.isArray(current)) {
+    if (baseline.length !== current.length) diffs.push({ path: `${path}.length`, type: "changed", oldVal: baseline.length, newVal: current.length });
+    const maxLen = Math.max(baseline.length, current.length);
+    for (let i = 0; i < Math.min(maxLen, 20); i++) { // cap at 20 items
+      if (i >= baseline.length) diffs.push({ path: `${path}[${i}]`, type: "added", newVal: current[i] });
+      else if (i >= current.length) diffs.push({ path: `${path}[${i}]`, type: "removed", oldVal: baseline[i] });
+      else diffs.push(...diffJson(baseline[i], current[i], `${path}[${i}]`));
+    }
+    return diffs;
+  }
+  if (typeof baseline === "object" && typeof current === "object") {
+    const allKeys = new Set([...Object.keys(baseline), ...Object.keys(current)]);
+    for (const key of allKeys) {
+      if (!(key in baseline)) diffs.push({ path: `${path}.${key}`, type: "added", newVal: current[key] });
+      else if (!(key in current)) diffs.push({ path: `${path}.${key}`, type: "removed", oldVal: baseline[key] });
+      else diffs.push(...diffJson(baseline[key], current[key], `${path}.${key}`));
+    }
+    return diffs;
+  }
+  if (baseline !== current) diffs.push({ path, type: "changed", oldVal: baseline, newVal: current });
+  return diffs;
+}
+
+/** Generate a JSON Schema from an actual JSON value (for contract assertions) */
+function generateJsonSchema(value: any): any {
+  if (value === null) return { type: "null" };
+  if (Array.isArray(value)) {
+    return { type: "array", items: value.length > 0 ? generateJsonSchema(value[0]) : {} };
+  }
+  if (typeof value === "object") {
+    const props: Record<string, any> = {};
+    const required: string[] = [];
+    for (const [k, v] of Object.entries(value)) {
+      props[k] = generateJsonSchema(v);
+      if (v !== null && v !== undefined) required.push(k);
+    }
+    return { type: "object", properties: props, required };
+  }
+  if (typeof value === "number") return Number.isInteger(value) ? { type: "integer" } : { type: "number" };
+  if (typeof value === "boolean") return { type: "boolean" };
+  return { type: "string" };
 }
 
 function formatResponseBody(body: string): string {
