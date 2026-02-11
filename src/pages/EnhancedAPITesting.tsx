@@ -2936,7 +2936,6 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             // Helper: add items to collection
             const addItemsToCollection = (itemKeys: string[]) => {
               const baseUrlVal = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || '';
-              const store = useApiTestingStore.getState();
               let addedCount = 0;
               
               // Separate endpoint keys and test keys
@@ -2963,7 +2962,8 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     bodyStr = JSON.stringify(sample, null, 2);
                   }
                 }
-                store.addRequest({
+                // Always read fresh state for each add
+                useApiTestingStore.getState().addRequest({
                   method: ep.method,
                   url: fullUrl,
                   path: ep.path,
@@ -2987,13 +2987,19 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               for (const [cat, tests] of Object.entries(tcByCategory)) {
                 // Create or find folder for this category
                 const folderName = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' ');
-                const existingFolder = (store.collections[store.active_collection_id || '']?.folders || [])
+                
+                // IMPORTANT: Always read FRESH state after each mutation
+                let freshState = useApiTestingStore.getState();
+                const collId = freshState.active_collection_id || '';
+                const existingFolder = (freshState.collections[collId]?.folders || [])
                   .find((f: any) => f.name.toLowerCase() === folderName.toLowerCase());
                 let folderId: string | null = existingFolder?.id || null;
+                
                 if (!folderId) {
-                  store.createFolder(folderName);
-                  // Get the newly created folder
-                  const updatedColl = store.collections[store.active_collection_id || ''];
+                  freshState.createFolder(folderName);
+                  // Re-read state AFTER folder creation to get the new folder's ID
+                  freshState = useApiTestingStore.getState();
+                  const updatedColl = freshState.collections[freshState.active_collection_id || ''];
                   const newFolder = updatedColl?.folders?.find((f: any) => f.name === folderName);
                   folderId = newFolder?.id || null;
                 }
@@ -3004,7 +3010,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   const fullUrl = baseUrlVal && tcPath && !tcPath.startsWith('http')
                     ? `${baseUrlVal.replace(/\/$/, '')}${tcPath.startsWith('/') ? tcPath : `/${tcPath}`}`
                     : tcPath;
-                  store.addRequest({
+                  useApiTestingStore.getState().addRequest({
                     method: test.method,
                     url: fullUrl,
                     path: tcPath,
@@ -3022,9 +3028,17 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 }
               }
               
+              // Trigger one immediate save after all bulk additions
+              const finalState = useApiTestingStore.getState();
+              const finalCollId = finalState.active_collection_id;
+              if (finalCollId) {
+                finalState._saveCollectionNow(finalCollId);
+              }
+              
+              const collName = finalState.collections[finalCollId || '']?.name || 'Collection';
               toast({
                 title: "Added to Collection",
-                description: `${addedCount} items added to "${activeColl?.name || 'Collection'}". Check the sidebar.`,
+                description: `${addedCount} items added to "${collName}". Check the sidebar.`,
               });
             };
             

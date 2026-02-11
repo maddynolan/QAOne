@@ -337,12 +337,12 @@ export default function ResponseTreeExplorer({
           <span className="text-muted-foreground text-xs">:</span>
 
           {/* Value */}
-          <span className={`font-mono text-xs truncate flex-1 ${getTypeColor(node.type)}`}>
+          <span className={`font-mono text-xs truncate flex-1 min-w-0 ${getTypeColor(node.type)}`}>
             {formatValue(node.value, node.type)}
           </span>
 
           {/* Breadcrumb (human path) - zero-code clarity */}
-          <span className="hidden sm:inline text-[10px] text-muted-foreground truncate max-w-[120px]" title={node.path}>
+          <span className="hidden sm:inline text-[10px] text-muted-foreground truncate max-w-[120px] shrink-0" title={node.path}>
             <ChevronsRight className="w-3 h-3 inline mr-0.5" />
             {pathToBreadcrumb(node.path)}
           </span>
@@ -351,7 +351,7 @@ export default function ResponseTreeExplorer({
           <Button
             variant="ghost"
             size="sm"
-            className={`h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+            className={`h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${
               alreadyAsserted ? "text-green-500" : "text-primary"
             }`}
             onClick={() => createAssertionFromNode(node)}
@@ -369,7 +369,7 @@ export default function ResponseTreeExplorer({
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600"
+              className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600"
               onClick={() => handleSaveAsVariable(node)}
               title={`Save as variable (use {{name}} in next request)`}
             >
@@ -381,7 +381,7 @@ export default function ResponseTreeExplorer({
           <Button
             variant="ghost"
             size="sm"
-            className="h-5 px-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={() => navigator.clipboard.writeText(node.path)}
             title={`JSONPath: ${node.path}`}
           >

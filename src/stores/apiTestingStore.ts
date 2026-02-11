@@ -928,8 +928,8 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
               coll.updated_at = nowISO();
             });
             
-            // Save immediately so new requests persist through refresh
-            get()._saveCollectionNow(collId);
+            // Use debounced save (callers can trigger immediate save after bulk ops)
+            get()._debouncedSaveCollection(collId);
             return id;
           },
           
