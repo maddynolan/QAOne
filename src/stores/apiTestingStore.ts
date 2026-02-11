@@ -2074,3 +2074,49 @@ export const useApiTestingActions = () => useApiTestingStore((s) => ({
   setSidebarOpen: s.setSidebarOpen,
   setSidebarSearch: s.setSidebarSearch,
 }), shallow);
+
+// ============================================================================
+// PURE HELPERS (for use with useMemo in components)
+// ============================================================================
+
+export type RequestResultInfo = { status: string; response_status: number; time: number };
+
+/**
+ * Compute latest test result for each request from test_runs.
+ * Returns a map: request_id -> { status, response_status, time }.
+ * Use with useMemo: `const resultMap = useMemo(() => getLatestResultMap(testRuns), [testRuns]);`
+ */
+export function getLatestResultMap(testRuns: ApiTestRun[]): Record<string, RequestResultInfo> {
+  const map: Record<string, RequestResultInfo> = {};
+  // Process runs from newest to oldest so we keep only the latest result per request
+  const sortedRuns = [...testRuns].sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  for (const run of sortedRuns) {
+    if (run.status === 'passed' || run.status === 'failed') {
+      for (const r of run.results) {
+        if (r.request_id && !map[r.request_id]) {
+          map[r.request_id] = { status: r.status, response_status: r.response_status, time: r.response_time_ms };
+        }
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Compute folder-level summary stats from a result map.
+ */
+export function getFolderStats(
+  requestIds: string[],
+  resultMap: Record<string, RequestResultInfo>
+): { total: number; passed: number; failed: number; untested: number } {
+  let passed = 0, failed = 0, untested = 0;
+  for (const id of requestIds) {
+    const r = resultMap[id];
+    if (!r) untested++;
+    else if (r.status === 'passed') passed++;
+    else failed++;
+  }
+  return { total: requestIds.length, passed, failed, untested };
+}

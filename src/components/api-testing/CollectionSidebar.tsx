@@ -39,9 +39,13 @@ import {
   useSidebarState,
   useActiveCollection,
   useWorkspaces,
+  useApiTestRuns,
+  getLatestResultMap,
+  getFolderStats,
   type ApiCollection,
   type ApiFolder,
   type ApiRequest,
+  type RequestResultInfo,
 } from '@/stores/apiTestingStore';
 import { API_BASE_URL } from '@/lib/api-config';
 import { getMethodColor } from './constants';
@@ -70,8 +74,10 @@ interface RequestItemProps {
   isSelected: boolean;
   isDragging?: boolean;
   isDropTarget?: boolean;
+  lastResult?: RequestResultInfo | null;
   onClick: (id: string) => void;
   onContextAction: (action: string, id: string) => void;
+  onRun?: (id: string) => void;
   onDragStart?: (e: React.DragEvent, id: string) => void;
   onDragOver?: (e: React.DragEvent, id: string) => void;
   onDragLeave?: () => void;
@@ -79,7 +85,7 @@ interface RequestItemProps {
   onDragEnd?: () => void;
 }
 
-const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, onClick, onContextAction, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: RequestItemProps) => {
+const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastResult, onClick, onContextAction, onRun, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: RequestItemProps) => {
   const label = request.name || `${request.method} ${request.path || request.url || '/'}`;
   const endpointPath = request.path || request.url || '';
   const showPath = request.name && endpointPath && endpointPath !== request.name;
@@ -103,6 +109,17 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, onCli
         }`}
         onClick={() => onClick(request.id)}
       >
+        {/* Status dot from latest test run */}
+        {lastResult ? (
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              lastResult.status === 'passed' ? 'bg-green-500' : 'bg-red-500'
+            }`}
+            title={`${lastResult.status === 'passed' ? 'Passed' : 'Failed'} (HTTP ${lastResult.response_status}, ${lastResult.time}ms)`}
+          />
+        ) : (
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground/20" title="Not yet run" />
+        )}
         <MethodBadge method={request.method} />
         <span className="truncate flex-1">
           {label}
@@ -114,8 +131,18 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, onCli
         </span>
       </button>
       
-      {/* Context menu on hover */}
-      <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* Hover actions: Run + Context menu */}
+      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onRun && (
+          <button
+            type="button"
+            className="h-5 w-5 flex items-center justify-center rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-muted-foreground hover:text-green-600"
+            title="Run this request"
+            onClick={(e) => { e.stopPropagation(); onRun(request.id); }}
+          >
+            <Play className="w-3 h-3" />
+          </button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
@@ -125,6 +152,9 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, onCli
           <DropdownMenuContent align="end" className="w-40">
             <DropdownMenuItem onClick={() => onContextAction('edit', request.id)}>
               <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit in Builder
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onRun?.(request.id)}>
+              <Play className="w-3.5 h-3.5 mr-2" /> Run
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onContextAction('duplicate', request.id)}>
               <Copy className="w-3.5 h-3.5 mr-2" /> Duplicate
@@ -157,10 +187,13 @@ interface FolderNodeProps {
   allFolders: ApiFolder[];
   selectedRequestId: string | null;
   expandedFolders: Set<string>;
+  lastResultMap?: Record<string, RequestResultInfo>;
   onToggleExpand: (id: string) => void;
   onRequestClick: (id: string) => void;
   onRequestContextAction: (action: string, id: string) => void;
   onFolderAction: (action: string, id: string) => void;
+  onRunRequest?: (id: string) => void;
+  onRunFolder?: (requestIds: string[]) => void;
   depth: number;
   dropTargetId?: string | null;
   dragRequestId?: string | null;
@@ -173,17 +206,24 @@ interface FolderNodeProps {
 }
 
 const FolderNode = memo(({
-  folder, requests, allFolders, selectedRequestId, expandedFolders,
-  onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction, depth,
+  folder, requests, allFolders, selectedRequestId, expandedFolders, lastResultMap,
+  onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction,
+  onRunRequest, onRunFolder, depth,
   dropTargetId, dragRequestId, onDragStart, onDragOver, onDragLeave, onDropOnFolder, onDropReorder, onDragEnd
 }: FolderNodeProps) => {
   const isExpanded = expandedFolders.has(folder.id);
   const folderRequests = requests.filter(r => r.folder_id === folder.id)
     .sort((a, b) => a.sort_order - b.sort_order);
   const childFolders = allFolders.filter(f => f.parent_folder_id === folder.id);
-  const totalCount = folderRequests.length + childFolders.reduce((sum, cf) => 
-    sum + requests.filter(r => r.folder_id === cf.id).length, 0);
+  const allFolderRequestIds = [
+    ...folderRequests.map(r => r.id),
+    ...childFolders.flatMap(cf => requests.filter(r => r.folder_id === cf.id).map(r => r.id)),
+  ];
+  const totalCount = allFolderRequestIds.length;
   const isFolderDropTarget = dropTargetId === `folder_${folder.id}`;
+  
+  // Folder-level pass/fail summary
+  const folderStats = lastResultMap ? getFolderStats(allFolderRequestIds, lastResultMap) : null;
   
   return (
     <div className={depth > 0 ? 'pl-2 border-l border-border ml-1.5' : ''}>
@@ -206,9 +246,27 @@ const FolderNode = memo(({
           <Folder className="w-3.5 h-3.5 text-amber-500/70 shrink-0" />
           <span className="text-xs font-medium truncate">{folder.name}</span>
           <span className="text-[10px] text-muted-foreground shrink-0">({totalCount})</span>
+          {/* Folder pass/fail summary */}
+          {folderStats && folderStats.total > 0 && (folderStats.passed > 0 || folderStats.failed > 0) && (
+            <span className="text-[9px] shrink-0 ml-0.5 flex items-center gap-0.5">
+              {folderStats.passed > 0 && <span className="text-green-600">{folderStats.passed}✓</span>}
+              {folderStats.failed > 0 && <span className="text-red-500">{folderStats.failed}✗</span>}
+            </span>
+          )}
         </button>
         
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Run all folder requests */}
+          {onRunFolder && totalCount > 0 && (
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-muted-foreground hover:text-green-600"
+              title={`Run all ${totalCount} tests in ${folder.name}`}
+              onClick={(e) => { e.stopPropagation(); onRunFolder(allFolderRequestIds); }}
+            >
+              <Play className="w-3 h-3" />
+            </button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
@@ -216,6 +274,14 @@ const FolderNode = memo(({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
+              {onRunFolder && totalCount > 0 && (
+                <>
+                  <DropdownMenuItem onClick={() => onRunFolder(allFolderRequestIds)}>
+                    <Play className="w-3.5 h-3.5 mr-2" /> Run All ({totalCount})
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={() => onFolderAction('add-request', folder.id)}>
                 <Plus className="w-3.5 h-3.5 mr-2" /> Add request
               </DropdownMenuItem>
@@ -248,10 +314,13 @@ const FolderNode = memo(({
               allFolders={allFolders}
               selectedRequestId={selectedRequestId}
               expandedFolders={expandedFolders}
+              lastResultMap={lastResultMap}
               onToggleExpand={onToggleExpand}
               onRequestClick={onRequestClick}
               onRequestContextAction={onRequestContextAction}
               onFolderAction={onFolderAction}
+              onRunRequest={onRunRequest}
+              onRunFolder={onRunFolder}
               depth={depth + 1}
               dropTargetId={dropTargetId}
               dragRequestId={dragRequestId}
@@ -271,8 +340,10 @@ const FolderNode = memo(({
               isSelected={selectedRequestId === req.id}
               isDragging={dragRequestId === req.id}
               isDropTarget={dropTargetId === req.id}
+              lastResult={lastResultMap?.[req.id] || null}
               onClick={onRequestClick}
               onContextAction={onRequestContextAction}
+              onRun={onRunRequest}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
@@ -561,6 +632,10 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const collection = useActiveCollection();
   const loading = useApiTestingStore(s => s.loading.collections);
   const syncStatus = useApiTestingStore(s => s.sync_status);
+  const testRuns = useApiTestRuns();
+  
+  // Compute latest result for each request (memoized)
+  const lastResultMap = useMemo(() => getLatestResultMap(testRuns), [testRuns]);
   
   // Actions (stable refs from store)
   const setSidebarOpen = useApiTestingStore(s => s.setSidebarOpen);
@@ -792,6 +867,29 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
       });
   }, []);
   
+  // Run a single request
+  const handleRunRequest = useCallback((requestId: string) => {
+    const store = useApiTestingStore.getState();
+    const envId = store.active_environment_id;
+    const req = collection?.requests.find(r => r.id === requestId);
+    const label = req?.name || `Request ${requestId.substring(0, 8)}`;
+    store.createTestRun(label, [requestId], envId || undefined)
+      .then((createdRun) => {
+        if (createdRun) store.executeTestRun(createdRun.id);
+      });
+  }, [collection]);
+  
+  // Run all requests in a folder
+  const handleRunFolder = useCallback((requestIds: string[]) => {
+    const store = useApiTestingStore.getState();
+    const envId = store.active_environment_id;
+    if (requestIds.length === 0) return;
+    store.createTestRun(`Folder run ${new Date().toLocaleTimeString()}`, requestIds, envId || undefined)
+      .then((createdRun) => {
+        if (createdRun) store.executeTestRun(createdRun.id);
+      });
+  }, []);
+  
   const handleFolderAction = useCallback((action: string, folderId: string) => {
     switch (action) {
       case 'add-request':
@@ -913,15 +1011,27 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                     <span className="text-[10px] text-muted-foreground shrink-0">
                       {totalRequests} req
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-5 w-5 p-0 shrink-0"
-                      onClick={handleNewRequest}
-                      title="Add request"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </Button>
+                    {/* New dropdown: Request or Folder */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 shrink-0"
+                          title="Add new..."
+                        >
+                          <Plus className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem onClick={handleNewRequest}>
+                          <Plus className="w-3.5 h-3.5 mr-2" /> New Request
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleCreateFolder}>
+                          <FolderPlus className="w-3.5 h-3.5 mr-2" /> New Folder
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   
                   {/* Folders section */}
@@ -970,10 +1080,13 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             allFolders={collection.folders}
                             selectedRequestId={sidebar.selected_request_id}
                             expandedFolders={sidebar.expanded_folders}
+                            lastResultMap={lastResultMap}
                             onToggleExpand={toggleFolderExpanded}
                             onRequestClick={handleRequestClick}
                             onRequestContextAction={handleRequestContextAction}
                             onFolderAction={handleFolderAction}
+                            onRunRequest={handleRunRequest}
+                            onRunFolder={handleRunFolder}
                             depth={0}
                             dropTargetId={dropTargetId}
                             dragRequestId={dragRequestId}

@@ -242,10 +242,11 @@ export default function EnhancedAPITesting() {
   const [specFormat, setSpecFormat] = useState("openapi");
   const [protocol, setProtocol] = useState("REST");
   const [specContent, setSpecContent] = useState("");
-  // const [showTemplatesInImport, setShowTemplatesInImport] = useState(false); // Removed - templates section removed
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedSpec, setParsedSpec] = useState<any>(null);
   const [testSuite, setTestSuite] = useState<any>(null);
+  // Import selection state — for selective "Add to Collection"
+  const [selectedImportItems, setSelectedImportItems] = useState<Set<string>>(new Set());
   const [suiteLoading, setSuiteLoading] = useState(true);
   const suiteLoadedFromBackend = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1423,17 +1424,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
       const enhanceData = await enhanceResponse.json();
       setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
+      setSelectedImportItems(new Set());
       
       toast({
-        title: "Success",
-        description: `Generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} comprehensive test cases`,
+        title: "Spec Parsed & Tests Generated",
+        description: `Found ${Object.keys(parseData.parsed_spec?.paths || {}).length} endpoints, generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} test cases. Select items below to add to your collection.`,
       });
       
-      setActiveTab("execute");
+      // Stay on import tab for selective add
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to import API specification",
+        description: error.message || "Failed to import API specification (file)",
         variant: "destructive",
       });
     } finally {
@@ -1499,13 +1501,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
       const enhanceData = await enhanceResponse.json();
       setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
+      setSelectedImportItems(new Set());
       
       toast({
-        title: "Success",
-        description: `Generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} comprehensive test cases`,
+        title: "Spec Parsed & Tests Generated",
+        description: `Found ${Object.keys(parseData.parsed_spec?.paths || {}).length} endpoints, generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} test cases. Select items below to add to your collection.`,
       });
       
-      setActiveTab("execute");
+      // Stay on import tab for selective add
     } catch (error: any) {
       toast({
         title: "Error",
@@ -2874,223 +2877,437 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             </CardContent>
           </Card>
 
-          {/* Parsed Spec Preview */}
-          {parsedSpec && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Parsed Endpoints</CardTitle>
-                <CardDescription>
-                  {Object.keys(parsedSpec.paths || {}).length} endpoints found from {parsedSpec.format || specFormat} spec
-                  {parsedSpec.base_url && ` | Base URL: ${parsedSpec.base_url}`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="max-h-64 overflow-y-auto border rounded-md">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Method</TableHead>
-                        <TableHead>Path</TableHead>
-                        <TableHead>Summary</TableHead>
-                        <TableHead className="w-20">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(parsedSpec.paths || {}).flatMap(([path, methods]: [string, any]) =>
-                        Object.entries(methods || {}).map(([method, op]: [string, any]) => (
-                          <TableRow key={`${method}-${path}`}>
-                            <TableCell>
-                              <Badge variant="outline" className={
-                                method === "GET" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
-                                method === "POST" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" :
-                                method === "PUT" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
-                                method === "DELETE" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
-                                ""
-                              }>
-                                {method}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-mono text-sm">{path}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{op?.summary || op?.operation_id || "-"}</TableCell>
-                            <TableCell>
+          {/* Parsed Spec Preview — Enhanced with selective add */}
+          {parsedSpec && (() => {
+            // Build flat list of endpoints from parsed spec
+            const endpointList: { key: string; method: string; path: string; summary: string; op: any }[] = [];
+            Object.entries(parsedSpec.paths || {}).forEach(([path, methods]: [string, any]) => {
+              Object.entries(methods || {}).forEach(([method, op]: [string, any]) => {
+                endpointList.push({ key: `ep_${method}_${path}`, method: method.toUpperCase(), path, summary: op?.summary || op?.operation_id || '', op });
+              });
+            });
+            
+            // Build list of auto-generated tests from testSuite (grouped by category)
+            const generatedTests: { key: string; name: string; method: string; path: string; category: string; tc: any }[] = [];
+            const categoryGroups: Record<string, typeof generatedTests> = {};
+            
+            if (testSuite?.test_categories && typeof testSuite.test_categories === 'object') {
+              Object.entries(testSuite.test_categories).forEach(([cat, catTests]: [string, any]) => {
+                if (!Array.isArray(catTests)) return;
+                catTests.forEach((tc: any, idx: number) => {
+                  const item = {
+                    key: `tc_${cat}_${tc.test_case_id || tc.name || idx}`,
+                    name: tc.name || tc.title || tc.test_name || `${cat} test ${idx + 1}`,
+                    method: (tc.method || 'GET').toUpperCase(),
+                    path: tc.path || tc.endpoint || '',
+                    category: cat,
+                    tc,
+                  };
+                  generatedTests.push(item);
+                  if (!categoryGroups[cat]) categoryGroups[cat] = [];
+                  categoryGroups[cat].push(item);
+                });
+              });
+            }
+            // Also include base test_cases that aren't in categories
+            if (testSuite?.test_cases && Array.isArray(testSuite.test_cases)) {
+              const catKeys = new Set(generatedTests.map(t => t.key));
+              testSuite.test_cases.forEach((tc: any, idx: number) => {
+                const k = `tc_base_${tc.test_case_id || tc.name || idx}`;
+                if (!catKeys.has(k)) {
+                  const item = { key: k, name: tc.name || tc.title || `Test ${idx + 1}`, method: (tc.method || 'GET').toUpperCase(), path: tc.path || tc.endpoint || '', category: 'functional', tc };
+                  generatedTests.push(item);
+                  if (!categoryGroups['functional']) categoryGroups['functional'] = [];
+                  categoryGroups['functional'].push(item);
+                }
+              });
+            }
+            
+            const allImportItems = [...endpointList.map(e => e.key), ...generatedTests.map(t => t.key)];
+            const totalItems = allImportItems.length;
+            
+            // Check which endpoints already exist in the active collection
+            const store = useApiTestingStore.getState();
+            const activeColl = store.active_collection_id ? store.collections[store.active_collection_id] : null;
+            const existingEndpoints = new Set(
+              (activeColl?.requests || []).map((r: any) => `${(r.method || 'GET').toUpperCase()} ${r.path || r.url || '/'}`)
+            );
+            
+            const baseUrl = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || parsedSpec.servers?.[0]?.url || '';
+            
+            // Helper: add items to collection
+            const addItemsToCollection = (itemKeys: string[]) => {
+              const baseUrlVal = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || '';
+              const store = useApiTestingStore.getState();
+              let addedCount = 0;
+              
+              // Separate endpoint keys and test keys
+              const epKeys = itemKeys.filter(k => k.startsWith('ep_'));
+              const tcKeys = itemKeys.filter(k => k.startsWith('tc_'));
+              
+              // Add endpoints as requests
+              for (const ek of epKeys) {
+                const ep = endpointList.find(e => e.key === ek);
+                if (!ep) continue;
+                const fullUrl = baseUrlVal && !ep.path.startsWith('http') 
+                  ? `${baseUrlVal.replace(/\/$/, '')}${ep.path.startsWith('/') ? ep.path : `/${ep.path}`}` 
+                  : ep.path;
+                // Build sample body
+                let bodyStr = '';
+                if (['POST', 'PUT', 'PATCH'].includes(ep.method)) {
+                  const reqBody = ep.op?.requestBody?.content?.['application/json']?.schema;
+                  if (reqBody?.properties) {
+                    const sample: any = {};
+                    for (const [propName, propSchema] of Object.entries(reqBody.properties)) {
+                      const ps = propSchema as any;
+                      sample[propName] = ps.type === 'integer' ? 1 : ps.type === 'number' ? 1.0 : ps.type === 'boolean' ? true : ps.type === 'array' ? [] : `sample_${propName}`;
+                    }
+                    bodyStr = JSON.stringify(sample, null, 2);
+                  }
+                }
+                store.addRequest({
+                  method: ep.method,
+                  url: fullUrl,
+                  path: ep.path,
+                  name: ep.summary || `${ep.method} ${ep.path}`,
+                  body: bodyStr,
+                  body_type: bodyStr ? 'json' : 'none',
+                  headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+                });
+                addedCount++;
+              }
+              
+              // Group test keys by category and create folders
+              const tcByCategory: Record<string, typeof generatedTests> = {};
+              for (const tk of tcKeys) {
+                const tc = generatedTests.find(t => t.key === tk);
+                if (!tc) continue;
+                if (!tcByCategory[tc.category]) tcByCategory[tc.category] = [];
+                tcByCategory[tc.category].push(tc);
+              }
+              
+              for (const [cat, tests] of Object.entries(tcByCategory)) {
+                // Create or find folder for this category
+                const folderName = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' ');
+                const existingFolder = (store.collections[store.active_collection_id || '']?.folders || [])
+                  .find((f: any) => f.name.toLowerCase() === folderName.toLowerCase());
+                let folderId: string | null = existingFolder?.id || null;
+                if (!folderId) {
+                  store.createFolder(folderName);
+                  // Get the newly created folder
+                  const updatedColl = store.collections[store.active_collection_id || ''];
+                  const newFolder = updatedColl?.folders?.find((f: any) => f.name === folderName);
+                  folderId = newFolder?.id || null;
+                }
+                
+                for (const test of tests) {
+                  const tc = test.tc;
+                  const tcPath = tc.path || tc.endpoint || '';
+                  const fullUrl = baseUrlVal && tcPath && !tcPath.startsWith('http')
+                    ? `${baseUrlVal.replace(/\/$/, '')}${tcPath.startsWith('/') ? tcPath : `/${tcPath}`}`
+                    : tcPath;
+                  store.addRequest({
+                    method: test.method,
+                    url: fullUrl,
+                    path: tcPath,
+                    name: test.name,
+                    test_type: test.category,
+                    expected_status: tc.expected_status || 200,
+                    description: tc.description || '',
+                    body: tc.request?.body ? (typeof tc.request.body === 'string' ? tc.request.body : JSON.stringify(tc.request.body, null, 2)) : '',
+                    body_type: tc.request?.body ? 'json' : 'none',
+                    headers: tc.request?.headers
+                      ? Object.entries(tc.request.headers).map(([k, v]: [string, any]) => ({ key: k, value: String(v), enabled: true }))
+                      : [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+                  }, folderId);
+                  addedCount++;
+                }
+              }
+              
+              toast({
+                title: "Added to Collection",
+                description: `${addedCount} items added to "${activeColl?.name || 'Collection'}". Check the sidebar.`,
+              });
+            };
+            
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <CardTitle className="text-lg">Parsed Endpoints & Generated Tests</CardTitle>
+                      <CardDescription>
+                        {endpointList.length} endpoints + {generatedTests.length} auto-generated tests from {parsedSpec.format || specFormat} spec
+                        {parsedSpec.base_url && ` | Base URL: ${parsedSpec.base_url}`}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedImportItems(new Set(allImportItems))}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedImportItems(new Set())}
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Endpoints Section */}
+                  {endpointList.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <Globe className="w-4 h-4" />
+                          Endpoints ({endpointList.length})
+                        </h4>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            const epKeys = endpointList.map(e => e.key);
+                            setSelectedImportItems(prev => {
+                              const next = new Set(prev);
+                              const allSelected = epKeys.every(k => next.has(k));
+                              if (allSelected) epKeys.forEach(k => next.delete(k));
+                              else epKeys.forEach(k => next.add(k));
+                              return next;
+                            });
+                          }}
+                        >
+                          Toggle All Endpoints
+                        </Button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-10">
+                                <input
+                                  type="checkbox"
+                                  checked={endpointList.every(e => selectedImportItems.has(e.key))}
+                                  onChange={(e) => {
+                                    setSelectedImportItems(prev => {
+                                      const next = new Set(prev);
+                                      endpointList.forEach(ep => e.target.checked ? next.add(ep.key) : next.delete(ep.key));
+                                      return next;
+                                    });
+                                  }}
+                                  className="cursor-pointer"
+                                />
+                              </TableHead>
+                              <TableHead className="w-20">Method</TableHead>
+                              <TableHead>Path</TableHead>
+                              <TableHead>Summary</TableHead>
+                              <TableHead className="w-32">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {endpointList.map(ep => {
+                              const alreadyAdded = existingEndpoints.has(`${ep.method} ${ep.path}`);
+                              return (
+                                <TableRow key={ep.key} className={alreadyAdded ? 'opacity-50' : ''}>
+                                  <TableCell>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedImportItems.has(ep.key)}
+                                      onChange={() => {
+                                        setSelectedImportItems(prev => {
+                                          const next = new Set(prev);
+                                          next.has(ep.key) ? next.delete(ep.key) : next.add(ep.key);
+                                          return next;
+                                        });
+                                      }}
+                                      className="cursor-pointer"
+                                      disabled={alreadyAdded}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={
+                                      ep.method === "GET" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                                      ep.method === "POST" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" :
+                                      ep.method === "PUT" ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" :
+                                      ep.method === "DELETE" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
+                                      ""
+                                    }>
+                                      {ep.method}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm">{ep.path}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">{ep.summary || '-'}</TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-1">
+                                      {alreadyAdded ? (
+                                        <Badge variant="secondary" className="text-[10px]">
+                                          <CheckCircle2 className="w-3 h-3 mr-1" /> Added
+                                        </Badge>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-green-600 hover:text-green-800 hover:bg-green-50 dark:hover:bg-green-950"
+                                          onClick={() => addItemsToCollection([ep.key])}
+                                          title="Add this endpoint to collection"
+                                        >
+                                          <Plus className="w-3 h-3 mr-1" />
+                                          Add
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                        onClick={() => {
+                                          const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${ep.path}` : ep.path;
+                                          let sampleBody: any = undefined;
+                                          if (["POST", "PUT", "PATCH"].includes(ep.method)) {
+                                            const reqBody = ep.op?.requestBody?.content?.["application/json"]?.schema;
+                                            if (reqBody?.properties) {
+                                              sampleBody = {};
+                                              for (const [propName, propSchema] of Object.entries(reqBody.properties)) {
+                                                const ps = propSchema as any;
+                                                sampleBody[propName] = ps.type === "integer" ? 1 : ps.type === "number" ? 1.0 : ps.type === "boolean" ? true : ps.type === "array" ? [] : `sample_${propName}`;
+                                              }
+                                            }
+                                          }
+                                          setBuilderInitialRequest({ method: ep.method, url: fullUrl, headers: { "Content-Type": "application/json" }, body: sampleBody });
+                                          setActiveTab("builder");
+                                        }}
+                                      >
+                                        <Send className="w-3 h-3 mr-1" />
+                                        Try
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Auto-Generated Tests Section (grouped by category) */}
+                  {Object.keys(categoryGroups).length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Auto-Generated Tests ({generatedTests.length})
+                      </h4>
+                      {Object.entries(categoryGroups).map(([cat, tests]) => (
+                        <div key={cat} className="mb-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs capitalize">{cat.replace(/_/g, ' ')}</Badge>
+                              <span className="text-xs text-muted-foreground">({tests.length} tests)</span>
+                            </div>
+                            <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                className="h-6 text-[10px] px-2"
                                 onClick={() => {
-                                  const baseUrl = parsedSpec.base_url || parsedSpec.servers?.[0]?.url || "";
-                                  const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path;
-                                  // Build sample body from spec if POST/PUT/PATCH
-                                  let sampleBody: any = undefined;
-                                  if (["post", "put", "patch"].includes(method.toLowerCase())) {
-                                    const reqBody = op?.requestBody?.content?.["application/json"]?.schema;
-                                    if (reqBody?.properties) {
-                                      sampleBody = {};
-                                      for (const [propName, propSchema] of Object.entries(reqBody.properties)) {
-                                        const ps = propSchema as any;
-                                        sampleBody[propName] = ps.type === "integer" ? 1 
-                                          : ps.type === "number" ? 1.0
-                                          : ps.type === "boolean" ? true
-                                          : ps.type === "array" ? []
-                                          : `sample_${propName}`;
-                                      }
-                                    }
-                                  }
-                                  setBuilderInitialRequest({
-                                    method: method.toUpperCase(),
-                                    url: fullUrl,
-                                    headers: { "Content-Type": "application/json" },
-                                    body: sampleBody,
+                                  setSelectedImportItems(prev => {
+                                    const next = new Set(prev);
+                                    const allSelected = tests.every(t => next.has(t.key));
+                                    tests.forEach(t => allSelected ? next.delete(t.key) : next.add(t.key));
+                                    return next;
                                   });
-                                  setActiveTab("builder");
                                 }}
                               >
-                                <Send className="w-3 h-3 mr-1" />
-                                Try It
+                                Toggle
                               </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 text-green-600"
+                                onClick={() => addItemsToCollection(tests.map(t => t.key))}
+                                title={`Add all ${cat} tests to collection`}
+                              >
+                                <Plus className="w-3 h-3 mr-0.5" /> Add All
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="max-h-32 overflow-y-auto border rounded-md">
+                            <Table>
+                              <TableBody>
+                                {tests.map(test => (
+                                  <TableRow key={test.key} className="text-xs">
+                                    <TableCell className="w-8 py-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedImportItems.has(test.key)}
+                                        onChange={() => {
+                                          setSelectedImportItems(prev => {
+                                            const next = new Set(prev);
+                                            next.has(test.key) ? next.delete(test.key) : next.add(test.key);
+                                            return next;
+                                          });
+                                        }}
+                                        className="cursor-pointer"
+                                      />
+                                    </TableCell>
+                                    <TableCell className="w-16 py-1">
+                                      <Badge variant="outline" className="text-[9px] px-1">{test.method}</Badge>
+                                    </TableCell>
+                                    <TableCell className="py-1 font-medium">{test.name}</TableCell>
+                                    <TableCell className="py-1 font-mono text-muted-foreground text-[10px] max-w-[150px] truncate">{test.path}</TableCell>
+                                    <TableCell className="w-16 py-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 px-1.5 text-green-600 text-[10px]"
+                                        onClick={() => addItemsToCollection([test.key])}
+                                        title="Add to collection"
+                                      >
+                                        <Plus className="w-2.5 h-2.5" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                {/* Import to Collection button */}
-                <div className="pt-4">
-                  <Button
-                    className="w-full"
-                    disabled={loading}
-                    onClick={async () => {
-                      setLoading(true);
-                      try {
-                        const baseUrlInput = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || '';
-                        
-                        // Extract Postman folder hierarchy if applicable
-                        let postmanFolders: { name: string; endpoints: string[] }[] = [];
-                        try {
-                          const specJson = JSON.parse(specContent);
-                          if (specJson.info && specJson.item) {
-                            // Postman collection - extract folder structure
-                            for (const item of specJson.item) {
-                              if (item.item && Array.isArray(item.item)) {
-                                // This is a folder
-                                const folderEndpoints = item.item
-                                  .filter((sub: any) => sub.request)
-                                  .map((sub: any) => sub.name || 'Untitled');
-                                postmanFolders.push({ name: item.name || 'Folder', endpoints: folderEndpoints });
-                              }
-                            }
-                          }
-                        } catch { /* Not JSON or not Postman - ignore */ }
-                        
-                        // Generate test suite with enhanced tests
-                        const enhRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ api_spec: parsedSpec, spec_format: specFormat, protocol, test_options: {} }),
-                        });
-                        
-                        let payload: any;
-                        
-                        if (enhRes.ok) {
-                          const enhData = await enhRes.json();
-                          const suite = enhData.test_suite;
-                          const allTestCases: any[] = [...(suite?.test_cases || [])];
-                          const folders: any[] = [];
-                          
-                          if (suite?.test_categories && typeof suite.test_categories === 'object') {
-                            const seenIds = new Set(allTestCases.map((tc: any) => tc.test_case_id || tc.title || tc.name));
-                            for (const [cat, catTests] of Object.entries(suite.test_categories) as [string, any][]) {
-                              const folderTestIds: string[] = [];
-                              for (const tc of (catTests || [])) {
-                                const tcId = tc.test_case_id || tc.title || tc.name;
-                                // Ensure base URL is attached to ALL tests
-                                if (baseUrlInput && tc.endpoint && !tc.endpoint.startsWith('http')) {
-                                  tc.endpoint = `${baseUrlInput.replace(/\/$/, '')}${tc.endpoint.startsWith('/') ? tc.endpoint : `/${tc.endpoint}`}`;
-                                }
-                                if (baseUrlInput && tc.path && !tc.path.startsWith('http')) {
-                                  tc.path = `${baseUrlInput.replace(/\/$/, '')}${tc.path.startsWith('/') ? tc.path : `/${tc.path}`}`;
-                                }
-                                if (!seenIds.has(tcId)) {
-                                  allTestCases.push(tc);
-                                  seenIds.add(tcId);
-                                }
-                                folderTestIds.push(tcId);
-                              }
-                              if (folderTestIds.length > 0) {
-                                folders.push({
-                                  id: `folder_${cat}_${Date.now()}`,
-                                  name: cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' '),
-                                  test_case_ids: folderTestIds,
-                                });
-                              }
-                            }
-                          }
-                          
-                          // Ensure base URL on all test cases
-                          allTestCases.forEach(tc => {
-                            if (baseUrlInput && tc.endpoint && !tc.endpoint.startsWith('http')) {
-                              tc.endpoint = `${baseUrlInput.replace(/\/$/, '')}${tc.endpoint.startsWith('/') ? tc.endpoint : `/${tc.endpoint}`}`;
-                            }
-                            if (baseUrlInput && tc.path && !tc.path.startsWith('http')) {
-                              tc.path = `${baseUrlInput.replace(/\/$/, '')}${tc.path.startsWith('/') ? tc.path : `/${tc.path}`}`;
-                            }
-                          });
-                          
-                        // Also add Postman folder hierarchy if detected
-                        if (postmanFolders.length > 0) {
-                          for (const pf of postmanFolders) {
-                            const matchingTestIds = allTestCases
-                              .filter((tc: any) => pf.endpoints.some(ep => 
-                                (tc.name || tc.title || '').includes(ep) || ep.includes(tc.name || tc.title || '')
-                              ))
-                              .map((tc: any) => tc.test_case_id || tc.title || tc.name);
-                            if (matchingTestIds.length > 0) {
-                              folders.push({
-                                id: `folder_postman_${pf.name.replace(/\s+/g, '_')}_${Date.now()}`,
-                                name: pf.name,
-                                test_case_ids: matchingTestIds,
-                              });
-                            }
-                          }
-                        }
-                        
-                        payload = { test_cases: allTestCases, base_url: baseUrlInput, folders };
-                      } else {
-                          const testCases = Object.entries(parsedSpec.paths || {}).flatMap(([path, methods]: [string, any]) =>
-                            Object.entries(methods || {}).map(([method, op]: [string, any]) => ({
-                              name: op?.summary || `${method.toUpperCase()} ${path}`,
-                              method: method.toUpperCase(),
-                              endpoint: baseUrlInput ? `${baseUrlInput.replace(/\/$/, '')}${path}` : path,
-                              path: path,
-                            }))
-                          );
-                          payload = { test_cases: testCases, base_url: baseUrlInput };
-                        }
-                        
-                        setTestSuite(ensureTestSuiteFolders({ ...payload }));
-                        
-                        const collName = parsedSpec.info?.title || parsedSpec.title || 'Imported Collection';
-                        await useApiTestingStore.getState().importCollection(payload, collName);
-                        
-                        toast({ 
-                          title: "Imported to Collection", 
-                          description: `Added ${payload.test_cases.length} test cases to "${collName}". Switch to Execute tab to run them.` 
-                        });
-                        setActiveTab("execute");
-                      } catch (e: any) {
-                        toast({ title: "Import Failed", description: e.message, variant: "destructive" });
-                      } finally { setLoading(false); }
-                    }}
-                  >
-                    <Database className="w-4 h-4 mr-2" />
-                    Import to Collection ({Object.entries(parsedSpec.paths || {}).reduce((sum: number, [, methods]: [string, any]) => sum + Object.keys(methods || {}).length, 0)} endpoints)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                  {/* Action buttons */}
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      className="flex-1"
+                      disabled={loading}
+                      onClick={() => addItemsToCollection(allImportItems)}
+                    >
+                      <Database className="w-4 h-4 mr-2" />
+                      Add All to Collection ({totalItems})
+                    </Button>
+                    {selectedImportItems.size > 0 && selectedImportItems.size < totalItems && (
+                      <Button
+                        variant="secondary"
+                        className="flex-1"
+                        disabled={loading}
+                        onClick={() => addItemsToCollection(Array.from(selectedImportItems))}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Selected ({selectedImportItems.size})
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
         </TabsContent>
 
         {/* Chains Tab - Request Chaining */}
@@ -3440,773 +3657,336 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
-        {/* Execute Tab */}
+        {/* Execute Tab — Collection-Driven */}
         <TabsContent value="execute" className="space-y-4">
           <TabErrorBoundary tabName="Execute">
           
-          {/* Empty state: no tests AND no collection */}
-          {!testSuite && (() => {
+          {/* Collection-driven execution: reads from sidebar collection as single source of truth */}
+          {(() => {
             const store = useApiTestingStore.getState();
             const collId = store.active_collection_id;
             const coll = collId ? store.collections[collId] : null;
-            const hasCollRequests = (coll?.requests?.length || 0) > 0;
-            if (hasCollRequests) return null; // collection tests will show below
-            return (
-              <Card className="border-dashed border-2 border-muted-foreground/25">
-                <CardContent className="flex flex-col items-center justify-center py-16">
-                  <Play className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                  <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Tests to Execute</h3>
-                  <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
-                    Import an API specification, add tests to a collection, or build requests to get started.
-                  </p>
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setActiveTab("import")}>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Import Spec
-                    </Button>
-                    <Button variant="default" onClick={() => setActiveTab("builder")}>
-                      <Zap className="w-4 h-4 mr-2" />
-                      Build Request
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-          <Card>
-            <CardHeader>
-              <CardTitle>Execute Tests</CardTitle>
-              <CardDescription>
-                Select and run test cases from your collection or imported spec
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Environment Selector */}
-              <div className="space-y-2">
-                <Label>Environment *</Label>
-                <Select 
-                  value={selectedEnvironment} 
-                  onValueChange={(value) => {
-                    setSelectedEnvironment(value);
-                    localStorage.setItem("apex_selected_environment", value);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select environment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {environments.length === 0 ? (
-                      <SelectItem value="__no_env__" disabled>No environments. Create one in Env tab.</SelectItem>
-                    ) : (
-                      environments.map((env) => {
-                        const varCount = Array.isArray(env.variables) ? env.variables.length : Object.keys(env.variables || {}).length;
-                        return (
-                        <SelectItem key={env.environment_id} value={env.environment_id}>
-                          <span className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${env.type === "production" ? "bg-red-500" : env.type === "staging" ? "bg-amber-500" : "bg-green-500"}`} />
-                            {env.name} ({env.base_url}){varCount > 0 ? ` [${varCount} vars]` : ""}
-                          </span>
-                        </SelectItem>
-                        );
-                      })
-                    )}
-                  </SelectContent>
-                </Select>
-                {selectedEnvironment && (
-                  <p className="text-sm text-muted-foreground">
-                    Base URL: {environments.find(e => e.environment_id === selectedEnvironment)?.base_url || "N/A"}
-                  </p>
-                )}
-              </div>
-
-              {/* Simplified: Sequential execution */}
-              
-              {/* Advanced options removed - simplified execution */}
-              
-              {false && showAdvancedExec && executionMode === "load" && (
-                <Card className="border-orange-500/20 bg-orange-50/50 dark:bg-orange-950/10">
-                  <CardContent className="pt-4 space-y-3">
-                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Load Test Configuration</p>
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Virtual Users</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          max={1000}
-                          value={loadConfig.virtual_users}
-                          onChange={(e) => setLoadConfig((c) => ({ ...c, virtual_users: parseInt(e.target.value) || 10 }))}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Duration (seconds)</Label>
-                        <Input
-                          type="number"
-                          min={5}
-                          max={3600}
-                          value={loadConfig.duration_seconds}
-                          onChange={(e) => setLoadConfig((c) => ({ ...c, duration_seconds: parseInt(e.target.value) || 30 }))}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Ramp-up (seconds)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={300}
-                          value={loadConfig.ramp_up_seconds}
-                          onChange={(e) => setLoadConfig((c) => ({ ...c, ramp_up_seconds: parseInt(e.target.value) || 5 }))}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Think Time (ms)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={30000}
-                          value={loadConfig.think_time_ms}
-                          onChange={(e) => setLoadConfig((c) => ({ ...c, think_time_ms: parseInt(e.target.value) || 1000 }))}
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Simulates {loadConfig.virtual_users} concurrent users for {loadConfig.duration_seconds}s (ramp-up {loadConfig.ramp_up_seconds}s)
+            const collReqs = coll?.requests || [];
+            const collFolders = coll?.folders || [];
+            const isExecuting = store.executing;
+            
+            // Get latest results for status indicators
+            const testRuns = store.test_runs || [];
+            const lastResultMap: Record<string, { status: string; response_status: number; time: number }> = {};
+            for (const run of [...testRuns].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())) {
+              if (run.status === 'passed' || run.status === 'failed') {
+                for (const r of run.results) {
+                  if (r.request_id && !lastResultMap[r.request_id]) {
+                    lastResultMap[r.request_id] = { status: r.status, response_status: r.response_status, time: r.response_time_ms };
+                  }
+                }
+              }
+            }
+            
+            if (collReqs.length === 0) {
+              return (
+                <Card className="border-dashed border-2 border-muted-foreground/25">
+                  <CardContent className="flex flex-col items-center justify-center py-16">
+                    <Play className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                    <h3 className="text-xl font-semibold text-muted-foreground mb-2">No Tests to Execute</h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-md mb-6">
+                      Import an API specification and add endpoints to your collection, or build requests from the Builder tab.
                     </p>
+                    <div className="flex gap-3">
+                      <Button variant="outline" onClick={() => setActiveTab("import")}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Spec
+                      </Button>
+                      <Button variant="default" onClick={() => setActiveTab("builder")}>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Build Request
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
-              )}
-
-              {/* Data-driven: removed from simplified Execute tab */}
-              {false && showAdvancedExec && testSuite && testSuite.test_cases?.length > 0 && (
-                <Card className="border-blue-500/20 bg-blue-50/30 dark:bg-blue-950/10">
-                  <CardHeader className="py-3">
-                    <CardTitle className="text-sm font-medium">Run with data (data-driven)</CardTitle>
-                    <CardDescription className="text-xs">
-                      Upload CSV or JSON; each row runs the selected tests with variables substituted. No scripts.
-                    </CardDescription>
+              );
+            }
+            
+            // Apply filter
+            const filterLower = executeFilter.toLowerCase();
+            const filteredRequests = filterLower 
+              ? collReqs.filter((req: any) => {
+                  const name = (req.name || '').toLowerCase();
+                  const method = (req.method || '').toLowerCase();
+                  const path = (req.url || req.path || '').toLowerCase();
+                  const testType = (req.test_type || '').toLowerCase();
+                  return name.includes(filterLower) || method.includes(filterLower) || path.includes(filterLower) || testType.includes(filterLower);
+                })
+              : collReqs;
+              
+            // Summary stats from last run
+            const passCount = Object.values(lastResultMap).filter(r => r.status === 'passed').length;
+            const failCount = Object.values(lastResultMap).filter(r => r.status === 'failed' || r.status === 'error').length;
+            
+            return (
+              <>
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <CardTitle>Execute Collection Tests</CardTitle>
+                        <CardDescription>
+                          {collReqs.length} tests in "{coll?.name || 'Collection'}" 
+                          {collFolders.length > 0 && ` • ${collFolders.length} folders`}
+                          {(passCount > 0 || failCount > 0) && ` • Last run: ${passCount} passed, ${failCount} failed`}
+                        </CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex gap-2">
-                      <Select value={dataDrivenSourceType} onValueChange={(v: "csv" | "json") => setDataDrivenSourceType(v)}>
-                        <SelectTrigger className="w-28">
-                          <SelectValue />
+                  <CardContent className="space-y-4">
+                    {/* Environment Selector */}
+                    <div className="space-y-2">
+                      <Label>Environment *</Label>
+                      <Select 
+                        value={selectedEnvironment} 
+                        onValueChange={(value) => {
+                          setSelectedEnvironment(value);
+                          localStorage.setItem("apex_selected_environment", value);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select environment" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="csv">CSV</SelectItem>
-                          <SelectItem value="json">JSON</SelectItem>
+                          {environments.length === 0 ? (
+                            <SelectItem value="__no_env__" disabled>No environments. Create one in Env tab.</SelectItem>
+                          ) : (
+                            environments.map((env) => {
+                              const varCount = Array.isArray(env.variables) ? env.variables.length : Object.keys(env.variables || {}).length;
+                              return (
+                              <SelectItem key={env.environment_id} value={env.environment_id}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${env.type === "production" ? "bg-red-500" : env.type === "staging" ? "bg-amber-500" : "bg-green-500"}`} />
+                                  {env.name} ({env.base_url}){varCount > 0 ? ` [${varCount} vars]` : ""}
+                                </span>
+                              </SelectItem>
+                              );
+                            })
+                          )}
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="file"
-                        accept={dataDrivenSourceType === "csv" ? ".csv" : ".json"}
-                        className="max-w-[200px]"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const reader = new FileReader();
-                          reader.onload = () => setDataDrivenContent(String(reader.result ?? ""));
-                          reader.readAsText(f);
-                          e.target.value = "";
-                        }}
-                      />
+                      {selectedEnvironment && (
+                        <p className="text-sm text-muted-foreground">
+                          Base URL: {environments.find(e => e.environment_id === selectedEnvironment)?.base_url || "N/A"}
+                        </p>
+                      )}
                     </div>
-                    <Textarea
-                      placeholder={dataDrivenSourceType === "csv" ? "Or paste CSV (header row, then data)..." : 'Or paste JSON array, e.g. [{"id":1,"name":"a"},...]'}
-                      value={dataDrivenContent}
-                      onChange={(e) => setDataDrivenContent(e.target.value)}
-                      className="min-h-[80px] font-mono text-xs"
-                    />
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!dataDrivenContent.trim() || dataDrivenRunning}
-                        onClick={async () => {
-                          try {
-                            const name = `data_${Date.now()}`;
-                            const res = await fetch(`${API_BASE_URL}/api/v2/testing/data-driven/source`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                name,
-                                source_type: dataDrivenSourceType,
-                                content: dataDrivenContent.trim(),
-                              }),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.detail || "Failed to create source");
-                            setDataDrivenSourceId(data.source_id);
-                            setDataDrivenPreview(data.preview ?? null);
-                            toast({ title: "Data source ready", description: `Preview: ${data.preview?.row_count ?? "?"} rows` });
-                          } catch (err: any) {
-                            toast({ title: "Error", description: err.message, variant: "destructive" });
-                          }
-                        }}
-                      >
-                        Create source & preview
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={!dataDrivenSourceId || executing}
-                        onClick={async () => {
-                          if (!dataDrivenSourceId || !testSuite) return;
-                          setDataDrivenRunning(true);
-                          try {
-                            const selectedEnv = environments.find((e) => e.environment_id === selectedEnvironment);
-                            const baseUrl = selectedEnv?.base_url || testSuite.base_url || "";
-                            const res = await fetch(`${API_BASE_URL}/api/v2/testing/data-driven/execute`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                test_suite: { ...testSuite, base_url: baseUrl },
-                                source_id: dataDrivenSourceId,
-                                execution_config: { base_url: baseUrl, parallel: true, max_workers: 5 },
-                              }),
-                            });
-                            const results = await res.json();
-                            setDataDrivenResults(results);
-                            setExecutionResults(results?.execution_results ?? results);
-                            setActiveTab("results");
-                            toast({
-                              title: "Data-driven run finished",
-                              description: results?.summary ? `${results.summary.total} runs` : "See Results tab",
-                            });
-                          } catch (err: any) {
-                            toast({ title: "Error", description: err.message, variant: "destructive" });
-                          } finally {
-                            setDataDrivenRunning(false);
-                          }
-                        }}
-                      >
-                        {dataDrivenRunning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                        Run with data
-                      </Button>
-                    </div>
-                    {dataDrivenPreview && (
-                      <div className="text-xs text-muted-foreground">
-                        Preview: {dataDrivenPreview.row_count ?? 0} rows, columns: {dataDrivenPreview.columns?.join(", ") ?? "—"}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-              
-              {testSuite && (
-                <div className="flex items-center gap-3 p-2 bg-green-50/50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-900">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                  <span className="text-sm text-green-800 dark:text-green-300 font-medium">
-                    Test Suite: {testSuite.metadata?.total_test_cases || testSuite.test_cases?.length || 0} tests, 
-                    {' '}{testSuite.endpoints?.length || Object.keys(testSuite.paths || parsedSpec?.paths || {}).length || 0} endpoints
-                    {selectedTestCases.size > 0 && ` — ${selectedTestCases.size} selected`}
-                  </span>
-                  {parsedSpec && (
-                    <Button variant="ghost" size="sm" onClick={() => setActiveTab("import")} className="text-xs ml-auto">
-                      View Spec
-                    </Button>
-                  )}
-                  {testSuite.test_categories && (
-                    <div className="flex flex-wrap gap-1 ml-auto">
-                      {Object.entries(testSuite.test_categories)
-                        .filter(([, tests]: [string, any]) => Array.isArray(tests) && tests.length > 0)
-                        .map(([cat, tests]: [string, any]) => (
-                          <Badge key={cat} variant="outline" className="text-xs">
-                            {tests.length} {cat}
-                          </Badge>
-                          ))}
-                      </div>
-                    )}
-                </div>
-              )}
 
-              {/* Test Cases View/Selector — from test suite OR collection */}
-              {(() => {
-                // Get all test cases - combine test_cases, test_categories, AND collection requests
-                const baseTestCases: any[] = testSuite?.test_cases || [];
-                const testCategories = testSuite?.test_categories || {};
-                
-                // Also include collection requests (sidebar) if they exist
-                const store = useApiTestingStore.getState();
-                const collId = store.active_collection_id;
-                const coll = collId ? store.collections[collId] : null;
-                const collRequests: any[] = (coll?.requests || []).map((req: any) => ({
-                  test_id: req.id,
-                  test_case_id: req.id,
-                  name: req.name || `${req.method} ${req.url || req.path || '/'}`,
-                  method: req.method,
-                  endpoint: req.url || req.path,
-                  path: req.url || req.path,
-                  expected_status: req.expected_status || 200,
-                  test_type: req.test_type || 'functional',
-                  category: req.test_type || 'functional',
-                  description: req.description || '',
-                  assertions: req.assertions,
-                  request: {
-                    headers: req.headers?.reduce((acc: any, h: any) => {
-                      if (h.key && h.enabled !== false) acc[h.key] = h.value;
-                      return acc;
-                    }, {}) || { 'Content-Type': 'application/json' },
-                    body: req.body || undefined,
-                  },
-                  _source: 'collection',
-                }));
-                
-                // Flatten all test cases from categories
-                const categoryTestCases: any[] = [];
-                Object.values(testCategories).forEach((categoryTests: any) => {
-                  if (Array.isArray(categoryTests)) {
-                    categoryTestCases.push(...categoryTests);
-                  }
-                });
-                
-                // Combine base test cases with category test cases, avoiding duplicates
-                const allTestCasesMap = new Map();
-                
-                // Add base test cases first
-                baseTestCases.forEach((tc, idx) => {
-                  const id = tc.test_id || tc.test_case_id || tc.name || tc.test_name || tc.title || tc.id || `base_${idx}`;
-                  allTestCasesMap.set(id, tc);
-                });
-                
-                // Add category test cases (they may override base ones if same ID, which is fine)
-                categoryTestCases.forEach((tc, idx) => {
-                  const id = tc.test_id || tc.test_case_id || tc.name || tc.test_name || tc.title || tc.id || `cat_${idx}`;
-                  allTestCasesMap.set(id, tc);
-                });
-                
-                // Add collection requests (if they're not already in the test suite)
-                collRequests.forEach((tc) => {
-                  if (!allTestCasesMap.has(tc.test_id)) {
-                    allTestCasesMap.set(tc.test_id, tc);
-                  }
-                });
-                
-                const allTestCases = Array.from(allTestCasesMap.values());
-                const totalCount = allTestCases.length;
-                
-                if (totalCount === 0) return null;
-                
-                // Apply filter
-                const filterLower = executeFilter.toLowerCase();
-                const filteredTestCases = filterLower 
-                  ? allTestCases.filter((tc: any) => {
-                      const name = (tc.name || tc.test_name || tc.title || '').toLowerCase();
-                      const method = (tc.method || '').toLowerCase();
-                      const path = (tc.endpoint || tc.url || tc.path || '').toLowerCase();
-                      const type = (tc.test_type || tc.category || '').toLowerCase();
-                      return name.includes(filterLower) || method.includes(filterLower) 
-                        || path.includes(filterLower) || type.includes(filterLower);
-                    })
-                  : allTestCases;
-                
-                return (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <CardTitle className="text-lg">Test Cases ({totalCount}){selectedTestCases.size > 0 ? ` — ${selectedTestCases.size} selected` : ''}</CardTitle>
-                        <div className="flex gap-2 flex-wrap items-center">
-                          {/* Search/filter */}
-                          <Input
-                            placeholder="Filter tests..."
-                            value={executeFilter}
-                            onChange={(e) => setExecuteFilter(e.target.value)}
-                            className="h-8 w-40 text-xs"
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const allIds = new Set(allTestCases.map((tc: any, idx: number) => 
-                                tc.test_id || tc.name || tc.test_name || `test_${idx}`
-                              ));
-                              setSelectedTestCases(allIds);
-                            }}
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedTestCases(new Set())}
-                          >
-                            Deselect All
-                          </Button>
-                        </div>
+                    {/* Test list with checkboxes, search, and status */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Filter tests..."
+                          value={executeFilter}
+                          onChange={(e) => setExecuteFilter(e.target.value)}
+                          className="h-8 w-40 text-xs"
+                        />
+                        <Button variant="outline" size="sm" onClick={() => {
+                          setSelectedTestCases(new Set(collReqs.map((r: any) => r.id)));
+                        }}>Select All</Button>
+                        <Button variant="outline" size="sm" onClick={() => setSelectedTestCases(new Set())}>Deselect</Button>
                       </div>
-                      <CardDescription>
-                        {selectedTestCases.size === 0 
-                          ? `All ${totalCount} test cases will run`
-                          : `${selectedTestCases.size} of ${totalCount} test cases selected`
-                        }
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="max-h-96 overflow-y-auto border rounded-md">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-12">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTestCases.size === totalCount && totalCount > 0}
-                                  onChange={(e) => {
-                                  if (e.target.checked) {
-                                    const allIds = new Set(allTestCases.map((tc: any, idx: number) => 
-                                      tc.test_id || 
-                                      tc.test_case_id || 
-                                      tc.name || 
-                                      tc.test_name || 
-                                      tc.title ||
-                                      tc.id ||
-                                      `test_${idx}`
-                                    ));
-                                    setSelectedTestCases(allIds);
-                                    } else {
-                                      setSelectedTestCases(new Set());
-                                    }
-                                  }}
-                                  className="cursor-pointer"
-                                />
-                              </TableHead>
-                              <TableHead>Test Case</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Endpoint</TableHead>
-                              <TableHead className="w-16">Status</TableHead>
-                              <TableHead className="w-24">Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredTestCases.slice(0, 100).map((testCase: any, idx: number) => {
-                              // Generate consistent test ID - must match filtering logic
-                              const testId = testCase.test_id || 
-                                           testCase.test_case_id || 
-                                           testCase.name || 
-                                           testCase.test_name || 
-                                           testCase.title ||
-                                           testCase.id ||
-                                           `test_${idx}`;
-                              const isSelected = selectedTestCases.has(testId);
-                              const tcMethod = (testCase.method || "GET").toUpperCase();
-                              const tcPath = testCase.endpoint || testCase.url || testCase.path || 
-                                       (testCase.request?.url) || (testCase.steps?.[0]?.url) || "";
-                              return (
-                                <TableRow key={testId} className={isSelected ? "bg-blue-50" : ""}>
-                                  <TableCell>
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        const newSet = new Set(selectedTestCases);
-                                        if (e.target.checked) {
-                                          newSet.add(testId);
-                                        } else {
-                                          newSet.delete(testId);
-                                        }
-                                        setSelectedTestCases(newSet);
-                                      }}
-                                      className="cursor-pointer"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    <div className="flex items-center gap-2">
-                                      <span className="flex-1">
-                                        {testCase.name || testCase.test_name || testCase.title || `Test ${idx + 1}`}
-                                        {testCase.test_type && testCase.test_type !== "functional" && (
-                                          <span className="ml-2 text-xs text-muted-foreground">
-                                            ({testCase.test_type})
-                                          </span>
-                                        )}
-                                      </span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 flex-shrink-0 hover:bg-blue-100 dark:hover:bg-blue-900"
-                                        onClick={() => setViewingTestCase(testCase)}
-                                        title="View test case details"
-                                      >
-                                        <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline">
-                                      {testCase.test_type || testCase.category || "functional"}
+                      <span className="text-xs text-muted-foreground">
+                        {selectedTestCases.size > 0 ? `${selectedTestCases.size} of ${collReqs.length} selected` : `${collReqs.length} tests`}
+                      </span>
+                    </div>
+
+                    <div className="max-h-96 overflow-y-auto border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">
+                              <input
+                                type="checkbox"
+                                checked={selectedTestCases.size === collReqs.length && collReqs.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedTestCases(new Set(collReqs.map((r: any) => r.id)));
+                                  else setSelectedTestCases(new Set());
+                                }}
+                                className="cursor-pointer"
+                              />
+                            </TableHead>
+                            <TableHead className="w-14">Status</TableHead>
+                            <TableHead>Test</TableHead>
+                            <TableHead className="w-20">Method</TableHead>
+                            <TableHead>Endpoint</TableHead>
+                            <TableHead className="w-20">Type</TableHead>
+                            <TableHead className="w-24">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredRequests.slice(0, 100).map((req: any) => {
+                            const isSelected = selectedTestCases.has(req.id);
+                            const result = lastResultMap[req.id];
+                            const folder = collFolders.find((f: any) => f.id === req.folder_id);
+                            return (
+                              <TableRow key={req.id} className={isSelected ? 'bg-blue-50 dark:bg-blue-950/30' : ''}>
+                                <TableCell>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setSelectedTestCases(prev => {
+                                        const next = new Set(prev);
+                                        next.has(req.id) ? next.delete(req.id) : next.add(req.id);
+                                        return next;
+                                      });
+                                    }}
+                                    className="cursor-pointer"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {result ? (
+                                    <Badge variant={result.status === 'passed' ? 'default' : 'destructive'} className="text-[10px]">
+                                      {result.status === 'passed' ? '✓' : '✗'}
                                     </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-sm text-muted-foreground">
-                                    <span className="font-mono text-xs">
-                                      {tcMethod} {tcPath || "N/A"}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    {(() => {
-                                      const result = executionResults?.results?.find?.((r: any) => 
-                                        r.test_id === testId || r.test_case_id === testId || r.name === (testCase.name || testCase.test_name)
-                                      );
-                                      if (!result) return <span className="text-xs text-muted-foreground">--</span>;
-                                      return (
-                                        <Badge variant={result.status === 'passed' ? 'default' : 'destructive'} className="text-[10px]">
-                                          {result.status === 'passed' ? 'Pass' : 'Fail'}
-                                        </Badge>
-                                      );
-                                    })()}
-                                  </TableCell>
-                                  <TableCell>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-medium text-sm">
+                                  <div>
+                                    {req.name || `${req.method} ${req.path || req.url || '/'}`}
+                                    {folder && (
+                                      <span className="block text-[10px] text-muted-foreground">
+                                        <Folder className="w-2.5 h-2.5 inline mr-0.5" />{folder.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs font-mono">{req.method}</Badge>
+                                </TableCell>
+                                <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-[200px]">
+                                  {req.path || req.url || '/'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary" className="text-[10px]">{req.test_type || 'functional'}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
+                                      className="h-6 w-6 p-0 text-green-600"
+                                      title="Run this test"
                                       onClick={() => {
-                                        // Build full URL from base_url + path
-                                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
-                                        const baseUrl = selectedEnv?.base_url || testSuite?.base_url || "";
-                                        const fullPath = tcPath.startsWith("http") ? tcPath : `${baseUrl.replace(/\/$/, "")}${tcPath.startsWith("/") ? tcPath : `/${tcPath}`}`;
-                                        setBuilderInitialRequest({
-                                          method: tcMethod,
-                                          url: fullPath,
-                                          headers: testCase.request?.headers || { "Content-Type": "application/json" },
-                                          body: testCase.request?.body || undefined,
-                                        });
-                                        setActiveTab("builder");
+                                        const s = useApiTestingStore.getState();
+                                        s.createTestRun(req.name || `${req.method} ${req.path}`, [req.id], s.active_environment_id || undefined)
+                                          .then((createdRun) => { if (createdRun) s.executeTestRun(createdRun.id); });
                                       }}
-                                      title="Open in Builder to test individually"
                                     >
-                                      <Send className="w-3 h-3 mr-1" />
-                                      Try It
+                                      <Play className="w-3.5 h-3.5" />
                                     </Button>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                        {filteredTestCases.length > 100 && (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            Showing first 100 of {filteredTestCases.length} test cases{executeFilter ? ` (filtered from ${totalCount})` : ''}
-                          </div>
-                        )}
-                        {executeFilter && filteredTestCases.length === 0 && (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            No tests match "{executeFilter}"
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })()}
-              
-              {/* Execute from test suite */}
-              {testSuite && (
-                <Button 
-                  onClick={handleExecuteTests} 
-                  disabled={executing || !selectedEnvironment}
-                  className="w-full"
-                >
-                  {executing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Executing...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 mr-2" />
-                      {selectedTestCases.size > 0 && selectedTestCases.size < (testSuite?.test_cases?.length || 0)
-                        ? `Execute ${selectedTestCases.size} Selected Tests`
-                        : "Execute All Tests"
-                      }
-                    </>
-                  )}
-                </Button>
-              )}
-              
-              {/* Execute from collection (when no test suite but collection has tests) */}
-              {!testSuite && (() => {
-                const storeSnap = useApiTestingStore.getState();
-                const collId = storeSnap.active_collection_id;
-                const coll = collId ? storeSnap.collections[collId] : null;
-                const collReqs = coll?.requests || [];
-                if (collReqs.length === 0) return null;
-                
-                // Filter by selected test cases if any
-                const toExecute = selectedTestCases.size > 0 
-                  ? collReqs.filter((r: any) => selectedTestCases.has(r.id))
-                  : collReqs;
-                
-                return (
-                  <Button
-                    className="w-full"
-                    disabled={executing || !selectedEnvironment || toExecute.length === 0}
-                    onClick={async () => {
-                      setExecuting(true);
-                      try {
-                        const selectedEnv = environments.find(e => e.environment_id === selectedEnvironment);
-                        const baseUrl = selectedEnv?.base_url || coll?.base_url || '';
-                        
-                        const testCases = toExecute.map((req: any) => ({
-                          test_case_id: req.id,
-                          name: req.name,
-                          method: req.method,
-                          path: req.url || req.path,
-                          expected_status: req.expected_status || 200,
-                          assertions: req.assertions,
-                          request: {
-                            headers: req.headers?.reduce((acc: any, h: any) => {
-                              if (h.key && h.enabled !== false) acc[h.key] = h.value;
-                              return acc;
-                            }, {}) || { 'Content-Type': 'application/json' },
-                            body: req.body || undefined,
-                          },
-                        }));
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      title="Edit in Builder"
+                                      onClick={() => {
+                                        useApiTestingStore.getState().openRequestInBuilder(req.id);
+                                        setActiveTab('builder');
+                                      }}
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                      {filteredRequests.length > 100 && (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          Showing first 100 of {filteredRequests.length} tests
+                        </div>
+                      )}
+                      {executeFilter && filteredRequests.length === 0 && (
+                        <div className="p-3 text-center text-sm text-muted-foreground">
+                          No tests match "{executeFilter}"
+                        </div>
+                      )}
+                    </div>
 
-                        const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            test_suite: {
-                              name: coll?.name || 'Collection Run',
-                              base_url: baseUrl,
-                              test_cases: testCases,
-                            },
-                            execution_config: {
-                              mode: 'manual',
-                              parallel: false,
-                              max_workers: 1,
-                            },
-                          }),
-                        });
-                        const rawResp = await res.json();
-                        setExecutionResults(rawResp?.execution_results || rawResp);
-                        setActiveTab("results");
-                        toast({ title: "Execution complete", description: `Ran ${toExecute.length} tests. See Results tab.` });
-                      } catch (err: any) {
-                        toast({ title: "Execution Error", description: err.message, variant: "destructive" });
-                      } finally {
-                        setExecuting(false);
-                      }
-                    }}
-                  >
-                    {executing ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Executing...</>
-                    ) : (
-                      <><Play className="w-4 h-4 mr-2" />
-                        {selectedTestCases.size > 0
-                          ? `Execute ${toExecute.length} Selected Tests`
-                          : `Execute All ${collReqs.length} Collection Tests`
-                        }
-                      </>
-                    )}
-                  </Button>
-                );
-              })()}
-              {/* Export row */}
-              {testSuite?.test_cases?.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  <Button variant="outline" size="sm" onClick={exportToPostman} title="Export as Postman Collection v2.1">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export Postman
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={exportToHAR} title="Export as HAR (HTTP Archive)">
-                    <Download className="w-4 h-4 mr-1" />
-                    Export HAR
-                  </Button>
-                </div>
-              )}
-
-              {/* Create Custom Test Dialog - removed from simplified Execute */}
-              {false && <Dialog open={showCreateTest} onOpenChange={setShowCreateTest}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create Custom API Test Case</DialogTitle>
-                    <DialogDescription>
-                      Add a custom test case to the current test suite
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Test Title *</Label>
-                      <Input
-                        placeholder="e.g., Verify GET /users returns 200"
-                        value={customTest.title}
-                        onChange={(e) => setCustomTest(prev => ({ ...prev, title: e.target.value }))}
-                      />
+                    {/* Execute buttons */}
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        disabled={isExecuting || !selectedEnvironment}
+                        onClick={() => {
+                          const s = useApiTestingStore.getState();
+                          const idsToRun = selectedTestCases.size > 0 
+                            ? Array.from(selectedTestCases) 
+                            : collReqs.map((r: any) => r.id);
+                          s.createTestRun(
+                            `${coll?.name || 'Collection'} - ${selectedTestCases.size > 0 ? `${selectedTestCases.size} selected` : 'Full Run'}`,
+                            idsToRun,
+                            s.active_environment_id || undefined
+                          ).then((createdRun) => {
+                            if (createdRun) {
+                              s.executeTestRun(createdRun.id).then(() => {
+                                setExecutionResults(useApiTestingStore.getState().execution_results);
+                                setActiveTab("results");
+                              });
+                            }
+                          });
+                        }}
+                      >
+                        {isExecuting ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Executing...</>
+                        ) : (
+                          <><Play className="w-4 h-4 mr-2" />
+                            {selectedTestCases.size > 0
+                              ? `Execute ${selectedTestCases.size} Selected Tests`
+                              : `Execute All ${collReqs.length} Tests`
+                            }
+                          </>
+                        )}
+                      </Button>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-2">
-                        <Label>Method</Label>
-                        <Select value={customTest.method} onValueChange={(v) => setCustomTest(prev => ({ ...prev, method: v }))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="GET">GET</SelectItem>
-                            <SelectItem value="POST">POST</SelectItem>
-                            <SelectItem value="PUT">PUT</SelectItem>
-                            <SelectItem value="PATCH">PATCH</SelectItem>
-                            <SelectItem value="DELETE">DELETE</SelectItem>
-                            <SelectItem value="HEAD">HEAD</SelectItem>
-                            <SelectItem value="OPTIONS">OPTIONS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 col-span-2">
-                        <Label>Endpoint Path *</Label>
-                        <Input
-                          placeholder="/api/users"
-                          value={customTest.path}
-                          onChange={(e) => setCustomTest(prev => ({ ...prev, path: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label>Expected Status</Label>
-                        <Input
-                          type="number"
-                          value={customTest.expected_status}
-                          onChange={(e) => setCustomTest(prev => ({ ...prev, expected_status: parseInt(e.target.value) || 200 }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Test Type</Label>
-                        <Select value={customTest.test_type} onValueChange={(v) => setCustomTest(prev => ({ ...prev, test_type: v }))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="functional">Functional</SelectItem>
-                            <SelectItem value="negative">Negative</SelectItem>
-                            <SelectItem value="boundary">Boundary</SelectItem>
-                            <SelectItem value="security">Security</SelectItem>
-                            <SelectItem value="performance">Performance</SelectItem>
-                            <SelectItem value="contract">Contract</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Description (optional)</Label>
-                      <Textarea
-                        placeholder="Describe what this test verifies..."
-                        value={customTest.description}
-                        onChange={(e) => setCustomTest(prev => ({ ...prev, description: e.target.value }))}
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowCreateTest(false)}>Cancel</Button>
-                    <Button onClick={handleAddCustomTest}>
-                      <Plus className="w-4 h-4 mr-1" /> Add Test Case
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>}
-              {!selectedEnvironment && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Please select an environment before executing tests
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+                
+                {/* Recent run results inline */}
+                {testRuns.filter(r => r.collection_id === collId && r.results.length > 0).slice(0, 3).map(run => {
+                  const rPassCount = run.results.filter(r => r.status === 'passed').length;
+                  const rFailCount = run.results.filter(r => r.status === 'failed' || r.status === 'error').length;
+                  const rTotal = run.results.length || run.request_ids.length;
+                  const rPassRate = rTotal > 0 ? Math.round((rPassCount / rTotal) * 100) : 0;
+                  return (
+                    <Card key={run.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={run.status === 'passed' ? 'default' : run.status === 'failed' ? 'destructive' : 'outline'}>
+                              {run.status}
+                            </Badge>
+                            <span className="font-medium text-sm">{run.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{run.started_at ? new Date(run.started_at).toLocaleString() : ''}</span>
+                            {run.duration_ms > 0 && <span>{Math.round(run.duration_ms)}ms</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 mt-1 text-xs">
+                          <span className="text-green-600">Passed: <strong>{rPassCount}</strong></span>
+                          <span className="text-red-600">Failed: <strong>{rFailCount}</strong></span>
+                          <span className="text-muted-foreground">Rate: <strong>{rPassRate}%</strong></span>
+                          <Progress value={rPassRate} className="h-2 flex-1 max-w-[200px]" />
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  );
+                })}
+              </>
+            );
+          })()}
           </TabErrorBoundary>
         </TabsContent>
 
