@@ -185,11 +185,15 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8080",  # Frontend
         "http://localhost:3000",  # Alternative frontend
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:5174",  # Vite dev server (alt port)
         "http://localhost:8081",  # Tools server (Flowstral recorder)
         "http://127.0.0.1:8081",  # Tools server (alternative)
         "http://127.0.0.1:8080",  # Frontend (alternative)
+        "http://127.0.0.1:5173",  # Vite dev (alternative)
         "https://flowstral.com",   # Production site
         "https://www.flowstral.com",
+        "https://qaone-production.up.railway.app",  # Railway production
     ],
     allow_credentials=True,
     allow_methods=["*"],
