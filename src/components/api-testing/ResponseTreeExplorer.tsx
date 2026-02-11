@@ -4,7 +4,7 @@
  * Zero-code: click to assert, click to save as variable; breadcrumb shows nesting.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   ChevronDown, ChevronRight, Plus, Target, Hash, Copy,
   Search, CheckCircle2, Type, List, Braces, AlertCircle,
-  Save, ChevronsRight,
+  Save, ChevronsRight, GripHorizontal,
 } from "lucide-react";
 import {
   Dialog,
@@ -174,6 +174,35 @@ export default function ResponseTreeExplorer({
   const [viewMode, setViewMode] = useState<"body" | "headers" | "meta">("body");
   const [saveVarNode, setSaveVarNode] = useState<{ path: string; value: unknown } | null>(null);
   const [saveVarName, setSaveVarName] = useState("");
+  
+  // Resizable panel height
+  const [panelHeight, setPanelHeight] = useState(350);
+  const resizing = useRef(false);
+  const resizeStartY = useRef(0);
+  const resizeStartH = useRef(350);
+  
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    resizeStartY.current = e.clientY;
+    resizeStartH.current = panelHeight;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    const handleMove = (ev: MouseEvent) => {
+      if (!resizing.current) return;
+      const delta = ev.clientY - resizeStartY.current;
+      setPanelHeight(Math.max(150, Math.min(800, resizeStartH.current + delta)));
+    };
+    const handleUp = () => {
+      resizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [panelHeight]);
 
   // Parse the response body
   const bodyTree = useMemo(() => {
@@ -309,84 +338,75 @@ export default function ResponseTreeExplorer({
     return (
       <div key={node.path}>
         <div
-          className={`flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 group text-sm ${
+          className={`flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 group text-sm overflow-hidden ${
             alreadyAsserted ? "bg-green-500/5" : ""
           }`}
           style={{ paddingLeft: `${node.depth * 16 + 4}px` }}
         >
           {/* Expand/collapse toggle */}
           {isExpandable ? (
-            <button className="w-4 h-4 flex-shrink-0" onClick={() => toggleExpand(node.path)}>
+            <button className="w-4 h-4 shrink-0" onClick={() => toggleExpand(node.path)}>
               {isExpanded
                 ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
                 : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
             </button>
           ) : (
-            <span className="w-4 flex-shrink-0" />
+            <span className="w-4 shrink-0" />
           )}
 
           {/* Type icon */}
-          <span className={`flex-shrink-0 ${getTypeColor(node.type)}`}>
+          <span className={`shrink-0 ${getTypeColor(node.type)}`}>
             {getTypeIcon(node.type)}
           </span>
 
           {/* Key */}
-          <span className="font-mono text-xs font-medium text-foreground">
+          <span className="font-mono text-xs font-medium text-foreground shrink-0 max-w-[140px] truncate">
             {node.arrayIndex !== undefined ? `[${node.arrayIndex}]` : node.key}
           </span>
-          <span className="text-muted-foreground text-xs">:</span>
+          <span className="text-muted-foreground text-xs shrink-0">:</span>
 
-          {/* Value */}
+          {/* Value - this is the only element that shrinks/truncates */}
           <span className={`font-mono text-xs truncate flex-1 min-w-0 ${getTypeColor(node.type)}`}>
             {formatValue(node.value, node.type)}
           </span>
 
-          {/* Breadcrumb (human path) - zero-code clarity */}
-          <span className="hidden sm:inline text-[10px] text-muted-foreground truncate max-w-[120px] shrink-0" title={node.path}>
-            <ChevronsRight className="w-3 h-3 inline mr-0.5" />
+          {/* Breadcrumb path */}
+          <span className="hidden lg:inline text-[10px] text-muted-foreground truncate max-w-[100px] shrink-0" title={node.path}>
             {pathToBreadcrumb(node.path)}
           </span>
 
-          {/* Add assertion (any node: leaf = value assert, parent = exists) */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${
-              alreadyAsserted ? "text-green-500" : "text-primary"
-            }`}
-            onClick={() => createAssertionFromNode(node)}
-            title={alreadyAsserted ? "Assertion exists - click to add another" : `Assert ${node.path}`}
-          >
-            {alreadyAsserted ? (
-              <CheckCircle2 className="w-3 h-3" />
-            ) : (
-              <Plus className="w-3 h-3" />
-            )}
-          </Button>
-
-          {/* Save as variable - zero-code store for next request */}
-          {onSaveAsVariable && (
+          {/* Action buttons - ALWAYS accessible on hover, never pushed off-screen */}
+          <div className="flex items-center gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600"
-              onClick={() => handleSaveAsVariable(node)}
-              title={`Save as variable (use {{name}} in next request)`}
+              className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary"}`}
+              onClick={() => createAssertionFromNode(node)}
+              title={alreadyAsserted ? "Assertion exists - click to add another" : `Assert ${node.path}`}
             >
-              <Save className="w-3 h-3" />
+              {alreadyAsserted ? <CheckCircle2 className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
             </Button>
-          )}
-
-          {/* Copy path */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={() => navigator.clipboard.writeText(node.path)}
-            title={`JSONPath: ${node.path}`}
-          >
-            <Copy className="w-3 h-3 text-muted-foreground" />
-          </Button>
+            {onSaveAsVariable && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 text-amber-600"
+                onClick={() => handleSaveAsVariable(node)}
+                title={`Save as variable (use {{name}} in next request)`}
+              >
+                <Save className="w-3 h-3" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0"
+              onClick={() => navigator.clipboard.writeText(node.path)}
+              title={`JSONPath: ${node.path}`}
+            >
+              <Copy className="w-3 h-3 text-muted-foreground" />
+            </Button>
+          </div>
         </div>
 
         {/* Children */}
@@ -453,61 +473,80 @@ export default function ResponseTreeExplorer({
 
       {/* Body Tree */}
       {viewMode === "body" && (
-        <ScrollArea className="h-[350px] border rounded-lg p-2 bg-muted/20">
-          {bodyTree.length > 0 ? (
-            <div>
-              {/* Root indicator */}
-              <div className="flex items-center gap-1 py-0.5 px-1 text-xs text-muted-foreground mb-1">
-                <button onClick={() => toggleExpand("$")} className="w-4 h-4">
-                  {expandedPaths.has("$")
-                    ? <ChevronDown className="w-3.5 h-3.5" />
-                    : <ChevronRight className="w-3.5 h-3.5" />}
-                </button>
-                <Braces className="w-3 h-3" />
-                <span className="font-mono">$ (root)</span>
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
-                  {allNodes.length} nodes
-                </Badge>
+        <div className="relative">
+          <ScrollArea className="border rounded-lg p-2 bg-muted/20" style={{ height: `${panelHeight}px` }}>
+            {bodyTree.length > 0 ? (
+              <div>
+                {/* Root indicator */}
+                <div className="flex items-center gap-1 py-0.5 px-1 text-xs text-muted-foreground mb-1">
+                  <button onClick={() => toggleExpand("$")} className="w-4 h-4">
+                    {expandedPaths.has("$")
+                      ? <ChevronDown className="w-3.5 h-3.5" />
+                      : <ChevronRight className="w-3.5 h-3.5" />}
+                  </button>
+                  <Braces className="w-3 h-3" />
+                  <span className="font-mono">$ (root)</span>
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                    {allNodes.length} nodes
+                  </Badge>
+                </div>
+                {expandedPaths.has("$") && bodyTree.map(node => renderNode(node))}
               </div>
-              {expandedPaths.has("$") && bodyTree.map(node => renderNode(node))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
-              <p className="text-sm">Response is not valid JSON</p>
-              <p className="text-xs">Tree view requires a JSON response body</p>
-            </div>
-          )}
-        </ScrollArea>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">Response is not valid JSON</p>
+                <p className="text-xs">Tree view requires a JSON response body</p>
+              </div>
+            )}
+          </ScrollArea>
+          {/* Resize handle */}
+          <div
+            className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 rounded-b-lg group/resize"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          >
+            <GripHorizontal className="w-4 h-3 text-muted-foreground/40 group-hover/resize:text-muted-foreground" />
+          </div>
+        </div>
       )}
 
       {/* Headers View */}
       {viewMode === "headers" && (
-        <ScrollArea className="h-[350px] border rounded-lg p-2 bg-muted/20">
-          <div className="space-y-0.5">
-            {Object.entries(responseHeaders).map(([name, value]) => (
-              <div
-                key={name}
-                className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted/50 group"
-              >
-                <span className="font-mono text-xs font-medium text-primary min-w-[160px] truncate">{name}</span>
-                <span className="font-mono text-xs text-muted-foreground flex-1 truncate">{value}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 px-1 opacity-0 group-hover:opacity-100"
-                  onClick={() => createHeaderAssertion(name, value)}
-                  title={`Assert header "${name}" equals "${value}"`}
+        <div className="relative">
+          <ScrollArea className="border rounded-lg p-2 bg-muted/20" style={{ height: `${panelHeight}px` }}>
+            <div className="space-y-0.5">
+              {Object.entries(responseHeaders).map(([name, value]) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 py-1 px-2 rounded hover:bg-muted/50 group overflow-hidden"
                 >
-                  <Plus className="w-3 h-3" />
-                </Button>
-              </div>
-            ))}
-            {Object.keys(responseHeaders).length === 0 && (
-              <p className="text-center text-xs text-muted-foreground py-8">No headers available</p>
-            )}
+                  <span className="font-mono text-xs font-medium text-primary min-w-[160px] truncate shrink-0">{name}</span>
+                  <span className="font-mono text-xs text-muted-foreground flex-1 truncate min-w-0">{value}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => createHeaderAssertion(name, value)}
+                    title={`Assert header "${name}" equals "${value}"`}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
+                </div>
+              ))}
+              {Object.keys(responseHeaders).length === 0 && (
+                <p className="text-center text-xs text-muted-foreground py-8">No headers available</p>
+              )}
+            </div>
+          </ScrollArea>
+          <div
+            className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 rounded-b-lg group/resize"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          >
+            <GripHorizontal className="w-4 h-3 text-muted-foreground/40 group-hover/resize:text-muted-foreground" />
           </div>
-        </ScrollArea>
+        </div>
       )}
 
       {/* Quick Assert Panel */}

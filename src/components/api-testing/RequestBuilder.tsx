@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Plus, Trash2, Loader2, Copy, Save, Clock, History, Code,
-  ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
+  ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Wand2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1440,16 +1440,136 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   {response.time}ms
                 </span>
               </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(response.body);
-                }}
-              >
-                <Copy className="w-4 h-4 mr-1" />
-                Copy
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => {
+                    // Auto-Assert: generate assertions from the ACTUAL response
+                    const newAssertions: AssertionConfig[] = [];
+                    
+                    // 1. Status code assertion
+                    newAssertions.push({
+                      id: generateId(),
+                      type: "status_code",
+                      name: `Status is ${response.status}`,
+                      path: "",
+                      operator: "equals",
+                      expected: String(response.status),
+                      schema: "",
+                    });
+                    
+                    // 2. Response time assertion
+                    newAssertions.push({
+                      id: generateId(),
+                      type: "response_time",
+                      name: `Response time < ${Math.max(response.time * 2, 1000)}ms`,
+                      path: "",
+                      operator: "less_than",
+                      expected: String(Math.max(response.time * 2, 1000)),
+                      schema: "",
+                    });
+                    
+                    // 3. Content-Type header assertion
+                    const ct = response.headers["content-type"] || response.headers["Content-Type"];
+                    if (ct) {
+                      newAssertions.push({
+                        id: generateId(),
+                        type: "header",
+                        name: "Content-Type header",
+                        path: "content-type",
+                        operator: "contains",
+                        expected: ct.split(";")[0].trim(),
+                        schema: "",
+                      });
+                    }
+                    
+                    // 4. JSONPath assertions for all top-level fields
+                    try {
+                      const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+                      if (Array.isArray(parsed)) {
+                        // Array: assert length
+                        newAssertions.push({
+                          id: generateId(),
+                          type: "jsonpath",
+                          name: `Response array length is ${parsed.length}`,
+                          path: "$",
+                          operator: "exists",
+                          expected: "",
+                          schema: "",
+                        });
+                        newAssertions.push({
+                          id: generateId(),
+                          type: "jsonpath",
+                          name: `Array has ${parsed.length} items`,
+                          path: "$.length",
+                          operator: "equals",
+                          expected: String(parsed.length),
+                          schema: "",
+                        });
+                      } else if (parsed && typeof parsed === "object") {
+                        // Object: assert each top-level field
+                        for (const [key, val] of Object.entries(parsed)) {
+                          if (val === null || val === undefined) continue;
+                          if (typeof val === "object") {
+                            // For nested objects/arrays, just assert "exists"
+                            newAssertions.push({
+                              id: generateId(),
+                              type: "jsonpath",
+                              name: `$.${key} exists`,
+                              path: `$.${key}`,
+                              operator: "exists",
+                              expected: "",
+                              schema: "",
+                            });
+                          } else {
+                            // Primitive: assert equals
+                            newAssertions.push({
+                              id: generateId(),
+                              type: "jsonpath",
+                              name: `$.${key} equals ${String(val).substring(0, 40)}`,
+                              path: `$.${key}`,
+                              operator: "equals",
+                              expected: String(val),
+                              schema: "",
+                            });
+                          }
+                        }
+                      }
+                    } catch {
+                      // Non-JSON body — skip JSONPath assertions
+                    }
+                    
+                    setAssertions(prev => [...prev, ...newAssertions]);
+                    setActiveSection("assertions");
+                    setResponseTab("tree");
+                    toast({
+                      title: "Auto-Assert Complete",
+                      description: `${newAssertions.length} assertions created from live response. Review and edit as needed.`,
+                    });
+                  }}
+                >
+                  <Wand2 className="w-4 h-4 mr-1" />
+                  Auto-Assert ({(() => {
+                    try {
+                      const p = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+                      const fieldCount = Array.isArray(p) ? 2 : (p && typeof p === "object" ? Object.keys(p).length : 0);
+                      return fieldCount + 3; // +3 for status, time, content-type
+                    } catch { return 3; }
+                  })()})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(response.body);
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-1" />
+                  Copy
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
