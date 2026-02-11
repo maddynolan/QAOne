@@ -28,7 +28,8 @@ import {
   PanelLeftClose, PanelLeftOpen, FolderOpen, Folder, FolderPlus,
   Link2, Plus, Search, Loader2, MoreHorizontal, ChevronRight,
   ChevronDown, Trash2, Copy, Edit3, ArrowRight, FileText,
-  Layers, RefreshCw, Download, Upload
+  Layers, RefreshCw, Download, Upload, AlertCircle, CheckCircle2,
+  Play, PlayCircle
 } from 'lucide-react';
 import {
   useApiTestingStore,
@@ -39,6 +40,7 @@ import {
   type ApiFolder,
   type ApiRequest,
 } from '@/stores/apiTestingStore';
+import { API_BASE_URL } from '@/lib/api-config';
 import { getMethodColor } from './constants';
 
 // ============================================================================
@@ -239,11 +241,14 @@ interface EndpointGroupProps {
   onToggleExpand: (key: string) => void;
   onRequestClick: (id: string) => void;
   onRequestContextAction: (action: string, id: string) => void;
+  onAddTestCase?: (method: string, path: string) => void;
+  onRunEndpoint?: (requestIds: string[]) => void;
 }
 
 const EndpointGroup = memo(({
   endpointKey, requests, selectedRequestId, isExpanded,
-  onToggleExpand, onRequestClick, onRequestContextAction
+  onToggleExpand, onRequestClick, onRequestContextAction,
+  onAddTestCase, onRunEndpoint
 }: EndpointGroupProps) => {
   const [method, ...pathParts] = endpointKey.split(' ');
   const path = pathParts.join(' ') || '/';
@@ -258,30 +263,55 @@ const EndpointGroup = memo(({
   
   return (
     <div>
-      <button
-        type="button"
-        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors ${
-          requests.length === 1 && selectedRequestId === requests[0]?.id 
-            ? 'bg-primary/10 text-primary border border-primary/20' 
-            : ''
-        }`}
-        onClick={handleClick}
-      >
-        {requests.length > 1 ? (
-          isExpanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+      <div className="group/endpoint relative">
+        <button
+          type="button"
+          className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors ${
+            requests.length === 1 && selectedRequestId === requests[0]?.id 
+              ? 'bg-primary/10 text-primary border border-primary/20' 
+              : ''
+          }`}
+          onClick={handleClick}
+        >
+          {requests.length > 1 ? (
+            isExpanded ? (
+              <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+            )
           ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
-          )
-        ) : (
-          <span className="w-3 h-3 shrink-0" /> 
-        )}
-        <MethodBadge method={method} />
-        <span className="text-xs font-medium truncate font-mono">{path}</span>
-        {requests.length > 1 && (
-          <span className="text-[10px] text-muted-foreground shrink-0">({requests.length})</span>
-        )}
-      </button>
+            <span className="w-3 h-3 shrink-0" /> 
+          )}
+          <MethodBadge method={method} />
+          <span className="text-xs font-medium truncate font-mono flex-1 text-left">{path}</span>
+          {requests.length > 1 && (
+            <span className="text-[10px] text-muted-foreground shrink-0 group-hover/endpoint:hidden">({requests.length})</span>
+          )}
+        </button>
+        {/* Hover actions: Add test case + Run endpoint */}
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover/endpoint:flex items-center gap-0.5">
+          {onRunEndpoint && (
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-green-500"
+              title={`Run all ${requests.length} test(s) for ${method} ${path}`}
+              onClick={(e) => { e.stopPropagation(); onRunEndpoint(requests.map(r => r.id)); }}
+            >
+              <Play className="w-3 h-3" />
+            </button>
+          )}
+          {onAddTestCase && (
+            <button
+              type="button"
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-primary"
+              title={`Add test case for ${method} ${path}`}
+              onClick={(e) => { e.stopPropagation(); onAddTestCase(method, path); }}
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
       
       {isExpanded && requests.length > 1 && (
         <div className="pl-5 border-l border-border ml-2.5 space-y-0.5">
@@ -532,8 +562,82 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
         payload = { test_cases: json.test_cases || json.requests || [] };
       }
       
-      // Import into store
-      await importCollection(payload, name);
+      // Try backend pipeline to auto-generate comprehensive tests (Happy Path, Missing Required, etc.)
+      let enhancedPayload = payload;
+      try {
+        // Determine spec format for backend
+        const specFormat = (json.info && json.item) ? 'postman' 
+          : (json.openapi || json.swagger) ? 'openapi' 
+          : null;
+        
+        if (specFormat) {
+          // Step 1: Parse spec via backend
+          const parseRes = await fetch(`${API_BASE_URL}/api/import/spec`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spec_content: text, spec_format: specFormat, content_type: 'json' }),
+          });
+          
+          if (parseRes.ok) {
+            const parseData = await parseRes.json();
+            
+            // Step 2: Generate comprehensive test suite
+            const genRes = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                api_spec: parseData.parsed_spec,
+                spec_format: specFormat,
+                protocol: 'REST',
+                test_options: {},
+              }),
+            });
+            
+            if (genRes.ok) {
+              const genData = await genRes.json();
+              const suite = genData.test_suite;
+              
+              if (suite?.test_cases?.length) {
+                // Merge auto-generated test cases with base_url
+                const allTestCases = suite.test_cases || [];
+                
+                // Also gather categorized test cases if available
+                if (suite.test_categories && typeof suite.test_categories === 'object') {
+                  const seenIds = new Set(allTestCases.map((tc: any) => tc.test_case_id || tc.title || tc.name));
+                  for (const catTests of Object.values(suite.test_categories) as any[][]) {
+                    for (const tc of (catTests || [])) {
+                      const tcId = tc.test_case_id || tc.title || tc.name;
+                      if (!seenIds.has(tcId)) {
+                        allTestCases.push(tc);
+                        seenIds.add(tcId);
+                      }
+                    }
+                  }
+                }
+                
+                enhancedPayload = {
+                  ...payload,
+                  test_cases: allTestCases,
+                  base_url: payload.base_url || suite.base_url || '',
+                  // Create folders from categories if available
+                  folders: suite.test_categories ? Object.keys(suite.test_categories).map((cat: string, idx: number) => ({
+                    id: `folder_${cat}_${Date.now()}`,
+                    name: cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' '),
+                    test_case_ids: ((suite.test_categories as any)[cat] || []).map((tc: any) => tc.test_case_id || tc.title || tc.name),
+                  })) : [],
+                };
+                console.log(`[CollectionSidebar] Auto-generated ${allTestCases.length} test cases from ${specFormat} spec`);
+              }
+            }
+          }
+        }
+      } catch (genErr) {
+        console.warn('[CollectionSidebar] Backend auto-generation failed, using client-side import:', genErr);
+        // Fall back to basic client-side payload (already set)
+      }
+      
+      // Import into store (enhanced or basic)
+      await importCollection(enhancedPayload, name);
     } catch (err) {
       console.error('[CollectionSidebar] Import failed:', err);
     }
@@ -600,6 +704,37 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     }
   }, [duplicateRequest, deleteRequest]);
   
+  // Add a new test case pre-filled with the endpoint's method/path and open in builder
+  const handleAddTestCase = useCallback((method: string, path: string) => {
+    const coll = useApiTestingStore.getState().collections[useApiTestingStore.getState().active_collection_id || ''];
+    const baseUrl = coll?.base_url || '';
+    const fullUrl = path.startsWith('http') ? path : `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+    const reqId = addRequest({
+      method: method.toUpperCase(),
+      url: fullUrl,
+      path: path,
+      name: `${method.toUpperCase()} ${path} - New Test`,
+    });
+    if (reqId) {
+      openRequestInBuilder(reqId);
+    }
+  }, [addRequest, openRequestInBuilder]);
+  
+  // Run all test cases for a given endpoint
+  const handleRunEndpoint = useCallback((requestIds: string[]) => {
+    const store = useApiTestingStore.getState();
+    const envId = store.active_environment_id;
+    const collId = store.active_collection_id;
+    if (!collId || requestIds.length === 0) return;
+    store.createTestRun(`Endpoint run ${new Date().toLocaleTimeString()}`, requestIds, envId || undefined);
+    // executeTestRun will be called via the Runs/Tests tab
+    const runs = useApiTestingStore.getState().test_runs;
+    const latestRun = runs[runs.length - 1];
+    if (latestRun) {
+      store.executeTestRun(latestRun.id);
+    }
+  }, []);
+  
   const handleFolderAction = useCallback((action: string, folderId: string) => {
     switch (action) {
       case 'add-request':
@@ -647,7 +782,13 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-xs font-medium text-muted-foreground truncate">Collections</span>
             {syncStatus === 'syncing' && (
-              <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />
+              <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground shrink-0" title="Saving..." />
+            )}
+            {syncStatus === 'error' && (
+              <AlertCircle className="w-3 h-3 text-destructive shrink-0" title="Save failed — changes will retry on next edit" />
+            )}
+            {syncStatus === 'idle' && collection && (
+              <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0 opacity-60" title="Saved" />
             )}
           </div>
         )}
@@ -823,6 +964,8 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             onToggleExpand={toggleEndpointExpanded}
                             onRequestClick={handleRequestClick}
                             onRequestContextAction={handleRequestContextAction}
+                            onAddTestCase={handleAddTestCase}
+                            onRunEndpoint={handleRunEndpoint}
                           />
                         ))}
                       </div>
@@ -833,12 +976,37 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
             </div>
           </ScrollArea>
           
-          {/* Footer with stats */}
+          {/* Footer with stats + Run All */}
           {collection && totalRequests > 0 && (
-            <div className="h-8 px-3 flex items-center justify-between border-t border-border shrink-0 text-[10px] text-muted-foreground">
-              <span>{totalRequests} requests</span>
-              <span>{collection.chains.length} chains</span>
-              <span>{collection.folders.length} folders</span>
+            <div className="px-2 py-1.5 border-t border-border shrink-0 space-y-1">
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full h-7 text-xs gap-1.5"
+                disabled={useApiTestingStore.getState().executing}
+                onClick={() => {
+                  const store = useApiTestingStore.getState();
+                  const allIds = collection.requests.map(r => r.id);
+                  if (allIds.length === 0) return;
+                  store.createTestRun(
+                    `${collection.name} - Full Run`,
+                    allIds,
+                    store.active_environment_id || undefined
+                  ).then(() => {
+                    const runs = useApiTestingStore.getState().test_runs;
+                    const latestRun = runs[runs.length - 1];
+                    if (latestRun) store.executeTestRun(latestRun.id);
+                  });
+                }}
+              >
+                <PlayCircle className="w-3.5 h-3.5" />
+                Run All ({totalRequests} tests)
+              </Button>
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
+                <span>{totalRequests} requests</span>
+                <span>{totalEndpoints} endpoints</span>
+                <span>{collection.folders.length} folders</span>
+              </div>
             </div>
           )}
         </>

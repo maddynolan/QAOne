@@ -206,9 +206,11 @@ export interface ApiTestRunResult {
   status: 'passed' | 'failed' | 'skipped' | 'error';
   response_status: number;
   response_time_ms: number;
+  response_body?: any;
+  response_headers?: Record<string, string>;
   assertion_results: Array<{
-    assertion_id: string;
-    name: string;
+    assertion_id?: string;
+    name?: string;
     passed: boolean;
     message: string;
   }>;
@@ -624,7 +626,10 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 for (const c of colls) {
                   s.collections[c.id] = c;
                 }
-                if (!s.active_collection_id && colls.length > 0) {
+                // If active_collection_id is unset or points to a non-existent collection, pick the first one
+                const currentActive = s.active_collection_id;
+                const activeExists = currentActive && colls.some(c => c.id === currentActive);
+                if (!activeExists && colls.length > 0) {
                   s.active_collection_id = colls[0].id;
                 }
               });
@@ -1410,27 +1415,34 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
                 }),
               });
               
-              const results = await res.json();
+              const rawResp = await res.json();
+              // Backend wraps in { status, execution_results: { test_results, summary, ... } }
+              const execResults = rawResp?.execution_results || rawResp;
+              const testResults = execResults?.test_results || [];
+              const summary = execResults?.summary || {};
               
               set((s) => {
                 const r = s.test_runs.find(r => r.id === runId);
                 if (r) {
-                  r.status = results.summary?.total_failed > 0 ? 'failed' : 'passed';
+                  const failCount = testResults.filter((t: any) => t.status === 'failed' || t.error).length;
+                  r.status = failCount > 0 ? 'failed' : 'passed';
                   r.completed_at = nowISO();
-                  r.duration_ms = results.summary?.total_duration_ms || 0;
-                  r.results = (results.results || []).map((result: any) => ({
+                  r.duration_ms = summary.total_duration_ms || testResults.reduce((sum: number, t: any) => sum + (t.response_time_ms || 0), 0);
+                  r.results = testResults.map((result: any) => ({
                     request_id: result.test_case_id || '',
-                    request_name: result.test_name || '',
+                    request_name: result.title || result.test_name || '',
                     method: result.method || '',
                     url: result.url || '',
-                    status: result.passed ? 'passed' : 'failed',
+                    status: result.status === 'passed' ? 'passed' : (result.error ? 'error' : 'failed'),
                     response_status: result.actual_status || 0,
                     response_time_ms: result.response_time_ms || 0,
-                    assertion_results: result.assertion_results || [],
+                    response_body: result.response_body || result.response_data || null,
+                    response_headers: result.response_headers || {},
+                    assertion_results: result.assertion_results || result.assertions?.results || [],
                     error: result.error || null,
                   }));
                 }
-                s.execution_results = results;
+                s.execution_results = rawResp;
                 s.executing = false;
               });
               

@@ -2323,6 +2323,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <Link2 className="w-4 h-4 mr-1" />
             Chains
           </TabsTrigger>
+          <TabsTrigger value="tests" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">
+            <FileText className="w-4 h-4 mr-1" />
+            Tests
+          </TabsTrigger>
+          <TabsTrigger value="runs" className="flex-1 min-w-0 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-500 text-muted-foreground">
+            <Play className="w-4 h-4 mr-1" />
+            Runs
+          </TabsTrigger>
           <TabsTrigger value="execute" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Execute</TabsTrigger>
           <TabsTrigger value="security" className="flex-1 min-w-0 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-500 text-muted-foreground">
             <Shield className="w-4 h-4 mr-1" />
@@ -2378,9 +2386,36 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   });
                 });
 
-                // 2) If new test, save to backend; if update, only in-memory (collection)
-                if (isUpdate) {
-                  toast({ title: "Test updated", description: `"${testCase.title || testCase.method + " " + (testCase.path || "")}" updated in collection.` });
+                // 2) If update, also save back to the sidebar collection store (→ DB)
+                if (isUpdate && editingId) {
+                  try {
+                    const store = useApiTestingStore.getState();
+                    const coll = store.collections[store.active_collection_id || ''];
+                    const existsInCollection = coll?.requests?.some((r: any) => r.id === editingId);
+                    if (existsInCollection) {
+                      store.updateRequest(editingId, {
+                        name: testCase.title || `${testCase.method} ${testCase.path || ''}`,
+                        method: testCase.method,
+                        url: testCase.path || testCase.endpoint || '',
+                        path: testCase.path || testCase.endpoint || '',
+                        headers: testCase.request?.headers
+                          ? Object.entries(testCase.request.headers).map(([k, v]) => ({ key: k, value: String(v), enabled: true }))
+                          : [{ key: 'Content-Type', value: 'application/json', enabled: true }],
+                        body: testCase.request?.body
+                          ? (typeof testCase.request.body === 'string' ? testCase.request.body : JSON.stringify(testCase.request.body))
+                          : '',
+                        assertions: Array.isArray(testCase.assertions) ? testCase.assertions : [],
+                        expected_status: testCase.expected_status || 200,
+                        description: testCase.description || '',
+                      });
+                      toast({ title: "Test saved", description: `"${testCase.title || testCase.method + " " + (testCase.path || "")}" saved to collection.` });
+                    } else {
+                      toast({ title: "Test updated", description: `"${testCase.title || testCase.method + " " + (testCase.path || "")}" updated in test suite.` });
+                    }
+                  } catch (err) {
+                    console.error('[onAddToTestSuite] Failed to save back to collection:', err);
+                    toast({ title: "Test updated", description: `Updated in test suite (collection save failed).` });
+                  }
                   return;
                 }
                 try {
@@ -3024,6 +3059,346 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
         <TabsContent value="chains" className="space-y-4">
           <TabErrorBoundary tabName="Chains">
             <RequestChainBuilder />
+          </TabErrorBoundary>
+        </TabsContent>
+
+        {/* Tests Tab — List all collection test cases with edit/run/bulk-select */}
+        <TabsContent value="tests" className="space-y-4">
+          <TabErrorBoundary tabName="Tests">
+          {(() => {
+            const store = useApiTestingStore.getState();
+            const collId = store.active_collection_id;
+            const coll = collId ? store.collections[collId] : null;
+            const requests = coll?.requests || [];
+            const testRuns = store.test_runs || [];
+            
+            // Build last-result lookup from most recent completed run
+            const lastResultMap: Record<string, { status: string; response_status: number; time: number }> = {};
+            for (const run of testRuns) {
+              if (run.status === 'passed' || run.status === 'failed') {
+                for (const r of run.results) {
+                  lastResultMap[r.request_id] = { status: r.status, response_status: r.response_status, time: r.response_time_ms };
+                }
+              }
+            }
+            
+            return requests.length === 0 ? (
+              <Card className="border-dashed border-2 border-muted-foreground/25">
+                <CardContent className="p-8 text-center space-y-3">
+                  <FileText className="w-12 h-12 mx-auto text-muted-foreground/50" />
+                  <p className="text-lg font-medium">No test cases yet</p>
+                  <p className="text-sm text-muted-foreground">Import a collection or add requests from the Builder tab to see them here.</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button variant="outline" onClick={() => setActiveTab('import')}>Import Spec</Button>
+                    <Button variant="outline" onClick={() => setActiveTab('builder')}>Open Builder</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Test Cases ({requests.length})
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled={store.executing}
+                        onClick={() => {
+                          const s = useApiTestingStore.getState();
+                          const allIds = requests.map(r => r.id);
+                          s.createTestRun(`${coll?.name || 'Collection'} - Full Run`, allIds, s.active_environment_id || undefined)
+                            .then(() => {
+                              const runs = useApiTestingStore.getState().test_runs;
+                              const latest = runs[runs.length - 1] || runs[0];
+                              if (latest) {
+                                s.executeTestRun(latest.id).then(() => setActiveTab('runs'));
+                              }
+                            });
+                        }}
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        Run All
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="max-h-[600px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[300px]">Name</TableHead>
+                          <TableHead className="w-[80px]">Method</TableHead>
+                          <TableHead>Endpoint</TableHead>
+                          <TableHead className="w-[100px]">Type</TableHead>
+                          <TableHead className="w-[90px]">Last Result</TableHead>
+                          <TableHead className="w-[120px] text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {requests.map((req) => {
+                          const lastResult = lastResultMap[req.id];
+                          return (
+                            <TableRow key={req.id} className="group">
+                              <TableCell className="font-medium text-sm">{req.name || `${req.method} ${req.path || req.url}`}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  {req.method}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-[250px]">
+                                {req.path || req.url || '/'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs">
+                                  {req.test_type || 'functional'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {lastResult ? (
+                                  <Badge variant={lastResult.status === 'passed' ? 'default' : 'destructive'} className="text-xs">
+                                    {lastResult.status === 'passed' ? '✓ Pass' : '✗ Fail'}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    title="Edit in Builder"
+                                    onClick={() => {
+                                      useApiTestingStore.getState().openRequestInBuilder(req.id);
+                                      setActiveTab('builder');
+                                    }}
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-green-600"
+                                    title="Run this test"
+                                    onClick={() => {
+                                      const s = useApiTestingStore.getState();
+                                      s.createTestRun(`${req.name}`, [req.id], s.active_environment_id || undefined)
+                                        .then(() => {
+                                          const runs = useApiTestingStore.getState().test_runs;
+                                          const latest = runs[runs.length - 1] || runs[0];
+                                          if (latest) s.executeTestRun(latest.id).then(() => setActiveTab('runs'));
+                                        });
+                                    }}
+                                  >
+                                    <Play className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-destructive"
+                                    title="Delete"
+                                    onClick={() => useApiTestingStore.getState().deleteRequest(req.id)}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            );
+          })()}
+          </TabErrorBoundary>
+        </TabsContent>
+
+        {/* Runs Tab — Test execution history with results */}
+        <TabsContent value="runs" className="space-y-4">
+          <TabErrorBoundary tabName="Runs">
+          {(() => {
+            const store = useApiTestingStore.getState();
+            const testRuns = store.test_runs || [];
+            const collId = store.active_collection_id;
+            const coll = collId ? store.collections[collId] : null;
+            const executing = store.executing;
+            
+            // Filter runs for active collection
+            const collRuns = testRuns.filter(r => r.collection_id === collId);
+            
+            return collRuns.length === 0 ? (
+              <Card className="border-dashed border-2 border-muted-foreground/25">
+                <CardContent className="p-8 text-center space-y-3">
+                  <Activity className="w-12 h-12 mx-auto text-muted-foreground/50" />
+                  <p className="text-lg font-medium">No test runs yet</p>
+                  <p className="text-sm text-muted-foreground">Run tests from the Tests tab, sidebar, or Builder to see execution history here.</p>
+                  <Button variant="outline" onClick={() => setActiveTab('tests')}>Go to Tests</Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Activity className="w-5 h-5" />
+                    Test Runs ({collRuns.length})
+                  </h3>
+                  {executing && (
+                    <Badge variant="secondary" className="animate-pulse">
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Running...
+                    </Badge>
+                  )}
+                </div>
+                
+                {collRuns.map((run) => {
+                  const passCount = run.results.filter(r => r.status === 'passed').length;
+                  const failCount = run.results.filter(r => r.status === 'failed' || r.status === 'error').length;
+                  const totalCount = run.results.length || run.request_ids.length;
+                  const passRate = totalCount > 0 ? Math.round((passCount / totalCount) * 100) : 0;
+                  
+                  return (
+                    <Card key={run.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={
+                              run.status === 'passed' ? 'default'
+                                : run.status === 'failed' ? 'destructive'
+                                : run.status === 'running' ? 'secondary'
+                                : 'outline'
+                            }>
+                              {run.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                              {run.status}
+                            </Badge>
+                            <span className="font-medium text-sm">{run.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{run.mode}</span>
+                            <span>{run.started_at ? new Date(run.started_at).toLocaleString() : ''}</span>
+                            {run.duration_ms > 0 && <span>{Math.round(run.duration_ms)}ms</span>}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-green-600"
+                              title="Re-run"
+                              disabled={executing}
+                              onClick={() => {
+                                const s = useApiTestingStore.getState();
+                                s.createTestRun(`${run.name} (re-run)`, run.request_ids, run.environment_id || undefined)
+                                  .then(() => {
+                                    const runs = useApiTestingStore.getState().test_runs;
+                                    const latest = runs[runs.length - 1] || runs[0];
+                                    if (latest) s.executeTestRun(latest.id);
+                                  });
+                              }}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        {/* Summary stats */}
+                        {run.results.length > 0 && (
+                          <div className="flex items-center gap-4 mt-2 text-xs">
+                            <span className="text-muted-foreground">Total: <strong>{totalCount}</strong></span>
+                            <span className="text-green-600">Passed: <strong>{passCount}</strong></span>
+                            <span className="text-red-600">Failed: <strong>{failCount}</strong></span>
+                            <span className="text-muted-foreground">Rate: <strong>{passRate}%</strong></span>
+                            <Progress value={passRate} className="h-2 flex-1 max-w-[200px]" />
+                          </div>
+                        )}
+                      </CardHeader>
+                      
+                      {/* Per-request results */}
+                      {run.results.length > 0 && (
+                        <CardContent className="pt-0 pb-3">
+                          <ScrollArea className="max-h-[300px]">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Test</TableHead>
+                                  <TableHead className="w-[70px]">Status</TableHead>
+                                  <TableHead className="w-[90px]">HTTP</TableHead>
+                                  <TableHead className="w-[80px]">Time</TableHead>
+                                  <TableHead>Assertions</TableHead>
+                                  <TableHead className="w-[60px]">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {run.results.map((result, idx) => (
+                                  <TableRow key={`${run.id}-${idx}`}>
+                                    <TableCell className="text-sm font-medium">
+                                      {result.request_name || result.request_id}
+                                      {result.method && <span className="text-xs text-muted-foreground ml-1">({result.method})</span>}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={result.status === 'passed' ? 'default' : 'destructive'} className="text-xs">
+                                        {result.status === 'passed' ? '✓' : '✗'} {result.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs font-mono">
+                                      {result.response_status > 0 ? result.response_status : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {result.response_time_ms > 0 ? `${Math.round(result.response_time_ms)}ms` : '—'}
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      {result.assertion_results?.length > 0 ? (
+                                        <div className="space-y-0.5">
+                                          {result.assertion_results.slice(0, 3).map((a, ai) => (
+                                            <div key={ai} className={`flex items-center gap-1 ${a.passed ? 'text-green-600' : 'text-red-600'}`}>
+                                              {a.passed ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                                              <span className="truncate max-w-[200px]">{a.message || a.name || 'assertion'}</span>
+                                            </div>
+                                          ))}
+                                          {result.assertion_results.length > 3 && (
+                                            <span className="text-muted-foreground">+{result.assertion_results.length - 3} more</span>
+                                          )}
+                                        </div>
+                                      ) : result.error ? (
+                                        <span className="text-red-600 truncate max-w-[200px]">{result.error}</span>
+                                      ) : '—'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {result.response_body && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 w-6 p-0"
+                                          title="View response"
+                                          onClick={() => {
+                                            // Open in builder with response data
+                                            const req = coll?.requests.find(r => r.id === result.request_id);
+                                            if (req) {
+                                              useApiTestingStore.getState().openRequestInBuilder(req.id);
+                                              setActiveTab('builder');
+                                            }
+                                          }}
+                                        >
+                                          <Eye className="w-3 h-3" />
+                                        </Button>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </ScrollArea>
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
           </TabErrorBoundary>
         </TabsContent>
 
