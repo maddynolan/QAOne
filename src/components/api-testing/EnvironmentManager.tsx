@@ -214,10 +214,10 @@ export default function EnvironmentManager({
             basic_password: env.auth.basic_password ? "***REDACTED***" : undefined,
           }
         : undefined,
-      variables: env.variables.map(v => ({
+      variables: Array.isArray(env.variables) ? env.variables.map(v => ({
         ...v,
         value: v.type === "secret" ? "***REDACTED***" : v.value,
-      })),
+      })) : env.variables || {},
     };
     const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);

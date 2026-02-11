@@ -418,9 +418,11 @@ export default function EnhancedAPITesting() {
           name: pageEnv.name,
           type: pageEnv.type || 'development',
           base_url: pageEnv.base_url,
-          variables: pageEnv.variables ? Object.fromEntries(
-            pageEnv.variables.filter((v: any) => v.enabled !== false).map((v: any) => [v.key, v.value])
-          ) : {},
+          variables: Array.isArray(pageEnv.variables)
+            ? Object.fromEntries(
+                pageEnv.variables.filter((v: any) => v.enabled !== false).map((v: any) => [v.key, v.value])
+              )
+            : (pageEnv.variables && typeof pageEnv.variables === 'object' ? pageEnv.variables : {}),
         });
       }
       store.setActiveEnvironment(pageEnv.environment_id);
