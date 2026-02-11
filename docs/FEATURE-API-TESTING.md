@@ -1,37 +1,77 @@
 # Feature: API Testing
 
-Flowstral's API Testing module is a comprehensive, enterprise-grade API testing platform comparable to Postman, ReadyAPI, and SoapUI. It supports REST, SOAP, GraphQL, and WebSocket protocols with real HTTP execution, request chaining, OWASP security scanning, and multi-format import/export.
+Flowstral's API Testing module is a response-driven API testing platform comparable to Postman, ReadyAPI, and SoapUI. It supports REST, SOAP, GraphQL, and WebSocket protocols with real HTTP execution, click-to-assert from live responses, request chaining, and multi-format import/export.
 
-## Architecture
+## Architecture (Post-Redesign Feb 2026)
 
 ```
-Frontend (React)                          Backend (FastAPI + aiohttp/httpx)
-+----------------------------------+      +-----------------------------------+
-| EnhancedAPITesting.tsx (9 tabs)  |      | /api/v2/testing/* (execution)     |
-|   - Builder (RequestBuilder)     | ---> | /api/import/*    (spec parsing)   |
-|   - Templates (quick-start)      |      | /api/request-chain/* (chaining)   |
-|   - Import (spec import)         |      | /api/security/*  (OWASP scanner)  |
-|   - Chains (RequestChainBuilder) |      +-----------------------------------+
-|   - Execute (test runner)        |                    |
-|   - Security (OWASP scan)        |        Real HTTP via aiohttp / httpx
-|   - Environments                 |                    |
-|   - Mock Server                  |              Target APIs
-|   - Results (reports)            |
+Frontend (React + Zustand)                   Backend (FastAPI + aiohttp/httpx)
++----------------------------------+         +-----------------------------------+
+| EnhancedAPITesting.tsx (6 tabs)  |         | /api/v2/testing/* (execution)     |
+|   - Builder (default tab)        | ------> | /api/import/*    (spec parsing)   |
+|   - Import (spec import)         |         | /api/request-chain/* (chaining)   |
+|   - Chains (multi-step flows)    |         +-----------------------------------+
+|   - Execute (batch runner)       |                     |
+|   - Environments                 |         Real HTTP via aiohttp / httpx
+|   - Results (reports)            |                     |
++----------------------------------+               Target APIs
+|                                  |
+| CollectionSidebar (Zustand)      |
+|   - Folders & requests           |
+|   - Drag & drop reorder          |
+|   - Context menu (edit/delete)   |
+|   - Run single / folder / all    |
 +----------------------------------+
 ```
 
-## 9 Tabs Overview
+### What Changed (Redesign: Feb 10, 2026)
 
-### 1. Builder (Postman-like Request Builder)
+| Before | After |
+|--------|-------|
+| 9 tabs (Builder, Templates, Import, Chains, Execute, Security, Environments, Mock, Results) | 6 tabs (Builder, Import, Chains, Execute, Environments, Results) |
+| Import auto-generated ~100 tests in 8 categories (security, performance, boundary, contract, negative, data-driven, integration, functional) from spec alone | Import creates clean endpoint list only; users build assertions from live responses |
+| Default tab: Import | Default tab: Builder |
+| Templates tab with 3 protocol demos | Removed (absorbed into Import quick-import) |
+| Tests tab (hidden dead code) | Removed |
+| Runs tab (hidden dead code) | Removed |
+| Security tab (OWASP scanner UI) | Removed from tabs (backend still available via API) |
+| Mock Server tab | Removed from tabs (backend still available via API) |
+| testSuite auto-bridge useEffect silently pushed phantom tests to sidebar | Removed |
+| Legacy testSuite persistence to `/api/db/api-collections/default` | Removed (Zustand store handles all persistence) |
+
+### Design Philosophy: Response-Driven Testing
+
+**The old approach** (spec-guessing): Import spec -> auto-generate ~100 tests with hardcoded assertions -> overwhelm user with noise they can't customize.
+
+**The new approach** (response-driven, like Postman/ReadyAPI):
+1. Import spec -> one clean request per endpoint in sidebar
+2. Click any request -> Builder opens with URL pre-filled
+3. Send request -> see actual live response
+4. Click response fields to add assertions (or click "Auto-Assert" for all top-level fields)
+5. Organize into folders, rename, duplicate for test variations
+6. Run single / folder / all from sidebar
+
+This matches how professional testers actually work: assertions built from **real responses**, not guesses.
+
+## 6 Tabs Overview
+
+### 1. Builder (Default Tab)
 
 **Component:** `src/components/api-testing/RequestBuilder.tsx`
 
-A full-featured HTTP request builder:
+A full-featured HTTP request builder (Postman-like):
 - URL bar with method selector (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)
 - Tabs: Params, Headers, Body (JSON/Form/XML/Raw/None), Auth (Bearer/Basic/API Key), Assertions
-- Response viewer with Body and Headers tabs, status badge, timing, copy button
-- Save/Load requests to localStorage
-- "Add to Chain" button to push any request into the chain builder
+- Response viewer with Body, Headers, Console, and Assert Builder tabs
+- **Auto-Assert button** (green, in response header): generates assertions from the actual response:
+  - Status code assertion (from real response status)
+  - Response time assertion (based on actual response time, 2x threshold)
+  - Content-Type header assertion
+  - JSONPath assertions for all top-level response fields (equals for primitives, exists for objects/arrays)
+  - Array length assertion (if response is an array)
+- Response Tree Explorer with click-to-assert on individual fields
+- **Resizable response panel** (drag handle, 150px-800px)
+- Save/Load requests, "Add to Chain" button
 
 **How Send works:**
 1. Builds URL with query params and auth headers
@@ -40,19 +80,16 @@ A full-featured HTTP request builder:
 4. Frontend extracts `actual_status`, `response_body`, `response_headers`, `response_time_ms`
 5. Displays formatted response with proper HTTP status text (200 OK, 404 Not Found, etc.)
 
-### 2. Templates (Quick-Start Protocol Templates)
+**Assert Builder (ResponseTreeExplorer):**
+- Browse JSON response as a collapsible tree
+- **Click any field** to add a JSONPath assertion (leaf = value assert, parent = exists)
+- **Save as variable**: click to store a response value as `{{name}}` for use in next request/chain
+- **Quick Assert panel**: one-click assertions for status, time, and suggested top-level fields
+- **"Assert All Top-Level Fields"** button: bulk-add assertions for all first-level response fields
+- **Resizable panel**: drag handle at bottom edge to adjust tree height
+- **Overflow-safe**: action buttons (assert, save, copy) are grouped in a shrink-0 container, never hidden by long text values
 
-Three protocol templates with real public APIs (no localhost):
-
-| Template | Protocol | Base URL | Auth |
-|----------|----------|----------|------|
-| **JSONPlaceholder** | REST/OpenAPI | `https://jsonplaceholder.typicode.com` | None |
-| **Countries** | GraphQL | `https://countries.trevorblades.com/graphql` | None |
-| **CountryInfo** | SOAP/WSDL | `http://webservices.oorsprong.org/...CountryInfoService.wso` | None |
-
-Clicking "Load" populates the Import tab with the full spec and creates an environment.
-
-### 3. Import (Specification Import)
+### 2. Import (Specification Import)
 
 **Supported formats:** OpenAPI/Swagger (JSON/YAML), Postman Collection (JSON), WSDL/SOAP (XML), GraphQL SDL, HAR
 
@@ -66,16 +103,19 @@ Clicking "Load" populates the Import tab with the full spec and creates an envir
 - **ReqRes Auth** - 7 endpoints (login, register, CRUD)
 - **Petstore** - 7 OpenAPI endpoints
 
-**Import flow:**
+**Import flow (simplified):**
 1. Frontend sends spec to `POST /api/import/spec` (or `/api/import/spec/file` for uploads)
-2. Backend's `APISpecParser` normalizes to a common format
-3. `APITestEngine.generate_test_suite()` creates base test cases from endpoints
-4. `EnhancedAPITestEngine.generate_comprehensive_test_suite()` adds 8 test categories
-5. Frontend stores the generated test suite and switches to Execute tab
+2. Backend's `APISpecParser` normalizes to a common format with paths and operations
+3. Frontend displays parsed endpoints in a table with method badges, paths, and summaries
+4. User clicks "Add All Endpoints" or selects specific ones with "Add Selected"
+5. Each endpoint becomes one clean request in the sidebar collection (with proper base URL, sample body for POST/PUT/PATCH, Content-Type header)
+6. **No auto-generated test categories** - user builds assertions from real responses in Builder
+
+**Tip displayed to users:** "Add endpoints to the collection, then click any in the sidebar to open in Builder. Send the request, see the live response, and click response fields to add real assertions."
 
 **Export:** Postman Collection v2.1 and HAR 1.2 export via backend endpoints.
 
-### 4. Chains (Request Chain Builder)
+### 3. Chains (Request Chain Builder)
 
 **Component:** `src/components/api-testing/RequestChainBuilder.tsx`
 
@@ -104,36 +144,15 @@ Multi-step request chaining (like ReadyAPI TestSuites):
 - Extracted variables per step
 - Assertion results per step
 
-### 5. Execute (Test Suite Runner)
+### 4. Execute (Collection-Driven Batch Runner)
 
-Runs generated test suites against selected environments:
-1. Select environment (provides `base_url`)
-2. Choose execution mode: **Automated**, **Manual**, **CI/CD**, or **Load Testing**
-3. Select/deselect individual test cases
-4. Execute via `POST /api/v2/testing/execute`
+Runs tests from the sidebar collection:
+1. Reads requests and folders from the active Zustand collection (single source of truth)
+2. Select/deselect individual tests or entire folders
+3. Execute via `POST /api/v2/testing/execute`
+4. Results flow into the Results tab automatically
 
-**Load Testing mode** supports: virtual users, duration, ramp-up time, think time.
-
-**Test case normalization:** Handles various field naming from different spec parsers. Auto-generates sample request bodies for common endpoints.
-
-### 6. Security (OWASP API Top 10 Scanner)
-
-**Backend:** `backend/app/services/api_testing/owasp_api_security.py` (623 lines)
-
-Real HTTP attacks against target API:
-
-| OWASP Category | What it tests |
-|----------------|---------------|
-| **API1 - BOLA** | Access resources with different IDs (1, 2, 999999, 0, -1, "admin") |
-| **API2 - Broken Auth** | 10 rapid login attempts, weak password registration |
-| **API3 - Mass Assignment** | Privileged payloads (role:admin, is_admin:true) |
-| **API4 - Resource Consumption** | page_size=10000, >1MB responses, deep nesting |
-| **API5 - BFLA** | Probe admin/management/internal/config paths |
-| **API7 - SSRF** | SSRF payloads (localhost, 169.254.169.254, file://) |
-| **API8 - Misconfig** | Missing security headers, verbose errors, CORS |
-| **API9 - Inventory** | Debug endpoints (/debug, /swagger, /.env, /graphiql) |
-
-### 7. Environments
+### 5. Environments
 
 Create and manage environments with:
 - Name, type (dev/staging/production), base URL
@@ -142,15 +161,7 @@ Create and manage environments with:
 
 **Database connectivity:** PostgreSQL, MySQL, SQLite, MongoDB, MSSQL for data-driven testing.
 
-### 8. Mock Server
-
-Create real HTTP mock servers with:
-- Dynamic response templates (status codes, headers, body)
-- Start/Stop/View Logs controls
-- Endpoint management (add/remove, configurable method/path/status/body)
-- Virtual service creation
-
-### 9. Results (Reports & Export)
+### 6. Results (Reports & Export)
 
 Five report format views:
 1. **Summary** - Grid with Total/Passed/Failed/Pass Rate + performance metrics
@@ -159,26 +170,29 @@ Five report format views:
 4. **JSON** - Raw JSON export
 5. **Allure** - Allure-format JSON (for `allure generate` CLI)
 
-## Test Case Generation Quality
+## Collection Sidebar
 
-When a spec is imported, tests are generated across **8 categories**:
+**Component:** `src/components/api-testing/CollectionSidebar.tsx`
 
-| Category | What's Generated |
-|----------|-----------------|
-| **Functional** | Happy path + content-type validation + non-empty response checks |
-| **Security** | Per-endpoint OWASP attacks: SQLi, XSS, Auth Bypass, BOLA, Rate Limiting, Mass Assignment |
-| **Performance** | Base tests with response time thresholds (1000ms max) |
-| **Integration** | Multi-endpoint flows with variable extraction between steps |
-| **Contract** | Status code + content-type + JSON schema validation from spec |
-| **Negative** | Wrong HTTP method, invalid resource ID, empty body, malformed JSON |
-| **Boundary** | Zero/large/negative numbers, empty/long/special-char strings |
-| **Data-driven** | Valid data, minimum values, maximum values, required-only fields |
+**State:** `src/stores/apiTestingStore.ts` (Zustand with immer + persist)
 
-**Sample value generation** uses schema types and formats:
-- `format: "email"` -> `test@example.com`
-- `format: "date-time"` -> `2024-01-01T12:00:00Z`
-- `format: "uuid"` -> `550e8400-e29b-41d4-a716-446655440000`
-- Property name hints: `email`, `password`, `phone`, `url`, `title`, `description`
+The sidebar is the organizational backbone:
+- **Collections**: create, rename, delete, import from spec
+- **Folders**: create, rename, delete, organize tests by category
+- **Requests**: create, edit, duplicate, delete, move between folders
+- **Drag & drop**: reorder requests within and between folders
+- **Context menu**: right-click for full actions (edit, delete, duplicate, move to folder)
+- **Run buttons**: run single request, run all in folder, run entire collection
+- **Persistence**: immediate save (`_saveCollectionNow`) for user-initiated mutations, debounced save for bulk operations, backend sync with `updated_at` timestamp comparison
+
+## State Management
+
+The API testing module uses a dedicated Zustand store (`apiTestingStore.ts`) with:
+- `immer` middleware for immutable state updates
+- `persist` middleware for localStorage backup
+- Backend sync via `/api/db/api-collections/*` endpoints
+- Debounced saves for performance, immediate saves for critical mutations (delete, move, create folder)
+- `updated_at` timestamp comparison on load to prevent overwriting newer local data
 
 ## Public Test Endpoints
 
@@ -186,11 +200,11 @@ All demos use real public APIs (no localhost):
 
 | API | URL | Used For |
 |-----|-----|----------|
-| **JSONPlaceholder** | `https://jsonplaceholder.typicode.com` | REST CRUD, templates, quick import |
+| **JSONPlaceholder** | `https://jsonplaceholder.typicode.com` | REST CRUD, quick import |
 | **ReqRes** | `https://reqres.in` | Auth flows, pagination, quick import |
 | **Petstore** | `https://petstore.swagger.io/v2` | OpenAPI import, quick import |
-| **Countries GraphQL** | `https://countries.trevorblades.com/graphql` | GraphQL template |
-| **CountryInfo SOAP** | `http://webservices.oorsprong.org/.../CountryInfoService.wso` | SOAP/WSDL template |
+| **Countries GraphQL** | `https://countries.trevorblades.com/graphql` | GraphQL testing |
+| **CountryInfo SOAP** | `http://webservices.oorsprong.org/.../CountryInfoService.wso` | SOAP/WSDL testing |
 | **HTTPBin** | `https://httpbin.org` | Headers, auth, status codes |
 
 ## Backend Endpoint Reference
@@ -202,7 +216,7 @@ All demos use real public APIs (no localhost):
 | POST | `/execute` | Execute test suite (automated/manual/ci_cd/load) |
 | POST | `/execute/load` | Load test execution |
 | POST | `/test-suite/generate` | Generate test suite from spec |
-| POST | `/security/scan` | OWASP security scan |
+| POST | `/security/scan` | OWASP security scan (available via API) |
 | POST | `/report/generate` | Generate execution report |
 | GET | `/capabilities` | Full capability list |
 | GET | `/protocols` | Supported protocols |
@@ -230,17 +244,6 @@ All demos use real public APIs (no localhost):
 | GET | `/extraction-methods` | List extraction methods |
 | GET | `/assertion-operators` | List assertion operators |
 
-### Mock Server (`/api/v2/testing/mock`)
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/server` | Create mock server |
-| GET | `/server` | List mock servers |
-| POST | `/server/{id}/start` | Start server |
-| POST | `/server/{id}/stop` | Stop server |
-| POST | `/server/{id}/endpoint` | Add endpoint |
-| GET | `/server/{id}/logs` | Get request logs |
-
 ### Environments (`/api/v2/testing/environment`)
 
 | Method | Path | Purpose |
@@ -250,6 +253,15 @@ All demos use real public APIs (no localhost):
 | GET | `/{id}` | Get environment |
 | PUT | `/{id}` | Update environment |
 | DELETE | `/{id}` | Delete environment |
+
+### Collection Persistence (`/api/db/api-collections`)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/` | List all collections |
+| GET | `/{id}` | Get collection by ID |
+| PUT | `/{id}` | Update collection |
+| DELETE | `/{id}` | Delete collection |
 
 ## Configuration
 
@@ -265,19 +277,37 @@ Both `constants.ts` (used by RequestBuilder, ChainBuilder) and `EnhancedAPITesti
 
 | File | Purpose |
 |------|---------|
-| `src/pages/EnhancedAPITesting.tsx` | Main page (9 tabs, ~3950 lines) |
-| `src/components/api-testing/RequestBuilder.tsx` | Postman-like request builder |
+| `src/pages/EnhancedAPITesting.tsx` | Main page (6 tabs, ~4077 lines) |
+| `src/stores/apiTestingStore.ts` | Zustand store (collections, folders, requests, execution) |
+| `src/components/api-testing/CollectionSidebar.tsx` | Sidebar with folders, requests, drag-drop, run buttons |
+| `src/components/api-testing/RequestBuilder.tsx` | Postman-like request builder with Auto-Assert |
+| `src/components/api-testing/ResponseTreeExplorer.tsx` | Response tree with click-to-assert, resizable panel |
+| `src/components/api-testing/AssertionsPanel.tsx` | Assertion editor (10 types, 13 operators) |
 | `src/components/api-testing/RequestChainBuilder.tsx` | Multi-step chain builder |
 | `src/components/api-testing/ChainStepCard.tsx` | Chain step UI card |
 | `src/components/api-testing/ChainResultsView.tsx` | Chain results display |
-| `src/components/api-testing/AssertionsPanel.tsx` | Assertion editor (10 types) |
+| `src/components/api-testing/EnvironmentManager.tsx` | Environment management with variable resolution |
 | `src/components/api-testing/constants.ts` | Shared types, constants, API_BASE_URL |
-| `backend/app/routers/enhanced_api_testing_api.py` | FastAPI router (execution, mock, env) |
+| `backend/app/routers/enhanced_api_testing_api.py` | FastAPI router (execution, env) |
 | `backend/app/routers/api_import_api.py` | Import/export router |
 | `backend/app/routers/request_chaining_api.py` | Chain execution router |
 | `backend/app/services/api_testing/test_execution_engine.py` | Real HTTP execution via aiohttp |
-| `backend/app/services/api_testing/enhanced_api_test_engine.py` | Test suite generator (8 categories) |
 | `backend/app/services/api_testing/request_chaining.py` | Chain engine (httpx, jsonpath_ng) |
-| `backend/app/services/api_testing/owasp_api_security.py` | OWASP API Top 10 scanner |
 | `backend/app/services/connectors/api_spec_parser.py` | OpenAPI/Postman/WSDL/GraphQL/HAR parser |
-| `backend/app/services/engines/api_test_engine.py` | Base test case generator |
+
+## Day-to-Day Tester Workflow
+
+1. **Import API**: Paste OpenAPI spec URL or upload Postman collection -> "Add Endpoints" -> clean sidebar with one request per endpoint
+2. **Test an endpoint**: Click in sidebar -> Builder opens with URL pre-filled -> Click Send -> See response
+3. **Add assertions**: Click response fields to assert specific values, OR click "Auto-Assert" to assert all top-level fields at once
+4. **Organize**: Drag requests into folders, rename, duplicate for variations (e.g., "GET /users - valid", "GET /users - invalid ID")
+5. **Run**: Click Run on a single request, a folder, or "Run All" from sidebar footer
+6. **Review results**: Results tab shows pass/fail with full request/response details, export as JUnit/HTML/JSON
+
+## Removed Features (Still Available via Backend API)
+
+The following features were removed from the frontend tabs but their backend endpoints remain available:
+
+- **OWASP Security Scanner**: `POST /api/v2/testing/security/scan` - still works for programmatic use
+- **Mock Server**: `POST /api/v2/testing/mock/server` - still works for programmatic use
+- **Auto-Generated Test Categories**: Backend engine (`EnhancedAPITestEngine`) still exists but is no longer called from the import flow
