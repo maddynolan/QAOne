@@ -52,8 +52,9 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { API_BASE_URL } from '@/lib/api-config';
 
-const API_BASE = 'http://localhost:8000/api/visual-testing';
+const API_BASE = `${API_BASE_URL}/api/visual-testing`;
 
 // Sample baseline images for demo purposes
 const SAMPLE_BASELINES: Baseline[] = [

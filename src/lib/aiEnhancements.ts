@@ -84,10 +84,8 @@ export interface EnhancementsStatus {
 // ============================================================================
 
 function getBaseUrl(): string {
-  // Desktop app (Electron) always uses localhost backend
-  if (typeof window !== 'undefined' && (window as any).electronAPI) {
-    return 'http://localhost:8000';
-  }
+  // Always use the central API_BASE_URL (Railway production or env override)
+  // This ensures desktop and web apps both reach the same backend
   return API_BASE_URL;
 }
 

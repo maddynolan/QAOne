@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { resultsIngestionService } from '@/lib/results-ingestion-service';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DASHBOARD - Clean, focused view of what matters

@@ -7,6 +7,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
 // AI Feature Areas - All places where AI can be used
@@ -325,7 +326,7 @@ export function AIProvider({ children }: { children: React.ReactNode }) {
     
     try {
       // Test via backend
-      const response = await fetch('http://localhost:8000/api/ai/vision/status');
+      const response = await fetch(`${API_BASE_URL}/api/ai/vision/status`);
       const data = await response.json();
       
       const latency = Date.now() - startTime;

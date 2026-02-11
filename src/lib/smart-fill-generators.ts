@@ -39,7 +39,7 @@ export interface GeneratorCategory {
 // BACKEND API INTEGRATION
 // ============================================================================
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '@/lib/api-config';
 
 /**
  * Generate data using backend TestDataGenerator (with Faker support)

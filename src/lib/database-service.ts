@@ -5,7 +5,9 @@
  * Uses the new SQLite-based backend API with caching for fast UI loading.
  */
 
-const API_BASE = 'http://localhost:8000/api/db';
+import { API_BASE_URL } from '@/lib/api-config';
+
+const API_BASE = `${API_BASE_URL}/api/db`;
 
 // ==================== TYPES ====================
 

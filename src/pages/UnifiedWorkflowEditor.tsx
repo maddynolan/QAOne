@@ -52,6 +52,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/api-config';
 import { ReusableModulesManager, ModuleStep } from '@/components/ReusableModulesManager';
 import { BlackboxLocatorStrategies, BlackboxLocator } from '@/components/BlackboxLocatorStrategies';
 import { resultsIngestionService, TestRunData } from '@/lib/results-ingestion-service';
@@ -2094,7 +2095,7 @@ export default function UnifiedWorkflowEditor() {
     console.log('[Builder] Loading from Flowstral session:', sessionId);
     try {
       // Try to get session artifacts from backend
-      const response = await fetch(`http://localhost:8000/api/flowstral/session/${sessionId}/artifacts`);
+      const response = await fetch(`${API_BASE_URL}/api/flowstral/session/${sessionId}/artifacts`);
       if (response.ok) {
         const data = await response.json();
         console.log('[Builder] Flowstral session data:', data);
@@ -2171,7 +2172,7 @@ export default function UnifiedWorkflowEditor() {
       if (!foundCase) {
         try {
           console.log('[Builder] Trying scale-data endpoint...');
-          const scaleResponse = await fetch(`http://localhost:8000/test-cases/scale-data/test-case/${testCaseId}`);
+          const scaleResponse = await fetch(`${API_BASE_URL}/test-cases/scale-data/test-case/${testCaseId}`);
           if (scaleResponse.ok) {
             foundCase = await scaleResponse.json();
             console.log('[Builder] Found in scale-data:', foundCase?.name);
@@ -2184,7 +2185,7 @@ export default function UnifiedWorkflowEditor() {
       // Try regular backend endpoint
       if (!foundCase) {
         try {
-          const response = await fetch(`http://localhost:8000/test-cases/${testCaseId}`);
+          const response = await fetch(`${API_BASE_URL}/test-cases/${testCaseId}`);
           if (response.ok) {
             foundCase = await response.json();
           }
@@ -3182,7 +3183,7 @@ export default function UnifiedWorkflowEditor() {
       // Try backend if not found locally
       if (!foundCase) {
         try {
-          const response = await fetch(`http://localhost:8000/test-cases/${preconditionId}`);
+          const response = await fetch(`${API_BASE_URL}/test-cases/${preconditionId}`);
           if (response.ok) {
             foundCase = await response.json();
           }
@@ -3369,7 +3370,7 @@ export default function UnifiedWorkflowEditor() {
       // Fallback to backend execution
       const safeName = testCase.name.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       const code = generateAutomationCode(mergedTestCase, safeName);
-      const response = await fetch('http://localhost:8000/api/flowstral/execute', {
+      const response = await fetch(`${API_BASE_URL}/api/flowstral/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3923,7 +3924,7 @@ export default function UnifiedWorkflowEditor() {
       try {
         if (savedTestCaseId) {
           // Update existing test case
-          const response = await fetch(`http://localhost:8000/test-cases/${savedTestCaseId}`, {
+          const response = await fetch(`${API_BASE_URL}/test-cases/${savedTestCaseId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(testCaseData),
@@ -3937,7 +3938,7 @@ export default function UnifiedWorkflowEditor() {
           }
         } else {
           // Create new test case
-          const response = await fetch('http://localhost:8000/test-cases', {
+          const response = await fetch(`${API_BASE_URL}/test-cases`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(testCaseData),
@@ -3968,7 +3969,7 @@ export default function UnifiedWorkflowEditor() {
     try {
       const testCaseData = buildTestCaseData(newName);
       
-      const response = await fetch('http://localhost:8000/test-cases', {
+      const response = await fetch(`${API_BASE_URL}/test-cases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testCaseData),
@@ -3995,7 +3996,7 @@ export default function UnifiedWorkflowEditor() {
   const loadAvailableTestCases = async () => {
     setImportLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/test-cases?limit=100');
+      const response = await fetch(`${API_BASE_URL}/test-cases?limit=100`);
       if (response.ok) {
         const data = await response.json();
         // Filter out current test case and format the list
@@ -11214,7 +11215,7 @@ ${tc.description || 'Generated by QAAI'}
 import pytest
 import requests
 
-BASE_URL = "${tc.settings.baseUrl || 'http://localhost:8000'}"
+BASE_URL = "${tc.settings.baseUrl || API_BASE_URL}"
 
 class Test${safeName.replace(/_/g, '')}:
 `;

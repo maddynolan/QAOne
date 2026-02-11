@@ -62,13 +62,10 @@ interface AIEvent {
   error?: string;
 }
 
-// API Base URL
-// Use local backend in development, production URL otherwise
-const API_BASE = import.meta.env.VITE_API_URL || (
-  window.location.hostname === 'localhost' 
-    ? 'http://localhost:8000' 
-    : 'https://qaone-production.up.railway.app'
-);
+// API Base URL - centralized config
+import { API_BASE_URL } from '@/lib/api-config';
+
+const API_BASE = API_BASE_URL;
 console.log('[AIChatTesting] API_BASE =', API_BASE, 'hostname =', window.location.hostname);
 
 export function AIChatTesting() {

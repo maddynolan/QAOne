@@ -17,12 +17,13 @@
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { useTestDataStore } from '../stores/testDataStore';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
 // API CLIENT
 // ============================================================================
 
-const API_BASE = 'http://localhost:8000/api/v2';
+const API_BASE = `${API_BASE_URL}/api/v2`;
 
 interface FetchOptions {
   signal?: AbortSignal;

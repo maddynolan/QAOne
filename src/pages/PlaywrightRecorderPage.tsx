@@ -104,6 +104,7 @@ import {
   type FailureExplanation,
   type FixOption as ApiFixOption,
 } from "@/lib/aiEnhancements";
+import { API_BASE_URL } from "@/lib/api-config";
 
 // Types
 interface StepConfidence {
@@ -1122,14 +1123,17 @@ export default function PlaywrightRecorderPage() {
   // Flaky step IDs for the current test (loaded after test run)
   const [flakyStepIds, setFlakyStepIds] = useState<Set<string>>(new Set());
   
+  // Stable test ID — uses selected test case ID, or falls back to a session-unique ID
+  const [sessionTestId] = useState(() => `session_${Date.now()}`);
+  const currentTestId = selectedTestCase?.id || (actions as any)?._testId || sessionTestId;
+  
   // ============ LOAD PERSISTED FALSE POSITIVES ON MOUNT ============
   // Restore false-positive flags from backend (survives page refresh)
   // Non-blocking: if backend is unavailable, existing in-memory flow works fine
   useEffect(() => {
-    const testId = (actions as any)?._testId || 'current';
-    if (!testId) return;
+    if (!currentTestId) return;
     
-    getFalsePositivesApi(testId).then((flags) => {
+    getFalsePositivesApi(currentTestId).then((flags) => {
       if (flags && flags.length > 0) {
         setFalsePositiveSteps(prev => {
           const merged = new Map(prev);
@@ -1507,7 +1511,7 @@ export default function PlaywrightRecorderPage() {
         
         // 1. Try scale database first (most test cases)
         try {
-          const response = await fetch('http://localhost:8000/test-cases/scale-data');
+          const response = await fetch(`${API_BASE_URL}/test-cases/scale-data`);
           if (response.ok) {
             const data = await response.json();
             for (const tc of (data.testCases || [])) {
@@ -2258,7 +2262,7 @@ export default function PlaywrightRecorderPage() {
       
       // Also update backend (PostgreSQL) if available
       try {
-        const backendResponse = await fetch(`http://localhost:8000/test-cases/${updatedTestCase.id}`, {
+        const backendResponse = await fetch(`${API_BASE_URL}/test-cases/${updatedTestCase.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2280,7 +2284,7 @@ export default function PlaywrightRecorderPage() {
       
       // Also update SQLite scale database if using it
       try {
-        const scaleResponse = await fetch(`http://localhost:8000/test-cases/scale-data/update/${updatedTestCase.id}`, {
+        const scaleResponse = await fetch(`${API_BASE_URL}/test-cases/scale-data/update/${updatedTestCase.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -3100,7 +3104,7 @@ export default function PlaywrightRecorderPage() {
     
     try {
       // Try to capture via backend API
-      const response = await fetch("http://localhost:8000/api/visual-testing/capture", {
+      const response = await fetch(`${API_BASE_URL}/api/visual-testing/capture`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -3183,7 +3187,7 @@ export default function PlaywrightRecorderPage() {
     
     setIsA11yScanning(true);
     try {
-      const response = await fetch("http://localhost:8000/api/accessibility/scan", {
+      const response = await fetch(`${API_BASE_URL}/api/accessibility/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3474,7 +3478,7 @@ const handleExportToBuilder = async () => {
 
   // Quick test in Perf tab - sends captured network requests for load testing.
   // Prefer backend draft (shareable, durable); fallback to sessionStorage.
-  const API_BASE_PERF = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE_PERF = API_BASE_URL;
   const handleQuickLoadTest = async () => {
     let loadTestRequests: any[] = [];
     
@@ -3523,7 +3527,7 @@ const handleExportToBuilder = async () => {
     window.location.href = '/performance';
   };
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE = API_BASE_URL;
   const exportCapturedAsPostman = async () => {
     if (capturedNetworkRequests.length === 0) {
       toast.error('No captured requests');
@@ -4480,7 +4484,7 @@ Recorded Test
       // Fire-and-forget: send step outcomes to backend for per-step flaky analysis
       // This runs after EVERY test completion (pass or fail) to build history
       try {
-        const testId = (actions as any)._testId || 'current';
+        const testId = currentTestId;
         const stepsForFlaky = stepResults.map((sr: any, idx: number) => ({
           step_id: actions[sr.index]?.id || String(sr.index),
           actionId: actions[sr.index]?.id,
@@ -4786,7 +4790,7 @@ Recorded Test
     });
     
     // Persist to backend (fire-and-forget, non-blocking)
-    const testId = (actions as any)._testId || 'current';
+    const testId = currentTestId;
     saveFalsePositiveApi({
       test_id: testId,
       step_id: action.id!,
@@ -4812,8 +4816,7 @@ Recorded Test
     });
     
     // Remove from backend (fire-and-forget)
-    const testId = (actions as any)._testId || 'current';
-    removeFalsePositiveApi(testId, actionId).catch(() => {});
+    removeFalsePositiveApi(currentTestId, actionId).catch(() => {});
     
     toast.info('False positive flag removed');
   }, [actions]);
@@ -8982,9 +8985,8 @@ Recorded Test
                         onClick={async () => {
                           setAiExplanationLoading(true);
                           try {
-                            const testId = (actions as any)._testId || 'current';
                             const result = await explainFailureApi({
-                              test_id: testId,
+                              test_id: currentTestId,
                               step_id: viewingAction?.id || 'unknown',
                               step_index: viewingIdx,
                               step_label: stepLabel || '',
@@ -9031,17 +9033,42 @@ Recorded Test
                                   setEditingActionIndex(viewingIdx);
                                   setRightPanelTab('suggestions');
                                   handleRefreshSuggestions();
-                                } else if (fix.fix_type === 'add_wait' || fix.fix_type === 'retry') {
+                                } else if (fix.fix_type === 'add_wait') {
+                                  // Actually insert a wait step before the failing step
+                                  const waitStep = {
+                                    type: 'wait',
+                                    value: String(fix.details?.wait_ms || 2000),
+                                    description: `Wait ${(fix.details?.wait_ms || 2000) / 1000}s before step`,
+                                    timestamp: Date.now(),
+                                  };
+                                  const newActions = [...actions];
+                                  newActions.splice(viewingIdx, 0, waitStep);
+                                  setActions(newActions);
+                                  toast.success(`Added ${(fix.details?.wait_ms || 2000) / 1000}s wait before step ${viewingIdx + 1}. Run again to verify.`, { duration: 4000 });
+                                } else if (fix.fix_type === 'retry') {
                                   handleRunFromStep(viewingIdx);
                                 } else if (fix.fix_type === 'skip_step') {
-                                  // Skip = run from next step
+                                  // Mark step as skipped and run from next step
+                                  const newActions = [...actions];
+                                  if (newActions[viewingIdx]) {
+                                    (newActions[viewingIdx] as any)._skipped = true;
+                                  }
+                                  setActions(newActions);
                                   if (viewingIdx + 1 < actions.length) {
                                     handleRunFromStep(viewingIdx + 1);
                                   }
+                                  toast.info(`Step ${viewingIdx + 1} marked as skipped.`, { duration: 3000 });
                                 } else if (fix.fix_type === 'mark_false_positive') {
                                   markStepAsFalsePositive(viewingIdx, viewingResult?.screenshot || null);
                                 } else if (fix.fix_type === 'quarantine') {
-                                  toast.info('Step quarantined — it will be skipped in future runs until stabilized.', { duration: 4000 });
+                                  // Persist quarantine — skip in future runs until manually un-quarantined
+                                  const newActions = [...actions];
+                                  if (newActions[viewingIdx]) {
+                                    (newActions[viewingIdx] as any)._quarantined = true;
+                                    (newActions[viewingIdx] as any)._quarantinedAt = new Date().toISOString();
+                                  }
+                                  setActions(newActions);
+                                  toast.info('Step quarantined — it will be skipped in future runs until you un-quarantine it.', { duration: 4000 });
                                 } else if (fix.fix_type === 'investigate') {
                                   toast.info(fix.description, { duration: 6000 });
                                 } else {

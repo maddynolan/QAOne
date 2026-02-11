@@ -1536,7 +1536,7 @@ export default function TestRepository() {
       if (useScaleDb) {
         try {
           console.log('[Repository] Loading from backend scale database...');
-          const response = await fetch('http://localhost:8000/test-cases/scale-data');
+          const response = await fetch(`${API_BASE_URL}/test-cases/scale-data`);
           if (response.ok) {
             const data = await response.json();
             console.log('[Repository] Loaded from scale DB:', data.testCases?.length || 0, 'test cases');
@@ -2278,7 +2278,7 @@ export default function TestRepository() {
     
     // 4. Delete from backend API (PostgreSQL)
     deletePromises.push(
-      fetch(`http://localhost:8000/test-cases/${testId}`, { method: 'DELETE' })
+      fetch(`${API_BASE_URL}/test-cases/${testId}`, { method: 'DELETE' })
         .then(res => {
           if (res.ok) console.log(`[Repository] Deleted ${testId} from PostgreSQL backend`);
           return res;
@@ -2288,7 +2288,7 @@ export default function TestRepository() {
     
     // 5. Delete from Flowstral backend (alternative endpoint)
     deletePromises.push(
-      fetch(`http://localhost:8000/api/flowstral/test-cases/${testId}`, { method: 'DELETE' })
+      fetch(`${API_BASE_URL}/api/flowstral/test-cases/${testId}`, { method: 'DELETE' })
         .then(res => {
           if (res.ok) console.log(`[Repository] Deleted ${testId} from Flowstral backend`);
           return res;
@@ -2298,7 +2298,7 @@ export default function TestRepository() {
     
     // 6. Delete from SQLite scale database
     deletePromises.push(
-      fetch(`http://localhost:8000/test-cases/scale-data/${testId}`, { method: 'DELETE' })
+      fetch(`${API_BASE_URL}/test-cases/scale-data/${testId}`, { method: 'DELETE' })
         .then(res => {
           if (res.ok) console.log(`[Repository] Deleted ${testId} from SQLite scale DB`);
           return res;

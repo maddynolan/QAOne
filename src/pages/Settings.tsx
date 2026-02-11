@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AIConfiguration } from "@/components/AIConfiguration";
 import { PluginManagement } from "@/components/PluginManagement";
+import { API_BASE_URL } from "@/lib/api-config";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2, Settings2, Puzzle, Brain, Bell, Database, Shield, Download, Monitor, Chrome, Key, AlertTriangle, CheckCircle, Clock } from "lucide-react";
@@ -282,7 +283,7 @@ export default function Settings() {
     setLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/ai/templates?project_id=default&task=${selectedTask}`
+        `${API_BASE_URL}/ai/templates?project_id=default&task=${selectedTask}`
       );
       const data = await response.json();
       setTemplate(data.template || "");
@@ -297,7 +298,7 @@ export default function Settings() {
   const saveTemplate = async () => {
     setSaving(true);
     try {
-      const response = await fetch("http://localhost:8000/ai/templates", {
+      const response = await fetch(`${API_BASE_URL}/ai/templates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

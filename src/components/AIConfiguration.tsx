@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Sparkles, Settings, CheckCircle, AlertCircle, Eye, EyeOff, Loader2, Zap, Key } from 'lucide-react';
 import { useAI, AI_FEATURE_AREAS, type AIFeatureId } from '@/contexts/AIContext';
+import { API_BASE_URL } from '@/lib/api-config';
 import { toast } from 'sonner';
 
 interface AIConfigProps {
@@ -33,7 +34,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
   useEffect(() => {
     const loadMaskedKey = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/ai/vision/config/key');
+        const response = await fetch(`${API_BASE_URL}/api/ai/vision/config/key`);
         if (response.ok) {
           const data = await response.json();
           setMaskedKey(data.masked_key || '');
@@ -79,7 +80,7 @@ export const AIConfiguration = ({ onConfigChange }: AIConfigProps) => {
 
   const saveApiKeyToBackend = async (apiKey: string) => {
     try {
-      await fetch('http://localhost:8000/api/ai/vision/config', {
+      await fetch(`${API_BASE_URL}/api/ai/vision/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

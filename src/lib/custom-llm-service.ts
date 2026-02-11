@@ -1,6 +1,8 @@
 // Custom LLM Service for ArisTrace Platform
 // This integrates with the QAOne backend API
 
+import { API_BASE_URL } from '@/lib/api-config';
+
 export interface TestCaseGenerationRequest {
   feature: string;
   description: string;
@@ -91,7 +93,7 @@ export interface OptimizationSuggestionResponse {
 class CustomLLMService {
   private apiBaseUrl: string;
 
-  constructor(apiBaseUrl: string = 'http://localhost:8000') {
+  constructor(apiBaseUrl: string = API_BASE_URL) {
     this.apiBaseUrl = apiBaseUrl;
   }
 
@@ -292,8 +294,8 @@ function mapPriorityFromLikelihood(likelihood: number): 'low' | 'medium' | 'high
 // Import mock service for development (not used currently)
 import { mockAIService } from './mock-ai-service';
 
-// Get API base URL from environment or use default
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// Get API base URL from centralized config
+const apiBaseUrl = API_BASE_URL;
 
 // Use real backend API
 export const customLLMService = new CustomLLMService(apiBaseUrl);

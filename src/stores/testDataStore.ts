@@ -18,6 +18,7 @@
 import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { API_BASE_URL } from '@/lib/api-config';
 
 // ============================================================================
 // TYPES
@@ -231,7 +232,7 @@ const initialState: TestDataState = {
   activeTab: 'repository',
   isLoading: false,
   error: null,
-  apiBaseUrl: 'http://localhost:8000',
+  apiBaseUrl: API_BASE_URL,
 };
 
 // ============================================================================
