@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import {
   ChevronDown, ChevronRight, Plus, Target, Hash, Copy,
   Search, CheckCircle2, Type, List, Braces, AlertCircle,
-  Save, ChevronsRight, GripHorizontal,
+  Save, ChevronsRight, GripHorizontal, Table2,
 } from "lucide-react";
 import {
   Dialog,
@@ -171,7 +171,7 @@ export default function ResponseTreeExplorer({
 }: ResponseTreeExplorerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(["$"]));
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"body" | "headers" | "meta">("body");
+  const [viewMode, setViewMode] = useState<"body" | "table" | "headers" | "meta">("body");
   const [saveVarNode, setSaveVarNode] = useState<{ path: string; value: unknown } | null>(null);
   const [saveVarName, setSaveVarName] = useState("");
   
@@ -430,6 +430,15 @@ export default function ResponseTreeExplorer({
             Body ({leafCount})
           </Button>
           <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setViewMode("table")}
+          >
+            <Table2 className="w-3 h-3 mr-1" />
+            Table
+          </Button>
+          <Button
             variant={viewMode === "headers" ? "default" : "outline"}
             size="sm"
             className="h-7 text-xs"
@@ -501,6 +510,76 @@ export default function ResponseTreeExplorer({
             )}
           </ScrollArea>
           {/* Resize handle */}
+          <div
+            className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 rounded-b-lg group/resize"
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          >
+            <GripHorizontal className="w-4 h-3 text-muted-foreground/40 group-hover/resize:text-muted-foreground" />
+          </div>
+        </div>
+      )}
+
+      {/* Table View - Flat tabular view of all leaf fields for easy assertion building */}
+      {viewMode === "table" && (
+        <div className="relative">
+          <ScrollArea className="border rounded-lg bg-muted/20" style={{ height: `${panelHeight}px` }}>
+            {allNodes.length > 0 ? (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
+                  <tr className="border-b">
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-8"></th>
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Field</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-16">Type</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Value</th>
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground w-[200px]">JSONPath</th>
+                    <th className="text-center py-1.5 px-2 font-medium text-muted-foreground w-10">Assert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allNodes.filter(n => !n.children).map((node) => {
+                    const alreadyAsserted = hasAssertion(node.path);
+                    return (
+                      <tr key={node.path} className={`border-b border-border/30 hover:bg-muted/40 ${alreadyAsserted ? "bg-green-500/5" : ""}`}>
+                        <td className="py-1 px-2">
+                          <span className={getTypeColor(node.type)}>{getTypeIcon(node.type)}</span>
+                        </td>
+                        <td className="py-1 px-2 font-mono font-medium truncate max-w-[150px]" title={node.key}>
+                          {node.key}
+                        </td>
+                        <td className="py-1 px-2">
+                          <span className={`${getTypeColor(node.type)} font-mono`}>{node.type}</span>
+                        </td>
+                        <td className="py-1 px-2 font-mono truncate max-w-[200px]" title={String(node.value)}>
+                          <span className={getTypeColor(node.type)}>{formatValue(node.value, node.type)}</span>
+                        </td>
+                        <td className="py-1 px-2 font-mono text-muted-foreground text-[10px] truncate max-w-[200px]" title={node.path}>
+                          {node.path}
+                        </td>
+                        <td className="py-1 px-2 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-5 w-5 p-0 ${alreadyAsserted ? "text-green-500" : "text-primary hover:text-primary"}`}
+                            onClick={() => createAssertionFromNode(node)}
+                            title={alreadyAsserted ? "Add another assertion" : `Assert ${node.key} = ${formatValue(node.value, node.type)}`}
+                          >
+                            {alreadyAsserted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">Response is not valid JSON</p>
+                <p className="text-xs">Table view requires a JSON response body</p>
+              </div>
+            )}
+          </ScrollArea>
           <div
             className="flex items-center justify-center h-3 cursor-ns-resize hover:bg-muted/50 rounded-b-lg group/resize"
             onMouseDown={handleResizeStart}

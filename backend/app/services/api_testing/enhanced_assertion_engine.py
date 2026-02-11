@@ -317,20 +317,23 @@ class EnhancedAssertionEngine:
     ) -> AssertionResult:
         """Assert status code"""
         operator = assertion.get("operator", "==")
-        expected = assertion.get("expected", 200)
+        try:
+            expected = int(assertion.get("expected", 200))
+        except (ValueError, TypeError):
+            expected = 200
         
         passed = False
-        if operator == "==" or operator == "=":
+        if operator in ("==", "=", "equals"):
             passed = status_code == expected
-        elif operator == "!=":
+        elif operator in ("!=", "not_equals"):
             passed = status_code != expected
-        elif operator == ">":
+        elif operator in (">", "greater_than"):
             passed = status_code > expected
-        elif operator == ">=":
+        elif operator in (">=",):
             passed = status_code >= expected
-        elif operator == "<":
+        elif operator in ("<", "less_than"):
             passed = status_code < expected
-        elif operator == "<=":
+        elif operator in ("<=",):
             passed = status_code <= expected
         
         return AssertionResult(
@@ -350,25 +353,29 @@ class EnhancedAssertionEngine:
     ) -> AssertionResult:
         """Assert response time"""
         operator = assertion.get("operator", "<")
-        threshold = assertion.get("threshold_ms", 1000)
+        # Read threshold from threshold_ms OR expected (frontend sends 'expected')
+        try:
+            threshold = float(assertion.get("threshold_ms") or assertion.get("expected") or 1000)
+        except (ValueError, TypeError):
+            threshold = 1000
         
         passed = False
-        if operator == "<":
+        if operator in ("<", "less_than"):
             passed = response_time_ms < threshold
-        elif operator == "<=":
+        elif operator in ("<=",):
             passed = response_time_ms <= threshold
-        elif operator == ">":
+        elif operator in (">", "greater_than"):
             passed = response_time_ms > threshold
-        elif operator == ">=":
+        elif operator in (">=",):
             passed = response_time_ms >= threshold
-        elif operator == "==":
+        elif operator in ("==", "equals"):
             passed = abs(response_time_ms - threshold) < 10  # 10ms tolerance
         
         return AssertionResult(
             "response_time",
             name,
             passed,
-            expected=f"{operator} {threshold}ms",
+            expected=f"< {threshold}ms",
             actual=f"{response_time_ms:.2f}ms",
             message=f"Response time {response_time_ms:.2f}ms {'meets' if passed else 'exceeds'} threshold {threshold}ms"
         )
@@ -471,14 +478,34 @@ class EnhancedAssertionEngine:
             jsonpath_expr = jsonpath_ng.parse(path)
             matches = [match.value for match in jsonpath_expr.find(data)]
             
-            if expected is not None:
-                # Check if any match equals expected
-                passed = any(str(match) == str(expected) for match in matches)
-                actual = matches[0] if matches else None
-            else:
-                # Just check if path exists
+            operator = assertion.get("operator", "equals")
+            actual = matches[0] if matches else None
+            
+            if operator in ("exists",):
+                # Just check if path exists (regardless of expected)
                 passed = len(matches) > 0
-                actual = matches[0] if matches else None
+            elif operator in ("not_exists",):
+                passed = len(matches) == 0
+            elif operator in ("contains",) and expected is not None:
+                passed = any(str(expected).lower() in str(match).lower() for match in matches)
+            elif operator in ("not_contains",) and expected is not None:
+                passed = all(str(expected).lower() not in str(match).lower() for match in matches)
+            elif operator in ("greater_than", ">") and expected is not None:
+                try:
+                    passed = any(float(match) > float(expected) for match in matches)
+                except (ValueError, TypeError):
+                    passed = False
+            elif operator in ("less_than", "<") and expected is not None:
+                try:
+                    passed = any(float(match) < float(expected) for match in matches)
+                except (ValueError, TypeError):
+                    passed = False
+            elif expected is not None and expected != "":
+                # Default: equals comparison
+                passed = any(str(match) == str(expected) for match in matches)
+            else:
+                # No expected value and no explicit operator — check existence
+                passed = len(matches) > 0
             
             return AssertionResult(
                 "jsonpath",
@@ -486,7 +513,7 @@ class EnhancedAssertionEngine:
                 passed,
                 expected=expected,
                 actual=actual,
-                message=f"JSONPath '{path}' {'found' if passed else 'not found'} in response"
+                message=f"JSONPath '{path}' {'matched' if passed else 'did not match'} (operator: {operator})"
             )
             
         except Exception as e:
@@ -815,11 +842,33 @@ class EnhancedAssertionEngine:
         name: str
     ) -> AssertionResult:
         """Assert response header"""
-        header_name = assertion.get("header", "")
+        # Frontend sends header name as 'path'; backend also accepts 'header'
+        header_name = assertion.get("header") or assertion.get("path", "")
         expected = assertion.get("expected", "")
+        operator = assertion.get("operator", "equals")
         
-        actual = response_headers.get(header_name, "")
-        passed = actual == expected if expected else actual != ""
+        # Case-insensitive header lookup
+        actual = ""
+        for k, v in response_headers.items():
+            if k.lower() == header_name.lower():
+                actual = v
+                break
+        
+        passed = False
+        if not expected:
+            passed = actual != ""
+        elif operator in ("contains",):
+            passed = expected.lower() in actual.lower()
+        elif operator in ("not_contains",):
+            passed = expected.lower() not in actual.lower()
+        elif operator in ("equals", "==", "="):
+            passed = actual == expected
+        elif operator in ("not_equals", "!="):
+            passed = actual != expected
+        elif operator in ("exists",):
+            passed = actual != ""
+        else:
+            passed = actual == expected
         
         return AssertionResult(
             "header",

@@ -1353,35 +1353,16 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
-      
-      // Now generate enhanced test suite
-      const enhanceResponse = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_spec: parseData.parsed_spec,
-          spec_format: format === "har" ? "openapi" : format,
-          protocol: protocol,
-          test_options: {}
-        }),
-      });
-
-      if (!enhanceResponse.ok) {
-        throw new Error(`Failed to generate enhanced test suite: ${enhanceResponse.statusText}`);
-      }
-
-      const enhanceData = await enhanceResponse.json();
-      setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
       setSelectedImportItems(new Set());
       
-      toast({
-        title: "Spec Parsed & Tests Generated",
-        description: `Found ${Object.keys(parseData.parsed_spec?.paths || {}).length} endpoints, generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} test cases. Select items below to add to your collection.`,
-      });
+      const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
+        (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
+      );
       
-      // Stay on import tab for selective add
+      toast({
+        title: "Spec Parsed",
+        description: `Found ${endpointCount} endpoints. Select and add them to your collection, then build assertions from live responses.`,
+      });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -1430,35 +1411,16 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
-      
-      // Generate enhanced test suite (HAR parses to openapi-like)
-      const enhanceResponse = await fetch(`${API_BASE_URL}/api/v2/testing/test-suite/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_spec: parseData.parsed_spec,
-          spec_format: specFormat === "har" ? "openapi" : specFormat,
-          protocol: protocol,
-          test_options: {}
-        }),
-      });
-
-      if (!enhanceResponse.ok) {
-        throw new Error(`Failed to generate enhanced test suite: ${enhanceResponse.statusText}`);
-      }
-
-      const enhanceData = await enhanceResponse.json();
-      setTestSuite(ensureTestSuiteFolders(enhanceData.test_suite));
       setSelectedImportItems(new Set());
       
-      toast({
-        title: "Spec Parsed & Tests Generated",
-        description: `Found ${Object.keys(parseData.parsed_spec?.paths || {}).length} endpoints, generated ${enhanceData.summary?.total_test_cases ?? enhanceData.test_suite?.metadata?.total_test_cases ?? 0} test cases. Select items below to add to your collection.`,
-      });
+      const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
+        (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
+      );
       
-      // Stay on import tab for selective add
+      toast({
+        title: "Spec Parsed",
+        description: `Found ${endpointCount} endpoints. Select and add them to your collection, then build assertions from live responses.`,
+      });
     } catch (error: any) {
       toast({
         title: "Error",
