@@ -714,6 +714,46 @@ class EnhancedAssertionEngine:
             )
         
         try:
+            import ast as _ast
+
+            # Security: validate AST before execution — block dangerous constructs
+            BLOCKED_NAMES = {"__import__", "eval", "exec", "compile", "open", "getattr",
+                             "setattr", "delattr", "globals", "locals", "vars", "dir",
+                             "__builtins__", "breakpoint", "exit", "quit", "input",
+                             "memoryview", "bytearray", "__subclasses__", "subprocess",
+                             "os", "sys", "shutil", "pathlib", "importlib"}
+
+            tree = _ast.parse(script, mode="exec")
+            for node in _ast.walk(tree):
+                # Block imports
+                if isinstance(node, (_ast.Import, _ast.ImportFrom)):
+                    return AssertionResult(
+                        "script", name, False,
+                        error="Import statements are not allowed in script assertions",
+                        message="Security: import statements are blocked"
+                    )
+                # Block dangerous function calls and attribute access
+                if isinstance(node, _ast.Name) and node.id in BLOCKED_NAMES:
+                    return AssertionResult(
+                        "script", name, False,
+                        error=f"Access to '{node.id}' is not allowed",
+                        message=f"Security: '{node.id}' is blocked"
+                    )
+                if isinstance(node, _ast.Attribute) and node.attr in BLOCKED_NAMES:
+                    return AssertionResult(
+                        "script", name, False,
+                        error=f"Access to '.{node.attr}' is not allowed",
+                        message=f"Security: '.{node.attr}' is blocked"
+                    )
+
+            # Limit script length
+            if len(script) > 5000:
+                return AssertionResult(
+                    "script", name, False,
+                    error="Script too long (max 5000 characters)",
+                    message="Security: script size limit exceeded"
+                )
+
             # Sandboxed execution — limited builtins for safety
             safe_builtins = {
                 "True": True, "False": False, "None": None,
@@ -726,7 +766,7 @@ class EnhancedAssertionEngine:
                 "any": any, "all": all, "map": map, "filter": filter,
                 "round": round, "print": lambda *a: None,  # no-op print
             }
-            
+
             script_locals = {
                 "response": response_data,
                 "status_code": status_code,
@@ -737,9 +777,11 @@ class EnhancedAssertionEngine:
                 "result": False,
                 "message": "",
             }
-            
-            exec(script, {"__builtins__": safe_builtins}, script_locals)
-            
+
+            # Compile and execute with AST-validated code
+            code = compile(tree, "<assertion>", "exec")
+            exec(code, {"__builtins__": safe_builtins}, script_locals)
+
             passed = bool(script_locals.get("result", False))
             msg = script_locals.get("message", "")
             
