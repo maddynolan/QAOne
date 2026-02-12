@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +26,7 @@ import RequestChainBuilder from "@/components/api-testing/RequestChainBuilder";
 import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables, resolveVariables } from "@/components/api-testing/EnvironmentManager";
 import CollectionSidebar from "@/components/api-testing/CollectionSidebar";
+import { CodeEditor, ResponseCodeViewer } from "@/components/api-testing/CodeEditor";
 import { useApiTestingStore } from "@/stores/apiTestingStore";
 
 import { API_BASE_URL } from "@/lib/api-config";
@@ -2633,11 +2633,13 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               {/* Text Paste */}
               <div className="space-y-2">
                 <Label>Or Paste Specification</Label>
-                <Textarea
+                <CodeEditor
                   value={specContent}
-                  onChange={(e) => setSpecContent(e.target.value)}
+                  onChange={(val) => setSpecContent(val)}
+                  language="json"
                   placeholder="Paste your API specification here (OpenAPI JSON/YAML, Postman Collection JSON, WSDL XML, GraphQL SDL, HAR JSON)..."
-                  className="min-h-[200px] font-mono text-sm"
+                  height="200px"
+                  lineNumbers="off"
                 />
               </div>
 
@@ -3725,11 +3727,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <CardDescription>Compatible with CI/CD tools like Jenkins, GitHub Actions, Azure DevOps</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[500px]">
-                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
-                        {generateJUnitXMLContent()}
-                      </pre>
-                    </ScrollArea>
+                    <ResponseCodeViewer
+                      value={generateJUnitXMLContent()}
+                      language="xml"
+                      height="500px"
+                    />
                   </CardContent>
                 </Card>
               )}
@@ -3747,11 +3749,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <CardDescription>Raw test execution data for custom processing</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[500px]">
-                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
-                        {JSON.stringify(executionResults, null, 2)}
-                      </pre>
-                    </ScrollArea>
+                    <ResponseCodeViewer
+                      value={JSON.stringify(executionResults, null, 2)}
+                      language="json"
+                      height="500px"
+                    />
                   </CardContent>
                 </Card>
               )}
@@ -3777,11 +3779,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                         Allure reports require the Allure CLI to generate. Install with: <code className="bg-muted px-1 rounded">npm install -g allure-commandline</code>
                       </AlertDescription>
                     </Alert>
-                    <ScrollArea className="h-[400px]">
-                      <pre className="text-xs bg-muted p-4 rounded-lg font-mono overflow-x-auto">
-                        {generateAllureContent()}
-                      </pre>
-                    </ScrollArea>
+                    <ResponseCodeViewer
+                      value={generateAllureContent()}
+                      language="json"
+                      height="400px"
+                    />
                   </CardContent>
                 </Card>
               )}

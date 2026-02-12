@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CodeEditor, ResponseCodeViewer } from "./CodeEditor";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1323,8 +1324,11 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 ))}
               </div>
               {request.bodyType !== "none" && (
-                <Textarea
-                  className="min-h-[200px] font-mono text-sm"
+                <CodeEditor
+                  value={request.body}
+                  onChange={(val) => setRequest({ ...request, body: val })}
+                  language={request.bodyType}
+                  height="200px"
                   placeholder={
                     request.bodyType === "json"
                       ? '{\n  "key": "value"\n}'
@@ -1334,8 +1338,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                           ? "key=value&key2=value2"
                           : "Raw text content..."
                   }
-                  value={request.body}
-                  onChange={e => setRequest({ ...request, body: e.target.value })}
+                  onCtrlEnter={handleSend}
                 />
               )}
               {request.bodyType === "json" && request.body.trim() && (
@@ -1911,11 +1914,33 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               </TabsContent>
 
               <TabsContent value="body" className="mt-0">
-                <ScrollArea className="h-[350px]">
-                  <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words">
-                    {formatResponseBody(response.body)}
-                  </pre>
-                </ScrollArea>
+                <div className="relative">
+                  <ResponseCodeViewer
+                    value={formatResponseBody(response.body)}
+                    language="auto"
+                    height="350px"
+                  />
+                  <div className="absolute top-2 right-4 flex gap-2 z-10">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs bg-background/80 backdrop-blur-sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(typeof response.body === 'string' ? response.body : JSON.stringify(response.body, null, 2));
+                        toast({ title: "Copied", description: "Response body copied to clipboard" });
+                      }}
+                    >
+                      <Copy className="w-3 h-3 mr-1" /> Copy
+                    </Button>
+                    <Badge variant="outline" className="text-xs bg-background/80 backdrop-blur-sm">
+                      {(() => {
+                        const bodyStr = typeof response.body === 'string' ? response.body : JSON.stringify(response.body);
+                        const bytes = new Blob([bodyStr]).size;
+                        return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+                      })()}
+                    </Badge>
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="headers" className="mt-0">
