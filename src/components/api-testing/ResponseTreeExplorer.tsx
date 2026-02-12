@@ -502,10 +502,15 @@ export default function ResponseTreeExplorer({
                 {expandedPaths.has("$") && bodyTree.map(node => renderNode(node))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
                 <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
-                <p className="text-sm">Response is not valid JSON</p>
-                <p className="text-xs">Tree view requires a JSON response body</p>
+                <p className="text-sm font-medium">Response is not valid JSON</p>
+                <p className="text-xs mt-1">Tree view requires a JSON response body</p>
+                <p className="text-xs mt-2 max-w-sm text-center">
+                  {responseBody && responseBody.trim().startsWith('<')
+                    ? 'The response appears to be HTML. Check that the URL points to an API endpoint, not a web page.'
+                    : 'Switch to the Body tab to see the raw response content.'}
+                </p>
               </div>
             )}
           </ScrollArea>
@@ -573,10 +578,15 @@ export default function ResponseTreeExplorer({
                 </tbody>
               </table>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
                 <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
-                <p className="text-sm">Response is not valid JSON</p>
-                <p className="text-xs">Table view requires a JSON response body</p>
+                <p className="text-sm font-medium">Response is not valid JSON</p>
+                <p className="text-xs mt-1">Table view requires a JSON response body</p>
+                <p className="text-xs mt-2 max-w-sm text-center">
+                  {responseBody && responseBody.trim().startsWith('<')
+                    ? 'The response appears to be HTML. Check that the URL points to an API endpoint, not a web page.'
+                    : 'Switch to the Body tab to see the raw response content.'}
+                </p>
               </div>
             )}
           </ScrollArea>

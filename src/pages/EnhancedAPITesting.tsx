@@ -251,6 +251,7 @@ export default function EnhancedAPITesting() {
   const [testSuite, setTestSuite] = useState<any>(null);
   // Import selection state — for selective "Add to Collection"
   const [selectedImportItems, setSelectedImportItems] = useState<Set<string>>(new Set());
+  const [importBaseUrl, setImportBaseUrl] = useState("");
   const [suiteLoading, setSuiteLoading] = useState(true);
   const suiteLoadedFromBackend = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1369,11 +1370,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
-      
+      // Auto-populate import base URL from parsed spec (file import)
+      const detectedBaseUrl = parseData.parsed_spec?.base_url || parseData.parsed_spec?.servers?.[0]?.url || '';
+      if (detectedBaseUrl) setImportBaseUrl(detectedBaseUrl);
+
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
         (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
       );
-      
+
       toast({
         title: "Spec Parsed",
         description: `Found ${endpointCount} endpoints. Select and add them to your collection, then build assertions from live responses.`,
@@ -1427,11 +1431,14 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
-      
+      // Auto-populate import base URL from parsed spec (text import)
+      const detectedBaseUrl2 = parseData.parsed_spec?.base_url || parseData.parsed_spec?.servers?.[0]?.url || '';
+      if (detectedBaseUrl2) setImportBaseUrl(detectedBaseUrl2);
+
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
         (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
       );
-      
+
       toast({
         title: "Spec Parsed",
         description: `Found ${endpointCount} endpoints. Select and add them to your collection, then build assertions from live responses.`,
@@ -2676,9 +2683,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               <div className="space-y-2">
                 <Label>Base URL (auto-detected, editable)</Label>
                 <Input
-                  id="import-base-url"
                   placeholder="https://api.example.com"
-                  defaultValue={parsedSpec?.base_url || parsedSpec?.servers?.[0]?.url || ''}
+                  value={importBaseUrl}
+                  onChange={(e) => setImportBaseUrl(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
                   This base URL will be attached to all imported endpoints including security tests.
@@ -2712,11 +2719,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               (activeColl?.requests || []).map((r: any) => `${(r.method || 'GET').toUpperCase()} ${r.path || r.url || '/'}`)
             );
             
-            const baseUrl = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || parsedSpec.servers?.[0]?.url || '';
+            const baseUrl = importBaseUrl.trim() || parsedSpec.base_url || parsedSpec.servers?.[0]?.url || '';
             
             // Helper: add endpoints to collection (clean, one request per endpoint)
             const addItemsToCollection = (itemKeys: string[]) => {
-              const baseUrlVal = (document.getElementById("import-base-url") as HTMLInputElement)?.value?.trim() || parsedSpec.base_url || '';
+              const baseUrlVal = importBaseUrl.trim() || parsedSpec.base_url || '';
               let addedCount = 0;
               
               for (const ek of itemKeys) {
