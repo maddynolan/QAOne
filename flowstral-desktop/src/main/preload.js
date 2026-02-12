@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('flowstral', {
       // Test execution events
       'playwright-test-step-start',
       'playwright-test-step-complete',
+      'playwright-test-step-healing',
       'playwright-test-complete',
       'playwright-test-paused',
       'test-step-start',

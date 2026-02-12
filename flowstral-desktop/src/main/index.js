@@ -1256,7 +1256,8 @@ function setupRecorderEvents(recorder) {
   recorder.removeAllListeners('test-resumed');
   recorder.removeAllListeners('test-stopped');
   recorder.removeAllListeners('test-runner:step-failed');
-  
+  recorder.removeAllListeners('test-step-healing');
+
   // Test execution feedback - sends events to frontend
   recorder.on('test-step-start', ({ stepIndex, step, isRetry }) => {
     console.log(`[Events] Step ${stepIndex + 1} started`);
@@ -1296,6 +1297,12 @@ function setupRecorderEvents(recorder) {
   
   recorder.on('test-runner:step-failed', ({ index, error, screenshot, isRetry }) => {
     sendToWebapp('test-runner:step-failed', { index, error, screenshot, isRetry });
+  });
+
+  // Resilient healing: emitted when auto-heal is in progress
+  recorder.on('test-step-healing', ({ stepIndex, error }) => {
+    console.log(`[Events] Step ${stepIndex + 1} healing in progress...`);
+    sendToWebapp('playwright-test-step-healing', { stepIndex, error });
   });
 }
 

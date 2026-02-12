@@ -3759,6 +3759,11 @@ class PlaywrightRecorder extends EventEmitter {
       let failError = '';
       // Track step results with workingSelector for Lock Locators feature
       const stepResults = new Array(steps.length).fill(null).map((_, i) => ({ index: i, status: 'pending' }));
+
+      // ═══ RESILIENT RUNTIME HEALING: Budget tracking ═══
+      // Max 5 AI healing attempts per test run to control costs
+      this._healingAttemptsThisRun = 0;
+      const MAX_HEALING_ATTEMPTS = 5;
       
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
@@ -4210,20 +4215,138 @@ class PlaywrightRecorder extends EventEmitter {
             elementLocation: elementLocation, // Where we scrolled to (if found)
             scrolledToElement: !!elementLocation // Whether we successfully scrolled
           };
-          
+
+          // ═══════════════════════════════════════════════════════════════════
+          // RESILIENT RUNTIME HEALING: Try to auto-heal before giving up
+          // Calls backend HealingOrchestrator (Knowledge → Deterministic → Vision AI → OCR)
+          // Budget: max 5 healed steps per run, prevents runaway AI costs
+          // ═══════════════════════════════════════════════════════════════════
+          let healedSuccessfully = false;
+
+          if (this._healingAttemptsThisRun < MAX_HEALING_ATTEMPTS && this.page && !this.page.isClosed()) {
+            console.log(`[Resilient] Attempting auto-heal for step ${i + 1} (attempt ${this._healingAttemptsThisRun + 1}/${MAX_HEALING_ATTEMPTS})`);
+            this.emit('test-step-healing', { stepIndex: i, error: stepError.message });
+
+            try {
+              const healResult = await this._attemptAutoHeal({
+                step,
+                stepIndex: i,
+                error: stepError.message,
+                screenshot: failureScreenshot,
+                url: failureUrl
+              });
+
+              if (healResult && healResult.success && healResult.fixed_selector) {
+                console.log(`[Resilient] Heal returned selector: "${healResult.fixed_selector}" via ${healResult.strategy_used}`);
+
+                // Reconstruct action with healed selector for re-execution
+                const healedStepType = step.type || step.qword?.toLowerCase() || 'click';
+                const healedLabel = step.description || step.text || step.label || step.name || '';
+                const healedAction = {
+                  type: healedStepType,
+                  label: healedLabel,
+                  text: healedLabel,
+                  value: step.value || step.fillValue || '',
+                  selector: healResult.fixed_selector,
+                  timeout,
+                  args: step.args,
+                  selectorObj: step.selectorObj || {},
+                  recipe: step.recipe,
+                  lockedSelector: null // Don't use locked selector for retry
+                };
+
+                // Re-execute with healed selector
+                let retryResult;
+                if (useSimplePlayback && this._simpleStepExecutor) {
+                  retryResult = await this._simpleStepExecutor.executeAction(healedAction);
+                } else {
+                  retryResult = await this.executeAction(healedAction);
+                }
+
+                if (retryResult.success !== false) {
+                  healedSuccessfully = true;
+                  this._healingAttemptsThisRun++;
+                  failedStep = -1; // Reset — this step is no longer failed
+                  failError = '';
+
+                  passedSteps++;
+                  stepResults[i] = {
+                    index: i,
+                    status: 'passed',
+                    healed: true,
+                    workingSelector: healResult.fixed_selector,
+                    strategyType: 'auto-healed-' + (healResult.strategy_used || 'unknown'),
+                    aiResolved: healResult.strategy_used || 'auto-healed'
+                  };
+                  this.emit('test-step-complete', {
+                    stepIndex: i,
+                    success: true,
+                    healed: true,
+                    workingSelector: healResult.fixed_selector,
+                    strategyType: 'auto-healed-' + (healResult.strategy_used || 'unknown')
+                  });
+
+                  console.log(`[Resilient] ✓ Step ${i + 1} AUTO-HEALED via ${healResult.strategy_used}`);
+                } else {
+                  console.log(`[Resilient] ✗ Healed selector found but re-execution still failed`);
+                }
+              } else {
+                console.log(`[Resilient] ✗ No healing available for step ${i + 1}`);
+              }
+            } catch (healError) {
+              console.warn(`[Resilient] Healing attempt error:`, healError.message);
+            }
+          }
+
+          // If healing succeeded, continue to next step (don't break)
+          if (healedSuccessfully) {
+            // Wait between steps like normal
+            const stepDelay = Math.max(100, slowMo);
+            await this.page.waitForTimeout(stepDelay);
+            continue;
+          }
+
+          // Check if step is non-critical and can be auto-skipped
+          const failedActionType = (step.type || step.qword || '').toLowerCase();
+          const isSkippable = ['hover', 'focus', 'blur', 'scroll', 'mouseover'].includes(failedActionType);
+
+          if (isSkippable) {
+            console.log(`[Resilient] Auto-skipping non-critical step ${i + 1} (${failedActionType})`);
+            failedStep = -1;
+            failError = '';
+            passedSteps++;
+            stepResults[i] = {
+              index: i,
+              status: 'passed',
+              skipped: true,
+              reason: 'non-critical-auto-skipped',
+              workingSelector: null,
+              strategyType: 'auto-skipped'
+            };
+            this.emit('test-step-complete', {
+              stepIndex: i,
+              success: true,
+              skipped: true,
+              strategyType: 'auto-skipped'
+            });
+            continue; // Skip to next step
+          }
+
+          // ═══ CRITICAL STEP TRULY FAILED — break as before ═══
+
           // Track failed step result
-          stepResults[i] = { 
-            index: i, 
-            status: 'failed', 
-            error: stepError.message, 
+          stepResults[i] = {
+            index: i,
+            status: 'failed',
+            error: stepError.message,
             screenshot: failureScreenshot,
             workingSelector: null,
             strategyType: null
           };
-          
-          this.emit('test-step-complete', { 
-            stepIndex: i, 
-            success: false, 
+
+          this.emit('test-step-complete', {
+            stepIndex: i,
+            success: false,
             error: stepError.message,
             screenshot: failureScreenshot,
             url: failureUrl
@@ -4383,6 +4506,46 @@ class PlaywrightRecorder extends EventEmitter {
   
   /**
    * OPTION C: Find similar elements on the page for Visual Selector Cards
+   * Attempt auto-healing via backend HealingOrchestrator API.
+   * Calls POST /api/ai/enhancements/auto-fix-step which chains:
+   * Knowledge Base (0ms) → Deterministic (0ms) → Vision AI (2-5s) → OCR (500ms)
+   *
+   * @param {Object} params - Healing parameters
+   * @returns {Object} { success, fixed_selector, strategy_used } or null
+   */
+  async _attemptAutoHeal({ step, stepIndex, error, screenshot, url }) {
+    try {
+      const API_BASE = process.env.API_BASE_URL || 'https://qaai-backend-production.up.railway.app';
+      const response = await fetch(`${API_BASE}/api/ai/enhancements/auto-fix-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          test_id: `runtime_${Date.now()}`,
+          step_id: step.id || `step_${stepIndex}`,
+          step_index: stepIndex,
+          step_label: step.description || step.text || step.label || `Step ${stepIndex + 1}`,
+          failed_selector: step.selector || step.selectorObj?.selector || '',
+          error_message: error,
+          screenshot_b64: screenshot?.replace(/^data:image\/[a-z]+;base64,/, ''),
+          page_url: url
+        }),
+        signal: AbortSignal.timeout(15000) // 15s timeout for healing
+      });
+
+      if (!response.ok) {
+        console.warn(`[Resilient] API returned ${response.status}`);
+        return null;
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (err) {
+      console.warn(`[Resilient] Auto-heal API error:`, err.message);
+      return null;
+    }
+  }
+
+  /**
    * When a step fails, find elements that might be what the user wanted
    * @param {Object} failedStep - The step that failed
    * @returns {Array} Array of similar elements with id, text, selector, type
