@@ -141,6 +141,37 @@ class ExecutionWebSocketManager:
             "timestamp": datetime.utcnow().isoformat()
         })
     
+    async def send_healing_chain_progress(
+        self,
+        execution_id: str,
+        step_number: int,
+        event: str,  # "chain_start", "layer_attempt", "chain_complete"
+        data: Dict[str, Any] = None
+    ):
+        """Send healing chain progress for real-time UI updates."""
+        await self._broadcast(execution_id, {
+            "type": f"healing_{event}",
+            "step_number": step_number,
+            **(data or {}),
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    async def send_false_positive_detected(
+        self,
+        execution_id: str,
+        step_number: int,
+        step_label: str,
+        confidence: float
+    ):
+        """Notify that a false positive was auto-detected."""
+        await self._broadcast(execution_id, {
+            "type": "false_positive_detected",
+            "step_number": step_number,
+            "step_label": step_label,
+            "confidence": confidence,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
     async def send_log(
         self,
         execution_id: str,

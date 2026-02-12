@@ -429,3 +429,189 @@ async def explain_failures_batch(failures: List[ExplainFailureRequest]):
         "count": len(results),
         "ai_enhanced": explainer.ai_available
     }
+
+
+# ============================================================================
+# AUTO-FIX STEP - AI-powered healing when user clicks "Fix"
+# ============================================================================
+
+class AutoFixStepRequest(BaseModel):
+    """Request to auto-fix a failed/flagged step using AI healing chain."""
+    test_id: str
+    step_id: str
+    step_index: int = 0
+    step_label: str = ""
+    failed_selector: str = ""
+    error_message: str = ""
+    step_info: Dict[str, Any] = Field(default_factory=dict)
+    screenshot_b64: Optional[str] = None
+    page_html: Optional[str] = None
+    page_url: Optional[str] = None
+
+
+class AutoFixAttempt(BaseModel):
+    strategy: str
+    selector: str
+    success: bool
+    duration_ms: int = 0
+
+
+class AutoFixStepResponse(BaseModel):
+    """Response with auto-fix result."""
+    success: bool
+    fixed_selector: Optional[str] = None
+    strategy_used: Optional[str] = None
+    confidence: float = 0.0
+    attempts: List[AutoFixAttempt] = []
+    message: str = ""
+    needs_manual_fix: bool = True
+
+
+@router.post("/auto-fix-step", response_model=AutoFixStepResponse)
+async def auto_fix_step(request: AutoFixStepRequest):
+    """
+    Attempt to automatically fix a failed/flagged step using the healing chain.
+
+    Called when user clicks "Fix" on a failed step. Tries AI healing first,
+    then returns whether manual fix is needed.
+
+    Healing chain: Knowledge → Deterministic → Vision AI → OCR
+    """
+    try:
+        from app.services.automation.healing_orchestrator import get_healing_orchestrator
+
+        orchestrator = get_healing_orchestrator()
+
+        intent_dict = {
+            "description": request.step_label,
+            "text": request.step_info.get("text", ""),
+            "role": request.step_info.get("role", ""),
+        }
+
+        result = await orchestrator.heal(
+            test_code="",  # Not needed for selector-only fix
+            failed_selector=request.failed_selector,
+            error_message=request.error_message,
+            step_info=request.step_info,
+            screenshot_b64=request.screenshot_b64,
+            page_html=request.page_html,
+            page_url=request.page_url,
+            intent_dict=intent_dict,
+        )
+
+        attempts = [
+            AutoFixAttempt(
+                strategy=a.strategy,
+                selector=a.selector_tried[:200],
+                success=a.success,
+                duration_ms=a.duration_ms,
+            )
+            for a in result.attempts
+        ]
+
+        if result.healed:
+            # Record success for future runs
+            orchestrator.record_healing_success(
+                intent_dict=intent_dict,
+                strategy=result.winning_strategy,
+                selector=result.healed_selector,
+                attributes={},
+                context={"url": request.page_url or "", "test_id": request.test_id},
+            )
+
+            # Resolve any existing false-positive flag
+            try:
+                fp_svc = _get_fp_service()
+                fp_svc.resolve_flag(request.test_id, request.step_id)
+            except Exception:
+                pass
+
+            return AutoFixStepResponse(
+                success=True,
+                fixed_selector=result.healed_selector,
+                strategy_used=result.winning_strategy,
+                confidence=result.confidence,
+                attempts=attempts,
+                message=f"Fixed using {result.winning_strategy} strategy",
+                needs_manual_fix=False,
+            )
+
+        return AutoFixStepResponse(
+            success=False,
+            attempts=attempts,
+            message="Auto-fix unsuccessful. Please fix manually.",
+            needs_manual_fix=True,
+        )
+
+    except Exception as e:
+        logger.error(f"Auto-fix error: {e}")
+        return AutoFixStepResponse(
+            success=False,
+            message=f"Auto-fix error: {str(e)}",
+            needs_manual_fix=True,
+        )
+
+
+# ============================================================================
+# DETECT FALSE POSITIVE - Vision-based automatic false-positive detection
+# ============================================================================
+
+class DetectFalsePositiveRequest(BaseModel):
+    """Request to detect if a failure is a false positive."""
+    test_id: str
+    step_id: str
+    step_index: int = 0
+    step_label: str = ""
+    failed_selector: str = ""
+    screenshot_b64: str = ""
+    page_url: Optional[str] = None
+    step_info: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/detect-false-positive")
+async def detect_false_positive(request: DetectFalsePositiveRequest):
+    """
+    Vision-based false positive detection.
+
+    If a step failed but the element is visually present on the page
+    (confidence > 70%), auto-flag it as a false positive.
+
+    Called automatically after test failure if screenshot is available.
+    """
+    if not request.screenshot_b64:
+        return {"is_false_positive": False, "reason": "No screenshot available"}
+
+    try:
+        from app.services.automation.healing_orchestrator import get_healing_orchestrator
+
+        orchestrator = get_healing_orchestrator()
+        element_desc = request.step_label or request.step_info.get("description", "element")
+
+        result = await orchestrator.detect_false_positive(
+            screenshot_b64=request.screenshot_b64,
+            element_description=element_desc,
+            page_url=request.page_url,
+        )
+
+        if result.get("is_false_positive"):
+            # Auto-flag it
+            try:
+                fp_svc = _get_fp_service()
+                from app.services.ai.ai_enhancements import FalsePositiveFlag
+                fp_svc.save_flag(request.test_id, FalsePositiveFlag(
+                    step_id=request.step_id,
+                    step_index=request.step_index,
+                    step_label=request.step_label,
+                    screenshot=None,
+                    reason=f"Auto-detected: Element visually present (confidence {result.get('confidence', 0):.0%}) but selector failed",
+                    flagged_at=datetime.utcnow().isoformat(),
+                    flagged_by="ai_vision",
+                ))
+            except Exception as e:
+                logger.debug(f"Could not auto-flag false positive: {e}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"False positive detection error: {e}")
+        return {"is_false_positive": False, "reason": f"Detection error: {str(e)}"}

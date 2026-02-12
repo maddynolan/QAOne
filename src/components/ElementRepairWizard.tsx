@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { autoFixStep, type AutoFixResult } from '@/lib/aiEnhancements';
 
 // Types
 interface ElementInfo {
@@ -181,6 +182,11 @@ export default function ElementRepairWizard({
   const [isReopening, setIsReopening] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
 
+  // Auto-Fix with AI state
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
+  const [autoFixResult, setAutoFixResult] = useState<AutoFixResult | null>(null);
+  const [autoFixProgress, setAutoFixProgress] = useState<string>('');
+
   // Get flowstral API
   const flowstral = (window as any).flowstral;
   
@@ -248,6 +254,8 @@ export default function ElementRepairWizard({
       setFixSuggestions([]);
       setAiDescription('');
       setAiResults([]);
+      setAutoFixResult(null);
+      setAutoFixProgress('');
     }
   }, [open]);
 
@@ -536,6 +544,63 @@ export default function ElementRepairWizard({
       toast.success('Browser closed');
     } catch (e: any) {
       toast.error(e.message || 'Failed to close browser');
+    }
+  };
+
+  // Auto-Fix with AI — calls the healing orchestrator backend
+  const handleAutoFix = async () => {
+    if (!action || actionIndex === undefined) return;
+
+    setIsAutoFixing(true);
+    setAutoFixResult(null);
+    setAutoFixProgress('Starting AI healing chain...');
+
+    try {
+      const failedSelector = action.manualSelector || action.selectorObj?.selector || action.selector || '';
+      const errorMessage = failureState?.error || 'Element not found';
+
+      // Extract screenshot base64 (strip data:image prefix if present)
+      let screenshotB64: string | null = null;
+      if (failureState?.screenshot) {
+        screenshotB64 = failureState.screenshot.replace(/^data:image\/[a-z]+;base64,/, '');
+      }
+
+      setAutoFixProgress('Layer 1: Checking knowledge base...');
+
+      const result = await autoFixStep({
+        test_id: `recording_${Date.now()}`,
+        step_id: `step_${actionIndex}`,
+        step_index: actionIndex,
+        step_label: action.text || action.label || action.description || `Step ${actionIndex + 1}`,
+        failed_selector: failedSelector,
+        error_message: errorMessage,
+        step_info: {
+          type: action.type || action.qword,
+          text: action.text,
+          label: action.label,
+          selector: failedSelector,
+        },
+        screenshot_b64: screenshotB64,
+        page_url: failureState?.url || undefined,
+      });
+
+      setAutoFixResult(result);
+
+      if (result.success && result.fixed_selector) {
+        // Auto-apply the healed selector
+        setSelectedSelector(result.fixed_selector);
+        setSelectorType('css');
+        setAutoFixProgress(`Fixed using ${result.strategy_used || 'AI'} (${Math.round(result.confidence * 100)}% confidence)`);
+        toast.success(`AI found a fix: ${result.strategy_used || 'healed selector'}`);
+      } else {
+        setAutoFixProgress(result.message || 'AI could not find a fix — try manual repair below');
+        toast.info('AI healing tried all layers — use manual repair');
+      }
+    } catch (e: any) {
+      setAutoFixProgress('AI auto-fix unavailable');
+      toast.error(e.message || 'Auto-fix failed');
+    } finally {
+      setIsAutoFixing(false);
     }
   };
 
@@ -1217,6 +1282,99 @@ export default function ElementRepairWizard({
             </p>
           )}
         </DialogHeader>
+
+        {/* Auto-Fix with AI — prominent CTA above tabs */}
+        <div className="relative">
+          {!autoFixResult?.success && (
+            <Button
+              onClick={handleAutoFix}
+              disabled={isAutoFixing || !action}
+              className={cn(
+                'w-full h-auto py-3 text-sm font-medium',
+                'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700',
+                'disabled:opacity-50'
+              )}
+            >
+              {isAutoFixing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {autoFixProgress || 'Running AI healing chain...'}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Auto-Fix with AI
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Auto-Fix Result */}
+          {autoFixResult && (
+            <div className={cn(
+              'rounded-lg p-3 text-sm border',
+              autoFixResult.success
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
+            )}>
+              <div className="flex items-start gap-2">
+                {autoFixResult.success ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={autoFixResult.success ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
+                    {autoFixResult.success ? 'AI Fixed!' : 'AI could not auto-fix'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {autoFixProgress}
+                  </p>
+                  {/* Show what was tried */}
+                  {autoFixResult.attempts && autoFixResult.attempts.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {autoFixResult.attempts.map((attempt, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          {attempt.success ? (
+                            <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <XCircle className="h-3 w-3 text-red-400/60" />
+                          )}
+                          <span className="text-muted-foreground">
+                            {attempt.strategy}: {attempt.success ? attempt.selector : 'no match'}
+                          </span>
+                          <span className="text-muted-foreground/50 ml-auto">
+                            {attempt.duration_ms}ms
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {autoFixResult.success && autoFixResult.fixed_selector && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <code className="text-xs bg-background/50 px-2 py-1 rounded text-emerald-300 truncate">
+                        {autoFixResult.fixed_selector}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2"
+                        onClick={() => copySelector(autoFixResult.fixed_selector!)}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  {!autoFixResult.success && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use the manual tabs below to fix this step.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-secondary/50 rounded-lg">

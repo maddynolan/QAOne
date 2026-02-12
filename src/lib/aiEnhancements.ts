@@ -317,3 +317,91 @@ export async function explainFailuresBatch(
 export async function getEnhancementsStatus(): Promise<EnhancementsStatus | null> {
   return apiFetch<EnhancementsStatus>('/status');
 }
+
+// ============================================================================
+// AUTO-FIX STEP — AI healing chain for failed/flagged steps
+// ============================================================================
+
+export interface AutoFixAttempt {
+  strategy: string;
+  selector: string;
+  success: boolean;
+  duration_ms: number;
+}
+
+export interface AutoFixResult {
+  success: boolean;
+  fixed_selector?: string;
+  strategy_used?: string;
+  confidence: number;
+  attempts: AutoFixAttempt[];
+  message: string;
+  needs_manual_fix: boolean;
+}
+
+/**
+ * Attempt to auto-fix a failed step using the AI healing chain.
+ * Call this when user clicks "Fix" — tries AI first, then falls back to manual.
+ *
+ * Healing chain: Knowledge → Deterministic → Vision AI → OCR
+ */
+export async function autoFixStep(params: {
+  test_id: string;
+  step_id: string;
+  step_index: number;
+  step_label: string;
+  failed_selector: string;
+  error_message: string;
+  step_info: Record<string, unknown>;
+  screenshot_b64?: string | null;
+  page_url?: string | null;
+}): Promise<AutoFixResult> {
+  const result = await apiFetch<AutoFixResult>('/auto-fix-step', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result ?? {
+    success: false,
+    confidence: 0,
+    attempts: [],
+    message: 'Backend unreachable',
+    needs_manual_fix: true,
+  };
+}
+
+// ============================================================================
+// DETECT FALSE POSITIVE — Vision-based automatic false-positive detection
+// ============================================================================
+
+export interface FalsePositiveDetectionResult {
+  is_false_positive: boolean;
+  confidence: number;
+  reason: string;
+  suggested_selector?: string;
+  coordinates?: { x: number; y: number } | null;
+}
+
+/**
+ * Detect if a failed step is a false positive using vision AI.
+ * If the element is visually present but the selector broke, auto-flags it.
+ */
+export async function detectFalsePositive(params: {
+  test_id: string;
+  step_id: string;
+  step_index: number;
+  step_label: string;
+  failed_selector: string;
+  screenshot_b64: string;
+  page_url?: string;
+  step_info?: Record<string, unknown>;
+}): Promise<FalsePositiveDetectionResult> {
+  const result = await apiFetch<FalsePositiveDetectionResult>('/detect-false-positive', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result ?? {
+    is_false_positive: false,
+    confidence: 0,
+    reason: 'Backend unreachable',
+  };
+}

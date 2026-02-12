@@ -103,6 +103,7 @@ import {
   type FlakyStepInfo,
   type FailureExplanation,
   type FixOption as ApiFixOption,
+  detectFalsePositive as detectFalsePositiveApi,
 } from "@/lib/aiEnhancements";
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -4509,7 +4510,56 @@ Recorded Test
       } catch (e) {
         // Non-critical — flaky detection is additive
       }
-      
+
+      // ============ AI FALSE-POSITIVE DETECTION ============
+      // For failed steps with screenshots, ask Vision AI if element is visually present
+      // If so, auto-flag as false positive (selector broke but element is there)
+      // Cost-controlled: max 3 checks per run
+      if (!testPassed) {
+        try {
+          const failedWithScreenshots = stepResults
+            .filter((s: any) => s.status === 'failed' && s.screenshot)
+            .slice(0, 3); // Max 3 for cost control
+
+          for (const failedStep of failedWithScreenshots) {
+            const action = actions[failedStep.index];
+            if (!action?.id) continue;
+            // Skip if already flagged
+            if (falsePositiveSteps.has(action.id)) continue;
+
+            const screenshotB64 = (failedStep.screenshot || '').replace(/^data:image\/[a-z]+;base64,/, '');
+            if (!screenshotB64) continue;
+
+            detectFalsePositiveApi({
+              test_id: currentTestId,
+              step_id: action.id,
+              step_index: failedStep.index,
+              step_label: action.description || action.text || action.label || `Step ${failedStep.index + 1}`,
+              failed_selector: action.manualSelector || action.selectorObj?.selector || action.selector || '',
+              screenshot_b64: screenshotB64,
+              page_url: failedStep.url || undefined,
+            }).then(fpResult => {
+              if (fpResult.is_false_positive && fpResult.confidence >= 0.7) {
+                // Auto-flag this step
+                markStepAsFalsePositive(
+                  failedStep.index,
+                  failedStep.screenshot || null,
+                  `AI detected: ${fpResult.reason} (${Math.round(fpResult.confidence * 100)}% confidence)`
+                );
+                toast.info(
+                  `🤖 AI detected Step ${failedStep.index + 1} may be a false positive: ${fpResult.reason}`,
+                  { duration: 6000 }
+                );
+              }
+            }).catch(() => {
+              // Non-critical — AI FP detection is additive
+            });
+          }
+        } catch (e) {
+          // Non-critical — AI FP detection is additive
+        }
+      }
+
       if (testPassed) {
         toast.success(`✅ Test Passed! (${actions.length} steps)`, { id: 'run' });
       } else {

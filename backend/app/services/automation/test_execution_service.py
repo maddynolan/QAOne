@@ -63,6 +63,7 @@ class TestExecutionService:
         # Lazy import to avoid circular dependency
         self._script_converter = None
         self._test_healer = None
+        self._healing_orchestrator = None
         self._healing_enabled = True  # Enable self-healing by default
         self._max_healing_attempts = 3
         self._current_execution_id = None  # Track current execution for WebSocket
@@ -135,7 +136,52 @@ class TestExecutionService:
             except ImportError as e:
                 logger.warning(f"Self-healing not available: {e}")
         return self._test_healer
-    
+
+    def _get_healing_orchestrator(self):
+        """Lazy load the HealingOrchestrator."""
+        if self._healing_orchestrator is None:
+            try:
+                from app.services.automation.healing_orchestrator import get_healing_orchestrator
+                self._healing_orchestrator = get_healing_orchestrator()
+            except ImportError as e:
+                logger.warning(f"HealingOrchestrator not available: {e}")
+        return self._healing_orchestrator
+
+    def _build_intent_from_step(self, step_names, failed_selector: str) -> Dict:
+        """Build intent dict from step metadata and failed selector for healing lookups."""
+        intent = {"description": "", "text": "", "role": ""}
+        if step_names:
+            if isinstance(step_names, list):
+                intent["description"] = " ".join(str(s) for s in step_names[:3])
+            else:
+                intent["description"] = str(step_names)
+        # Parse text from selector
+        import re as _re
+        text_match = _re.search(r"text=['\"]([^'\"]+)['\"]", failed_selector)
+        if text_match:
+            intent["text"] = text_match.group(1)
+        role_match = _re.search(r"getByRole\(['\"](\w+)['\"]", failed_selector)
+        if role_match:
+            intent["role"] = role_match.group(1)
+        return intent
+
+    def _extract_screenshot_b64(self, result: Dict) -> str:
+        """Extract base64 screenshot from test results if available."""
+        screenshots = result.get("screenshots", [])
+        if screenshots:
+            try:
+                import base64
+                last_screenshot = screenshots[-1]
+                if isinstance(last_screenshot, str) and os.path.exists(last_screenshot):
+                    with open(last_screenshot, 'rb') as f:
+                        return base64.b64encode(f.read()).decode('utf-8')
+                elif isinstance(last_screenshot, str) and len(last_screenshot) > 200:
+                    # Already base64
+                    return last_screenshot
+            except Exception:
+                pass
+        return ""
+
     def _is_selector_failure(self, error_output: str) -> bool:
         """Check if the error is a selector-related failure that can be healed"""
         if not error_output:
@@ -339,67 +385,116 @@ class TestExecutionService:
             logger.info(f"Test execution finished: status={status}, exit_code={result['exit_code']}, time={execution_time:.2f}s")
             
             # ============================================================
-            # SELF-HEALING: Attempt to fix selector failures automatically
+            # SELF-HEALING: Use HealingOrchestrator for layered healing
+            # Chain: Knowledge → Deterministic → Vision AI → OCR
             # ============================================================
             healing_attempted = False
             healing_successful = False
             healed_test_code = None
-            
+
             if status == "failed" and self._healing_enabled:
                 error_output = result.get("stderr", "") + result.get("stdout", "")
-                
+
                 if self._is_selector_failure(error_output):
-                    logger.info("[SELF-HEAL] Detected selector failure, attempting to heal...")
-                    await self._emit_ws_event("log", level="warning", message="Selector failure detected, attempting self-healing...")
+                    logger.info("[SELF-HEAL] Detected selector failure, invoking HealingOrchestrator...")
+                    await self._emit_ws_event("log", level="warning", message="Selector failure detected, running AI healing chain...")
                     healing_attempted = True
-                    
+
                     failed_selector = self._extract_failed_selector(error_output, test_code)
-                    if failed_selector:
+                    orchestrator = self._get_healing_orchestrator()
+
+                    if failed_selector and orchestrator:
                         await self._emit_ws_event("log", level="info", message=f"Healing selector: {failed_selector[:50]}...")
+
+                        # Build context for the orchestrator
+                        intent_dict = self._build_intent_from_step(
+                            result.get("step_names"), failed_selector
+                        )
+                        screenshot_b64 = self._extract_screenshot_b64(result)
+
+                        healing_result = await orchestrator.heal(
+                            test_code=test_code,
+                            failed_selector=failed_selector,
+                            error_message=error_output[:2000],
+                            step_info={"test_name": test_name},
+                            screenshot_b64=screenshot_b64 or None,
+                            intent_dict=intent_dict,
+                            execution_id=self._current_execution_id,
+                        )
+
+                        # Log each attempt for transparency
+                        for attempt in healing_result.attempts:
+                            level = "info" if attempt.success else "debug"
+                            await self._emit_ws_event("log", level=level,
+                                message=f"  [{attempt.strategy}] {'OK' if attempt.success else 'SKIP'} ({attempt.duration_ms}ms) → {attempt.selector_tried[:50]}")
+
+                        if healing_result.healed and healing_result.healed_code:
+                            logger.info(f"[SELF-HEAL] Retrying with {healing_result.winning_strategy} selector...")
+                            healed_test_file = self._create_test_file(
+                                healing_result.healed_code, f"{test_name}_healed",
+                                language=effective_language
+                            )
+
+                            if effective_language == "python":
+                                healed_result = await self._run_playwright_python_test(
+                                    healed_test_file, browser=browser,
+                                    headless=headless, timeout=timeout
+                                )
+                            else:
+                                healed_result = await self._run_playwright_test(
+                                    healed_test_file, browser=browser,
+                                    headless=headless, timeout=timeout
+                                )
+
+                            if healed_result["exit_code"] == 0:
+                                logger.info("[SELF-HEAL] Test passed after healing!")
+                                healing_successful = True
+                                healed_test_code = healing_result.healed_code
+                                result = healed_result
+                                status = "success"
+                                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                                await self._emit_ws_event("self_healing",
+                                    step_number=2,
+                                    original_selector=failed_selector,
+                                    healed_selector=healing_result.healed_selector,
+                                    strategy=healing_result.winning_strategy
+                                )
+                                await self._emit_ws_event("log", level="info",
+                                    message=f"Test passed after {healing_result.winning_strategy} healing!")
+                                # Record success for future runs
+                                orchestrator.record_healing_success(
+                                    intent_dict=intent_dict,
+                                    strategy=healing_result.winning_strategy,
+                                    selector=healing_result.healed_selector,
+                                    attributes={},
+                                    context={"test_name": test_name}
+                                )
+                            else:
+                                logger.warning("[SELF-HEAL] Test still failed after healing attempt")
+                                await self._emit_ws_event("log", level="warning",
+                                    message=f"Healing tried {len(healing_result.attempts)} strategies but test still failed")
+                        else:
+                            logger.warning(f"[SELF-HEAL] All {len(healing_result.attempts)} healing layers failed")
+                            await self._emit_ws_event("log", level="warning",
+                                message=f"All healing layers exhausted ({len(healing_result.attempts)} attempts)")
+                    elif failed_selector:
+                        # Fallback: use old _attempt_self_healing if orchestrator unavailable
                         healed_code = await self._attempt_self_healing(
                             test_code=test_code,
                             failed_selector=failed_selector,
                             error_message=error_output
                         )
-                        
                         if healed_code and healed_code != test_code:
-                            logger.info("[SELF-HEAL] Retrying test with healed selector...")
-                            # Retry with healed code
                             healed_test_file = self._create_test_file(healed_code, f"{test_name}_healed", language=effective_language)
-                            
                             if effective_language == "python":
-                                healed_result = await self._run_playwright_python_test(
-                                    healed_test_file,
-                                    browser=browser,
-                                    headless=headless,
-                                    timeout=timeout
-                                )
+                                healed_result = await self._run_playwright_python_test(healed_test_file, browser=browser, headless=headless, timeout=timeout)
                             else:
-                                healed_result = await self._run_playwright_test(
-                                    healed_test_file,
-                                    browser=browser,
-                                    headless=headless,
-                                    timeout=timeout
-                                )
-                            
+                                healed_result = await self._run_playwright_test(healed_test_file, browser=browser, headless=headless, timeout=timeout)
                             if healed_result["exit_code"] == 0:
-                                logger.info("[SELF-HEAL] ✅ Test passed after healing!")
                                 healing_successful = True
-                                healed_test_code = healed_code
                                 result = healed_result
                                 status = "success"
                                 execution_time = (datetime.utcnow() - start_time).total_seconds()
-                                # Emit self-healing success event
-                                await self._emit_ws_event("self_healing", 
-                                    step_number=2, 
-                                    original_selector=failed_selector, 
-                                    healed_selector="auto-healed",
-                                    strategy="fallback"
-                                )
-                                await self._emit_ws_event("log", level="info", message="✅ Test passed after self-healing!")
-                            else:
-                                logger.warning("[SELF-HEAL] ❌ Test still failed after healing attempt")
-                                await self._emit_ws_event("log", level="warning", message="Self-healing attempted but test still failed")
                     else:
                         logger.warning("[SELF-HEAL] Could not extract failed selector from error output")
             

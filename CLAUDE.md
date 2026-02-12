@@ -1,0 +1,721 @@
+# CLAUDE.md — QAAI/Flowstral Platform Reference
+
+> **This file is the starting reference for all Claude sessions working on this codebase.**
+> It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
+> Last updated: 2026-02-12
+
+---
+
+## Platform Overview
+
+QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platform. It combines browser recording, AI-powered test generation, multi-protocol API testing, performance/load testing, accessibility scanning, visual regression, and mobile testing into a unified product.
+
+### Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + TypeScript + Vite 5 + Tailwind CSS + Radix UI (shadcn/ui) |
+| State | Zustand (local) + TanStack React Query (server) + React Context (global) |
+| Backend | Python FastAPI + Uvicorn |
+| Database | PostgreSQL 16 (primary) + Supabase (auth/storage) + SQLite (desktop/offline) |
+| AI/LLM | OpenAI gpt-4o-mini (active) + Anthropic Claude (prompt caching) + Ollama (local, disabled) |
+| Browser Automation | Playwright 1.48 |
+| Desktop | Electron 28 (Win/Mac/Linux) |
+| Extension | Chrome Extension Manifest V3 |
+| Deployment | Railway + Vercel + Supabase (SaaS) / Docker + K8s + Helm (on-prem) |
+
+### Repository Structure
+
+```
+/ (root)
+├── src/                      # React frontend (262 TSX/TS files, 60+ pages)
+│   ├── pages/                # Page components
+│   ├── components/           # 137 component files
+│   │   ├── ui/               # 40+ shadcn/ui primitives
+│   │   ├── api-testing/      # 8 API testing components
+│   │   ├── mobile-testing/   # 6 mobile testing components
+│   │   ├── salesforce/       # 6 Salesforce components
+│   │   ├── confidence/       # 3 confidence scoring components
+│   │   └── FlowstralWorkflowEditor/  # 7 builder sub-components
+│   ├── stores/               # Zustand stores (testDataStore, apiTestingStore, mobileTestingStore)
+│   ├── contexts/             # ThemeContext, AIContext, AuthContext, LandingPluginsContext
+│   ├── hooks/                # useExecutionWebSocket, custom hooks
+│   └── lib/                  # api-config, electron-bridge, services
+├── backend/                  # FastAPI backend (v3.4.0)
+│   └── app/
+│       ├── main.py           # Entry point (313KB)
+│       ├── routers/          # 67 API router files
+│       ├── services/         # 295+ services across 26 subdirectories
+│       ├── schemas/          # Pydantic models
+│       └── middleware/       # RBAC, tenant, trace logging
+├── flowstral-engine/         # TypeScript recording/execution engine
+│   └── src/                  # FlowstralEngine, ElementCollector, PlaywrightScriptGenerator, etc.
+├── flowstral-extension/      # Chrome extension (MV3)
+│   └── src/                  # background, content, sidepanel, lib
+├── flowstral-desktop/        # Electron desktop app
+│   └── src/main/             # Main process, embedded browser, test executor
+├── docs/                     # 270+ documentation files
+└── supabase/                 # Database migrations
+```
+
+### Key Config Files
+
+| File | Purpose |
+|------|---------|
+| `.env` | VITE_API_URL, Supabase keys, OpenAI key, LLM provider |
+| `src/lib/api-config.ts` | Central API endpoint definitions, API_BASE_URL |
+| `backend/app/config/llm_config.py` | LLM provider configuration |
+| `package.json` | Frontend deps, build scripts, engine config |
+| `backend/requirements.txt` | Python dependencies |
+| `docker-compose.yml` | PostgreSQL dev setup |
+| `docker-compose.full.yml` | Full production stack |
+
+### Running Locally
+
+```bash
+docker-compose up          # PostgreSQL
+npm run dev                # Frontend at localhost:8080
+cd backend && uvicorn app.main:app --reload  # Backend at localhost:8000
+```
+
+---
+
+## Component 1: Record & Playback
+
+> Capture user interactions in a browser and produce Playwright scripts, structured test cases, and Action Graphs.
+
+### Three Recording Systems
+
+| System | How | Key Files |
+|--------|-----|-----------|
+| CDP Recorder | Backend launches browser via Chrome DevTools Protocol | `backend/app/routers/cdp_recorder_api.py`, `backend/app/services/cdp_recorder/` |
+| Playwright Recorder | Extension sends actions to backend | `backend/app/routers/playwright_recorder_api.py` (44 endpoints, prefix `/api/playwright`) |
+| Flowstral Pipeline | Full-stack: extension + Action Graph + multi-modal analysis | `backend/app/routers/flowstral_api.py` (prefix `/api/flowstral`) |
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/PlaywrightRecorderPage.tsx` | 504KB | Main recorder page — step list, suggestions, playback controls |
+
+### Backend — Flowstral Services
+
+**Directory:** `backend/app/services/flowstral/` (27 files)
+
+| File | Purpose |
+|------|---------|
+| `flowstral_action_graph.py` | Action Graph representation (DAG of user actions) |
+| `flowstral_action_graph_builder.py` | Builds Action Graph from recorded events |
+| `flowstral_dom_pipeline.py` | DOM snapshot micro-pipeline |
+| `flowstral_wcag_pipeline.py` | WCAG accessibility scan micro-pipeline |
+| `flowstral_performance_pipeline.py` | Performance probe micro-pipeline |
+| `flowstral_event_coalescer.py` | Coalesces rapid events (e.g., keystroke debouncing) |
+| `flowstral_session.py` | Session management |
+| `flowstral_websocket_manager.py` | WebSocket connection management |
+| `flowstral_realtime_output.py` | Real-time output generation |
+| `enhanced_playwright_generator.py` | Generates Playwright code from recordings |
+| `salesforce_playwright_generator.py` | Salesforce-specific code generation |
+| `robust_salesforce_generator.py` | Robust Salesforce generator with retry logic |
+| `element_model_builder.py` | Element model construction |
+| `element_model_service.py` | Element model persistence |
+| `semantic_step_converter.py` | Converts actions to human-readable steps |
+| `test_healer.py` | Self-healing test repair |
+| `flowstral_agent_orchestrator.py` | Agent orchestration |
+| `flowstral_artifacts.py` | Recording artifact management |
+| `flowstral_gateway.py` | Gateway service |
+
+### Backend — Flowstral Engine Services
+
+**Directory:** `backend/app/services/flowstral_engine/` (9 files)
+
+| File | Purpose |
+|------|---------|
+| `smart_finder.py` | SmartElementFinder — intent-based scoring (text:30, role:20, label:20, context:15, selector:10, visibility:5) |
+| `code_generator.py` | FlowstralCodeGenerator — generates intent-based Playwright code |
+| `engine.py` | Core engine orchestration |
+| `self_healer.py` | Self-healing locator logic |
+| `intelligent_waiter.py` | Smart waiting strategies |
+| `page_intelligence.py` | Page analysis and understanding |
+| `keywords.py` | Keyword definitions for NLP |
+| `test_builder.py` | Builds tests from recorded actions |
+
+### TypeScript Engine
+
+**Directory:** `flowstral-engine/src/`
+
+| File | Size | Purpose |
+|------|------|---------|
+| `FlowstralEngine.ts` | 18KB | Main engine orchestrating recording |
+| `ElementCollector.ts` | 19KB | Collects element metadata from DOM |
+| `PlaywrightScriptGenerator.ts` | 22KB | Generates Playwright scripts |
+| `LocatorHealingRuntime.ts` | 18KB | Runtime locator healing |
+| `SessionManager.ts` | 17KB | Recording session lifecycle |
+| `TestUtilities.ts` | 18KB | Test utility functions |
+
+Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, `healing/`, `locators/`, `runner/`, `types/`, `utils/`
+
+### Chrome Extension
+
+**Directory:** `flowstral-extension/`
+
+| File | Purpose |
+|------|---------|
+| `manifest.json` | MV3 manifest — permissions: activeTab, storage, tabs, scripting, sidePanel |
+| `src/background/background.js` | Service worker |
+| `src/content/content.js` | Content script — DOM event capture |
+| `src/lib/recorder-engine.js` | Core recording logic |
+| `src/lib/action-coalescer-browser.js` | Event coalescing in browser |
+| `src/sidepanel/sidepanel.html` | Side panel UI |
+
+### Key Concepts
+
+- **Action Graph**: DAG representing user actions with edges for flow dependencies
+- **4 Parallel Micro-Pipelines**: During recording, DOM snapshot + WCAG scan + Performance probe + Action Graph update run concurrently
+- **Selector Confidence**: 8+ selector strategies scored by reliability
+- **Self-Healing**: 5-layer fallback with OCR last resort; supports 25+ enterprise apps (Salesforce, ServiceNow, SAP, Workday)
+
+### API Endpoints
+
+- `POST /api/flowstral/start-recording` — Start recording session
+- `POST /api/flowstral/stop-recording` — Stop and finalize
+- `GET /api/playwright/code` — Get generated Playwright code
+- `POST /api/playwright/recorder/events` — Receive recorded events
+- `POST /cdp-recorder/start` — Start CDP recording
+- `POST /cdp-recorder/stop` — Stop CDP recording
+
+---
+
+## Component 2: Build (Test Builder)
+
+> Visual no-code builder for composing test cases, AI generation from requirements, Gherkin conversion.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/UnifiedWorkflowEditor.tsx` | ~538KB | Primary no-code/code test builder with 60+ step types |
+| `src/pages/TestRepository.tsx` | ~340KB | Test management hub (folders, suites, releases) |
+| `src/pages/TestPlayground.tsx` | ~1,858 lines | 10-tab interactive testing playground |
+| `src/components/FlowstralWorkflowEditor/` | Directory | Visual canvas-based workflow editor |
+
+**FlowstralWorkflowEditor Sub-Components:**
+
+| File | Purpose |
+|------|---------|
+| `CICDExporter.tsx` | Export to GitHub Actions, GitLab CI, Jenkins, Azure Pipelines |
+| `LocatorBuilder.tsx` | Build and test element locators |
+| `ScheduleManager.tsx` | Schedule test execution |
+| `TestRunner.tsx` | Execute tests from builder |
+| `TestSuiteManager.tsx` | Organize tests into suites |
+| `VariableStore.tsx` | Manage test variables and data |
+| `WorkflowNodes.tsx` | Visual workflow node definitions |
+
+### Backend
+
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `backend/app/routers/test_cases_crud_api.py` | `/test-cases` | Test case CRUD (16 endpoints), PostgreSQL with in-memory fallback |
+| `backend/app/routers/test_plans_api.py` | `/test-plans` | Test plan management (4 endpoints) |
+| `backend/app/routers/gherkin_api.py` | `/api/gherkin` | BDD/Gherkin support (3 endpoints) |
+| `backend/app/routers/ai_generation_api.py` | `/ai` | AI test generation (28 endpoints) |
+| `backend/app/routers/requirement_to_testcase_api.py` | `/api/req2tc` | Requirement-to-test-case conversion |
+
+### Test Generation Pipeline
+
+1. Parse requirement (JIRA story, text) with NLP
+2. Build synthetic app model (screens, APIs, entities)
+3. Generate scenario skeletons
+4. LLM rewrite for natural language
+5. Format as structured test cases (ISTQB, Gherkin, Markdown)
+
+### Key Backend Services
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/ai/enhanced_generation_service.py` | Enhanced test generation |
+| `backend/app/services/ai/test_case_rewrite_service.py` | Test case rewriting and formatting |
+| `backend/app/services/core/test_plan_service.py` | Test plan business logic |
+| `backend/app/services/core/test_data_service.py` | Test data management |
+
+---
+
+## Component 3: Test Execution
+
+> Execute test cases via Playwright automation, manual walkthrough, or CI/CD pipelines with real-time WebSocket progress.
+
+### Three Execution Modes
+
+| Mode | How | Where |
+|------|-----|-------|
+| Automated | Playwright browser automation via subprocess | Backend |
+| Manual | Step-by-step human execution with evidence | Frontend (TestCaseExecution) |
+| CI/CD | Headless execution with exit codes | Backend (TestRunnerService queue) |
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/TestCaseExecution.tsx` | 54KB | Step-by-step execution UI with screenshots, evidence capture |
+| `src/pages/TestRuns.tsx` | — | Test run listing and management |
+| `src/hooks/useExecutionWebSocket.ts` | — | WebSocket hook for real-time execution progress |
+
+**WebSocket Message Types:**
+- `step_start` / `step_complete` — Step lifecycle
+- `self_healing` — Selector was healed
+- `screenshot` — Screenshot captured
+- `execution_complete` — Run finished
+- `heartbeat` / `pong` — Keep-alive (25s interval)
+
+### Backend
+
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `backend/app/routers/test_runs_api.py` | `/test-runs` | Test run execution and reporting (14 endpoints), WebSocket support |
+| `backend/app/routers/automation_api.py` | `/automation` | Script conversion, test execution, locator analysis |
+| `backend/app/routers/complex_verifications.py` | `/api/complex-verify` | Email/PDF/file verification (10 endpoints) |
+
+### Key Backend Services
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/executors/playwright_runner.py` | Browser automation with Playwright |
+| `backend/app/services/executors/playwright_executor.py` | Windows subprocess-based execution |
+| `backend/app/services/executors/test_executor_queue.py` | Queue-based async execution |
+| `backend/app/services/executors/unified_runner_service.py` | Unified test execution interface |
+| `backend/app/services/flowstral_engine/self_healer.py` | Self-healing locator logic |
+| `backend/app/services/automation/healing_orchestrator.py` | **HealingOrchestrator** — chains all healing layers |
+
+### Self-Healing Architecture (HealingOrchestrator)
+
+**Coordinator:** `backend/app/services/automation/healing_orchestrator.py`
+Chains all existing healing services with early-return-on-first-success:
+
+| Layer | Service | Speed | Requires |
+|-------|---------|-------|----------|
+| 1 | `SelfHealingController.get_healing_suggestions()` | 0ms | Nothing (JSON lookup) |
+| 2 | `_generate_alternative_selectors()` | 0ms | Nothing (string transforms) |
+| 3 | `VisionSelfHealingService.heal_broken_selector()` | 2-5s | Screenshot + OPENAI_API_KEY |
+| 4 | OCR `find_text_in_screenshot()` | 500ms | Screenshot + Tesseract |
+
+- Budget-controlled: max 3 AI calls per run via `ai_automation_api._budget_state`
+- Records successes to `SelfHealingController` for future runs (knowledge reuse)
+- Wired into `TestExecutionService` for automatic healing during execution
+- Also exposed via `POST /api/ai/enhancements/auto-fix-step` for frontend "Fix" button
+- WebSocket events: `healing_chain_start`, `healing_layer_attempt`, `healing_chain_complete`
+
+**Frontend integration:**
+- `ElementRepairWizard.tsx` — "Auto-Fix with AI" button calls `/auto-fix-step`, shows progress per layer
+- `PlaywrightRecorderPage.tsx` — Auto false-positive detection after test runs via `/detect-false-positive`
+- `src/lib/aiEnhancements.ts` — `autoFixStep()` and `detectFalsePositive()` API helpers
+
+### Complex Verifications
+
+- **Email**: MS 365 and Gmail verification
+- **PDF**: Content extraction and validation
+- **File**: Download verification and content checks
+
+---
+
+## Component 4: Mobile Testing
+
+> Native mobile app testing via Maestro CLI with device lab management, test flows, and execution.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/MobileTestingPage.tsx` | 186 lines | Hub with 6 tabs: studio, flows, device-lab, runs, inspector, tools |
+| `src/components/MobileDeviceSelector.tsx` | 532 lines | Device emulation selection (50+ profiles, network throttling) |
+
+**Sub-Components** (`src/components/mobile-testing/`):
+
+| File | Purpose |
+|------|---------|
+| `MobileTestStudio.tsx` | Maestro Studio recording — start/stop, YAML flow editor, real-time console |
+| `MobileTestFlows.tsx` | Saved flow management — CRUD, folders, import/export YAML, templates |
+| `MobileDeviceLab.tsx` | Device management — install/uninstall apps, screenshots, logs |
+| `MobileTestRuns.tsx` | Execution history — stats, filtering, detailed reports |
+| `MobileInspector.tsx` | Element hierarchy viewer — selector generation, property inspection |
+| `MobileAdvancedTools.tsx` | Deep links, push notifications, biometrics, network/geo mocking |
+
+### State Management
+
+**Zustand Store:** `src/stores/mobileTestingStore.ts`
+
+Key state: `activeTab`, `isStudioRunning`, `maestroInstalled`, `nativeDevices`, `selectedPlatform`, `appBundleId`, `flows`, `folders`, `testRuns`, `studioOutput`
+
+### Key Types
+
+```typescript
+type MobilePlatform = 'ios' | 'android'
+type FlowPriority = 'critical' | 'high' | 'medium' | 'low'
+type TestRunStatus = 'passed' | 'failed' | 'running' | 'skipped' | 'error'
+interface MobileTestFlow { id, name, description, yaml, app_bundle_id, platform, tags, priority, folder_id }
+interface MobileTestRun { id, flow_id, flow_name, platform, device, status, duration_ms, steps_total/passed/failed }
+```
+
+### Integration
+
+- Uses `electron-bridge` for native device communication
+- Maestro CLI for iOS/Android test execution
+- YAML-based test flow definitions
+- Device logs via logcat (Android) / syslog (iOS)
+
+---
+
+## Component 5: API Testing
+
+> Multi-protocol API testing with collections, environments, request chaining, and assertions.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/EnhancedAPITesting.tsx` | 187KB | Main API testing page |
+
+**Sub-Components** (`src/components/api-testing/`):
+
+| File | Purpose |
+|------|---------|
+| `RequestBuilder.tsx` | Build individual API requests (URL, method, headers, body, auth) |
+| `RequestChainBuilder.tsx` | Chain multiple API calls with variable extraction |
+| `CollectionSidebar.tsx` | Organize requests into collections and folders |
+| `EnvironmentManager.tsx` | Manage environment variables (dev, staging, prod) |
+| `AssertionsPanel.tsx` | Assertion editor — type, operator, expected value, pass/fail display |
+| `ResponseTreeExplorer.tsx` | JSON response tree viewer |
+| `ChainResultsView.tsx` | Chain execution results |
+| `ChainStepCard.tsx` | Individual chain step result card |
+| `constants.ts` | ASSERTION_TYPES, ASSERTION_OPERATORS, AssertionConfig type |
+| `TabErrorBoundary.tsx` | Error boundary for API testing tab |
+
+### State Management
+
+**Zustand Store:** `src/stores/apiTestingStore.ts`
+
+Key state: saved requests, request chains, collections, folders, environments, variables
+
+### Backend
+
+| File | Prefix | Endpoints | Purpose |
+|------|--------|-----------|---------|
+| `backend/app/routers/enhanced_api_testing_api.py` | `/api/v2/testing` | 46 | Multi-protocol API testing (REST, SOAP, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP) |
+| `backend/app/routers/api_import_api.py` | `/api/import` | 9 | OpenAPI/HAR/Postman import, export, test generation |
+| `backend/app/routers/request_chaining_api.py` | `/api/chain` | 9 | Request chaining for API testing |
+
+### Key Backend Services
+
+**Directory:** `backend/app/services/api_testing/`
+
+| Service | Purpose |
+|---------|---------|
+| `EnhancedAPITestEngine` | Core multi-protocol test execution |
+| `DatabaseConnector` | Database connectivity for API tests |
+| `TestExecutionEngine` | Test execution orchestration |
+| `ServiceVirtualization` | Mock service responses |
+| `ReportingEngine` | Test result reporting |
+| `EnvironmentManager` | Environment variable management |
+| `OpenAPIValidator` | OpenAPI spec validation |
+| `SchemaInferenceEngine` | Auto-infer JSON schemas from responses |
+| `DataDrivenEngine` | Data-driven test execution |
+
+### Supported Protocols
+
+REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
+
+### Key API Endpoints
+
+- `POST /api/v2/testing/execute` — Execute API test
+- `POST /api/import/spec` — Import OpenAPI/Swagger spec
+- `POST /api/import/har` — Import HAR file
+- `POST /api/import/generate-tests` — Generate tests from API specs
+- `POST /api/chain/execute` — Execute request chain
+
+---
+
+## Component 6: Performance Testing
+
+> Load testing with virtual user simulation, protocol recording, and multiple load patterns.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/Performance.tsx` | 89KB | Performance testing UI — scenarios, execution, results, charts |
+
+### Backend
+
+| File | Prefix | Endpoints | Purpose |
+|------|--------|-----------|---------|
+| `backend/app/routers/performance_api.py` | `/performance` | 80 | Load testing engine, transaction analysis, metrics |
+| `backend/app/routers/protocol_recording_api.py` | `/api/protocol-recording` | 13 | HTTP traffic capture during browser sessions |
+| `backend/app/routers/scale_api.py` | `/api/v2` | 8 | Paginated queries for 100K+ test cases |
+
+### Key Backend Services
+
+**Directory:** `backend/app/services/performance/`
+
+| Feature | Description |
+|---------|-------------|
+| Virtual User Simulation | Concurrent user generation with configurable behavior |
+| Protocol Recording | Captures HTTP traffic during browser sessions |
+| HAR Import/Export | Import/export HTTP Archive files |
+| Script Generation | Generate scripts for QAAI, k6, JMeter formats |
+| Headless Execution | Run performance tests without browser UI |
+| Transaction Analysis | Response time percentiles, throughput, error rates |
+
+### 8 Load Patterns
+
+1. **Constant** — Fixed user count
+2. **Ramp** — Gradual increase
+3. **Spike** — Sudden burst
+4. **Stress** — Beyond capacity
+5. **Soak** — Extended duration
+6. **Breakpoint** — Find failure threshold
+7. **Wave** — Oscillating load
+8. **Custom** — User-defined pattern
+
+### Key API Endpoints
+
+- `POST /performance/start` — Start load test
+- `GET /performance/results/{id}` — Get test results
+- `POST /api/protocol-recording/start` — Start traffic capture
+- `POST /api/protocol-recording/stop` — Stop and export HAR
+- `POST /performance/generate-script` — Generate load test script
+
+---
+
+## Component 7: Accessibility Testing
+
+> WCAG compliance scanning with axe-core, report generation, and AI-powered analysis.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/Accessibility.tsx` | 347 lines | URL-based scanner — level selection (A/AA/AAA), component scans, issue filtering |
+
+### Types
+
+```typescript
+interface AccessibilityIssue { id, rule, impact, description, element, suggested_fix, wcag_criterion }
+// impact: 'critical' | 'serious' | 'moderate' | 'minor'
+interface ScanResult { scan_id, url, summary: { total, critical, serious, moderate, minor }, issues, timestamp }
+```
+
+### Backend
+
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `backend/app/routers/accessibility_api.py` | `/api/accessibility` | Main scan endpoint (10 endpoints) |
+| `backend/app/routers/accessibility_scan_api.py` | `/api/a11y` | V2 scanning with reports (6 endpoints) |
+
+### Key Backend Services
+
+**Directory:** `backend/app/services/accessibility/`
+
+| File | Purpose |
+|------|---------|
+| `axe_scanner.py` | Standalone sync script — launches Playwright, injects axe-core v4.8.4 CDN, runs scan |
+| `axe_core_scanner.py` | Async scanner wrapper |
+| `accessibility_report_generator.py` | HTML/JSON/Markdown report generation |
+
+**Related AI Services:**
+- `backend/app/services/agents/accessibility_agent.py` — AI-powered analysis
+- `backend/app/services/agents/accessibility_compliance.py` — WCAG compliance checking
+- `backend/app/services/llm/accessibility_report_service.py` — LLM report generation
+
+### Scanning Architecture
+
+1. Subprocess-based execution (Windows asyncio safe)
+2. Launch headless Chrome, navigate to URL
+3. Inject axe-core v4.8.4 from CDN
+4. Run with WCAG2A/AA/2.1A/2.1AA rules
+5. Optional component-selector targeting
+6. Return violations + HTML content as JSON
+7. Generate reports in multiple formats
+
+### Key API Endpoints
+
+- `POST /api/accessibility/scan` — Run axe-core scan
+- `POST /api/a11y/scan` — V2 scan with report generation
+- `GET /api/a11y/report/{scan_id}` — Get report (HTML/JSON/Markdown)
+- `POST /api/a11y/batch-scan` — Scan multiple URLs concurrently
+
+---
+
+## Component 8: Visual Testing
+
+> Visual regression testing with 6 comparison modes, baseline management, and diff visualization.
+
+### Frontend
+
+| File | Size | Purpose |
+|------|------|---------|
+| `src/pages/VisualTestingPage.tsx` | 1324 lines | Dashboard, Compare, Baselines, Recent Diffs tabs |
+
+### 6 Comparison Modes
+
+| Mode | Description |
+|------|-------------|
+| `pixel_perfect` | Exact pixel-by-pixel comparison |
+| `anti_aliased` | Tolerant of anti-aliasing differences (recommended) |
+| `perceptual` | Perceptual hash (aHash) — robust against scaling/compression |
+| `structural` | SSIM (Structural Similarity Index) |
+| `layout` | Layout-only comparison (ignoring content) |
+| `ai_semantic` | AI-powered semantic comparison using Claude Vision |
+
+### Types
+
+```typescript
+interface Baseline { test_name, path, file_size, modified_at, dimensions, created_at }
+interface IgnoreRegion { x, y, width, height, name, reason }
+interface ComparisonResult { passed, diff_percentage, diff_pixel_count, total_pixels, mode, threshold, ssim_score, perceptual_hash_baseline, perceptual_hash_actual, mismatch_regions, diff_image_base64 }
+```
+
+### Backend
+
+| File | Prefix | Purpose |
+|------|--------|---------|
+| `backend/app/routers/visual_testing_api.py` | `/api/visual-testing` | Compare, baselines, capture, diffs (15 endpoints) |
+
+### Key Backend Service
+
+**File:** `backend/app/services/automation/visual_testing_engine.py`
+
+| Class | Purpose |
+|-------|---------|
+| `ComparisonMode` | Enum of 6 modes |
+| `IgnoreRegion` | Dataclass for masked regions |
+| `ComparisonOptions` | Threshold, mode, tolerance, ignore regions, viewport |
+| `ComparisonResult` | Pass/fail, diff %, SSIM score, mismatch regions |
+| `PerceptualHasher` | Average hash (16x16 grid aHash algorithm) |
+| `VisualTestingEngine` | Main orchestrator — dispatches to algorithm by mode |
+
+**Dependencies:** PIL/Pillow (image processing), NumPy (numerical computation)
+
+### Key API Endpoints
+
+- `POST /api/visual-testing/compare` — Compare two images
+- `POST /api/visual-testing/compare-by-name` — Compare against stored baseline
+- `POST /api/visual-testing/baselines` — Upload new baseline
+- `GET /api/visual-testing/baselines` — List all baselines
+- `POST /api/visual-testing/capture` — Screenshot from URL
+- `POST /api/visual-testing/batch-compare` — Batch comparison
+- `GET /api/visual-testing/diffs` — List diff images
+
+---
+
+## Cross-Cutting Concerns
+
+### Authentication & Authorization
+
+- **JWT Tokens** via python-jose
+- **RBAC Middleware** — decorator-based permission checks: `@require_permission("test_cases:create")`
+- **Multi-Tenancy** — tenant isolation via TenantContextMiddleware
+- **OAuth2** — Salesforce and external integrations
+- **Middleware Stack** (outermost to innermost): CORS → RBAC → Tenant → TraceLogging
+
+### AI/LLM Integration
+
+| Provider | Status | Use Case |
+|----------|--------|----------|
+| OpenAI gpt-4o-mini | Active | Test generation, rewrites, JSON formatting |
+| Anthropic Claude | Active (dev) | Complex reasoning, prompt caching |
+| Ollama/vLLM | Disabled | Local inference on DGX |
+
+**Key Files:**
+- `backend/app/services/llm/` — LLM services with prompt caching
+- `backend/app/services/ai/` — AI generation, failure analysis
+- `backend/app/config/llm_config.py` — Provider configuration
+- `backend/app/routers/ai_generation_api.py` — 28 AI endpoints (prefix `/ai`)
+
+### WebSocket Real-Time
+
+- **Test Execution**: `wss://API_BASE_URL/test-runs/ws/{executionId}` — step progress, screenshots, self-healing events
+- **Agent Control**: `ws://localhost:8000/ws/agent` — desktop agent registration, commands
+- **Flowstral Session**: Recording session streaming
+
+### Database Pattern
+
+PostgreSQL (primary) with **in-memory fallback**:
+- `backend/app/services/storage/database.py` — Unified client
+- `backend/app/services/storage/postgres_direct.py` — Direct PostgreSQL
+- Auto-migration on startup via `auto_migrate.py`
+- Supabase for auth and file storage
+
+### Electron Desktop
+
+- `flowstral-desktop/src/main/index.js` — Main process (1681 lines)
+- `embedded-browser.js` — BrowserView recorder
+- `test-executor.js` — Playwright test runner
+- `cloud-connector.js` — Cloud API sync
+- HashRouter for file:// protocol, BrowserRouter for web
+- Auto-detection: `window.electron || navigator.userAgent.includes('electron')`
+
+---
+
+## Conventions & Patterns
+
+1. **Frontend**: Pages in `src/pages/`, components in `src/components/`, path alias `@/` = `src/`
+2. **Backend**: Routers in `backend/app/routers/`, services in `backend/app/services/`, Pydantic schemas in `backend/app/schemas/`
+3. **State**: Zustand stores with `devtools` + `persist` + `immer` middleware
+4. **Styling**: Tailwind CSS utility classes, CSS variables for theming, dark mode via `dark:` prefix
+5. **API calls**: Axios with centralized base URL from `api-config.ts`
+6. **Error boundaries**: TabErrorBoundary pattern for isolated failures
+7. **License gating**: `LicenseGate` wrapper for enterprise features
+8. **Lazy loading**: Heavy pages (API Testing) lazy-loaded to prevent crash propagation
+9. **In-memory fallback**: All DB operations fall back to in-memory when PostgreSQL unavailable
+10. **Subprocess execution**: Playwright runs in subprocess on Windows to avoid asyncio conflicts
+
+---
+
+## Quick Reference — All API Router Prefixes
+
+| Router | Prefix | Key Purpose |
+|--------|--------|-------------|
+| accessibility_api | `/api/accessibility` | A11y scans |
+| accessibility_scan_api | `/api/a11y` | A11y v2 with reports |
+| ai_generation_api | `/ai` | Test generation, triage, model gateway |
+| ai_automation_api | `/ai-automation` | Element resolution, failure analysis |
+| ai_enhancements_api | `/api/ai/enhancements` | False positives, flaky detection |
+| api_import_api | `/api/import` | OpenAPI/HAR/Postman import |
+| automation_api | `/automation` | Script conversion, execution |
+| cdp_recorder_api | `/cdp-recorder` | CDP recording |
+| code_alchemy_api | `/api/code-alchemy` | Repository import |
+| complex_verifications | `/api/complex-verify` | Email/PDF/file checks |
+| dashboard_api | `/dashboard` | Dashboard metrics |
+| database_api | `/api/db` | Database CRUD |
+| defects_api | `/defects` | Defect management |
+| enhanced_api_testing_api | `/api/v2/testing` | Multi-protocol API testing |
+| flowstral_api | `/api/flowstral` | Recording sessions |
+| flowstral_engine_api | `/api/flowstral/engine` | Engine operations |
+| framework_analyzer_api | `/api/framework` | Framework detection |
+| health_api | `/health` | Health checks |
+| license_api | `/api/license` | License management |
+| performance_api | `/performance` | Load testing |
+| playwright_recorder_api | `/api/playwright` | Playwright recording |
+| project_management_api | `/api/projects` | Project management |
+| protocol_recording_api | `/api/protocol-recording` | HTTP traffic capture |
+| request_chaining_api | `/api/chain` | Request chaining |
+| requirements_api | `/api/requirements` | Requirements management |
+| salesforce_api | `/api/salesforce` | Salesforce integration |
+| scale_api | `/api/v2` | Paginated queries |
+| secrets_api | `/api/secrets` | Secrets vault |
+| test_cases_crud_api | `/test-cases` | Test case CRUD |
+| test_plans_api | `/test-plans` | Test plans |
+| test_runs_api | `/test-runs` | Test execution |
+| visual_testing_api | `/api/visual-testing` | Visual regression |
+| vision_healing_api | `/api/vision` | Vision-based healing |
+
+---
+
+## Updating This File
+
+**This CLAUDE.md must be updated whenever:**
+- New components, pages, or API endpoints are added
+- File paths change due to refactoring
+- New services or stores are created
+- Architecture patterns change
+- New integrations are added
+
+When making changes to the codebase, update the relevant section of this file to keep it accurate as the primary reference for all future planning and execution.
