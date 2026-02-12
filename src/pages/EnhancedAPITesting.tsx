@@ -252,6 +252,7 @@ export default function EnhancedAPITesting() {
   // Import selection state — for selective "Add to Collection"
   const [selectedImportItems, setSelectedImportItems] = useState<Set<string>>(new Set());
   const [importBaseUrl, setImportBaseUrl] = useState("");
+  const [importFetchUrl, setImportFetchUrl] = useState("");
   const [suiteLoading, setSuiteLoading] = useState(true);
   const suiteLoadedFromBackend = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -2599,15 +2600,15 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 <div className="flex gap-2">
                   <Input
                     placeholder="https://petstore.swagger.io/v2/swagger.json"
-                    id="import-url-input"
+                    value={importFetchUrl}
+                    onChange={(e) => setImportFetchUrl(e.target.value)}
                     className="flex-1"
                   />
-                  <Button 
+                  <Button
                     variant="outline"
                     disabled={loading}
                     onClick={async () => {
-                      const urlInput = document.getElementById("import-url-input") as HTMLInputElement;
-                      const url = urlInput?.value?.trim();
+                      const url = importFetchUrl.trim();
                       if (!url) { toast({ title: "Error", description: "Enter a URL", variant: "destructive" }); return; }
                       setLoading(true);
                       try {
@@ -2648,13 +2649,29 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                         setSpecFormat(detectedFormat);
                         
                         if (!isValidSpec) {
-                          toast({ 
-                            title: "Not an API Specification", 
+                          toast({
+                            title: "Not an API Specification",
                             description: "This URL returned a regular API response, not an OpenAPI/Swagger/WSDL spec. Use the Builder tab to test API endpoints directly.",
                             variant: "destructive"
                           });
                         } else {
-                          toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click Import below.` });
+                          // Auto-extract base URL from the spec URL origin or from the parsed spec content
+                          try {
+                            const parsed = JSON.parse(text);
+                            const specBaseUrl = parsed.servers?.[0]?.url || parsed.host ? `${parsed.schemes?.[0] || 'https'}://${parsed.host}${parsed.basePath || ''}` : '';
+                            if (specBaseUrl && !importBaseUrl) {
+                              setImportBaseUrl(specBaseUrl);
+                            }
+                          } catch {
+                            // For non-JSON specs, try to extract origin from the fetch URL
+                            try {
+                              const urlObj = new URL(url);
+                              if (!importBaseUrl) {
+                                setImportBaseUrl(urlObj.origin);
+                              }
+                            } catch { /* ignore */ }
+                          }
+                          toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click "Parse Specification" below.` });
                         }
                       } catch (e: any) {
                         toast({ title: "Fetch Failed", description: e.message, variant: "destructive" });
@@ -2749,7 +2766,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   method: ep.method,
                   url: fullUrl,
                   path: ep.path,
-                  name: ep.summary || `${ep.method} ${ep.path}`,
+                  name: `${ep.method} ${ep.path}`,
                   body: bodyStr,
                   body_type: bodyStr ? 'json' : 'none',
                   headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
