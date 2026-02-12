@@ -2757,6 +2757,12 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 addedCount++;
               }
               
+              // Store the base URL on the collection so future sidebar clicks can resolve paths
+              const storeNow = useApiTestingStore.getState();
+              const collIdNow = storeNow.active_collection_id;
+              if (collIdNow && baseUrlVal && storeNow.collections[collIdNow]) {
+                storeNow.collections[collIdNow].base_url = baseUrlVal;
+              }
               // One save after all bulk additions
               const finalState = useApiTestingStore.getState();
               const finalCollId = finalState.active_collection_id;
