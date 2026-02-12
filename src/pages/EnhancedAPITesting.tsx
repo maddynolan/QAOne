@@ -314,6 +314,10 @@ export default function EnhancedAPITesting() {
     setCollectionVariables(v);
     try { localStorage.setItem(VAR_COLLECTION_KEY, JSON.stringify(v)); } catch {}
   };
+  const [newGlobalVarKey, setNewGlobalVarKey] = useState("");
+  const [newGlobalVarVal, setNewGlobalVarVal] = useState("");
+  const [newCollVarKey, setNewCollVarKey] = useState("");
+  const [newCollVarVal, setNewCollVarVal] = useState("");
 
   // Load API collection from backend on mount (single source of truth)
   useEffect(() => {
@@ -3306,17 +3310,32 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     <Input
                       placeholder="Key"
                       className="flex-1 h-8 text-xs"
-                      id="global-var-key"
+                      value={newGlobalVarKey}
+                      onChange={e => setNewGlobalVarKey(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && newGlobalVarKey.trim()) {
+                          persistGlobalVars({ ...globalVariables, [newGlobalVarKey.trim()]: newGlobalVarVal });
+                          setNewGlobalVarKey(""); setNewGlobalVarVal("");
+                        }
+                      }}
                     />
                     <Input
                       placeholder="Value"
                       className="flex-1 h-8 text-xs"
-                      id="global-var-val"
+                      value={newGlobalVarVal}
+                      onChange={e => setNewGlobalVarVal(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && newGlobalVarKey.trim()) {
+                          persistGlobalVars({ ...globalVariables, [newGlobalVarKey.trim()]: newGlobalVarVal });
+                          setNewGlobalVarKey(""); setNewGlobalVarVal("");
+                        }
+                      }}
                     />
                     <Button size="sm" className="h-8" onClick={() => {
-                      const key = (document.getElementById("global-var-key") as HTMLInputElement)?.value?.trim();
-                      const val = (document.getElementById("global-var-val") as HTMLInputElement)?.value ?? "";
-                      if (key) { persistGlobalVars({ ...globalVariables, [key]: val }); (document.getElementById("global-var-key") as HTMLInputElement).value = ""; (document.getElementById("global-var-val") as HTMLInputElement).value = ""; }
+                      if (newGlobalVarKey.trim()) {
+                        persistGlobalVars({ ...globalVariables, [newGlobalVarKey.trim()]: newGlobalVarVal });
+                        setNewGlobalVarKey(""); setNewGlobalVarVal("");
+                      }
                     }}>Add</Button>
                   </div>
                 </div>
@@ -3333,12 +3352,35 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     {Object.keys(collectionVariables).length === 0 && <p className="text-xs text-muted-foreground">No collection variables</p>}
                   </div>
                   <div className="flex gap-2">
-                    <Input placeholder="Key" className="flex-1 h-8 text-xs" id="coll-var-key" />
-                    <Input placeholder="Value" className="flex-1 h-8 text-xs" id="coll-var-val" />
+                    <Input
+                      placeholder="Key"
+                      className="flex-1 h-8 text-xs"
+                      value={newCollVarKey}
+                      onChange={e => setNewCollVarKey(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && newCollVarKey.trim()) {
+                          persistCollectionVars({ ...collectionVariables, [newCollVarKey.trim()]: newCollVarVal });
+                          setNewCollVarKey(""); setNewCollVarVal("");
+                        }
+                      }}
+                    />
+                    <Input
+                      placeholder="Value"
+                      className="flex-1 h-8 text-xs"
+                      value={newCollVarVal}
+                      onChange={e => setNewCollVarVal(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && newCollVarKey.trim()) {
+                          persistCollectionVars({ ...collectionVariables, [newCollVarKey.trim()]: newCollVarVal });
+                          setNewCollVarKey(""); setNewCollVarVal("");
+                        }
+                      }}
+                    />
                     <Button size="sm" className="h-8" onClick={() => {
-                      const key = (document.getElementById("coll-var-key") as HTMLInputElement)?.value?.trim();
-                      const val = (document.getElementById("coll-var-val") as HTMLInputElement)?.value ?? "";
-                      if (key) { persistCollectionVars({ ...collectionVariables, [key]: val }); (document.getElementById("coll-var-key") as HTMLInputElement).value = ""; (document.getElementById("coll-var-val") as HTMLInputElement).value = ""; }
+                      if (newCollVarKey.trim()) {
+                        persistCollectionVars({ ...collectionVariables, [newCollVarKey.trim()]: newCollVarVal });
+                        setNewCollVarKey(""); setNewCollVarVal("");
+                      }
                     }}>Add</Button>
                   </div>
                 </div>

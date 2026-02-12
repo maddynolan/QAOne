@@ -805,7 +805,13 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
     switch (action) {
       case 'edit': openRequestInBuilder(requestId); break;
       case 'duplicate': duplicateRequest(requestId); break;
-      case 'delete': deleteRequest(requestId); break;
+      case 'delete': {
+        const req = collection?.requests.find(r => r.id === requestId);
+        if (window.confirm(`Delete request "${req?.name || 'Untitled'}"? This cannot be undone.`)) {
+          deleteRequest(requestId);
+        }
+        break;
+      }
       case 'move': setMoveDialogRequestId(requestId); break;
     }
   }, [openRequestInBuilder, duplicateRequest, deleteRequest]);
@@ -929,9 +935,14 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
         setNewFolderName(folder?.name || '');
         setTimeout(() => renameInputRef.current?.focus(), 50);
         break;
-      case 'delete':
-        deleteFolder(folderId);
+      case 'delete': {
+        const f = collection?.folders.find(f => f.id === folderId);
+        const requestCount = collection?.requests.filter(r => r.folderId === folderId).length || 0;
+        if (window.confirm(`Delete folder "${f?.name || 'Untitled'}"${requestCount > 0 ? ` and its ${requestCount} request(s)` : ''}? This cannot be undone.`)) {
+          deleteFolder(folderId);
+        }
         break;
+      }
     }
   }, [addRequest, createFolder, deleteFolder, collection]);
   

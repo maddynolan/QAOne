@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Plus, Trash2, Loader2, Copy, Save, Clock, History, Code,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2, Wand2,
-  Camera, GitCompare, FlaskConical, Shield,
+  Camera, GitCompare, FlaskConical, Shield, Import, Terminal, X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,7 +44,9 @@ import {
   type KeyValuePair,
   createEmptyRequest,
   generateId,
+  parseCurlCommand,
 } from "./constants";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 /** Resolve a simple JSONPath (e.g. $[4].title or $.data.items[0]) to a value; supports arrays and objects. */
 function jsonPathValue(obj: any, path: string): unknown {
@@ -125,6 +127,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   const [response, setResponse] = useState<ResponseData | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [activeSection, setActiveSection] = useState("params");
   const [responseTab, setResponseTab] = useState("body");
   // Console: last request/response for inspection (zero-code)
@@ -210,6 +213,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   });
   const [showHistory, setShowHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
+  const [showCurlImport, setShowCurlImport] = useState(false);
+  const [curlInput, setCurlInput] = useState("");
 
   const pushHistory = useCallback((method: string, url: string) => {
     const entry = {
@@ -426,6 +431,20 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   // Check for unresolved variables in URL
   const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
 
+  // --- Import cURL ---
+  const handleCurlImport = useCallback(() => {
+    if (!curlInput.trim()) return;
+    try {
+      const parsed = parseCurlCommand(curlInput);
+      setRequest(parsed);
+      setShowCurlImport(false);
+      setCurlInput("");
+      toast({ title: "Imported", description: `${parsed.method} ${parsed.url || "(no URL)"} — imported from cURL` });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message || "Could not parse cURL command", variant: "destructive" });
+    }
+  }, [curlInput, toast]);
+
   // --- Send the request ---
   const handleSend = async () => {
     // Compute before-request variables so {{var}} in URL/headers/body resolve correctly
@@ -440,6 +459,11 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       ? resolveVariables(request.body, activeEnvironment || null, extraVarsForResolve())
       : "";
 
+    // Cancel any in-flight request
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     setSending(true);
     setError(null);
     setResponse(null);
@@ -451,6 +475,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       const proxyResponse = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
         body: JSON.stringify({
           test_suite: {
             test_cases: [
@@ -614,6 +639,93 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               } catch {
                 results.push({ passed: false, message: `JSONPath "${a.path}": failed to evaluate` });
               }
+            } else if (a.type === "not_contains") {
+              const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
+              const found = bodyStr.includes(a.expected);
+              results.push({
+                passed: !found,
+                message: `Body ${found ? "contains" : "does not contain"} "${a.expected}"`,
+              });
+            } else if (a.type === "regex") {
+              try {
+                const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
+                const re = new RegExp(a.expected);
+                const match = re.test(bodyStr);
+                results.push({
+                  passed: match,
+                  message: `Regex /${a.expected}/: ${match ? "matched" : "no match"}`,
+                });
+              } catch (regErr: any) {
+                results.push({ passed: false, message: `Regex error: ${regErr.message}` });
+              }
+            } else if (a.type === "equals") {
+              const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
+              const actual = a.path ? (() => { try { return String(jsonPathValue(typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody, a.path) ?? ""); } catch { return bodyStr; } })() : bodyStr.trim();
+              const passed = actual === a.expected;
+              results.push({
+                passed,
+                message: `Equals: ${passed ? "matched" : `expected "${a.expected}", got "${actual.slice(0, 80)}${actual.length > 80 ? "..." : ""}"`}`,
+              });
+            } else if (a.type === "schema") {
+              try {
+                const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+                const schema = JSON.parse(a.schema || a.expected || "{}");
+                // Simple JSON Schema validation (type + required fields)
+                const errors: string[] = [];
+                if (schema.type && typeof bodyObj !== schema.type && !(schema.type === "array" && Array.isArray(bodyObj)) && !(schema.type === "object" && typeof bodyObj === "object" && !Array.isArray(bodyObj))) {
+                  errors.push(`Expected type "${schema.type}", got "${Array.isArray(bodyObj) ? "array" : typeof bodyObj}"`);
+                }
+                if (schema.required && Array.isArray(schema.required) && typeof bodyObj === "object") {
+                  for (const field of schema.required) {
+                    if (!(field in bodyObj)) errors.push(`Missing required field "${field}"`);
+                  }
+                }
+                if (schema.properties && typeof bodyObj === "object") {
+                  for (const [key, propSchema] of Object.entries(schema.properties as Record<string, any>)) {
+                    if (key in bodyObj && propSchema.type) {
+                      const actualType = Array.isArray(bodyObj[key]) ? "array" : typeof bodyObj[key];
+                      if (actualType !== propSchema.type) errors.push(`"${key}" expected ${propSchema.type}, got ${actualType}`);
+                    }
+                  }
+                }
+                results.push({
+                  passed: errors.length === 0,
+                  message: errors.length === 0 ? "Schema: valid" : `Schema: ${errors.join("; ")}`,
+                });
+              } catch (schErr: any) {
+                results.push({ passed: false, message: `Schema: ${schErr.message}` });
+              }
+            } else if (a.type === "xpath") {
+              try {
+                const bodyStr = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody || "");
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(bodyStr, "text/xml");
+                const xpResult = doc.evaluate(a.path || "/", doc, null, XPathResult.STRING_TYPE, null);
+                const actual = xpResult.stringValue || "";
+                const passed = a.operator === "exists" ? !!actual
+                  : a.operator === "contains" ? actual.includes(a.expected)
+                  : actual === a.expected;
+                results.push({
+                  passed,
+                  message: `XPath "${a.path}": ${passed ? "passed" : `expected "${a.expected}", got "${actual}"`}`,
+                });
+              } catch (xpErr: any) {
+                results.push({ passed: false, message: `XPath: ${xpErr.message}` });
+              }
+            } else if (a.type === "matches_baseline") {
+              try {
+                const bodyObj = typeof responseBody === "string" ? JSON.parse(responseBody) : responseBody;
+                const baselineObj = JSON.parse(a.expected || "{}");
+                const diffs = diffJson(baselineObj, bodyObj);
+                results.push({
+                  passed: diffs.length === 0,
+                  message: diffs.length === 0
+                    ? "Matches baseline: identical"
+                    : `Baseline mismatch: ${diffs.length} difference(s) — ${diffs.slice(0, 3).map(d => `${d.path}: ${d.type}`).join(", ")}${diffs.length > 3 ? "..." : ""}`,
+                });
+              } catch (blErr: any) {
+                results.push({ passed: false, message: `Baseline: ${blErr.message}` });
+              }
             } else {
               results.push({ passed: true, message: `${a.type}: evaluated` });
             }
@@ -652,9 +764,21 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         pushHistory(request.method, url);
       }
     } catch (err: any) {
-      setError(err.message || "Request failed");
+      if (err.name === "AbortError") {
+        setError("Request cancelled");
+      } else {
+        setError(err.message || "Request failed");
+      }
     } finally {
       setSending(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
   };
 
@@ -869,18 +993,25 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
               )}
             </div>
 
-            <Button
-              onClick={handleSend}
-              disabled={sending || !request.url.trim()}
-              className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px]"
-            >
-              {sending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
+            {sending ? (
+              <Button
+                onClick={handleCancel}
+                variant="destructive"
+                className="min-w-[100px]"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSend}
+                disabled={!request.url.trim()}
+                className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-500 min-w-[100px]"
+              >
                 <Send className="w-4 h-4 mr-2" />
-              )}
-              Send
-            </Button>
+                Send
+              </Button>
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -904,6 +1035,15 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowCurlImport(true)}
+              title="Import from cURL"
+            >
+              <Terminal className="w-4 h-4" />
+            </Button>
 
             <Button
               variant="outline"
@@ -1311,19 +1451,22 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
 
             {/* Body */}
             <TabsContent value="body" className="p-4 mt-0 space-y-3">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {BODY_TYPES.map(bt => (
                   <Button
                     key={bt.value}
                     variant={request.bodyType === bt.value ? "default" : "outline"}
                     size="sm"
+                    className="h-7 text-xs"
                     onClick={() => setRequest({ ...request, bodyType: bt.value })}
                   >
                     {bt.label}
                   </Button>
                 ))}
               </div>
-              {request.bodyType !== "none" && (
+
+              {/* Standard body types: JSON, XML, Form URL-encoded, Raw */}
+              {(request.bodyType === "json" || request.bodyType === "xml" || request.bodyType === "form" || request.bodyType === "raw") && (
                 <CodeEditor
                   value={request.body}
                   onChange={(val) => setRequest({ ...request, body: val })}
@@ -1341,6 +1484,192 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   onCtrlEnter={handleSend}
                 />
               )}
+
+              {/* GraphQL — structured query + variables */}
+              {request.bodyType === "graphql" && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Query</Label>
+                  <CodeEditor
+                    value={(() => {
+                      try { return JSON.parse(request.body)?.query || ""; } catch { return request.body; }
+                    })()}
+                    onChange={(val) => {
+                      try {
+                        const parsed = JSON.parse(request.body);
+                        setRequest({ ...request, body: JSON.stringify({ ...parsed, query: val }) });
+                      } catch {
+                        setRequest({ ...request, body: JSON.stringify({ query: val, variables: {} }) });
+                      }
+                    }}
+                    language="graphql"
+                    height="150px"
+                    placeholder={'query {\n  users {\n    id\n    name\n    email\n  }\n}'}
+                    onCtrlEnter={handleSend}
+                  />
+                  <Label className="text-xs font-medium">Variables (JSON)</Label>
+                  <CodeEditor
+                    value={(() => {
+                      try { return JSON.stringify(JSON.parse(request.body)?.variables || {}, null, 2); } catch { return "{}"; }
+                    })()}
+                    onChange={(val) => {
+                      try {
+                        const parsed = JSON.parse(request.body);
+                        const vars = JSON.parse(val);
+                        setRequest({ ...request, body: JSON.stringify({ ...parsed, variables: vars }) });
+                      } catch { /* invalid JSON in variables — skip */ }
+                    }}
+                    language="json"
+                    height="80px"
+                    placeholder={'{\n  "id": 1\n}'}
+                  />
+                </div>
+              )}
+
+              {/* Multipart form — key-value with file/text type */}
+              {request.bodyType === "multipart" && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Add form fields below. Each row is a key-value pair sent as multipart/form-data.
+                  </p>
+                  {(() => {
+                    let parts: Array<{ key: string; value: string; type: "text" | "file" }> = [];
+                    try { parts = JSON.parse(request.body); } catch { parts = [{ key: "", value: "", type: "text" }]; }
+                    if (!Array.isArray(parts) || parts.length === 0) parts = [{ key: "", value: "", type: "text" }];
+                    const updateParts = (newParts: typeof parts) => setRequest({ ...request, body: JSON.stringify(newParts) });
+                    return (
+                      <>
+                        {parts.map((part, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Select
+                              value={part.type || "text"}
+                              onValueChange={(v) => {
+                                const updated = [...parts];
+                                updated[i] = { ...updated[i], type: v as "text" | "file" };
+                                updateParts(updated);
+                              }}
+                            >
+                              <SelectTrigger className="w-[80px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="file">File</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              className="flex-1 h-8 text-xs font-mono"
+                              placeholder="Field name"
+                              value={part.key}
+                              onChange={e => {
+                                const updated = [...parts];
+                                updated[i] = { ...updated[i], key: e.target.value };
+                                updateParts(updated);
+                              }}
+                            />
+                            {part.type === "file" ? (
+                              <Input
+                                className="flex-1 h-8 text-xs"
+                                type="file"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                      const updated = [...parts];
+                                      updated[i] = { ...updated[i], value: reader.result as string, fileName: file.name } as any;
+                                      updateParts(updated);
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <Input
+                                className="flex-1 h-8 text-xs font-mono"
+                                placeholder="Value"
+                                value={part.value}
+                                onChange={e => {
+                                  const updated = [...parts];
+                                  updated[i] = { ...updated[i], value: e.target.value };
+                                  updateParts(updated);
+                                }}
+                              />
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+                              onClick={() => {
+                                const updated = parts.filter((_, idx) => idx !== i);
+                                updateParts(updated.length ? updated : [{ key: "", value: "", type: "text" }]);
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateParts([...parts, { key: "", value: "", type: "text" }])}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Add Field
+                        </Button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Binary — file upload */}
+              {request.bodyType === "binary" && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Select a file to send as raw binary body. The file will be base64-encoded for transport.
+                  </p>
+                  <Input
+                    type="file"
+                    className="cursor-pointer"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setRequest({
+                            ...request,
+                            body: JSON.stringify({
+                              __binary: true,
+                              fileName: file.name,
+                              mimeType: file.type,
+                              size: file.size,
+                              data: reader.result,
+                            }),
+                          });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  {request.body && (() => {
+                    try {
+                      const bin = JSON.parse(request.body);
+                      if (bin?.__binary) {
+                        return (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                            <Badge variant="secondary">{bin.fileName}</Badge>
+                            <span>{(bin.size / 1024).toFixed(1)} KB</span>
+                            <span className="text-muted-foreground">({bin.mimeType})</span>
+                          </div>
+                        );
+                      }
+                    } catch {}
+                    return null;
+                  })()}
+                </div>
+              )}
+
+              {/* Format button for JSON */}
               {request.bodyType === "json" && request.body.trim() && (
                 <div className="flex gap-2">
                   <Button
@@ -1980,6 +2309,63 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
           </CardContent>
         </Card>
       )}
+
+      {/* cURL Import Dialog */}
+      <Dialog open={showCurlImport} onOpenChange={setShowCurlImport}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="w-5 h-5" />
+              Import from cURL
+            </DialogTitle>
+            <DialogDescription>
+              Paste a cURL command to auto-populate method, URL, headers, body, and auth.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              className="min-h-[160px] font-mono text-xs"
+              placeholder={`curl -X POST https://api.example.com/users \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer token123" \\
+  -d '{"name": "John", "email": "john@example.com"}'`}
+              value={curlInput}
+              onChange={(e) => setCurlInput(e.target.value)}
+            />
+            {curlInput.trim() && (
+              <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                {(() => {
+                  try {
+                    const preview = parseCurlCommand(curlInput);
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">{preview.method}</Badge>
+                        <span className="font-mono truncate max-w-[300px]">{preview.url || "(no URL)"}</span>
+                        {preview.headers.filter(h => h.key).length > 0 && (
+                          <Badge variant="secondary">{preview.headers.filter(h => h.key).length} headers</Badge>
+                        )}
+                        {preview.body && <Badge variant="secondary">Has body ({preview.bodyType})</Badge>}
+                        {preview.authType !== "none" && <Badge variant="secondary">Auth: {preview.authType}</Badge>}
+                      </div>
+                    );
+                  } catch {
+                    return <span className="text-red-500">Could not parse cURL command</span>;
+                  }
+                })()}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowCurlImport(false); setCurlInput(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCurlImport} disabled={!curlInput.trim()}>
+              <Import className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
