@@ -27,12 +27,13 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   PanelLeftClose, PanelLeftOpen, FolderOpen, Folder, FolderPlus,
   Link2, Plus, Search, Loader2, MoreHorizontal, ChevronRight,
   ChevronDown, Trash2, Copy, Edit3, ArrowRight, FileText,
   Layers, RefreshCw, Download, AlertCircle, CheckCircle2,
-  Play, PlayCircle
+  Play, PlayCircle, CheckSquare, Square, X
 } from 'lucide-react';
 import {
   useApiTestingStore,
@@ -83,18 +84,22 @@ interface RequestItemProps {
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent, id: string, folderId: string | null) => void;
   onDragEnd?: () => void;
+  /** Multi-select mode */
+  selectMode?: boolean;
+  isChecked?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastResult, onClick, onContextAction, onRun, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd }: RequestItemProps) => {
+const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastResult, onClick, onContextAction, onRun, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, selectMode, isChecked, onToggleSelect }: RequestItemProps) => {
   const label = request.name || `${request.method} ${request.path || request.url || '/'}`;
   const endpointPath = request.path || request.url || '';
   const showPath = request.name && endpointPath && endpointPath !== request.name;
-  
+
   return (
     <div
       className={`group relative ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'border-t-2 border-primary' : ''}`}
-      draggable
-      onDragStart={(e) => onDragStart?.(e, request.id)}
+      draggable={!selectMode}
+      onDragStart={(e) => !selectMode && onDragStart?.(e, request.id)}
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e, request.id); }}
       onDragLeave={() => onDragLeave?.()}
       onDrop={(e) => onDrop?.(e, request.id, request.folder_id)}
@@ -103,14 +108,23 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastR
       <button
         type="button"
         className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs transition-colors ${
-          isSelected 
-            ? 'bg-primary/10 text-primary border border-primary/20' 
-            : 'hover:bg-muted/70'
+          isSelected
+            ? 'bg-primary/10 text-primary border border-primary/20'
+            : isChecked
+              ? 'bg-destructive/5 border border-destructive/20'
+              : 'hover:bg-muted/70'
         }`}
-        onClick={() => onClick(request.id)}
+        onClick={() => selectMode ? onToggleSelect?.(request.id) : onClick(request.id)}
       >
-        {/* Status dot from latest test run */}
-        {lastResult ? (
+        {/* Checkbox in select mode, status dot otherwise */}
+        {selectMode ? (
+          <Checkbox
+            checked={isChecked}
+            onCheckedChange={() => onToggleSelect?.(request.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 shrink-0"
+          />
+        ) : lastResult ? (
           <span
             className={`w-1.5 h-1.5 rounded-full shrink-0 ${
               lastResult.status === 'passed' ? 'bg-green-500' : 'bg-red-500'
@@ -203,13 +217,18 @@ interface FolderNodeProps {
   onDropOnFolder?: (e: React.DragEvent, folderId: string | null) => void;
   onDropReorder?: (e: React.DragEvent, targetId: string, folderId: string | null) => void;
   onDragEnd?: () => void;
+  /** Multi-select props */
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 const FolderNode = memo(({
   folder, requests, allFolders, selectedRequestId, expandedFolders, lastResultMap,
   onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction,
   onRunRequest, onRunFolder, depth,
-  dropTargetId, dragRequestId, onDragStart, onDragOver, onDragLeave, onDropOnFolder, onDropReorder, onDragEnd
+  dropTargetId, dragRequestId, onDragStart, onDragOver, onDragLeave, onDropOnFolder, onDropReorder, onDragEnd,
+  selectMode, selectedIds, onToggleSelect
 }: FolderNodeProps) => {
   const isExpanded = expandedFolders.has(folder.id);
   const folderRequests = requests.filter(r => r.folder_id === folder.id)
@@ -330,6 +349,9 @@ const FolderNode = memo(({
               onDropOnFolder={onDropOnFolder}
               onDropReorder={onDropReorder}
               onDragEnd={onDragEnd}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
             />
           ))}
           {/* Then requests */}
@@ -344,6 +366,9 @@ const FolderNode = memo(({
               onClick={onRequestClick}
               onContextAction={onRequestContextAction}
               onRun={onRunRequest}
+              selectMode={selectMode}
+              isChecked={selectedIds?.has(req.id)}
+              onToggleSelect={onToggleSelect}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
@@ -384,6 +409,10 @@ interface EndpointGroupProps {
   onDragEnd?: () => void;
   dragRequestId?: string | null;
   dropTargetId?: string | null;
+  /** Multi-select props */
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 const EndpointGroup = memo(({
@@ -391,7 +420,8 @@ const EndpointGroup = memo(({
   onToggleExpand, onRequestClick, onRequestContextAction,
   onAddTestCase, onRunEndpoint, onRunRequest,
   onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
-  dragRequestId, dropTargetId
+  dragRequestId, dropTargetId,
+  selectMode, selectedIds, onToggleSelect
 }: EndpointGroupProps) => {
   const [method, ...pathParts] = endpointKey.split(' ');
   const path = pathParts.join(' ') || '/';
@@ -414,6 +444,9 @@ const EndpointGroup = memo(({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onDragEnd={onDragEnd}
+        selectMode={selectMode}
+        isChecked={selectedIds?.has(requests[0].id)}
+        onToggleSelect={onToggleSelect}
       />
     );
   }
@@ -479,6 +512,9 @@ const EndpointGroup = memo(({
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               onDragEnd={onDragEnd}
+              selectMode={selectMode}
+              isChecked={selectedIds?.has(req.id)}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>
@@ -686,6 +722,9 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   // Drag-and-drop state
   const [dragRequestId, setDragRequestId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  // Multi-select / bulk delete state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
 
   // Resizable sidebar width
   const SIDEBAR_MIN = 220;
@@ -750,7 +789,55 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
       openRequestInBuilder(reqId);
     }
   }, [createCollection, switchCollection, addRequest, openRequestInBuilder]);
-  
+
+  // Multi-select handlers
+  const handleToggleSelectMode = useCallback(() => {
+    setSelectMode(prev => {
+      if (prev) setSelectedRequestIds(new Set()); // Clear selection when exiting
+      return !prev;
+    });
+  }, []);
+
+  const handleToggleSelect = useCallback((requestId: string) => {
+    setSelectedRequestIds(prev => {
+      const next = new Set(prev);
+      if (next.has(requestId)) next.delete(requestId);
+      else next.add(requestId);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (!collection) return;
+    setSelectedRequestIds(new Set(collection.requests.map(r => r.id)));
+  }, [collection]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedRequestIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    if (selectedRequestIds.size === 0) return;
+    const count = selectedRequestIds.size;
+    if (!window.confirm(`Delete ${count} selected request${count !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    for (const reqId of selectedRequestIds) {
+      deleteRequest(reqId);
+    }
+    setSelectedRequestIds(new Set());
+    setSelectMode(false);
+  }, [selectedRequestIds, deleteRequest]);
+
+  const handleDeleteAll = useCallback(() => {
+    if (!collection || collection.requests.length === 0) return;
+    const count = collection.requests.length;
+    if (!window.confirm(`Delete ALL ${count} request${count !== 1 ? 's' : ''} in "${collection.name}"? This cannot be undone.`)) return;
+    for (const req of collection.requests) {
+      deleteRequest(req.id);
+    }
+    setSelectedRequestIds(new Set());
+    setSelectMode(false);
+  }, [collection, deleteRequest]);
+
   // Memoized endpoint grouping
   const endpointGroups = useMemo(() => {
     if (!collection) return [];
@@ -1038,6 +1125,48 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                 </div>
               ) : (
                 <>
+                  {/* Bulk action bar (visible when in select mode) */}
+                  {selectMode && (
+                    <div className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-destructive/5 border border-destructive/20">
+                      <Checkbox
+                        checked={selectedRequestIds.size === totalRequests && totalRequests > 0}
+                        onCheckedChange={(checked) => checked ? handleSelectAll() : handleDeselectAll()}
+                        className="h-3.5 w-3.5 shrink-0"
+                      />
+                      <span className="text-[11px] font-medium flex-1 truncate">
+                        {selectedRequestIds.size > 0 ? `${selectedRequestIds.size} selected` : 'Select items'}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5 text-[10px]"
+                        onClick={handleSelectAll}
+                      >
+                        All
+                      </Button>
+                      {selectedRequestIds.size > 0 && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={handleBulkDelete}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Delete ({selectedRequestIds.size})
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={handleToggleSelectMode}
+                        title="Exit select mode"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Collection header */}
                   <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50">
                     <FolderOpen className="w-4 h-4 text-primary shrink-0" />
@@ -1066,6 +1195,17 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                         <DropdownMenuItem onClick={handleCreateFolder}>
                           <FolderPlus className="w-3.5 h-3.5 mr-2" /> New Folder
                         </DropdownMenuItem>
+                        {totalRequests > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={handleToggleSelectMode}>
+                              <CheckSquare className="w-3.5 h-3.5 mr-2" /> Select & Delete...
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleDeleteAll} className="text-destructive">
+                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete All ({totalRequests})
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1132,6 +1272,9 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             onDropOnFolder={handleDropOnFolder}
                             onDropReorder={handleDropReorder}
                             onDragEnd={handleDragEnd}
+                            selectMode={selectMode}
+                            selectedIds={selectedRequestIds}
+                            onToggleSelect={handleToggleSelect}
                           />
                         ))}
                       </div>
@@ -1187,6 +1330,9 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             onDragEnd={handleDragEnd}
                             dragRequestId={dragRequestId}
                             dropTargetId={dropTargetId}
+                            selectMode={selectMode}
+                            selectedIds={selectedRequestIds}
+                            onToggleSelect={handleToggleSelect}
                           />
                         ))}
                       </div>
