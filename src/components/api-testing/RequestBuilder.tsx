@@ -215,6 +215,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   const [historySearch, setHistorySearch] = useState("");
   const [showCurlImport, setShowCurlImport] = useState(false);
   const [curlInput, setCurlInput] = useState("");
+  const [inferredSchema, setInferredSchema] = useState<string | null>(null);
+  const [inferringSchema, setInferringSchema] = useState(false);
 
   const pushHistory = useCallback((method: string, url: string) => {
     const entry = {
@@ -444,6 +446,35 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
       toast({ title: "Import failed", description: err.message || "Could not parse cURL command", variant: "destructive" });
     }
   }, [curlInput, toast]);
+
+  // --- Infer Schema from response (backend AI) ---
+  const handleInferSchema = useCallback(async () => {
+    if (!response) return;
+    setInferringSchema(true);
+    try {
+      const bodyObj = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+      const res = await fetch(`${API_BASE_URL}/api/v2/testing/openapi/infer-schema`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response_data: bodyObj }),
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
+      const data = await res.json();
+      setInferredSchema(JSON.stringify(data.schema, null, 2));
+      toast({ title: "Schema inferred", description: "AI-powered schema generated from response" });
+    } catch (err: any) {
+      // Fallback to client-side inference
+      try {
+        const bodyObj = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+        setInferredSchema(JSON.stringify(generateJsonSchema(bodyObj), null, 2));
+        toast({ title: "Schema inferred (local)", description: "Generated from response structure" });
+      } catch {
+        toast({ title: "Error", description: err.message || "Response is not valid JSON", variant: "destructive" });
+      }
+    } finally {
+      setInferringSchema(false);
+    }
+  }, [response, toast]);
 
   // --- Send the request ---
   const handleSend = async () => {
@@ -2118,6 +2149,15 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={handleInferSchema}
+                  disabled={inferringSchema}
+                >
+                  {inferringSchema ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Wand2 className="w-4 h-4 mr-1" />}
+                  Infer
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     navigator.clipboard.writeText(response.body);
                   }}
@@ -2306,6 +2346,54 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 />
               </TabsContent>
             </Tabs>
+
+            {/* Inferred Schema Display */}
+            {inferredSchema && (
+              <div className="px-4 pb-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium flex items-center gap-1">
+                    <Wand2 className="w-3 h-3" /> Inferred JSON Schema
+                  </Label>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inferredSchema);
+                        toast({ title: "Copied" });
+                      }}
+                    >
+                      <Copy className="w-3 h-3 mr-1" /> Copy
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        setAssertions(prev => [...prev, {
+                          id: generateId(),
+                          type: "schema",
+                          name: "Response matches inferred schema",
+                          path: "$",
+                          operator: "json_schema",
+                          expected: "",
+                          schema: inferredSchema,
+                        }]);
+                        setActiveSection("assertions");
+                        toast({ title: "Schema assertion added" });
+                      }}
+                    >
+                      <Shield className="w-3 h-3 mr-1" /> Add as Assertion
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setInferredSchema(null)}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+                <ResponseCodeViewer value={inferredSchema} language="json" height="200px" />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -27,6 +27,10 @@ import TabErrorBoundary from "@/components/api-testing/TabErrorBoundary";
 import EnvironmentManagerComponent, { type EnvironmentConfig, normalizeVariables, resolveVariables } from "@/components/api-testing/EnvironmentManager";
 import CollectionSidebar from "@/components/api-testing/CollectionSidebar";
 import { CodeEditor, ResponseCodeViewer } from "@/components/api-testing/CodeEditor";
+import DataDrivenPanel from "@/components/api-testing/DataDrivenPanel";
+import MockServerPanel from "@/components/api-testing/MockServerPanel";
+import SecurityScanPanel from "@/components/api-testing/SecurityScanPanel";
+import WebSocketClient from "@/components/api-testing/WebSocketClient";
 import { useApiTestingStore } from "@/stores/apiTestingStore";
 
 import { API_BASE_URL } from "@/lib/api-config";
@@ -274,6 +278,11 @@ export default function EnhancedAPITesting() {
   const [executeFilter, setExecuteFilter] = useState("");
   const [viewingTestCase, setViewingTestCase] = useState<any>(null);
   const [expandedResultIdx, setExpandedResultIdx] = useState<number | null>(null);
+  // Collection Runner config
+  const [runIterations, setRunIterations] = useState(1);
+  const [runDelay, setRunDelay] = useState(0);
+  const [runBailOnError, setRunBailOnError] = useState(false);
+  const [showRunnerConfig, setShowRunnerConfig] = useState(false);
 
   // Load testing (React state — zero-code, no getElementById)
   const [loadConfig, setLoadConfig] = useState({
@@ -2319,6 +2328,22 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             <Play className="w-4 h-4 mr-1" />
             Execute
           </TabsTrigger>
+          <TabsTrigger value="data-driven" className="flex-1 min-w-0 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-600 text-muted-foreground">
+            <Database className="w-4 h-4 mr-1" />
+            Data
+          </TabsTrigger>
+          <TabsTrigger value="mock" className="flex-1 min-w-0 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-600 text-muted-foreground">
+            <Server className="w-4 h-4 mr-1" />
+            Mock
+          </TabsTrigger>
+          <TabsTrigger value="security" className="flex-1 min-w-0 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-600 text-muted-foreground">
+            <Shield className="w-4 h-4 mr-1" />
+            Security
+          </TabsTrigger>
+          <TabsTrigger value="websocket" className="flex-1 min-w-0 data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-600 text-muted-foreground">
+            <Zap className="w-4 h-4 mr-1" />
+            WS
+          </TabsTrigger>
           <TabsTrigger value="environments" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Env</TabsTrigger>
           <TabsTrigger value="results" className="flex-1 min-w-0 data-[state=active]:bg-primary/20 data-[state=active]:text-primary text-muted-foreground">Results</TabsTrigger>
         </TabsList>
@@ -3205,28 +3230,89 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       )}
                     </div>
 
+                    {/* Collection Runner Config */}
+                    <div className="space-y-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setShowRunnerConfig(!showRunnerConfig)}
+                      >
+                        <Settings className="w-3 h-3 mr-1" />
+                        Runner Options
+                        {runIterations > 1 && <Badge variant="secondary" className="ml-1 text-[10px] h-4">{runIterations}x</Badge>}
+                        {showRunnerConfig ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronRight className="w-3 h-3 ml-1" />}
+                      </Button>
+                      {showRunnerConfig && (
+                        <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/20">
+                          <div>
+                            <Label className="text-xs">Iterations</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={runIterations}
+                              onChange={e => setRunIterations(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="h-8 text-xs mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Run collection N times</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs">Delay (ms)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={runDelay}
+                              onChange={e => setRunDelay(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="h-8 text-xs mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Delay between requests</p>
+                          </div>
+                          <div className="flex items-end pb-5">
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                              <input type="checkbox" checked={runBailOnError} onChange={e => setRunBailOnError(e.target.checked)} />
+                              Stop on first error
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Execute buttons */}
                     <div className="flex gap-2">
                       <Button
                         className="flex-1"
                         disabled={isExecuting || !selectedEnvironment}
-                        onClick={() => {
+                        onClick={async () => {
                           const s = useApiTestingStore.getState();
-                          const idsToRun = selectedTestCases.size > 0 
-                            ? Array.from(selectedTestCases) 
+                          const idsToRun = selectedTestCases.size > 0
+                            ? Array.from(selectedTestCases)
                             : collReqs.map((r: any) => r.id);
-                          s.createTestRun(
-                            `${coll?.name || 'Collection'} - ${selectedTestCases.size > 0 ? `${selectedTestCases.size} selected` : 'Full Run'}`,
-                            idsToRun,
-                            s.active_environment_id || undefined
-                          ).then((createdRun) => {
+
+                          for (let iter = 0; iter < runIterations; iter++) {
+                            const runName = runIterations > 1
+                              ? `${coll?.name || 'Collection'} — Iteration ${iter + 1}/${runIterations}`
+                              : `${coll?.name || 'Collection'} - ${selectedTestCases.size > 0 ? `${selectedTestCases.size} selected` : 'Full Run'}`;
+
+                            const createdRun = await s.createTestRun(runName, idsToRun, s.active_environment_id || undefined);
                             if (createdRun) {
-                              s.executeTestRun(createdRun.id).then(() => {
-                                setExecutionResults(useApiTestingStore.getState().execution_results);
-                                setActiveTab("results");
-                              });
+                              await s.executeTestRun(createdRun.id);
+                              setExecutionResults(useApiTestingStore.getState().execution_results);
                             }
-                          });
+
+                            // Check bail on error
+                            if (runBailOnError) {
+                              const latestResults = useApiTestingStore.getState().execution_results;
+                              const hasFailure = latestResults?.some((r: any) => r.status === 'failed' || r.status === 'error');
+                              if (hasFailure) break;
+                            }
+
+                            // Delay between iterations
+                            if (runDelay > 0 && iter < runIterations - 1) {
+                              await new Promise(r => setTimeout(r, runDelay));
+                            }
+                          }
+                          setActiveTab("results");
                         }}
                       >
                         {isExecuting ? (
@@ -3237,6 +3323,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                               ? `Execute ${selectedTestCases.size} Selected Tests`
                               : `Execute All ${collReqs.length} Tests`
                             }
+                            {runIterations > 1 && ` × ${runIterations}`}
                           </>
                         )}
                       </Button>
@@ -3281,6 +3368,34 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </TabErrorBoundary>
         </TabsContent>
 
+
+        {/* Data-Driven Testing Tab */}
+        <TabsContent value="data-driven" className="space-y-4">
+          <TabErrorBoundary tabName="Data-Driven">
+            <DataDrivenPanel testSuite={testSuite} />
+          </TabErrorBoundary>
+        </TabsContent>
+
+        {/* Mock Server Tab */}
+        <TabsContent value="mock" className="space-y-4">
+          <TabErrorBoundary tabName="Mock Server">
+            <MockServerPanel />
+          </TabErrorBoundary>
+        </TabsContent>
+
+        {/* Security Scan Tab */}
+        <TabsContent value="security" className="space-y-4">
+          <TabErrorBoundary tabName="Security">
+            <SecurityScanPanel />
+          </TabErrorBoundary>
+        </TabsContent>
+
+        {/* WebSocket Client Tab */}
+        <TabsContent value="websocket" className="space-y-4">
+          <TabErrorBoundary tabName="WebSocket">
+            <WebSocketClient />
+          </TabErrorBoundary>
+        </TabsContent>
 
         {/* Environments Tab */}
         <TabsContent value="environments" className="space-y-4">
