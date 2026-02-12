@@ -4039,10 +4039,12 @@ Recorded Test
       return;
     }
     
-    // Set debug mode state
+    // ═══ CLEAN EXECUTION STATE: Reset all debug/pause/failure state from previous runs ═══
     setIsDebugMode(debugMode);
     setShowRunMenu(false);
-    
+    setIsTestPaused(false);
+    setPausedAtStep(null);
+
     // If debug mode, start paused at first step for step-by-step execution
     if (debugMode) {
       setStepByStepMode(true);
@@ -4087,42 +4089,47 @@ Recorded Test
       eventCleanups.push(unsubStepStart);
       
       // Listen for step complete events
-      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; newSelector?: string; aiResolved?: string | false; aiDetails?: any }) => {
-        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗', data.aiResolved ? `[AI: ${data.aiResolved}]` : '');
+      const unsubStepComplete = flowstral.on('playwright-test-step-complete', (data: { stepIndex: number; success: boolean; error?: string; screenshot?: string; workingSelector?: string; strategyType?: string; healed?: boolean; skipped?: boolean; newSelector?: string; aiResolved?: string | false; aiDetails?: any }) => {
+        const isHealed = data.healed || false;
+        const isSkipped = data.skipped || false;
+        console.log('[Test] Step complete:', data.stepIndex, data.success ? '✓' : '✗', isHealed ? '[HEALED]' : '', isSkipped ? '[SKIPPED]' : '', data.aiResolved ? `[AI: ${data.aiResolved}]` : '');
+
         setTestExecutionResult(prev => {
           if (!prev) return prev;
           const newResults = [...prev.stepResults];
           newResults[data.stepIndex] = {
             index: data.stepIndex,
-            status: data.success ? 'passed' : 'failed',
+            status: data.success ? (isHealed ? 'healed' : isSkipped ? 'skipped' : 'passed') : 'failed',
             error: data.error,
             screenshot: data.screenshot,
             workingSelector: data.workingSelector,
             strategyType: data.strategyType,
             aiResolved: data.aiResolved || false,
             aiDetails: data.aiDetails || null,
+            healed: isHealed,
+            skipped: isSkipped,
           };
           return {
             ...prev,
-            // On success: advance currentStep so spinner moves to next step immediately
-            // On failure: keep currentStep on the failed step to show the failure indicator
+            // On success (including healed/skipped): advance currentStep
+            // On failure: keep currentStep on the failed step
             currentStep: data.success ? data.stepIndex + 1 : data.stepIndex,
             stepResults: newResults
           };
         });
-        
+
         // =========== AUTO-HEAL LOCKED SELECTORS ===========
         // If a locked selector failed but SmartFinder found the element,
         // auto-update the step's optimizedSelector with the new working one
-        if (data.success && data.healed && data.newSelector) {
-          console.log(`[Test] 🔧 Auto-healing step ${data.stepIndex + 1}: ${data.newSelector}`);
+        if (data.success && data.healed && data.workingSelector) {
+          console.log(`[Test] 🔧 Auto-healing step ${data.stepIndex + 1}: ${data.workingSelector}`);
           setActions(prev => prev.map((action, idx) => {
             if (idx === data.stepIndex) {
               return {
                 ...action,
                 selectorObj: {
                   ...action.selectorObj,
-                  optimizedSelector: data.newSelector,
+                  optimizedSelector: data.newSelector || data.workingSelector,
                   optimizedAt: new Date().toISOString(),
                   optimizedSource: 'auto-healed'
                 }
@@ -4130,27 +4137,32 @@ Recorded Test
             }
             return action;
           }));
-          toast.info(`🔧 Auto-healed step ${data.stepIndex + 1} with new selector`, { duration: 2000 });
+          toast.success(`Step ${data.stepIndex + 1} auto-healed`, { duration: 2000 });
         }
-        
-        // =========== SMART SUGGESTIONS ON FAILURE ===========
-        // When a step fails, show Smart Suggestions first for quick fix
-        // This is BEFORE showing retry/skip options
-        if (!data.success) {
+
+        // Notify on auto-skipped steps
+        if (data.success && isSkipped) {
+          console.log(`[Test] ⏭️ Step ${data.stepIndex + 1} auto-skipped (non-critical)`);
+        }
+
+        // =========== SMART SUGGESTIONS ON TRUE FAILURE ===========
+        // Only pause and show failure UI when step truly failed
+        // (NOT when healed or skipped by resilient runtime)
+        if (!data.success && !isHealed && !isSkipped) {
           console.log('[Test] ❌ Step failed - showing Smart Suggestions for quick fix');
-          
+
           // Set paused state so user can fix
           setIsTestPaused(true);
           setPausedAtStep(data.stepIndex);
           setEditingActionIndex(data.stepIndex);
           setRightPanelTab('suggestions');
-          
+
           // Show suggestions overlay in browser
           if (flowstral?.playwrightRecorder?.showSuggestionsOverlay) {
             flowstral.playwrightRecorder.showSuggestionsOverlay();
           }
           switchToStepTabAndRefresh(data.stepIndex);
-          
+
           toast.error(
             `Step ${data.stepIndex + 1} failed. Click correct element in browser or use Smart Suggestions panel to fix.`,
             { duration: 8000 }
@@ -4167,7 +4179,23 @@ Recorded Test
         }, 100);
       });
       eventCleanups.push(unsubStepComplete);
-      
+
+      // Listen for resilient healing events (step is being auto-healed)
+      const unsubStepHealing = flowstral.on('playwright-test-step-healing', (data: { stepIndex: number; error?: string }) => {
+        console.log(`[Test] 🔄 Step ${data.stepIndex + 1} healing in progress...`);
+        setTestExecutionResult(prev => {
+          if (!prev) return prev;
+          const newResults = [...prev.stepResults];
+          newResults[data.stepIndex] = {
+            ...newResults[data.stepIndex],
+            index: data.stepIndex,
+            status: 'healing',
+          };
+          return { ...prev, stepResults: newResults };
+        });
+      });
+      eventCleanups.push(unsubStepHealing);
+
       // Listen for flagged step / pause events
       const unsubPaused = flowstral.on('playwright-test-paused', (data: { stepIndex: number; reason: string; flagReason?: string }) => {
         console.log('[Test] 🚩 Paused at flagged step:', data.stepIndex, data.flagReason);
@@ -4205,7 +4233,9 @@ Recorded Test
           error: s.error,
           screenshot: s.screenshot,
           workingSelector: s.workingSelector,
-          strategyType: s.strategyType
+          strategyType: s.strategyType,
+          healed: s.healed || false,
+          skipped: s.skipped || false,
         })) || [];
         
         // Determine the canonical failed step index:
@@ -4237,7 +4267,11 @@ Recorded Test
         // setIsTestRunning was removed — do NOT re-add it.
         
         if (data.success) {
-          toast.success(`✅ Test Passed! (${data.passedSteps}/${data.totalSteps} steps)`, { duration: 3000 });
+          const healedCount = finalStepResults.filter(s => s.healed).length;
+          const skippedCount = finalStepResults.filter(s => s.skipped).length;
+          const healInfo = healedCount > 0 ? `, ${healedCount} auto-healed` : '';
+          const skipInfo = skippedCount > 0 ? `, ${skippedCount} auto-skipped` : '';
+          toast.success(`Test Passed! (${data.passedSteps}/${data.totalSteps} steps${healInfo}${skipInfo})`, { duration: 3000 });
         } else {
           toast.error(`❌ Test Failed: ${data.error || 'Step failed'}`, { duration: 5000 });
         }
@@ -4821,13 +4855,16 @@ Recorded Test
     toast.success(`Running from step ${stepIndex + 1}...`, { duration: 1500 });
   }, [browserKeptOpen, actions]);
 
-  // ============ FALSE POSITIVE HANDLERS ============
-  // Mark a failed step as false positive (element not reliably found)
-  // Now persists to backend so flags survive across sessions
+  // ============ STEP FLAG HANDLERS ============
+  // Flag a step as unreliable — covers both false positives and false negatives:
+  // - False positive: step FAILED but shouldn't have (selector broke, element is there)
+  // - False negative: step PASSED but hit the WRONG element
+  // On next run, test will stop at flagged steps for the user to fix.
+  // Now persists to backend so flags survive across sessions.
   const markStepAsFalsePositive = useCallback((stepIndex: number, screenshot: string | null, reason?: string) => {
     const action = actions[stepIndex];
     if (!action || !action.id) return;
-    
+
     setFalsePositiveSteps(prev => {
       const newMap = new Map(prev);
       newMap.set(action.id!, {
@@ -4838,7 +4875,7 @@ Recorded Test
       });
       return newMap;
     });
-    
+
     // Persist to backend (fire-and-forget, non-blocking)
     const testId = currentTestId;
     saveFalsePositiveApi({
@@ -4849,9 +4886,12 @@ Recorded Test
       screenshot: null, // Don't send screenshots to backend (too large)
       reason: reason || null,
     }).catch(() => {}); // Silent fail — in-memory still works
-    
+
+    const isWrongElement = reason?.includes('Wrong element');
     toast.success(
-      `🚩 Step ${stepIndex + 1} marked as false positive. On next run, test will stop here for you to fix.`,
+      isWrongElement
+        ? `🚩 Step ${stepIndex + 1} flagged — wrong element. On next run, test will stop here for you to fix.`
+        : `🚩 Step ${stepIndex + 1} flagged. On next run, test will stop here for you to fix.`,
       { duration: 4000 }
     );
   }, [actions]);
@@ -5998,13 +6038,18 @@ Recorded Test
                           {isCrossOriginAction(action) && (
                             <span className="ml-1 text-yellow-500">⚠️</span>
                           )}
-                          {/* False positive indicator */}
+                          {/* Flagged step indicator (false positive or wrong element) */}
                           {action.id && falsePositiveSteps.has(action.id) && (
-                            <span 
-                              className="ml-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded border border-amber-500/30"
-                              title="Flagged as false positive - test will stop here for fixing"
+                            <span
+                              className={cn(
+                                "ml-1 px-1.5 py-0.5 text-[10px] rounded border",
+                                falsePositiveSteps.get(action.id)?.reason?.includes('Wrong element')
+                                  ? "bg-red-500/20 text-red-400 border-red-500/30"
+                                  : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                              )}
+                              title={falsePositiveSteps.get(action.id)?.reason || "Flagged — test will stop here for fixing"}
                             >
-                              🚩 Flagged
+                              🚩 {falsePositiveSteps.get(action.id)?.reason?.includes('Wrong element') ? 'Wrong Element' : 'Flagged'}
                             </span>
                           )}
                         </p>
@@ -8780,6 +8825,16 @@ Recorded Test
                   <>
                     <CheckCircle className="h-5 w-5 text-emerald-400" />
                     Test Passed!
+                    {(() => {
+                      const healedCount = testExecutionResult?.stepResults?.filter((s: any) => s.healed).length || 0;
+                      const skippedCount = testExecutionResult?.stepResults?.filter((s: any) => s.skipped).length || 0;
+                      return (
+                        <>
+                          {healedCount > 0 && <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30 text-xs ml-2">{healedCount} healed</Badge>}
+                          {skippedCount > 0 && <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs ml-2">{skippedCount} skipped</Badge>}
+                        </>
+                      );
+                    })()}
                   </>
                 )}
                 {testExecutionResult?.status === 'failed' && !isTestPaused && (
@@ -8965,7 +9020,17 @@ Recorded Test
                         </p>
                       )}
                       {viewingResult?.status === 'passed' && (
-                        <p className="text-sm text-emerald-400/90 mt-1">This step passed successfully.</p>
+                        <p className={cn(
+                          "text-sm mt-1",
+                          viewingAction?.id && falsePositiveSteps.has(viewingAction.id) && falsePositiveSteps.get(viewingAction.id)?.reason?.includes('Wrong element')
+                            ? "text-red-400/90"
+                            : "text-emerald-400/90"
+                        )}>
+                          {viewingAction?.id && falsePositiveSteps.has(viewingAction.id) && falsePositiveSteps.get(viewingAction.id)?.reason?.includes('Wrong element')
+                            ? "⚠️ Step passed but flagged as wrong element — may have clicked the wrong thing."
+                            : "This step passed successfully."
+                          }
+                        </p>
                       )}
                       {!viewingResult && (
                         <p className="text-sm text-gray-400/90 mt-1">This step was not reached during execution.</p>
@@ -8996,6 +9061,18 @@ Recorded Test
                     {isViewingFailed && viewingAction?.id && !falsePositiveSteps.has(viewingAction.id) && (
                       <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10" onClick={() => { markStepAsFalsePositive(viewingIdx, viewingResult?.screenshot || null); }}>
                         Not a real failure
+                      </Button>
+                    )}
+                    {/* False negative: step passed but hit wrong element */}
+                    {viewingResult?.status === 'passed' && viewingAction?.id && !falsePositiveSteps.has(viewingAction.id) && (
+                      <Button variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={() => { markStepAsFalsePositive(viewingIdx, viewingResult?.screenshot || null, 'Wrong element — step passed but clicked incorrect element'); }}>
+                        Wrong Element
+                      </Button>
+                    )}
+                    {/* Unflag — for any step already flagged */}
+                    {viewingAction?.id && falsePositiveSteps.has(viewingAction.id) && (
+                      <Button variant="outline" size="sm" className="border-gray-500/30 text-gray-400 hover:bg-gray-500/10" onClick={() => { unmarkFalsePositive(viewingAction.id!); }}>
+                        Unflag
                       </Button>
                     )}
                     {isViewingFailed && (
@@ -9340,6 +9417,8 @@ Recorded Test
                           isPausedHere && "bg-amber-500/20 border border-amber-500/50 ring-1 ring-amber-500/30",
                           isCurrent && !isPausedHere && "bg-blue-500/20 border border-blue-500/30",
                           stepResult?.status === 'passed' && "bg-emerald-500/10 hover:bg-emerald-500/20",
+                          stepResult?.status === 'healed' && "bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20",
+                          stepResult?.status === 'healing' && "bg-amber-500/10 border border-amber-500/20 animate-pulse",
                           stepResult?.status === 'failed' && "bg-red-500/10 hover:bg-red-500/20",
                           stepResult?.status === 'skipped' && "bg-gray-500/10 opacity-60",
                           testExecutionResult?.selectedScreenshot === stepResult?.screenshot && "ring-2 ring-blue-500"
@@ -9361,6 +9440,8 @@ Recorded Test
                           {isPausedHere && <div className="h-4 w-4 rounded-full bg-amber-500 flex items-center justify-center"><div className="h-1.5 w-1.5 bg-amber-900 rounded-sm" /></div>}
                           {isCurrent && !isPausedHere && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
                           {stepResult?.status === 'passed' && !isPausedHere && <Check className="h-4 w-4 text-emerald-400" />}
+                          {stepResult?.status === 'healed' && !isPausedHere && <Check className="h-4 w-4 text-violet-400" />}
+                          {stepResult?.status === 'healing' && <Loader2 className="h-4 w-4 animate-spin text-amber-400" />}
                           {stepResult?.status === 'failed' && !isPausedHere && <X className="h-4 w-4 text-red-400" />}
                           {stepResult?.status === 'skipped' && <SkipForward className="h-4 w-4 text-gray-400" />}
                           {!isCurrent && !stepResult && !isPausedHere && <Circle className="h-4 w-4 text-muted-foreground" />}
@@ -9371,6 +9452,8 @@ Recorded Test
                               "break-words flex-1",
                               isPausedHere && "text-amber-300",
                               stepResult?.status === 'passed' && !isPausedHere && "text-emerald-400",
+                              stepResult?.status === 'healed' && !isPausedHere && "text-violet-400",
+                              stepResult?.status === 'healing' && "text-amber-400",
                               stepResult?.status === 'failed' && !isPausedHere && "text-red-400",
                               stepResult?.status === 'skipped' && "text-gray-400",
                               !stepResult && !isPausedHere && "text-muted-foreground"
@@ -9407,9 +9490,32 @@ Recorded Test
                                    stepResult.aiResolved === 'ai-verified' ? 'AI Check' : 'AI'}
                                 </span>
                               )}
-                              {/* Show false positive badge if flagged */}
+                              {/* Show auto-healed badge */}
+                              {stepResult?.status === 'healed' && (
+                                <span className="ml-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30" title="Auto-healed: selector was broken but AI found the correct element">
+                                  Healed
+                                </span>
+                              )}
+                              {/* Show healing in progress */}
+                              {stepResult?.status === 'healing' && (
+                                <span className="ml-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
+                                  Healing...
+                                </span>
+                              )}
+                              {/* Show auto-skipped badge */}
+                              {stepResult?.skipped && (
+                                <span className="ml-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/30" title="Auto-skipped: non-critical step">
+                                  Skipped
+                                </span>
+                              )}
+                              {/* Show flag badge (false positive or wrong element) */}
                               {action.id && falsePositiveSteps.has(action.id) && (
-                                <span className="ml-1 text-xs bg-amber-500/20 text-amber-400 px-1 rounded">🚩</span>
+                                <span className={cn(
+                                  "ml-1 text-xs px-1 rounded",
+                                  falsePositiveSteps.get(action.id)?.reason?.includes('Wrong element')
+                                    ? "bg-red-500/20 text-red-400"
+                                    : "bg-amber-500/20 text-amber-400"
+                                )}>🚩</span>
                               )}
                             </span>
                             {/* Action buttons for FAILED steps - Fix + Flag */}
@@ -9481,11 +9587,10 @@ Recorded Test
                                 )}
                               </div>
                             )}
-                            {/* Fix/Flag buttons for PASSED steps */}
-                            {/* Show Fix on hover for all passed steps (not just flagged), plus Flag/Unflag */}
+                            {/* Fix/Flag buttons for PASSED steps — always visible since platform is blackbox */}
                             {stepResult?.status === 'passed' && testExecutionResult?.status !== 'running' && action.id && (
-                              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-                                {/* Fix button - always visible on hover for passed steps */}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Fix button */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -9496,7 +9601,7 @@ Recorded Test
                                     toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
                                   }}
                                   className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="Fix this step - use Smart Suggestions to replace"
+                                  title="Fix this step - pick the correct element"
                                 >
                                   Fix
                                 </button>
@@ -9504,12 +9609,12 @@ Recorded Test
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      markStepAsFalsePositive(idx, stepResult?.screenshot || null);
+                                      markStepAsFalsePositive(idx, stepResult?.screenshot || null, 'Wrong element — step passed but clicked incorrect element');
                                     }}
-                                    className="px-2 py-0.5 text-[10px] bg-amber-500/10 hover:bg-amber-500/30 text-amber-400/70 hover:text-amber-400 rounded border border-amber-500/20 hover:border-amber-500/30"
-                                    title="Flag as false positive - step passed but clicked wrong element"
+                                    className="px-2 py-0.5 text-[10px] bg-red-500/10 hover:bg-red-500/30 text-red-400/70 hover:text-red-400 rounded border border-red-500/20 hover:border-red-500/30"
+                                    title="Wrong element — step passed but clicked incorrect element. Test will stop here on next run for fixing."
                                   >
-                                    🚩 Flag
+                                    🚩 Wrong
                                   </button>
                                 ) : (
                                   <button
@@ -9518,7 +9623,7 @@ Recorded Test
                                       unmarkFalsePositive(action.id!);
                                     }}
                                     className="px-2 py-0.5 text-[10px] bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 rounded border border-gray-500/30"
-                                    title="Remove false positive flag"
+                                    title="Remove flag"
                                   >
                                     Unflag
                                   </button>
