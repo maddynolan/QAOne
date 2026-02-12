@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build:webapp": "cd .. && set VITE_BASE=./ && npm run build && rmdir /S /Q flowstral-desktop\\webapp 2>nul & xcopy /E /I /Y dist flowstral-desktop\\webapp",
+    "build:webapp": "cd .. && npx vite build --base ./ && rmdir /S /Q flowstral-desktop\\webapp 2>nul & xcopy /E /I /Y dist flowstral-desktop\\webapp",
     "build:webapp:unix": "cd .. && VITE_BASE=./ npm run build && cp -r dist ../flowstral-desktop/webapp",
     "prebuild": "npm run build:webapp",
     "build": "electron-builder",
