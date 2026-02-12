@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
+import { CompactCodeEditor } from "./CodeEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -340,11 +340,12 @@ export default function ChainStepCard({
                 ))}
               </div>
               {step.request.bodyType !== "none" && (
-                <Textarea
-                  className="min-h-[120px] font-mono text-xs"
-                  placeholder={'{\n  "key": "${variable}"\n}'}
+                <CompactCodeEditor
                   value={step.request.body}
-                  onChange={e => updateRequest("body", e.target.value)}
+                  onChange={(val) => updateRequest("body", val)}
+                  language={step.request.bodyType === "json" ? "json" : step.request.bodyType === "xml" ? "xml" : step.request.bodyType === "graphql" ? "graphql" : "raw"}
+                  placeholder={'{\n  "key": "${variable}"\n}'}
+                  height="120px"
                 />
               )}
             </TabsContent>
