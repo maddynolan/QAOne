@@ -10,6 +10,51 @@
 
 QAAI (also branded as Flowstral/ArisTrace) is an enterprise QA automation platform. It combines browser recording, AI-powered test generation, multi-protocol API testing, performance/load testing, accessibility scanning, visual regression, and mobile testing into a unified product.
 
+### Project Paths
+
+| Path | Purpose |
+|------|---------|
+| `C:\QAAI` | **Main repository** — all code lives here, push from here |
+| `C:\QAAI\flowstral-desktop` | Electron desktop app (separate package.json) |
+| `C:\QAAI\flowstral-desktop\dist` | Built Electron installers (Setup.exe, Portable.exe) |
+| GitHub | `maddynolan/QAOne` (origin), `maddynolan/code-whisperer-75` (upstream) |
+
+### Push & Release Procedure
+
+**When the user says "push", execute ALL of these steps in order:**
+
+1. **Merge worktree → main:**
+   ```
+   cd C:\QAAI
+   git merge claude/quizzical-feistel --no-edit
+   ```
+
+2. **Push to GitHub:**
+   ```
+   git push origin main
+   ```
+
+3. **Build Electron app:**
+   ```
+   cd C:\QAAI\flowstral-desktop
+   taskkill /f /im Flowstral.exe 2>nul & taskkill /f /im electron.exe 2>nul
+   npm run build:webapp
+   npm run build:win
+   ```
+
+4. **Create GitHub release with assets:**
+   ```
+   "C:\Program Files\GitHub CLI\gh.exe" release create vX.Y.Z \
+     --repo maddynolan/QAOne \
+     --title "Flowstral vX.Y.Z - <description>" \
+     --notes "<release notes>" \
+     "C:\QAAI\flowstral-desktop\dist\Flowstral-Setup.exe" \
+     "C:\QAAI\flowstral-desktop\dist\Flowstral-Portable.exe" \
+     "C:\QAAI\flowstral-desktop\dist\latest.yml"
+   ```
+
+**Version bumping:** Check `flowstral-desktop/package.json` version and increment accordingly. Check latest release with `gh release list --repo maddynolan/QAOne --limit 1`.
+
 ### Tech Stack
 
 | Layer | Technology |
@@ -719,3 +764,17 @@ PostgreSQL (primary) with **in-memory fallback**:
 - New integrations are added
 
 When making changes to the codebase, update the relevant section of this file to keep it accurate as the primary reference for all future planning and execution.
+
+---
+
+## Quick Reference: Common Commands
+
+| Action | Command |
+|--------|---------|
+| Push + build + release | See "Push & Release Procedure" above — do ALL steps when user says "push" |
+| Start backend (dev) | `cd C:\QAAI && python -m uvicorn backend.app.main:app --reload --port 8000` |
+| Start frontend (dev) | `cd C:\QAAI && npm run dev` |
+| Build webapp only | `cd C:\QAAI && npm run build` |
+| Build Electron | `cd C:\QAAI\flowstral-desktop && npm run build:win` |
+| List releases | `"C:\Program Files\GitHub CLI\gh.exe" release list --repo maddynolan/QAOne --limit 5` |
+| gh CLI path | `"C:\Program Files\GitHub CLI\gh.exe"` (not on PATH, use full path) |
