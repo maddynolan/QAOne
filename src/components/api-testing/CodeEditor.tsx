@@ -6,9 +6,25 @@
  * Dark theme by default, matches the app's dark UI.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import Editor, { type OnMount, type Monaco } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
+
+/** Detect current theme from document root class (synced with ThemeContext) */
+function useDocumentTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  );
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      setTheme(root.classList.contains('dark') ? 'dark' : 'light');
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
 
 // Map body types to Monaco language IDs
 const LANGUAGE_MAP: Record<string, string> = {
@@ -73,6 +89,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoLang = LANGUAGE_MAP[language] || 'plaintext';
+  const appTheme = useDocumentTheme();
+  const monacoTheme = appTheme === 'dark' ? 'vs-dark' : 'light';
 
   const handleEditorMount: OnMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editor;
@@ -111,7 +129,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     <div
-      className={`border rounded-md overflow-hidden ${className}`}
+      className={`border rounded-md overflow-hidden bg-background ${className}`}
       style={{ minHeight: minHeight ? `${minHeight}px` : undefined }}
     >
       <Editor
@@ -120,7 +138,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         value={value}
         onChange={handleChange}
         onMount={handleEditorMount}
-        theme="vs-dark"
+        theme={monacoTheme}
         options={{
           readOnly,
           fontSize,

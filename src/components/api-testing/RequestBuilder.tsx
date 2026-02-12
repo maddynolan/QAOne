@@ -4,7 +4,7 @@
  * send the request, and see the full response with syntax highlighting.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -433,6 +433,17 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
   // Check for unresolved variables in URL
   const unresolvedVars = request.url ? hasUnresolvedVariables(request.url) : [];
 
+  // --- Check if current response is valid JSON ---
+  const isResponseJson = useMemo(() => {
+    if (!response?.body) return false;
+    try {
+      const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+      return parsed !== null && typeof parsed === "object";
+    } catch {
+      return false;
+    }
+  }, [response]);
+
   // --- Import cURL ---
   const handleCurlImport = useCallback(() => {
     if (!curlInput.trim()) return;
@@ -483,6 +494,11 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
     const url = buildUrl();
     if (!url) {
       setError("Please enter a URL");
+      return;
+    }
+    // Validate URL has a scheme — paths like /posts/1 cannot be sent directly
+    if (!url.match(/^https?:\/\//i)) {
+      setError(`URL "${url}" needs a base URL (e.g., https://api.example.com${url.startsWith('/') ? url : '/' + url}). Set a base URL in the Environment tab, or enter the full URL.`);
       return;
     }
     const sentHeaders = buildHeaders();
@@ -2089,6 +2105,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   variant={responseSnapshot ? "outline" : "ghost"}
                   size="sm"
                   className={responseSnapshot ? "border-amber-500/50 text-amber-600" : ""}
+                  disabled={!isResponseJson}
+                  title={!isResponseJson ? "Snapshot requires a JSON response" : "Save a baseline snapshot of this response"}
                   onClick={() => {
                     try {
                       const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
@@ -2122,6 +2140,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={!isResponseJson}
+                  title={!isResponseJson ? "Schema requires a JSON response" : "Generate a schema assertion from response structure"}
                   onClick={() => {
                     try {
                       const parsed = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
@@ -2150,7 +2170,8 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
                   variant="ghost"
                   size="sm"
                   onClick={handleInferSchema}
-                  disabled={inferringSchema}
+                  disabled={inferringSchema || !isResponseJson}
+                  title={!isResponseJson ? "Infer requires a JSON response" : "Infer JSON Schema from response data"}
                 >
                   {inferringSchema ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Wand2 className="w-4 h-4 mr-1" />}
                   Infer
