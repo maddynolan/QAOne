@@ -33,9 +33,12 @@ export const AUTH_TYPES = [
 // --- Body Types ---
 export const BODY_TYPES = [
   { value: "json", label: "JSON" },
-  { value: "form", label: "Form Data" },
+  { value: "form", label: "Form URL" },
+  { value: "multipart", label: "Multipart" },
+  { value: "graphql", label: "GraphQL" },
   { value: "xml", label: "XML" },
   { value: "raw", label: "Raw Text" },
+  { value: "binary", label: "Binary" },
   { value: "none", label: "None" },
 ] as const;
 
@@ -221,4 +224,152 @@ export function createEmptyChainStep(stepNumber: number): ChainStep {
 
 export function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// --- cURL Parser ---
+
+/** Tokenize a cURL command string, handling single/double quotes and backslash escapes. */
+function tokenizeCurl(raw: string): string[] {
+  // Normalize line continuations (backslash + newline)
+  const cmd = raw.replace(/\\\s*\n/g, " ").trim();
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < cmd.length) {
+    // Skip whitespace
+    if (/\s/.test(cmd[i])) { i++; continue; }
+    let token = "";
+    if (cmd[i] === "'" || cmd[i] === '"') {
+      const quote = cmd[i];
+      i++;
+      while (i < cmd.length && cmd[i] !== quote) {
+        if (cmd[i] === "\\" && quote === '"' && i + 1 < cmd.length) {
+          i++;
+          token += cmd[i];
+        } else {
+          token += cmd[i];
+        }
+        i++;
+      }
+      i++; // skip closing quote
+    } else {
+      while (i < cmd.length && !/\s/.test(cmd[i])) {
+        if (cmd[i] === "\\" && i + 1 < cmd.length) {
+          i++;
+          token += cmd[i];
+        } else {
+          token += cmd[i];
+        }
+        i++;
+      }
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+/**
+ * Parse a cURL command string into a RequestConfig.
+ * Supports: -X, -H, -d, --data, --data-raw, --data-binary, -u, --user,
+ * --header, -A, --user-agent, --compressed, -b, --cookie
+ */
+export function parseCurlCommand(curlStr: string): RequestConfig {
+  const result = createEmptyRequest();
+  const tokens = tokenizeCurl(curlStr);
+
+  // Remove leading "curl" if present
+  let idx = 0;
+  if (tokens[idx]?.toLowerCase() === "curl") idx++;
+
+  let explicitMethod = false;
+  const headers: KeyValuePair[] = [];
+
+  while (idx < tokens.length) {
+    const t = tokens[idx];
+
+    if (t === "-X" || t === "--request") {
+      idx++;
+      result.method = (tokens[idx] || "GET").toUpperCase();
+      explicitMethod = true;
+    } else if (t === "-H" || t === "--header") {
+      idx++;
+      const hdr = tokens[idx] || "";
+      const colonIdx = hdr.indexOf(":");
+      if (colonIdx > 0) {
+        const key = hdr.slice(0, colonIdx).trim();
+        const val = hdr.slice(colonIdx + 1).trim();
+        // Handle Authorization header
+        if (key.toLowerCase() === "authorization") {
+          if (val.toLowerCase().startsWith("bearer ")) {
+            result.authType = "bearer";
+            result.authToken = val.slice(7).trim();
+          } else if (val.toLowerCase().startsWith("basic ")) {
+            result.authType = "basic";
+            try {
+              const decoded = atob(val.slice(6).trim());
+              const sepIdx = decoded.indexOf(":");
+              if (sepIdx > 0) {
+                result.authUsername = decoded.slice(0, sepIdx);
+                result.authPassword = decoded.slice(sepIdx + 1);
+              }
+            } catch { /* not valid base64 */ }
+          } else {
+            headers.push({ key, value: val, enabled: true });
+          }
+        } else {
+          headers.push({ key, value: val, enabled: true });
+        }
+      }
+    } else if (t === "-d" || t === "--data" || t === "--data-raw" || t === "--data-binary" || t === "--data-urlencode") {
+      idx++;
+      result.body = tokens[idx] || "";
+      if (!explicitMethod) result.method = "POST";
+      // Auto-detect body type
+      const trimmed = result.body.trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        result.bodyType = "json";
+      } else if (trimmed.startsWith("<?xml") || trimmed.startsWith("<")) {
+        result.bodyType = "xml";
+      } else if (t === "--data-urlencode" || (trimmed.includes("=") && !trimmed.includes("{"))) {
+        result.bodyType = "form";
+      } else {
+        result.bodyType = "raw";
+      }
+    } else if (t === "-u" || t === "--user") {
+      idx++;
+      const userPass = tokens[idx] || "";
+      const sepIdx = userPass.indexOf(":");
+      if (sepIdx > 0) {
+        result.authType = "basic";
+        result.authUsername = userPass.slice(0, sepIdx);
+        result.authPassword = userPass.slice(sepIdx + 1);
+      }
+    } else if (t === "-A" || t === "--user-agent") {
+      idx++;
+      headers.push({ key: "User-Agent", value: tokens[idx] || "", enabled: true });
+    } else if (t === "-b" || t === "--cookie") {
+      idx++;
+      headers.push({ key: "Cookie", value: tokens[idx] || "", enabled: true });
+    } else if (t === "--compressed" || t === "-k" || t === "--insecure" || t === "-s" || t === "--silent" || t === "-v" || t === "--verbose" || t === "-L" || t === "--location") {
+      // Flags with no argument — skip
+    } else if (t === "-o" || t === "--output" || t === "--connect-timeout" || t === "--max-time") {
+      idx++; // skip the argument too
+    } else if (!t.startsWith("-")) {
+      // Bare URL
+      result.url = t;
+    }
+
+    idx++;
+  }
+
+  // If no Content-Type header was explicitly set and we have a JSON body, add it
+  const hasCT = headers.some(h => h.key.toLowerCase() === "content-type");
+  if (!hasCT && result.bodyType === "json" && result.body) {
+    headers.unshift({ key: "Content-Type", value: "application/json", enabled: true });
+  } else if (!hasCT && result.bodyType === "form" && result.body) {
+    headers.unshift({ key: "Content-Type", value: "application/x-www-form-urlencoded", enabled: true });
+  }
+
+  result.headers = headers.length > 0 ? headers : [{ key: "Content-Type", value: "application/json", enabled: true }];
+
+  return result;
 }

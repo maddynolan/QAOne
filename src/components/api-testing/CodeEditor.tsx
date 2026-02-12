@@ -17,6 +17,8 @@ const LANGUAGE_MAP: Record<string, string> = {
   graphql: 'graphql',
   html: 'html',
   form: 'plaintext',
+  multipart: 'plaintext',
+  binary: 'plaintext',
   raw: 'plaintext',
   text: 'plaintext',
   none: 'plaintext',
