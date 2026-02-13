@@ -2,7 +2,7 @@
 
 > **This file is the starting reference for all Claude sessions working on this codebase.**
 > It must be kept up-to-date whenever changes are made to components, APIs, or architecture.
-> Last updated: 2026-02-12
+> Last updated: 2026-02-13
 
 ---
 
@@ -127,7 +127,7 @@ cd backend && uvicorn app.main:app --reload  # Backend at localhost:8000
 
 ## Component 1: Record & Playback
 
-> Capture user interactions in a browser and produce Playwright scripts, structured test cases, and Action Graphs.
+> Capture user interactions in a browser and produce Playwright scripts, structured test cases, and Action Graphs. Includes AI self-healing that auto-fixes broken selectors.
 
 ### Three Recording Systems
 
@@ -141,7 +141,41 @@ cd backend && uvicorn app.main:app --reload  # Backend at localhost:8000
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/PlaywrightRecorderPage.tsx` | 504KB | Main recorder page — step list, suggestions, playback controls |
+| `src/pages/PlaywrightRecorderPage.tsx` | ~520KB | Main recorder page — step list, suggestions, playback, AI auto-fix |
+
+### AI Self-Healing Auto-Fix (v3.10.1+)
+
+When a test step fails, the **Fix/Flag/Wrong** buttons on the test result card trigger the AI healing chain automatically — no manual element picking required.
+
+**Flow:**
+1. User clicks **🤖 Fix** (or **🚩 Flag** / **🚩 Wrong**) on a failed/incorrect step
+2. Frontend calls `autoFixStepApi()` → `POST /api/ai/enhancements/auto-fix-step`
+3. Backend runs **4-layer healing chain** (Knowledge → Deterministic → Vision AI → OCR)
+4. If AI finds a fix → selector auto-applied in the step list, green ✅ badge shown
+5. If AI fails → falls back to Smart Suggestions panel for manual element selection
+
+**Key state variables** (PlaywrightRecorderPage.tsx):
+- `autoFixingSteps: Set<number>` — tracks which steps are currently being auto-fixed (shows spinner)
+- `autoFixResults: Map<number, { success, message }>` — stores fix results per step
+
+**Buttons:**
+- **"🤖 Auto-Fix All"** — appears in test result summary footer, fixes all failed steps at once
+- Per-step **🤖 Fix** — auto-fixes individual failed steps
+- Per-step **🚩 Flag** — flags as false positive + auto-fixes
+- Per-step **🚩 Wrong** — flags wrong element + auto-fixes (for passed steps that clicked the wrong thing)
+
+**Key files:**
+- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()` API helpers
+- `src/components/confidence/ElementRepairWizard.tsx` — 4-tab dialog (Manual, Pick, Debug, AI) for advanced repair
+- `backend/app/routers/ai_enhancements_api.py` — `/api/ai/enhancements/auto-fix-step` endpoint
+- `backend/app/services/automation/healing_orchestrator.py` — HealingOrchestrator backend service
+
+### False Positive Persistence
+
+- `markStepAsFalsePositive()` → persists to backend via `saveFalsePositiveApi()`
+- `unmarkFalsePositive()` → removes from backend via `removeFalsePositiveApi()`
+- Flags survive page refresh (loaded on mount via `getFalsePositivesApi()`)
+- Flaky step detection via `getFlakyStepsApi()` loaded after test runs
 
 ### Backend — Flowstral Services
 
@@ -217,7 +251,8 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 - **Action Graph**: DAG representing user actions with edges for flow dependencies
 - **4 Parallel Micro-Pipelines**: During recording, DOM snapshot + WCAG scan + Performance probe + Action Graph update run concurrently
 - **Selector Confidence**: 8+ selector strategies scored by reliability
-- **Self-Healing**: 5-layer fallback with OCR last resort; supports 25+ enterprise apps (Salesforce, ServiceNow, SAP, Workday)
+- **Self-Healing**: 4-layer healing chain (Knowledge → Deterministic → Vision AI → OCR); supports 25+ enterprise apps (Salesforce, ServiceNow, SAP, Workday)
+- **AI Auto-Fix**: Fix/Flag/Wrong buttons call `autoFixStepApi()` which runs the 4-layer healing chain and auto-applies the fix; falls back to Smart Suggestions only if AI fails
 
 ### API Endpoints
 
@@ -227,6 +262,13 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 - `POST /api/playwright/recorder/events` — Receive recorded events
 - `POST /cdp-recorder/start` — Start CDP recording
 - `POST /cdp-recorder/stop` — Stop CDP recording
+- `POST /api/ai/enhancements/auto-fix-step` — AI auto-fix a broken step (4-layer healing chain)
+- `POST /api/ai/enhancements/false-positive` — Save false positive flag
+- `DELETE /api/ai/enhancements/false-positive/{test_id}/{step_id}` — Remove false positive flag
+- `GET /api/ai/enhancements/false-positives/{test_id}` — Get all false positive flags for a test
+- `GET /api/ai/enhancements/flaky-steps/{test_id}` — Get flaky step info
+- `POST /api/ai/enhancements/explain-failure` — AI failure explanation with fix options
+- `POST /api/ai/enhancements/detect-false-positive` — Vision-based false positive detection
 
 ---
 
@@ -348,10 +390,12 @@ Chains all existing healing services with early-return-on-first-success:
 - Also exposed via `POST /api/ai/enhancements/auto-fix-step` for frontend "Fix" button
 - WebSocket events: `healing_chain_start`, `healing_layer_attempt`, `healing_chain_complete`
 
-**Frontend integration:**
-- `ElementRepairWizard.tsx` — "Auto-Fix with AI" button calls `/auto-fix-step`, shows progress per layer
-- `PlaywrightRecorderPage.tsx` — Auto false-positive detection after test runs via `/detect-false-positive`
-- `src/lib/aiEnhancements.ts` — `autoFixStep()` and `detectFalsePositive()` API helpers
+**Frontend integration (v3.10.1+):**
+- `PlaywrightRecorderPage.tsx` — **Fix/Flag/Wrong buttons call `autoFixStepApi()` directly** for automatic healing; falls back to Smart Suggestions only if AI fails
+- `PlaywrightRecorderPage.tsx` — "🤖 Auto-Fix All" button in test result summary fixes all failed steps at once
+- `PlaywrightRecorderPage.tsx` — `autoFixingSteps` state (Set<number>) tracks in-progress fixes; `autoFixResults` (Map) stores outcomes
+- `ElementRepairWizard.tsx` — Advanced 4-tab repair dialog (Manual, Pick, Debug, AI) for cases where auto-fix fails
+- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `saveFalsePositive()`, `removeFalsePositive()`, `getFalsePositives()`, `getFlakySteps()` API helpers
 
 ### Complex Verifications
 
@@ -410,34 +454,76 @@ interface MobileTestRun { id, flow_id, flow_name, platform, device, status, dura
 
 ## Component 5: API Testing
 
-> Multi-protocol API testing with collections, environments, request chaining, and assertions.
+> Multi-protocol API testing with collections, environments, request chaining, assertions, Monaco code editor, and spec import with automatic base URL detection.
 
 ### Frontend
 
 | File | Size | Purpose |
 |------|------|---------|
-| `src/pages/EnhancedAPITesting.tsx` | 187KB | Main API testing page |
+| `src/pages/EnhancedAPITesting.tsx` | ~200KB | Main API testing page — builder, import, execute, chains, environments |
 
 **Sub-Components** (`src/components/api-testing/`):
 
 | File | Purpose |
 |------|---------|
-| `RequestBuilder.tsx` | Build individual API requests (URL, method, headers, body, auth) |
-| `RequestChainBuilder.tsx` | Chain multiple API calls with variable extraction |
-| `CollectionSidebar.tsx` | Organize requests into collections and folders |
-| `EnvironmentManager.tsx` | Manage environment variables (dev, staging, prod) |
-| `AssertionsPanel.tsx` | Assertion editor — type, operator, expected value, pass/fail display |
-| `ResponseTreeExplorer.tsx` | JSON response tree viewer |
-| `ChainResultsView.tsx` | Chain execution results |
+| `RequestBuilder.tsx` | Build API requests — URL, method, headers, body (Monaco editor), auth, assertions |
+| `RequestChainBuilder.tsx` | Chain multiple API calls with variable extraction (JSONPath, regex, headers) |
+| `CollectionSidebar.tsx` | Organize requests into collections/folders, drag-drop reorder, bulk delete, run all |
+| `EnvironmentManager.tsx` | Manage environments (dev, staging, prod) with variable substitution |
+| `AssertionsPanel.tsx` | Assertion editor — 11 types, multiple operators, pass/fail display |
+| `ResponseTreeExplorer.tsx` | JSON response tree viewer with copy-path |
+| `ChainResultsView.tsx` | Chain execution results with per-step detail |
 | `ChainStepCard.tsx` | Individual chain step result card |
 | `constants.ts` | ASSERTION_TYPES, ASSERTION_OPERATORS, AssertionConfig type |
 | `TabErrorBoundary.tsx` | Error boundary for API testing tab |
 
+### Recent Enhancements (v3.7.0 — v3.10.1)
+
+**Monaco Code Editor:**
+- Body editor uses Monaco with JSON/XML/GraphQL syntax highlighting
+- Response body displayed in read-only Monaco with auto-detected language
+- Format button (Ctrl+L) for JSON/XML auto-prettify
+- Ctrl+Enter sends request, Ctrl+S saves
+
+**Spec Import with Base URL Detection (v3.10.1):**
+- 5-layer base URL resolution chain:
+  1. User-entered `importBaseUrl` (editable input field)
+  2. Backend `parsedSpec.base_url` (from `APISpecParser._extract_base_url()`)
+  3. OpenAPI 3.x `servers[0].url`
+  4. Swagger 2.0 `host + basePath + schemes`
+  5. Raw spec content extraction (client-side JSON/YAML parsing as last resort)
+- Client-side spec parsing runs BEFORE backend call for immediate detection
+- YAML specs: regex extraction of `servers:`, `host:`, `basePath:`
+- Resolved base URL shown in "Parsed Endpoints" card description
+- Console logging (`[API Import]`) for debugging import flow
+- `resolveBaseUrl()` function defined inside parsed spec preview section
+
+**Collection Sidebar (v3.10.0+):**
+- Visible trash icon button on collection header for bulk delete
+- Multi-select mode with checkboxes on each request
+- Select All / Deselect All / Delete Selected controls
+- Also available via dropdown: "Select & Delete..." and "Delete All"
+- Drag-and-drop reorder between folders
+- Run individual requests or entire collections
+
+**Request URL Handling:**
+- `addRequest()` stores both `url` (full URL with base) and `path` (path only)
+- `openRequestInBuilder()` resolves URL: environment base_url → collection base_url → stored URL
+- `onAddToTestSuite` callback passes `fullUrl` from RequestBuilder to preserve complete URL on save-back
+- `updateRequest()` uses `testCase.fullUrl || existingReq.url` to avoid stripping base URL
+
 ### State Management
 
-**Zustand Store:** `src/stores/apiTestingStore.ts`
+**Zustand Store:** `src/stores/apiTestingStore.ts` (with `devtools` + `persist` + `immer` middleware)
 
 Key state: saved requests, request chains, collections, folders, environments, variables
+
+Key actions:
+- `addRequest(data, folderId?)` — creates request in active collection
+- `updateRequest(id, updates)` — updates existing request via `Object.assign`
+- `openRequestInBuilder(id)` — loads request into builder with URL resolution
+- `updateCollection(id, updates)` — updates collection metadata (persists via `set()` + debounced save)
+- `_saveCollectionNow(id)` — immediate (non-debounced) save to DB + localStorage
 
 ### Backend
 
@@ -454,6 +540,7 @@ Key state: saved requests, request chains, collections, folders, environments, v
 | Service | Purpose |
 |---------|---------|
 | `EnhancedAPITestEngine` | Core multi-protocol test execution |
+| `APISpecParser` | Parses OpenAPI/Swagger/Postman/HAR specs; `_extract_base_url()` for base URL |
 | `DatabaseConnector` | Database connectivity for API tests |
 | `TestExecutionEngine` | Test execution orchestration |
 | `ServiceVirtualization` | Mock service responses |
@@ -470,7 +557,9 @@ REST, SOAP/WSDL, GraphQL, gRPC, Kafka, MQTT, WebSocket, AMQP (RabbitMQ)
 ### Key API Endpoints
 
 - `POST /api/v2/testing/execute` — Execute API test
-- `POST /api/import/spec` — Import OpenAPI/Swagger spec
+- `POST /api/import/spec` — Import OpenAPI/Swagger spec (returns `parsed_spec` with `base_url`, `servers`, `paths`)
+- `POST /api/import/spec/file` — Import spec via file upload
+- `GET /api/import/fetch-url?url=` — Fetch spec from URL (backend proxy for CORS)
 - `POST /api/import/har` — Import HAR file
 - `POST /api/import/generate-tests` — Generate tests from API specs
 - `POST /api/chain/execute` — Execute request chain

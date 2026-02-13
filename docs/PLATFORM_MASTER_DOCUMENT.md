@@ -217,11 +217,19 @@ The Flowstral Engine is the core recording and automation engine, available as b
   - **NetSuite** (SuiteScript, internalid)
   - And 17+ more enterprise apps
 
-**Self-Healing:**
-- When locators break (DOM changes), the engine attempts multiple healing strategies
-- Fuzzy matching, attribute-based fallback, text content matching, visual proximity
-- AI-powered element resolution as last resort
-- Healed selectors reported back to user with confidence scores
+**AI Self-Healing (v3.10.1+):**
+- When a test step fails, **Fix/Flag/Wrong buttons auto-fix using the 4-layer AI healing chain**:
+  1. **Knowledge lookup** — check if this selector was healed before (0ms)
+  2. **Deterministic alternatives** — string transforms and fallback selectors (0ms)
+  3. **Vision AI** — screenshot + OpenAI to find the element visually (2-5s)
+  4. **OCR** — Tesseract text recognition as last resort (500ms)
+- If AI succeeds: selector auto-applied, green badge shown, no manual intervention
+- If AI fails: falls back to Smart Suggestions panel for manual element selection
+- **"Auto-Fix All" button** — fixes all failed steps in a test run at once
+- Budget-controlled: max 3 AI calls per run
+- Healed selectors recorded for future runs (knowledge reuse)
+- False positive persistence — flags survive page refresh via backend API
+- Flaky step detection — identifies intermittently failing steps
 
 **Script Generation:**
 - Generates Playwright test scripts in real-time as user records
@@ -230,26 +238,31 @@ The Flowstral Engine is the core recording and automation engine, available as b
 - Export to multiple formats (Playwright, Selenium, Cypress)
 
 **Key Files:** `FlowstralEngine.ts` (18KB), `ElementCollector.ts` (19KB), `PlaywrightScriptGenerator.ts` (22KB), `LocatorHealingRuntime.ts` (18KB), `SessionManager.ts` (17KB), `TestUtilities.ts` (18KB)
+**AI Healing Files:** `src/lib/aiEnhancements.ts`, `backend/app/services/automation/healing_orchestrator.py`, `backend/app/routers/ai_enhancements_api.py`
 
 ### 3.4 API Testing
 
-A Postman-equivalent built into the platform:
+A Postman-equivalent built into the platform with Monaco code editor, automatic base URL detection, and bulk management:
 
-- **Request Builder** - Full HTTP client (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD) with headers, query params, body (JSON, form-data, raw, binary, GraphQL)
-- **Collections & Folders** - Organize API requests into collections, folders, and workspaces
+- **Request Builder** - Full HTTP client (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD) with headers, query params, body (Monaco editor with JSON/XML/GraphQL syntax highlighting)
+- **Monaco Code Editor** - Syntax-highlighted body editor with auto-format (Ctrl+L), send shortcut (Ctrl+Enter), response viewer with language auto-detection
+- **Collections & Folders** - Organize API requests into collections, folders, and workspaces with drag-drop reorder
+- **Bulk Delete** - Visible trash icon on collection header, multi-select mode with checkboxes, Select All / Delete Selected / Delete All
 - **Environment Variables** - Multiple environments with variable substitution ({{variable}} syntax)
-- **Request Chaining** - Multi-step API workflows with data extraction between steps (JSONPath, regex, header extraction)
-- **Assertions Panel** - Response status, body, headers, timing assertions with multiple comparison operators
+- **Request Chaining** - Multi-step API workflows with data extraction between steps (JSONPath, regex, header extraction), conditions, retry logic
+- **Assertions Panel** - 11 assertion types (status_code, contains, response_time, header, jsonpath, schema, not_contains, regex, equals, xpath, matches_baseline)
 - **Response Explorer** - Tree view of JSON responses, syntax highlighting, copy paths
-- **Import/Export** - OpenAPI/Swagger spec import, Postman collection import, HAR file import, export to Postman/OpenAPI/HAR formats
+- **Import/Export** - OpenAPI 3.x / Swagger 2.0 / Postman / HAR import with **automatic base URL detection** (5-layer resolution: user input → parsed_spec → servers → host+basePath → raw spec content); export to Postman/OpenAPI/HAR formats
 - **Code Snippets** - Generate code in 10+ languages (cURL, Python, JavaScript, Go, etc.)
 - **Snapshot/Diff Testing** - Save API response baselines and compare against future runs
 - **Schema Validation** - JSON Schema assertion against responses
 - **AI Test Generation** - Generate API test suites from OpenAPI specs with negative/edge cases
 - **API Coverage Map** - Visualize which endpoints have test coverage
+- **Negative Test Auto-Generation** - Automatically generate 405/401/400 variant tests (unique differentiator)
 
-**Key Pages:** EnhancedAPITesting (187KB - massive component), APIImport, APICoverageMap, DataDependencyGraph
-**Key Backend:** `enhanced_api_testing_api.py` (41KB), `api_import_api.py` (31KB), `request_chaining_api.py`
+**Key Pages:** EnhancedAPITesting (~200KB), APIImport, APICoverageMap, DataDependencyGraph
+**Key Backend:** `enhanced_api_testing_api.py` (41KB), `api_import_api.py` (31KB), `request_chaining_api.py`, `api_spec_parser.py` (base URL extraction)
+**Key Store:** `src/stores/apiTestingStore.ts` (Zustand with immer+persist, debounced DB save)
 
 ### 3.5 Performance Testing
 
