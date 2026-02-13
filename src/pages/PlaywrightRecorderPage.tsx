@@ -1156,7 +1156,7 @@ export default function PlaywrightRecorderPage() {
     });
     
     // Also load flaky step data
-    getFlakyStepsApi(testId).then((flakySteps) => {
+    getFlakyStepsApi(currentTestId).then((flakySteps) => {
       if (flakySteps && flakySteps.length > 0) {
         const ids = new Set(flakySteps.filter(s => s.is_flaky).map(s => s.step_id));
         setFlakyStepIds(ids);
