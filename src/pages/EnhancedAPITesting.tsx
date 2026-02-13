@@ -1372,10 +1372,17 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
       // Auto-populate import base URL from parsed spec (file import)
-      const ps = parseData.parsed_spec;
-      const detectedBaseUrl = ps?.base_url || ps?.servers?.[0]?.url
-        || (ps?.host ? `${ps.schemes?.[0] || 'https'}://${ps.host}${ps.basePath || ''}` : '');
-      if (detectedBaseUrl) setImportBaseUrl(detectedBaseUrl);
+      if (!importBaseUrl.trim()) {
+        const ps = parseData.parsed_spec;
+        let detectedBaseUrl = '';
+        if (ps?.base_url) detectedBaseUrl = ps.base_url;
+        else if (ps?.servers?.[0]?.url) detectedBaseUrl = ps.servers[0].url;
+        else if (ps?.host) {
+          const scheme = (ps.schemes && ps.schemes[0]) || 'https';
+          detectedBaseUrl = `${scheme}://${ps.host}${ps.basePath || ''}`;
+        }
+        if (detectedBaseUrl) setImportBaseUrl(detectedBaseUrl);
+      }
 
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
         (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
@@ -1409,12 +1416,36 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
     setLoading(true);
 
     try {
+      // Client-side base URL extraction BEFORE backend parsing (most reliable)
+      if (!importBaseUrl.trim()) {
+        try {
+          const rawParsed = JSON.parse(specContent);
+          if (rawParsed.servers && Array.isArray(rawParsed.servers) && rawParsed.servers[0]?.url) {
+            setImportBaseUrl(rawParsed.servers[0].url);
+          } else if (rawParsed.host) {
+            const scheme = (rawParsed.schemes && rawParsed.schemes[0]) || 'https';
+            setImportBaseUrl(`${scheme}://${rawParsed.host}${rawParsed.basePath || ''}`);
+          }
+        } catch {
+          // YAML: try regex
+          const serversMatch = specContent.match(/servers:\s*\n\s*-\s*url:\s*['"]?([^\s'"]+)/);
+          if (serversMatch?.[1]) setImportBaseUrl(serversMatch[1]);
+          const hostMatch = specContent.match(/host:\s*['"]?([^\s'"]+)/);
+          const basePathMatch = specContent.match(/basePath:\s*['"]?([^\s'"]+)/);
+          if (hostMatch?.[1]) {
+            const schemesMatch = specContent.match(/schemes:\s*\n\s*-\s*['"]?(\w+)/);
+            const scheme = schemesMatch?.[1] || 'https';
+            setImportBaseUrl(`${scheme}://${hostMatch[1]}${basePathMatch?.[1] || ''}`);
+          }
+        }
+      }
+
       // Parse spec - determine content type based on format
       let contentType = "json";
       if (specFormat === "wsdl") contentType = "xml";
       else if (specFormat === "graphql") contentType = "graphql";
       else if (specFormat === "har") contentType = "json";
-      
+
       const parseResponse = await fetch(`${API_BASE_URL}/api/import/spec`, {
         method: "POST",
         headers: {
@@ -1434,11 +1465,18 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       const parseData = await parseResponse.json();
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
-      // Auto-populate import base URL from parsed spec (text import)
-      const ps2 = parseData.parsed_spec;
-      const detectedBaseUrl2 = ps2?.base_url || ps2?.servers?.[0]?.url
-        || (ps2?.host ? `${ps2.schemes?.[0] || 'https'}://${ps2.host}${ps2.basePath || ''}` : '');
-      if (detectedBaseUrl2) setImportBaseUrl(detectedBaseUrl2);
+      // Also try from backend parsed spec as additional fallback
+      if (!importBaseUrl.trim()) {
+        const ps2 = parseData.parsed_spec;
+        let detectedBaseUrl2 = '';
+        if (ps2?.base_url) detectedBaseUrl2 = ps2.base_url;
+        else if (ps2?.servers?.[0]?.url) detectedBaseUrl2 = ps2.servers[0].url;
+        else if (ps2?.host) {
+          const scheme = (ps2.schemes && ps2.schemes[0]) || 'https';
+          detectedBaseUrl2 = `${scheme}://${ps2.host}${ps2.basePath || ''}`;
+        }
+        if (detectedBaseUrl2) setImportBaseUrl(detectedBaseUrl2);
+      }
 
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
         (sum: number, methods: any) => sum + Object.keys(methods || {}).length, 0
@@ -2662,21 +2700,34 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                             variant: "destructive"
                           });
                         } else {
-                          // Auto-extract base URL from the spec URL origin or from the parsed spec content
+                          // Auto-extract base URL from the spec content (client-side, before backend parsing)
                           try {
                             const parsed = JSON.parse(text);
-                            const specBaseUrl = parsed.servers?.[0]?.url || parsed.host ? `${parsed.schemes?.[0] || 'https'}://${parsed.host}${parsed.basePath || ''}` : '';
-                            if (specBaseUrl && !importBaseUrl) {
+                            // OpenAPI 3.x: servers[0].url
+                            let specBaseUrl = '';
+                            if (parsed.servers && Array.isArray(parsed.servers) && parsed.servers[0]?.url) {
+                              specBaseUrl = parsed.servers[0].url;
+                            }
+                            // Swagger 2.0: host + basePath + schemes
+                            if (!specBaseUrl && parsed.host) {
+                              const scheme = (parsed.schemes && parsed.schemes[0]) || 'https';
+                              specBaseUrl = `${scheme}://${parsed.host}${parsed.basePath || ''}`;
+                            }
+                            if (specBaseUrl) {
                               setImportBaseUrl(specBaseUrl);
                             }
                           } catch {
-                            // For non-JSON specs, try to extract origin from the fetch URL
-                            try {
-                              const urlObj = new URL(url);
-                              if (!importBaseUrl) {
+                            // For YAML specs, try regex extraction
+                            const serversMatch = text.match(/servers:\s*\n\s*-\s*url:\s*['"]?([^\s'"]+)/);
+                            if (serversMatch?.[1]) {
+                              setImportBaseUrl(serversMatch[1]);
+                            } else {
+                              // Fallback to URL origin
+                              try {
+                                const urlObj = new URL(url);
                                 setImportBaseUrl(urlObj.origin);
-                              }
-                            } catch { /* ignore */ }
+                              } catch { /* ignore */ }
+                            }
                           }
                           toast({ title: "Fetched", description: `Loaded ${text.length} bytes from URL. Click "Parse Specification" below.` });
                         }
@@ -2743,15 +2794,41 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               (activeColl?.requests || []).map((r: any) => `${(r.method || 'GET').toUpperCase()} ${r.path || r.url || '/'}`)
             );
             
-            // Resolve base URL from ALL possible sources (OpenAPI 3 servers, Swagger 2 host+basePath, user input)
-            const resolveBaseUrl = () => {
+            // Resolve base URL from ALL possible sources — 5 layers of fallback
+            const resolveBaseUrl = (): string => {
+              // 1) User-entered / auto-detected base URL (React state)
               if (importBaseUrl.trim()) return importBaseUrl.trim();
+              // 2) Backend parsed_spec.base_url
               if (parsedSpec.base_url) return parsedSpec.base_url;
-              if (parsedSpec.servers?.[0]?.url) return parsedSpec.servers[0].url;
-              // Swagger 2.0 format: host + basePath
+              // 3) OpenAPI 3.x servers array
+              if (parsedSpec.servers && Array.isArray(parsedSpec.servers) && parsedSpec.servers[0]?.url) {
+                return parsedSpec.servers[0].url;
+              }
+              // 4) Swagger 2.0 host + basePath
               if (parsedSpec.host) {
-                const scheme = parsedSpec.schemes?.[0] || 'https';
+                const scheme = (parsedSpec.schemes && parsedSpec.schemes[0]) || 'https';
                 return `${scheme}://${parsedSpec.host}${parsedSpec.basePath || ''}`;
+              }
+              // 5) Last resort: extract from raw spec content (client-side)
+              if (specContent) {
+                try {
+                  const raw = JSON.parse(specContent);
+                  if (raw.servers?.[0]?.url) return raw.servers[0].url;
+                  if (raw.host) {
+                    const scheme = (raw.schemes && raw.schemes[0]) || 'https';
+                    return `${scheme}://${raw.host}${raw.basePath || ''}`;
+                  }
+                } catch {
+                  // YAML fallback
+                  const sm = specContent.match(/servers:\s*\n\s*-\s*url:\s*['"]?([^\s'"]+)/);
+                  if (sm?.[1]) return sm[1];
+                  const hm = specContent.match(/host:\s*['"]?([^\s'"]+)/);
+                  if (hm?.[1]) {
+                    const bpm = specContent.match(/basePath:\s*['"]?([^\s'"]+)/);
+                    const scm = specContent.match(/schemes:\s*\n\s*-\s*['"]?(\w+)/);
+                    return `${scm?.[1] || 'https'}://${hm[1]}${bpm?.[1] || ''}`;
+                  }
+                }
               }
               return '';
             };
@@ -2760,6 +2837,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             // Helper: add endpoints to collection (clean, one request per endpoint)
             const addItemsToCollection = (itemKeys: string[]) => {
               const baseUrlVal = resolveBaseUrl();
+              console.log('[API Import] resolveBaseUrl =', baseUrlVal, '| importBaseUrl =', importBaseUrl, '| parsedSpec.base_url =', parsedSpec.base_url, '| parsedSpec.servers =', parsedSpec.servers, '| parsedSpec.host =', parsedSpec.host);
               let addedCount = 0;
               
               for (const ek of itemKeys) {
@@ -2821,7 +2899,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                       <CardTitle className="text-lg">Parsed Endpoints</CardTitle>
                       <CardDescription>
                         {endpointList.length} endpoints from {parsedSpec.format || specFormat} spec
-                        {parsedSpec.base_url && ` | Base URL: ${parsedSpec.base_url}`}
+                        {baseUrl ? ` | Base URL: ${baseUrl}` : ' | No base URL detected'}
                       </CardDescription>
                     </div>
                     <div className="flex gap-2 flex-wrap items-center">

@@ -104,6 +104,7 @@ import {
   type FailureExplanation,
   type FixOption as ApiFixOption,
   detectFalsePositive as detectFalsePositiveApi,
+  autoFixStep as autoFixStepApi,
 } from "@/lib/aiEnhancements";
 import { API_BASE_URL } from "@/lib/api-config";
 
@@ -1123,6 +1124,9 @@ export default function PlaywrightRecorderPage() {
   const [aiExplanationLoading, setAiExplanationLoading] = useState(false);
   // Flaky step IDs for the current test (loaded after test run)
   const [flakyStepIds, setFlakyStepIds] = useState<Set<string>>(new Set());
+  // Auto-fix state: tracks which steps are currently being auto-fixed by AI
+  const [autoFixingSteps, setAutoFixingSteps] = useState<Set<number>>(new Set());
+  const [autoFixResults, setAutoFixResults] = useState<Map<number, { success: boolean; message: string }>>(new Map());
   
   // Stable test ID — uses selected test case ID, or falls back to a session-unique ID
   const [sessionTestId] = useState(() => `session_${Date.now()}`);
@@ -4910,7 +4914,115 @@ Recorded Test
     
     toast.info('False positive flag removed');
   }, [actions]);
-  
+
+  // ============ AI AUTO-FIX STEP HANDLER ============
+  // When user clicks "Fix" on a failed step, try AI healing chain FIRST.
+  // If AI finds a fix, apply it automatically (no manual intervention needed).
+  // Only fall back to Smart Suggestions panel if AI can't fix it.
+  const handleAutoFixStep = useCallback(async (stepIndex: number, opts?: { flagFirst?: boolean }) => {
+    const action = actions[stepIndex];
+    if (!action) return;
+
+    // Mark this step as being auto-fixed (shows spinner)
+    setAutoFixingSteps(prev => new Set(prev).add(stepIndex));
+
+    // If flagFirst option is set, flag before trying fix
+    if (opts?.flagFirst && action.id && !falsePositiveSteps.has(action.id)) {
+      markStepAsFalsePositive(stepIndex, null);
+    }
+
+    // Get the test result for this step to extract error info
+    const stepResult = testExecutionResult?.stepResults?.[stepIndex] || testExecutionResult?.step_results?.[stepIndex];
+    const errorMessage = stepResult?.error || stepResult?.message || 'Element not found';
+    const failedSelector = action.selector || action.selectorObj?.css || action.selectorObj?.xpath || action.args?.[0] || '';
+    const screenshot = stepResult?.screenshot || null;
+
+    try {
+      toast.info(`🤖 AI is auto-fixing step ${stepIndex + 1}...`, { duration: 3000 });
+
+      const result = await autoFixStepApi({
+        test_id: currentTestId,
+        step_id: action.id || `step_${stepIndex}`,
+        step_index: stepIndex,
+        step_label: getDisplayLabel(action),
+        failed_selector: failedSelector,
+        error_message: errorMessage,
+        step_info: {
+          qword: action.qword,
+          type: action.type,
+          args: action.args,
+          description: action.description,
+          url: action.url,
+        },
+        screenshot_b64: screenshot || null,
+        page_url: action.url || null,
+      });
+
+      if (result.success && result.fixed_selector) {
+        // AI found a fix! Apply it automatically — no manual intervention needed.
+        setActions(prev => {
+          const newActions = [...prev];
+          if (stepIndex >= 0 && stepIndex < newActions.length) {
+            const oldAction = newActions[stepIndex];
+            newActions[stepIndex] = {
+              ...oldAction,
+              selector: result.fixed_selector!,
+              selectorObj: {
+                ...(oldAction.selectorObj || {}),
+                css: result.fixed_selector!,
+              },
+              args: oldAction.args ? [result.fixed_selector!, ...oldAction.args.slice(1)] : [result.fixed_selector!],
+              _aiHealed: true,
+              _healStrategy: result.strategy_used,
+            } as any;
+          }
+          return newActions;
+        });
+
+        // Clear false positive flag since we fixed it
+        if (action.id && falsePositiveSteps.has(action.id)) {
+          setFalsePositiveSteps(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(action.id!);
+            return newMap;
+          });
+        }
+
+        setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: true, message: `AI fixed: ${result.strategy_used || 'auto-healed'}` }));
+        toast.success(
+          `✅ Step ${stepIndex + 1} auto-fixed by AI (${result.strategy_used || 'healed'}, ${Math.round(result.confidence * 100)}% confidence). Run test again to verify.`,
+          { duration: 5000 }
+        );
+      } else {
+        // AI couldn't fix it — fall back to Smart Suggestions panel
+        setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: false, message: result.message || 'AI could not find a fix' }));
+        setShowTestResultModal(false);
+        setEditingActionIndex(stepIndex);
+        setRightPanelTab('suggestions');
+        switchToStepTabAndRefresh(stepIndex);
+        toast.warning(
+          `AI couldn't auto-fix step ${stepIndex + 1}. ${result.message || 'Select the correct element from Smart Suggestions.'}`,
+          { duration: 5000 }
+        );
+      }
+    } catch (err) {
+      console.error('[AI Auto-Fix] Error:', err);
+      // On error, fall back to Smart Suggestions
+      setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: false, message: 'AI service error' }));
+      setShowTestResultModal(false);
+      setEditingActionIndex(stepIndex);
+      setRightPanelTab('suggestions');
+      switchToStepTabAndRefresh(stepIndex);
+      toast.warning('AI auto-fix unavailable. Select the correct element from Smart Suggestions.', { duration: 4000 });
+    } finally {
+      setAutoFixingSteps(prev => {
+        const next = new Set(prev);
+        next.delete(stepIndex);
+        return next;
+      });
+    }
+  }, [actions, currentTestId, testExecutionResult, falsePositiveSteps, markStepAsFalsePositive]);
+
   // Handle when test stops at a false positive step - auto-open element picker
   const handleFalsePositiveStop = useCallback((stepIndex: number, actionId: string, screenshot: string | null) => {
     setStoppedAtFalsePositive({ stepIndex, actionId, screenshot });
@@ -9518,60 +9630,56 @@ Recorded Test
                                 )}>🚩</span>
                               )}
                             </span>
-                            {/* Action buttons for FAILED steps - Fix + Flag */}
+                            {/* Action buttons for FAILED steps — AI Auto-Fix + Flag */}
                             {isFailed && testExecutionResult?.status !== 'running' && (
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Fix button - CLOSE modal and open Smart Suggestions panel */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // CLOSE the modal so user can see Smart Suggestions
-                                    setShowTestResultModal(false);
-                                    setEditingActionIndex(idx);
-                                    setRightPanelTab('suggestions');
-                                    switchToStepTabAndRefresh(idx);
-                                    toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
-                                  }}
-                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="Fix this step - use Smart Suggestions to replace"
-                                >
-                                  Fix
-                                </button>
-                                {/* Mark as false positive - for steps that fail but shouldn't */}
-                                {action.id && !falsePositiveSteps.has(action.id) && (
+                                {/* AI Auto-Fix button — tries AI healing chain first, falls back to manual */}
+                                {autoFixingSteps.has(idx) ? (
+                                  <span className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 animate-pulse flex items-center gap-1">
+                                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg>
+                                    Fixing...
+                                  </span>
+                                ) : autoFixResults.get(idx)?.success ? (
+                                  <span className="px-2 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded border border-green-500/30">
+                                    ✅ Fixed
+                                  </span>
+                                ) : (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      markStepAsFalsePositive(idx, stepResult?.screenshot || null);
-                                      // CLOSE modal and open suggestions for fixing
-                                      setShowTestResultModal(false);
-                                      setEditingActionIndex(idx);
-                                      setRightPanelTab('suggestions');
-                                      switchToStepTabAndRefresh(idx);
-                                      toast.info('Step flagged! Select correct element from Smart Suggestions.', { duration: 4000 });
+                                      handleAutoFixStep(idx);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                    title="AI Auto-Fix: automatically repair this step using AI healing chain"
+                                  >
+                                    🤖 Fix
+                                  </button>
+                                )}
+                                {/* Flag button — flags + auto-fixes */}
+                                {action.id && !falsePositiveSteps.has(action.id) && !autoFixingSteps.has(idx) && !autoFixResults.get(idx)?.success && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAutoFixStep(idx, { flagFirst: true });
                                     }}
                                     className="px-2 py-0.5 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded border border-amber-500/30"
-                                    title="Flag and fix - opens Smart Suggestions to replace selector"
+                                    title="Flag as false positive and auto-fix with AI"
                                   >
                                     🚩 Flag
                                   </button>
                                 )}
-                                {/* After flagging - show Fix button + Unflag option */}
-                                {action.id && falsePositiveSteps.has(action.id) && (
+                                {/* After flagging - show Fix + Unflag */}
+                                {action.id && falsePositiveSteps.has(action.id) && !autoFixingSteps.has(idx) && !autoFixResults.get(idx)?.success && (
                                   <>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setShowTestResultModal(false);
-                                        setEditingActionIndex(idx);
-                                        setRightPanelTab('suggestions');
-                                        switchToStepTabAndRefresh(idx);
-                                        toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
+                                        handleAutoFixStep(idx);
                                       }}
                                       className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                      title="Fix this flagged step"
+                                      title="AI Auto-Fix this flagged step"
                                     >
-                                      Fix
+                                      🤖 Fix
                                     </button>
                                     <button
                                       onClick={(e) => {
@@ -9590,29 +9698,37 @@ Recorded Test
                             {/* Fix/Flag buttons for PASSED steps — always visible since platform is blackbox */}
                             {stepResult?.status === 'passed' && testExecutionResult?.status !== 'running' && action.id && (
                               <div className="flex items-center gap-1 shrink-0">
-                                {/* Fix button */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowTestResultModal(false);
-                                    setEditingActionIndex(idx);
-                                    setRightPanelTab('suggestions');
-                                    switchToStepTabAndRefresh(idx);
-                                    toast.info('Select the correct element from Smart Suggestions to replace this step', { duration: 4000 });
-                                  }}
-                                  className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
-                                  title="Fix this step - pick the correct element"
-                                >
-                                  Fix
-                                </button>
+                                {/* AI Auto-Fix button for passed steps */}
+                                {autoFixingSteps.has(idx) ? (
+                                  <span className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 animate-pulse flex items-center gap-1">
+                                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg>
+                                    Fixing...
+                                  </span>
+                                ) : autoFixResults.get(idx)?.success ? (
+                                  <span className="px-2 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded border border-green-500/30">
+                                    ✅ Fixed
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAutoFixStep(idx);
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded border border-blue-500/30"
+                                    title="AI Auto-Fix: automatically repair this step"
+                                  >
+                                    🤖 Fix
+                                  </button>
+                                )}
                                 {!falsePositiveSteps.has(action.id) ? (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       markStepAsFalsePositive(idx, stepResult?.screenshot || null, 'Wrong element — step passed but clicked incorrect element');
+                                      handleAutoFixStep(idx);
                                     }}
                                     className="px-2 py-0.5 text-[10px] bg-red-500/10 hover:bg-red-500/30 text-red-400/70 hover:text-red-400 rounded border border-red-500/20 hover:border-red-500/30"
-                                    title="Wrong element — step passed but clicked incorrect element. Test will stop here on next run for fixing."
+                                    title="Wrong element — flags and auto-fixes with AI"
                                   >
                                     🚩 Wrong
                                   </button>
@@ -9706,10 +9822,41 @@ Recorded Test
                 <div className="flex items-center gap-2">
                   {testExecutionResult?.status === 'failed' && (() => {
                     // Prefer canonical failedStepIndex, fall back to finding first failed
-                    const failedIdx = testExecutionResult.failedStepIndex ?? 
+                    const failedIdx = testExecutionResult.failedStepIndex ??
                       testExecutionResult.stepResults?.find((r: { status: string }) => r.status === 'failed')?.index ?? 0;
+                    const failedStepIndices = testExecutionResult.stepResults
+                      ?.map((r: { status: string }, i: number) => r.status === 'failed' ? i : -1)
+                      .filter((i: number) => i >= 0) || [];
+                    const isAutoFixingAll = failedStepIndices.some((i: number) => autoFixingSteps.has(i));
+                    const allFixed = failedStepIndices.length > 0 && failedStepIndices.every((i: number) => autoFixResults.get(i)?.success);
                     return (
                       <>
+                        {/* AI Auto-Fix All Failed Steps button */}
+                        {failedStepIndices.length > 0 && !allFixed && (
+                          <Button
+                            onClick={() => {
+                              // Auto-fix all failed steps sequentially
+                              failedStepIndices.forEach((i: number) => {
+                                if (!autoFixResults.get(i)?.success) {
+                                  handleAutoFixStep(i);
+                                }
+                              });
+                            }}
+                            variant="outline"
+                            className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                            disabled={isAutoFixingAll}
+                            title={`AI Auto-Fix ${failedStepIndices.length} failed step${failedStepIndices.length > 1 ? 's' : ''}`}
+                          >
+                            {isAutoFixingAll ? (
+                              <><svg className="w-4 h-4 mr-1 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg> Fixing...</>
+                            ) : (
+                              <>🤖 Auto-Fix All ({failedStepIndices.length})</>
+                            )}
+                          </Button>
+                        )}
+                        {allFixed && (
+                          <span className="text-sm text-green-400">✅ All steps fixed</span>
+                        )}
                         <Button
                           onClick={() => handleRunFromStep(failedIdx)}
                           variant="outline"
