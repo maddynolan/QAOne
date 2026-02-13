@@ -1055,30 +1055,40 @@ export const useApiTestingStore = create<ApiTestingState & ApiTestingActions>()(
           openRequestInBuilder: (requestId) => {
             const collId = get().active_collection_id;
             if (!collId) return;
-            
+
             const coll = get().collections[collId];
             const request = coll?.requests.find(r => r.id === requestId);
             if (!request) return;
-            
-            // Resolve full URL with environment (try multiple sources for base URL)
-            const envId = get().active_environment_id;
-            const env = get().environments.find(e => e.id === envId);
-            let baseUrl = env?.base_url || coll?.base_url || '';
-            
-            // Extra fallback: try page's localStorage environment if store env lookup failed
-            if (!baseUrl) {
-              try {
-                const savedEnvId = localStorage.getItem('apex_selected_environment');
-                if (savedEnvId) {
-                  const savedEnvs = JSON.parse(localStorage.getItem('apex_environments') || '[]');
-                  const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
-                  if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
-                }
-              } catch { /* ignore */ }
+
+            // Use the stored URL directly — prefer request.url (full URL with base) over request.path
+            const storedUrl = request.url || request.path || '/';
+
+            let fullUrl: string;
+            if (storedUrl.startsWith('http')) {
+              // Already a full URL — use as-is, no base URL prepend needed
+              fullUrl = storedUrl;
+            } else {
+              // Path-only URL — resolve base URL from environment → collection → localStorage
+              const envId = get().active_environment_id;
+              const env = get().environments.find(e => e.id === envId);
+              let baseUrl = env?.base_url || coll?.base_url || '';
+
+              // Extra fallback: try page's localStorage environment if store env lookup failed
+              if (!baseUrl) {
+                try {
+                  const savedEnvId = localStorage.getItem('apex_selected_environment');
+                  if (savedEnvId) {
+                    const savedEnvs = JSON.parse(localStorage.getItem('apex_environments') || '[]');
+                    const savedEnv = savedEnvs.find((e: any) => e.environment_id === savedEnvId);
+                    if (savedEnv?.base_url) baseUrl = savedEnv.base_url;
+                  }
+                } catch { /* ignore */ }
+              }
+
+              fullUrl = baseUrl
+                ? `${baseUrl.replace(/\/$/, '')}${storedUrl.startsWith('/') ? storedUrl : `/${storedUrl}`}`
+                : storedUrl; // No base URL found — show path only (user can edit)
             }
-            
-            const url = request.url || request.path;
-            const fullUrl = url.startsWith('http') ? url : `${baseUrl.replace(/\/$/, '')}${url.startsWith('/') ? url : `/${url}`}`;
             
             set((s) => {
               s.builder_request_id = requestId;

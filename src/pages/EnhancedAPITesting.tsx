@@ -2794,7 +2794,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               (activeColl?.requests || []).map((r: any) => `${(r.method || 'GET').toUpperCase()} ${r.path || r.url || '/'}`)
             );
             
-            // Resolve base URL from ALL possible sources — 5 layers of fallback
+            // Resolve base URL from ALL possible sources — 6 layers of fallback
             const resolveBaseUrl = (): string => {
               // 1) User-entered / auto-detected base URL (React state)
               if (importBaseUrl.trim()) return importBaseUrl.trim();
@@ -2809,7 +2809,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 const scheme = (parsedSpec.schemes && parsedSpec.schemes[0]) || 'https';
                 return `${scheme}://${parsedSpec.host}${parsedSpec.basePath || ''}`;
               }
-              // 5) Last resort: extract from raw spec content (client-side)
+              // 5) Extract from raw spec content (client-side)
               if (specContent) {
                 try {
                   const raw = JSON.parse(specContent);
@@ -2830,6 +2830,13 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                   }
                 }
               }
+              // 6) Last resort: use origin of the fetch URL (e.g. https://jsonplaceholder.typicode.com)
+              if (importFetchUrl.trim()) {
+                try {
+                  const fetchOrigin = new URL(importFetchUrl.trim()).origin;
+                  if (fetchOrigin && fetchOrigin !== 'null') return fetchOrigin;
+                } catch { /* ignore */ }
+              }
               return '';
             };
             const baseUrl = resolveBaseUrl();
@@ -2837,14 +2844,24 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
             // Helper: add endpoints to collection (clean, one request per endpoint)
             const addItemsToCollection = (itemKeys: string[]) => {
               const baseUrlVal = resolveBaseUrl();
-              console.log('[API Import] resolveBaseUrl =', baseUrlVal, '| importBaseUrl =', importBaseUrl, '| parsedSpec.base_url =', parsedSpec.base_url, '| parsedSpec.servers =', parsedSpec.servers, '| parsedSpec.host =', parsedSpec.host);
+              console.log('[API Import] resolveBaseUrl =', baseUrlVal, '| importBaseUrl =', importBaseUrl, '| parsedSpec.base_url =', parsedSpec.base_url, '| parsedSpec.servers =', parsedSpec.servers, '| parsedSpec.host =', parsedSpec.host, '| importFetchUrl =', importFetchUrl);
+
+              // Warn if no base URL could be resolved — endpoints will have path-only URLs
+              if (!baseUrlVal) {
+                toast({
+                  title: "No Base URL Detected",
+                  description: "Could not detect a base URL from the spec. Please enter a base URL above, or endpoints will be saved with path-only URLs.",
+                  variant: "destructive",
+                });
+              }
+
               let addedCount = 0;
-              
+
               for (const ek of itemKeys) {
                 const ep = endpointList.find(e => e.key === ek);
                 if (!ep) continue;
-                const fullUrl = baseUrlVal && !ep.path.startsWith('http') 
-                  ? `${baseUrlVal.replace(/\/$/, '')}${ep.path.startsWith('/') ? ep.path : `/${ep.path}`}` 
+                const fullUrl = baseUrlVal && !ep.path.startsWith('http')
+                  ? `${baseUrlVal.replace(/\/$/, '')}${ep.path.startsWith('/') ? ep.path : `/${ep.path}`}`
                   : ep.path;
                 // Build sample body for write methods
                 let bodyStr = '';
