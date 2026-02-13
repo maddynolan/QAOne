@@ -1176,6 +1176,18 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                     <span className="text-[10px] text-muted-foreground shrink-0">
                       {totalRequests} req
                     </span>
+                    {/* Visible bulk select/delete button */}
+                    {totalRequests > 0 && !selectMode && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0 shrink-0 text-muted-foreground hover:text-destructive"
+                        title="Select & delete requests"
+                        onClick={handleToggleSelectMode}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    )}
                     {/* New dropdown: Request or Folder */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
