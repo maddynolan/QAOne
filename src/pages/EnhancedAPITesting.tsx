@@ -1372,7 +1372,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
       // Auto-populate import base URL from parsed spec (file import)
-      const detectedBaseUrl = parseData.parsed_spec?.base_url || parseData.parsed_spec?.servers?.[0]?.url || '';
+      const ps = parseData.parsed_spec;
+      const detectedBaseUrl = ps?.base_url || ps?.servers?.[0]?.url
+        || (ps?.host ? `${ps.schemes?.[0] || 'https'}://${ps.host}${ps.basePath || ''}` : '');
       if (detectedBaseUrl) setImportBaseUrl(detectedBaseUrl);
 
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
@@ -1433,7 +1435,9 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
       setParsedSpec(parseData.parsed_spec);
       setSelectedImportItems(new Set());
       // Auto-populate import base URL from parsed spec (text import)
-      const detectedBaseUrl2 = parseData.parsed_spec?.base_url || parseData.parsed_spec?.servers?.[0]?.url || '';
+      const ps2 = parseData.parsed_spec;
+      const detectedBaseUrl2 = ps2?.base_url || ps2?.servers?.[0]?.url
+        || (ps2?.host ? `${ps2.schemes?.[0] || 'https'}://${ps2.host}${ps2.basePath || ''}` : '');
       if (detectedBaseUrl2) setImportBaseUrl(detectedBaseUrl2);
 
       const endpointCount = Object.values(parseData.parsed_spec?.paths || {}).reduce(
@@ -2739,11 +2743,23 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
               (activeColl?.requests || []).map((r: any) => `${(r.method || 'GET').toUpperCase()} ${r.path || r.url || '/'}`)
             );
             
-            const baseUrl = importBaseUrl.trim() || parsedSpec.base_url || parsedSpec.servers?.[0]?.url || '';
-            
+            // Resolve base URL from ALL possible sources (OpenAPI 3 servers, Swagger 2 host+basePath, user input)
+            const resolveBaseUrl = () => {
+              if (importBaseUrl.trim()) return importBaseUrl.trim();
+              if (parsedSpec.base_url) return parsedSpec.base_url;
+              if (parsedSpec.servers?.[0]?.url) return parsedSpec.servers[0].url;
+              // Swagger 2.0 format: host + basePath
+              if (parsedSpec.host) {
+                const scheme = parsedSpec.schemes?.[0] || 'https';
+                return `${scheme}://${parsedSpec.host}${parsedSpec.basePath || ''}`;
+              }
+              return '';
+            };
+            const baseUrl = resolveBaseUrl();
+
             // Helper: add endpoints to collection (clean, one request per endpoint)
             const addItemsToCollection = (itemKeys: string[]) => {
-              const baseUrlVal = importBaseUrl.trim() || parsedSpec.base_url || '';
+              const baseUrlVal = resolveBaseUrl();
               let addedCount = 0;
               
               for (const ek of itemKeys) {
