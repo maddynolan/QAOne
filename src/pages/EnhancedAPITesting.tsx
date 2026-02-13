@@ -2408,10 +2408,13 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                     const coll = store.collections[store.active_collection_id || ''];
                     const existsInCollection = coll?.requests?.some((r: any) => r.id === editingId);
                     if (existsInCollection) {
+                      // Use fullUrl (complete URL with base) from RequestBuilder, fall back to existing request URL
+                      const existingReq = coll?.requests?.find((r: any) => r.id === editingId);
+                      const resolvedUrl = testCase.fullUrl || existingReq?.url || testCase.path || testCase.endpoint || '';
                       store.updateRequest(editingId, {
                         name: testCase.title || `${testCase.method} ${testCase.path || ''}`,
                         method: testCase.method,
-                        url: testCase.path || testCase.endpoint || '',
+                        url: resolvedUrl,
                         path: testCase.path || testCase.endpoint || '',
                         headers: testCase.request?.headers
                           ? Object.entries(testCase.request.headers).map(([k, v]) => ({ key: k, value: String(v), enabled: true }))
@@ -2774,11 +2777,11 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                 addedCount++;
               }
               
-              // Store the base URL on the collection so future sidebar clicks can resolve paths
+              // Store the base URL on the collection via proper store action (persists to DB + localStorage)
               const storeNow = useApiTestingStore.getState();
               const collIdNow = storeNow.active_collection_id;
-              if (collIdNow && baseUrlVal && storeNow.collections[collIdNow]) {
-                storeNow.collections[collIdNow].base_url = baseUrlVal;
+              if (collIdNow && baseUrlVal) {
+                storeNow.updateCollection(collIdNow, { base_url: baseUrlVal } as any);
               }
               // One save after all bulk additions
               const finalState = useApiTestingStore.getState();

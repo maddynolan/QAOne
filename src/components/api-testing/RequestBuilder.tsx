@@ -858,6 +858,7 @@ export default function RequestBuilder({ onSaveToChain, onAddToTestSuite, initia
         method: request.method,
         path: pathOnly,
         endpoint: pathOnly,
+        fullUrl: url,  // Preserve the complete URL including base
         expected_status: (() => {
           const sa = assertions.find(a => a.type === "status_code");
           if (sa) return parseInt(String(sa.expected), 10) || 200;
