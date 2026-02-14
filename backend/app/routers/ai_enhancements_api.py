@@ -703,11 +703,11 @@ def _handle_paste_element(request: ManualAssistRequest) -> ManualAssistResponse:
 
         for c in all_candidates:
             candidates.append(SelectorCandidate(
-                strategy=c.strategy.name if hasattr(c.strategy, 'name') else str(c.strategy),
-                selector=c.selector,
-                confidence=c.confidence,
-                description=c.description,
-                playwright_locator=c.playwright_locator,
+                strategy=c.get("strategy", "") if isinstance(c, dict) else (c.strategy.name if hasattr(c.strategy, 'name') else str(c.strategy)),
+                selector=c.get("selector", "") if isinstance(c, dict) else c.selector,
+                confidence=c.get("confidence", 0.0) if isinstance(c, dict) else c.confidence,
+                description=c.get("description", "") if isinstance(c, dict) else c.description,
+                playwright_locator=c.get("playwright_locator", "") if isinstance(c, dict) else c.playwright_locator,
             ))
 
         # Sort by confidence descending
