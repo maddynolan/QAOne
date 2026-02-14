@@ -256,18 +256,30 @@ When AI auto-fix fails, the **ManualAssistCard** appears inline below the failed
 
 Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, `healing/`, `locators/`, `runner/`, `types/`, `utils/`
 
-### Chrome Extension
+### Chrome Extension (v1.1.0+)
 
 **Directory:** `flowstral-extension/`
 
 | File | Purpose |
 |------|---------|
-| `manifest.json` | MV3 manifest — permissions: activeTab, storage, tabs, scripting, sidePanel |
-| `src/background/background.js` | Service worker |
-| `src/content/content.js` | Content script — DOM event capture |
+| `manifest.json` | MV3 manifest — permissions: activeTab, storage, tabs, scripting, sidePanel, webRequest |
+| `src/background/background.js` | Service worker — uses centralized URLs from api-config.js |
+| `src/content/content.js` | Content script — DOM event capture, auto-generates action IDs |
+| `src/lib/api-config.js` | Centralized URL config — reads serverUrl/frontendUrl from chrome.storage.local |
+| `src/lib/ai-enhancements.js` | AI API client — autoFixStep, saveFalsePositive, manualAssist (mirrors aiEnhancements.ts) |
 | `src/lib/recorder-engine.js` | Core recording logic |
 | `src/lib/action-coalescer-browser.js` | Event coalescing in browser |
-| `src/sidepanel/sidepanel.html` | Side panel UI |
+| `src/sidepanel/sidepanel.html` | Side panel UI — 5 visible tabs: Record, Suggest, SF, Script, Run |
+| `src/sidepanel/sidepanel.js` | SidebarController — recording, AI fix/flag/manual buttons per step, Open in Desktop |
+
+**Extension-Desktop Sync (v3.10.5+):**
+- All URLs centralized via `api-config.js` (no more hardcoded localhost)
+- Actions have unique `id` field for AI healing chain compatibility
+- 5 visible tabs: Record, Suggest, SF, Script, Run (previously Script/Run were hidden)
+- Per-step AI buttons: 🤖 Fix, 🚩 Flag, 🔧 Manual (same as desktop)
+- Inline Manual Assist card: Paste Element + Enter Selector modes
+- "Open in Desktop" button saves session and opens `PlaywrightRecorderPage?sessionId=...`
+- Settings sync to `chrome.storage.local` so background.js picks up URL changes
 
 ### Key Concepts
 

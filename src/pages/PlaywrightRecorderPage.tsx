@@ -1339,6 +1339,56 @@ export default function PlaywrightRecorderPage() {
     }
   }, []);
 
+  // ============ LOAD EXTENSION SESSION (Open in Desktop) ============
+  // When user clicks "Open in Desktop" in the Chrome extension, we load the session here
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sessionId');
+    if (!sessionId) return;
+
+    const loadExtensionSession = async () => {
+      try {
+        toast.info('Loading session from extension...', { duration: 3000 });
+        const response = await fetch(`${API_BASE_URL}/api/flowstral/sessions/${encodeURIComponent(sessionId)}`);
+        if (!response.ok) {
+          throw new Error(`Session not found: ${response.status}`);
+        }
+        const session = await response.json();
+        const rawActions = session.actions || session.action_graph?.nodes || [];
+
+        // Convert extension action format to desktop RecordedAction format
+        const converted: RecordedAction[] = rawActions.map((a: any, i: number) => {
+          const actionType = a.type || a.action || 'click';
+          const selectorStr = typeof a.selector === 'string'
+            ? a.selector
+            : a.selector?.primary?.css || a.selector?.selector || a.selector?.playwright || '';
+          return {
+            id: a.id || a.node_id || `step-${i}`,
+            qword: actionType,
+            args: selectorStr ? [selectorStr] : [],
+            description: a.description || a.label || `${actionType} ${selectorStr ? 'on ' + selectorStr.substring(0, 40) : 'step'}`,
+            timestamp: a.timestamp || Date.now(),
+            selector: a.selector || selectorStr,
+            type: actionType,
+            value: a.value || '',
+          };
+        });
+
+        if (converted.length > 0) {
+          setActions(converted);
+          toast.success(`Loaded ${converted.length} steps from extension session`, { duration: 4000 });
+        } else {
+          toast.warning('Session found but contains no actions');
+        }
+      } catch (error: any) {
+        console.error('[Recorder] Failed to load extension session:', error);
+        toast.error(`Failed to load session: ${error.message}`);
+      }
+    };
+
+    loadExtensionSession();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Recording timer
   useEffect(() => {
     if (isRecording && !isPaused) {
