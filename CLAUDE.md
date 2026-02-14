@@ -468,7 +468,7 @@ interface MobileTestRun { id, flow_id, flow_name, platform, device, status, dura
 |------|---------|
 | `RequestBuilder.tsx` | Build API requests — URL, method, headers, body (Monaco editor), auth, assertions |
 | `RequestChainBuilder.tsx` | Chain multiple API calls with variable extraction (JSONPath, regex, headers) |
-| `CollectionSidebar.tsx` | Organize requests into collections/folders, drag-drop reorder, bulk delete, run all |
+| `CollectionSidebar.tsx` | Organize requests into collections/folders, drag-drop reorder, bulk delete, inline rename, run all |
 | `EnvironmentManager.tsx` | Manage environments (dev, staging, prod) with variable substitution |
 | `AssertionsPanel.tsx` | Assertion editor — 11 types, multiple operators, pass/fail display |
 | `ResponseTreeExplorer.tsx` | JSON response tree viewer with copy-path |
@@ -505,6 +505,18 @@ interface MobileTestRun { id, flow_id, flow_name, platform, device, status, dura
 - Also available via dropdown: "Select & Delete..." and "Delete All"
 - Drag-and-drop reorder between folders
 - Run individual requests or entire collections
+
+**Inline Rename (v3.10.2+):**
+- **Folder rename**: inline input appears inside the folder row (replaces folder name) — no more floating input
+- **Request rename**: via context menu "Rename" or double-click on request name
+- Both use `onBlur` with 150ms delay to prevent accidental submission when dropdown closes
+- Rename state managed at sidebar level, passed down through FolderNode/EndpointGroup/RequestItem
+
+**Assertions & Schema Validation (v3.10.2+):**
+- JSON Schema assertions: schema string is parsed from JSON before `jsonschema.validate()` call
+- Inferred JSON Schema: backend `SchemaInferenceEngine.infer_schema()` auto-generates schema from response
+- "Matches Baseline" (Snapshot): regression testing — stores "known-good" response and compares future responses
+- 11 assertion types: status_code, response_time, jsonpath, schema, contains, not_contains, regex, header, equals, xpath, matches_baseline
 
 **Request URL Handling:**
 - `addRequest()` stores both `url` (full URL with base) and `path` (path only)

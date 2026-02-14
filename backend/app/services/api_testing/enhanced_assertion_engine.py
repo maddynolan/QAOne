@@ -605,14 +605,18 @@ class EnhancedAssertionEngine:
                 error="No schema provided",
                 message="Schema assertion requires a schema definition"
             )
-        
+
         try:
             # Parse JSON if string
             if isinstance(response_data, str):
                 data = json.loads(response_data)
             else:
                 data = response_data
-            
+
+            # Parse schema from JSON string if needed
+            if isinstance(schema, str):
+                schema = json.loads(schema)
+
             validate(instance=data, schema=schema)
             
             return AssertionResult(

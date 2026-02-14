@@ -246,16 +246,18 @@ A Postman-equivalent built into the platform with Monaco code editor, automatic 
 
 - **Request Builder** - Full HTTP client (GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD) with headers, query params, body (Monaco editor with JSON/XML/GraphQL syntax highlighting)
 - **Monaco Code Editor** - Syntax-highlighted body editor with auto-format (Ctrl+L), send shortcut (Ctrl+Enter), response viewer with language auto-detection
-- **Collections & Folders** - Organize API requests into collections, folders, and workspaces with drag-drop reorder
+- **Collections & Folders** - Organize API requests into collections, nested folders, and workspaces with drag-drop reorder
+- **Inline Rename** - Folder rename via inline input (replaces name in-place); request rename via context menu or double-click
 - **Bulk Delete** - Visible trash icon on collection header, multi-select mode with checkboxes, Select All / Delete Selected / Delete All
 - **Environment Variables** - Multiple environments with variable substitution ({{variable}} syntax)
 - **Request Chaining** - Multi-step API workflows with data extraction between steps (JSONPath, regex, header extraction), conditions, retry logic
 - **Assertions Panel** - 11 assertion types (status_code, contains, response_time, header, jsonpath, schema, not_contains, regex, equals, xpath, matches_baseline)
 - **Response Explorer** - Tree view of JSON responses, syntax highlighting, copy paths
-- **Import/Export** - OpenAPI 3.x / Swagger 2.0 / Postman / HAR import with **automatic base URL detection** (5-layer resolution: user input → parsed_spec → servers → host+basePath → raw spec content); export to Postman/OpenAPI/HAR formats
+- **Import/Export** - OpenAPI 3.x / Swagger 2.0 / Postman / HAR import with **automatic base URL detection** (6-layer resolution: user input → parsed_spec → servers → host+basePath → raw spec content → fetch URL origin); export to Postman/OpenAPI/HAR formats
 - **Code Snippets** - Generate code in 10+ languages (cURL, Python, JavaScript, Go, etc.)
 - **Snapshot/Diff Testing** - Save API response baselines and compare against future runs
-- **Schema Validation** - JSON Schema assertion against responses
+- **Schema Validation** - JSON Schema assertion against responses (auto-parses schema from JSON string)
+- **Schema Inference** - AI-powered JSON schema generation from API responses via `SchemaInferenceEngine`
 - **AI Test Generation** - Generate API test suites from OpenAPI specs with negative/edge cases
 - **API Coverage Map** - Visualize which endpoints have test coverage
 - **Negative Test Auto-Generation** - Automatically generate 405/401/400 variant tests (unique differentiator)
