@@ -1331,7 +1331,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
     a.download = `${workflowName.replace(/\s+/g, '_')}.spec.ts`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Playwright script exported with intelligent locators!');
+    toast.success('Automated script exported with intelligent locators!');
   };
 
   // View full script
@@ -1963,7 +1963,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Eye className="h-4 w-4" />
-                    Playwright Code Preview
+                    Automated Script Preview
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2199,7 +2199,7 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
       <Dialog open={showScriptViewer} onOpenChange={setShowScriptViewer}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Generated Playwright Script</DialogTitle>
+            <DialogTitle>Generated Automated Script</DialogTitle>
             <DialogDescription>
               Review the generated script and run it to verify it works
             </DialogDescription>

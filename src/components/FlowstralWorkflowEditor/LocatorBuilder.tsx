@@ -422,7 +422,7 @@ export default function LocatorBuilder({
             Intelligent Locator Builder
           </CardTitle>
           <CardDescription>
-            Build reliable Playwright locators using best practices. Fill in what you know about the element.
+            Build reliable element locators using best practices. Fill in what you know about the element.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

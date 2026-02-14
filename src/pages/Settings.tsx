@@ -16,7 +16,7 @@ import { Loader2, Settings2, Puzzle, Brain, Bell, Database, Shield, Download, Mo
 
 const AI_TASKS = [
   { value: "jira-to-tests", label: "Jira to Test Cases" },
-  { value: "testcase-to-playwright", label: "Test Case to Playwright" },
+  { value: "testcase-to-playwright", label: "Test Case to Automated Script" },
   { value: "api-tests", label: "API Tests Generation" },
   { value: "perf-tests", label: "Performance Tests" },
   { value: "a11y-tests", label: "Accessibility Tests" },

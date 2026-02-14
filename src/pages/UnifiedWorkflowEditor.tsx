@@ -2193,12 +2193,101 @@ export default function UnifiedWorkflowEditor() {
           console.log('Could not fetch from backend');
         }
       }
-      
+
+      // Try database API endpoint (for API test cases saved from API Testing page)
+      if (!foundCase) {
+        try {
+          console.log('[Builder] Trying /api/db/test-cases endpoint...');
+          const dbResponse = await fetch(`${API_BASE_URL}/api/db/test-cases/${testCaseId}`);
+          if (dbResponse.ok) {
+            foundCase = await dbResponse.json();
+            console.log('[Builder] Found in DB:', foundCase?.name);
+          }
+        } catch {
+          console.log('[Builder] DB test-cases endpoint not available');
+        }
+      }
+
       if (!foundCase) {
         toast.error('Test case not found');
         return;
       }
-      
+
+      // PRIORITY 0: API test case from DB — has metadata with method/endpoint/body
+      // Convert API metadata into proper builder steps
+      const meta = foundCase.metadata || {};
+      if (meta.type === 'automated' && meta.method && meta.endpoint) {
+        console.log('[Builder] Converting API test case from DB metadata:', meta.method, meta.endpoint);
+        const apiSteps: TestStep[] = [];
+        // Step 1: Navigate to the API endpoint (or set up URL)
+        const endpoint = meta.endpoint;
+        const method = meta.method || 'GET';
+        const expectedStatus = meta.expected_status || '200';
+        let bodyStr = '';
+        try { bodyStr = meta.request_body || ''; } catch { /* ignore */ }
+        let headersStr = '';
+        try { headersStr = meta.headers || ''; } catch { /* ignore */ }
+
+        // Create a descriptive API test step
+        apiSteps.push({
+          id: `step_${Date.now()}_0`,
+          type: 'navigate' as StepType,
+          name: `Send ${method} request to ${endpoint}`,
+          description: `Send ${method} ${endpoint}${bodyStr ? ` with body` : ''} — expect status ${expectedStatus}`,
+          url: endpoint.startsWith('http') ? endpoint : `{{base_url}}${endpoint}`,
+          selector: '',
+          value: '',
+          enabled: true,
+          expectedResult: `Response status is ${expectedStatus}`,
+        });
+
+        // Step 2: Assert response status
+        apiSteps.push({
+          id: `step_${Date.now()}_1`,
+          type: 'assert' as StepType,
+          name: `Verify response status ${expectedStatus}`,
+          description: `Assert that HTTP response status code is ${expectedStatus}`,
+          selector: '',
+          value: expectedStatus,
+          enabled: true,
+          expectedResult: `Status code equals ${expectedStatus}`,
+          assertion: { enabled: true, type: 'visible', expected: `Status ${expectedStatus}` },
+        });
+
+        // Parse assertions from metadata if available
+        try {
+          const assertions = meta.assertions ? (typeof meta.assertions === 'string' ? JSON.parse(meta.assertions) : meta.assertions) : [];
+          if (Array.isArray(assertions)) {
+            assertions.forEach((a: any, idx: number) => {
+              if (a.type && a.type !== 'status_code') {
+                apiSteps.push({
+                  id: `step_${Date.now()}_${idx + 2}`,
+                  type: 'assert' as StepType,
+                  name: `Assert: ${a.type} ${a.operator || ''} ${a.expected || ''}`.trim(),
+                  description: `${a.type}: ${a.path || ''} ${a.operator || ''} ${a.expected || ''}`.trim(),
+                  selector: a.path || '',
+                  value: a.expected || '',
+                  enabled: true,
+                  expectedResult: `${a.type} assertion passes`,
+                });
+              }
+            });
+          }
+        } catch { /* ignore assertion parse errors */ }
+
+        setTestCase(prev => ({
+          ...prev,
+          id: testCaseId,
+          name: foundCase.name || foundCase.title || 'API Test Case',
+          description: foundCase.description || `${method} ${endpoint}`,
+          tags: foundCase.tags || [],
+          steps: apiSteps,
+        }));
+        setSavedTestCaseId(testCaseId);
+        toast.success(`Loaded API test "${foundCase.name || foundCase.title}" with ${apiSteps.length} steps`);
+        return;
+      }
+
       // PRIORITY 1: Try to load from unified_data (contains the full test case with proper step format)
       if (foundCase.unified_data) {
         try {
