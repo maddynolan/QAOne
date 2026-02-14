@@ -1240,8 +1240,8 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
             </div>
           </div>
           
-          {/* Content */}
-          <ScrollArea className="flex-1 mt-1">
+          {/* Content — flex-1 + min-h-0 ensures ScrollArea shrinks within flex parent and scrolls */}
+          <ScrollArea className="flex-1 min-h-0 mt-1">
             <div className="p-2 space-y-1">
               {loading ? (
                 <p className="text-xs text-muted-foreground px-2 py-4 flex items-center gap-1.5">

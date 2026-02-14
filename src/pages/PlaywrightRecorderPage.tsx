@@ -8901,7 +8901,7 @@ Recorded Test
         }
         setShowTestResultModal(open);
       }}>
-        <DialogContent className="max-w-3xl bg-card border-border overflow-hidden">
+        <DialogContent className="max-w-4xl max-h-[90vh] bg-card border-border overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -9480,7 +9480,7 @@ Recorded Test
             
             {/* Step Results List */}
             <div className="flex gap-4 overflow-hidden max-w-full">
-              <ScrollArea className={cn("flex-1 overflow-hidden", isTestPaused ? "h-[200px]" : "h-[350px]")}>
+              <ScrollArea className={cn("flex-1 overflow-hidden", isTestPaused ? "h-[300px]" : "h-[55vh]")}>
                 <div className="space-y-1 pr-2 overflow-hidden max-w-full" id="execution-steps-container">
                   {actions.map((action, idx) => {
                     // DISPLAY-ONLY: Skip duplicate fills (same as recorded steps list)

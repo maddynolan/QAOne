@@ -6370,8 +6370,8 @@ export default function TestRepository() {
                 <button
                   onClick={() => {
                     setShowRunTestDialog(false);
-                    if (apiTest) navigate('/api');
-                    else navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
+                    // Always transport to Builder (Build tab) with test steps
+                    navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
                   }}
                   className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-amber-500/50 hover:bg-accent transition-all text-left"
                 >
@@ -6379,10 +6379,28 @@ export default function TestRepository() {
                     <Pencil className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-white">{apiTest ? 'Open in API Testing' : 'Open in Builder'}</p>
-                    <p className="text-xs text-gray-500">{apiTest ? 'Edit request, assertions, and run in API tab' : 'Edit steps, then run manually when ready'}</p>
+                    <p className="font-medium text-white">Open in Builder</p>
+                    <p className="text-xs text-gray-500">Edit steps in the visual builder, then run when ready</p>
                   </div>
                 </button>
+
+                {apiTest && (
+                  <button
+                    onClick={() => {
+                      setShowRunTestDialog(false);
+                      navigate('/api');
+                    }}
+                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-cyan-500/50 hover:bg-cyan-900/20 transition-all text-left"
+                  >
+                    <div className="p-2 rounded-lg bg-cyan-600">
+                      <Zap className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-white">Open in API Testing</p>
+                      <p className="text-xs text-gray-500">Edit request, assertions, and run in API tab</p>
+                    </div>
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -6443,7 +6461,7 @@ export default function TestRepository() {
                   }}
                   className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
                 >
-                  <option value="automated">Automated (Playwright)</option>
+                  <option value="automated">Automated</option>
                   <option value="manual">Manual (Step-by-Step)</option>
                 </select>
               </div>

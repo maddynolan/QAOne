@@ -2220,7 +2220,7 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
           </Badge>
         </div>
 
-      <div className="flex min-h-[420px] gap-0 -mx-6">
+      <div className="flex min-h-[420px] h-[calc(100vh-180px)] gap-0 -mx-6">
         {/* NEW: Extracted memoized sidebar with workspace/collection switching */}
         <CollectionSidebar />
 
@@ -3326,7 +3326,12 @@ ${result.status !== 'passed' ? `    <failure message="${result.error_message || 
                                   {req.path || req.url || '/'}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant="secondary" className="text-[10px]">{req.test_type || 'functional'}</Badge>
+                                  {(() => {
+                                    const tt = req.test_type || 'functional';
+                                    const label = tt === 'negative' ? '⚠️ Neg' : tt === 'boundary' ? '📐 Bnd' : tt === 'security' ? '🔒 Sec' : tt === 'performance' ? '⚡ Perf' : tt === 'functional' ? 'Func' : tt.replace(/_/g, ' ');
+                                    const cls = tt === 'negative' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' : tt === 'security' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : '';
+                                    return <Badge variant="secondary" className={`text-[10px] ${cls}`}>{label}</Badge>;
+                                  })()}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center gap-1">

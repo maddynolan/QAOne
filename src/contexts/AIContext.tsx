@@ -115,7 +115,7 @@ export const AI_FEATURE_AREAS = {
   CODE_GENERATION: {
     id: 'code_generation',
     name: 'Code Generation',
-    description: 'Generate Playwright/Cypress code from recordings',
+    description: 'Generate automated test code from recordings',
     pages: ['Record', 'Alchemy'],
     icon: '💻'
   },

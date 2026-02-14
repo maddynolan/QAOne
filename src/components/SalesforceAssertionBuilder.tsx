@@ -323,7 +323,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
     }).join('\n');
 
     navigator.clipboard.writeText(code);
-    toast.success('Playwright assertions copied to clipboard');
+    toast.success('Automated assertions copied to clipboard');
   }, [assertions, generateSOQL]);
 
   const getResultForAssertion = useCallback((assertionId: string) => {
@@ -475,7 +475,7 @@ export function SalesforceAssertionBuilder({ isConnected, onExportAssertions }: 
                   className="gap-2 text-foreground border-border hover:bg-accent"
                 >
                   <Code className="w-4 h-4" />
-                  Export to Playwright
+                  Export Script
                 </Button>
                 <Button
                   onClick={runAssertions}

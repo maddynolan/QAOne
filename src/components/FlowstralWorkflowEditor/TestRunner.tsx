@@ -187,7 +187,7 @@ export default function TestRunner({ script, workflowName }: TestRunnerProps) {
             )}
           </CardTitle>
           <CardDescription>
-            Execute the generated Playwright script to verify it works correctly
+            Execute the generated automated script to verify it works correctly
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
