@@ -405,3 +405,85 @@ export async function detectFalsePositive(params: {
     reason: 'Backend unreachable',
   };
 }
+
+// ============================================================================
+// MANUAL ASSIST — User-provided DOM / selector / screenshot for fixing steps
+// ============================================================================
+
+export interface ManualAssistSelector {
+  strategy: string;
+  selector: string;
+  confidence: number;
+  description: string;
+  playwright_locator: string;
+}
+
+export interface ManualAssistResult {
+  success: boolean;
+  selectors: ManualAssistSelector[];
+  recommended_selector?: string;
+  message: string;
+}
+
+const MANUAL_ASSIST_FALLBACK: ManualAssistResult = {
+  success: false,
+  selectors: [],
+  message: 'Backend unreachable — try entering a selector directly.',
+};
+
+/**
+ * Manual assist: Parse pasted outerHTML from DevTools and generate selectors.
+ * User copies the element in Chrome DevTools (right-click → Copy → Copy outerHTML).
+ */
+export async function manualAssistPasteElement(params: {
+  test_id: string;
+  step_id: string;
+  step_index: number;
+  step_label: string;
+  html_content: string;
+  failed_selector?: string;
+  page_url?: string;
+}): Promise<ManualAssistResult> {
+  const result = await apiFetch<ManualAssistResult>('/manual-assist', {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'paste_element', ...params }),
+  });
+  return result ?? MANUAL_ASSIST_FALLBACK;
+}
+
+/**
+ * Manual assist: Validate a user-entered CSS/XPath/text selector.
+ */
+export async function manualAssistEnterSelector(params: {
+  test_id: string;
+  step_id: string;
+  step_index: number;
+  step_label: string;
+  selector_type: string;
+  selector_value: string;
+}): Promise<ManualAssistResult> {
+  const result = await apiFetch<ManualAssistResult>('/manual-assist', {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'enter_selector', ...params }),
+  });
+  return result ?? MANUAL_ASSIST_FALLBACK;
+}
+
+/**
+ * Manual assist: Analyze a pasted screenshot to identify elements via Vision AI.
+ */
+export async function manualAssistScreenshot(params: {
+  test_id: string;
+  step_id: string;
+  step_index: number;
+  step_label: string;
+  screenshot_b64: string;
+  failed_selector?: string;
+  page_url?: string;
+}): Promise<ManualAssistResult> {
+  const result = await apiFetch<ManualAssistResult>('/manual-assist', {
+    method: 'POST',
+    body: JSON.stringify({ mode: 'paste_screenshot', ...params }),
+  });
+  return result ?? MANUAL_ASSIST_FALLBACK;
+}

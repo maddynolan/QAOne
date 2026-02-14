@@ -615,3 +615,253 @@ async def detect_false_positive(request: DetectFalsePositiveRequest):
     except Exception as e:
         logger.error(f"False positive detection error: {e}")
         return {"is_false_positive": False, "reason": f"Detection error: {str(e)}"}
+
+
+# ============================================================================
+# MANUAL ASSIST — User-provided DOM / selector / screenshot for fixing steps
+# ============================================================================
+
+class ManualAssistRequest(BaseModel):
+    """Request for manual-assist selector generation."""
+    mode: str = Field(..., description="paste_element | enter_selector | paste_screenshot")
+    test_id: str
+    step_id: str
+    step_index: int = 0
+    step_label: str = ""
+    # Mode-specific fields
+    html_content: Optional[str] = Field(None, description="Pasted outerHTML from DevTools (paste_element mode)")
+    selector_type: Optional[str] = Field(None, description="css | xpath | text (enter_selector mode)")
+    selector_value: Optional[str] = Field(None, description="User-entered selector (enter_selector mode)")
+    screenshot_b64: Optional[str] = Field(None, description="Base64 screenshot (paste_screenshot mode)")
+    failed_selector: Optional[str] = Field(None, description="Original broken selector for context")
+    page_url: Optional[str] = None
+
+
+class SelectorCandidate(BaseModel):
+    strategy: str
+    selector: str
+    confidence: float = 0.0
+    description: str = ""
+    playwright_locator: str = ""
+
+
+class ManualAssistResponse(BaseModel):
+    success: bool
+    selectors: List[SelectorCandidate] = []
+    recommended_selector: Optional[str] = None
+    message: str = ""
+
+
+@router.post("/manual-assist", response_model=ManualAssistResponse)
+async def manual_assist(request: ManualAssistRequest):
+    """
+    Manual assist endpoint — generates selectors from user-provided input
+    when AI auto-fix and Smart Suggestions both fail.
+
+    Three modes:
+      - paste_element: User pastes outerHTML from DevTools → parse → generate selectors
+      - enter_selector: User types CSS/XPath/text selector → validate → format
+      - paste_screenshot: User provides screenshot → Vision AI → suggest selectors
+    """
+    mode = (request.mode or "").lower().strip()
+
+    if mode == "paste_element":
+        return _handle_paste_element(request)
+    elif mode == "enter_selector":
+        return _handle_enter_selector(request)
+    elif mode == "paste_screenshot":
+        return await _handle_paste_screenshot(request)
+    else:
+        return ManualAssistResponse(
+            success=False,
+            message=f"Unknown mode: {mode}. Use paste_element, enter_selector, or paste_screenshot.",
+        )
+
+
+def _handle_paste_element(request: ManualAssistRequest) -> ManualAssistResponse:
+    """Parse pasted HTML and generate robust selectors."""
+    if not request.html_content or not request.html_content.strip():
+        return ManualAssistResponse(
+            success=False,
+            message="No HTML content provided. Paste the element's outerHTML from DevTools.",
+        )
+
+    try:
+        from app.services.automation.dom_element_parser import parse_and_generate_selectors
+
+        result = parse_and_generate_selectors(request.html_content)
+
+        if result.get("error"):
+            return ManualAssistResponse(
+                success=False,
+                message=result["error"],
+            )
+
+        # Convert candidates to response format
+        candidates = []
+        all_candidates = result.get("all_candidates", [])
+
+        for c in all_candidates:
+            candidates.append(SelectorCandidate(
+                strategy=c.strategy.name if hasattr(c.strategy, 'name') else str(c.strategy),
+                selector=c.selector,
+                confidence=c.confidence,
+                description=c.description,
+                playwright_locator=c.playwright_locator,
+            ))
+
+        # Sort by confidence descending
+        candidates.sort(key=lambda x: x.confidence, reverse=True)
+
+        recommended = result.get("primary", "")
+        if not recommended and candidates:
+            recommended = candidates[0].selector
+
+        return ManualAssistResponse(
+            success=True,
+            selectors=candidates,
+            recommended_selector=recommended,
+            message=f"Generated {len(candidates)} selector(s) from pasted element.",
+        )
+
+    except Exception as e:
+        logger.error(f"Manual assist paste_element error: {e}")
+        return ManualAssistResponse(
+            success=False,
+            message=f"Failed to parse element: {str(e)}",
+        )
+
+
+def _handle_enter_selector(request: ManualAssistRequest) -> ManualAssistResponse:
+    """Validate a user-entered selector and format as Playwright locator."""
+    if not request.selector_value or not request.selector_value.strip():
+        return ManualAssistResponse(
+            success=False,
+            message="No selector value provided.",
+        )
+
+    try:
+        from app.services.automation.dom_element_parser import validate_selector
+
+        result = validate_selector(
+            selector_type=request.selector_type or "css",
+            selector_value=request.selector_value,
+        )
+
+        if not result.get("valid"):
+            return ManualAssistResponse(
+                success=False,
+                message=result.get("message", "Invalid selector"),
+            )
+
+        candidate = SelectorCandidate(
+            strategy=result.get("strategy", "css"),
+            selector=result["selector"],
+            confidence=result.get("confidence", 0.80),
+            description=result.get("message", "User-provided selector"),
+            playwright_locator=result.get("playwright_locator", ""),
+        )
+
+        return ManualAssistResponse(
+            success=True,
+            selectors=[candidate],
+            recommended_selector=result["selector"],
+            message=result.get("message", "Selector validated successfully."),
+        )
+
+    except Exception as e:
+        logger.error(f"Manual assist enter_selector error: {e}")
+        return ManualAssistResponse(
+            success=False,
+            message=f"Selector validation failed: {str(e)}",
+        )
+
+
+async def _handle_paste_screenshot(request: ManualAssistRequest) -> ManualAssistResponse:
+    """Use Vision AI to analyze a screenshot and suggest selectors."""
+    if not request.screenshot_b64:
+        return ManualAssistResponse(
+            success=False,
+            message="No screenshot provided. Paste or upload a screenshot of the element area.",
+        )
+
+    try:
+        from app.services.automation.healing_orchestrator import get_healing_orchestrator
+
+        orchestrator = get_healing_orchestrator()
+        element_desc = request.step_label or "the target element"
+
+        # Use the orchestrator's vision healing to find the element in screenshot
+        result = await orchestrator.detect_false_positive(
+            screenshot_b64=request.screenshot_b64,
+            element_description=element_desc,
+            page_url=request.page_url,
+        )
+
+        candidates = []
+
+        # If vision found the element, try to generate a selector suggestion
+        if result.get("suggested_selector"):
+            candidates.append(SelectorCandidate(
+                strategy="vision_ai",
+                selector=result["suggested_selector"],
+                confidence=result.get("confidence", 0.70),
+                description=f"AI-identified from screenshot: {result.get('reason', '')}",
+                playwright_locator=f"page.locator('{result['suggested_selector']}')",
+            ))
+
+        if result.get("coordinates"):
+            coords = result["coordinates"]
+            # Coordinate-based click as fallback
+            candidates.append(SelectorCandidate(
+                strategy="coordinates",
+                selector=f"click({coords['x']}, {coords['y']})",
+                confidence=0.50,
+                description=f"Click at coordinates ({coords['x']}, {coords['y']}) — use as last resort",
+                playwright_locator=f"page.click({{ position: {{ x: {coords['x']}, y: {coords['y']} }} }})",
+            ))
+
+        if not candidates:
+            # Try the full healing chain with screenshot
+            try:
+                heal_result = await orchestrator.heal(
+                    test_code="",
+                    failed_selector=request.failed_selector or "",
+                    error_message=f"Element not found: {element_desc}",
+                    step_info={"description": element_desc},
+                    screenshot_b64=request.screenshot_b64,
+                    page_url=request.page_url,
+                    intent_dict={"description": element_desc},
+                )
+                if heal_result.healed:
+                    candidates.append(SelectorCandidate(
+                        strategy=heal_result.winning_strategy or "ai_healing",
+                        selector=heal_result.healed_selector,
+                        confidence=heal_result.confidence,
+                        description=f"AI healing found selector via {heal_result.winning_strategy}",
+                        playwright_locator=f"page.locator('{heal_result.healed_selector}')",
+                    ))
+            except Exception as heal_err:
+                logger.debug(f"Healing chain during screenshot assist failed: {heal_err}")
+
+        if not candidates:
+            return ManualAssistResponse(
+                success=False,
+                message="Could not identify the element from the screenshot. Try pasting the element HTML instead.",
+            )
+
+        recommended = candidates[0].selector if candidates else None
+
+        return ManualAssistResponse(
+            success=True,
+            selectors=candidates,
+            recommended_selector=recommended,
+            message=f"Found {len(candidates)} selector(s) from screenshot analysis.",
+        )
+
+    except Exception as e:
+        logger.error(f"Manual assist paste_screenshot error: {e}")
+        return ManualAssistResponse(
+            success=False,
+            message=f"Screenshot analysis failed: {str(e)}. Try pasting element HTML instead.",
+        )

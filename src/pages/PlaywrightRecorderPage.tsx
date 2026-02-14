@@ -9,7 +9,7 @@
  * - Play/Execute and Add buttons for each suggestion
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   Play, Square, Pause, Trash2, Download, ExternalLink, Save,
@@ -106,6 +106,7 @@ import {
   detectFalsePositive as detectFalsePositiveApi,
   autoFixStep as autoFixStepApi,
 } from "@/lib/aiEnhancements";
+import ManualAssistCard from "@/components/ManualAssistCard";
 import { API_BASE_URL } from "@/lib/api-config";
 
 // Types
@@ -1127,6 +1128,8 @@ export default function PlaywrightRecorderPage() {
   // Auto-fix state: tracks which steps are currently being auto-fixed by AI
   const [autoFixingSteps, setAutoFixingSteps] = useState<Set<number>>(new Set());
   const [autoFixResults, setAutoFixResults] = useState<Map<number, { success: boolean; message: string }>>(new Map());
+  // Manual Assist: which step's ManualAssistCard is open (null = none)
+  const [manualAssistStep, setManualAssistStep] = useState<number | null>(null);
   
   // Stable test ID — uses selected test case ID, or falls back to a session-unique ID
   const [sessionTestId] = useState(() => `session_${Date.now()}`);
@@ -4994,26 +4997,20 @@ Recorded Test
           { duration: 5000 }
         );
       } else {
-        // AI couldn't fix it — fall back to Smart Suggestions panel
+        // AI couldn't fix it — show Manual Assist card inline instead of navigating away
         setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: false, message: result.message || 'AI could not find a fix' }));
-        setShowTestResultModal(false);
-        setEditingActionIndex(stepIndex);
-        setRightPanelTab('suggestions');
-        switchToStepTabAndRefresh(stepIndex);
+        setManualAssistStep(stepIndex);
         toast.warning(
-          `AI couldn't auto-fix step ${stepIndex + 1}. ${result.message || 'Select the correct element from Smart Suggestions.'}`,
-          { duration: 5000 }
+          `AI couldn't auto-fix step ${stepIndex + 1}. Use Manual Assist below to paste element HTML, enter a selector, or upload a screenshot.`,
+          { duration: 6000 }
         );
       }
     } catch (err) {
       console.error('[AI Auto-Fix] Error:', err);
-      // On error, fall back to Smart Suggestions
+      // On error, show Manual Assist card inline
       setAutoFixResults(prev => new Map(prev).set(stepIndex, { success: false, message: 'AI service error' }));
-      setShowTestResultModal(false);
-      setEditingActionIndex(stepIndex);
-      setRightPanelTab('suggestions');
-      switchToStepTabAndRefresh(stepIndex);
-      toast.warning('AI auto-fix unavailable. Select the correct element from Smart Suggestions.', { duration: 4000 });
+      setManualAssistStep(stepIndex);
+      toast.warning('AI auto-fix unavailable. Use Manual Assist below to fix the step manually.', { duration: 5000 });
     } finally {
       setAutoFixingSteps(prev => {
         const next = new Set(prev);
@@ -9514,8 +9511,8 @@ Recorded Test
                     const shouldScrollTo = isCurrent || (isFailed && !testExecutionResult?.stepResults.some((r, i) => i > idx && r.status === 'failed'));
                     
                     return (
-                      <div 
-                        key={action.id || idx}
+                      <React.Fragment key={action.id || idx}>
+                      <div
                         ref={shouldScrollTo ? (el) => {
                           if (el) {
                             // Delay scroll to ensure DOM is updated
@@ -9693,6 +9690,24 @@ Recorded Test
                                     </button>
                                   </>
                                 )}
+                                {/* Manual Fix button — opens ManualAssistCard inline */}
+                                {!autoFixingSteps.has(idx) && !autoFixResults.get(idx)?.success && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setManualAssistStep(manualAssistStep === idx ? null : idx);
+                                    }}
+                                    className={cn(
+                                      "px-2 py-0.5 text-[10px] rounded border",
+                                      manualAssistStep === idx
+                                        ? "bg-amber-500/30 text-amber-300 border-amber-500/50"
+                                        : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400/70 hover:text-amber-400 border-amber-500/20 hover:border-amber-500/30"
+                                    )}
+                                    title="Manual Fix: paste element HTML, enter selector, or upload screenshot"
+                                  >
+                                    🔧 Manual
+                                  </button>
+                                )}
                               </div>
                             )}
                             {/* Fix/Flag buttons for PASSED steps — always visible since platform is blackbox */}
@@ -9763,6 +9778,37 @@ Recorded Test
                           <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
                       </div>
+                      {/* Manual Assist Card — appears below failed step when AI fix fails */}
+                      {manualAssistStep === idx && (
+                        <ManualAssistCard
+                          testId={currentTestId}
+                          stepId={action.id || `step-${idx}`}
+                          stepIndex={idx}
+                          stepLabel={getDisplayLabel(action)}
+                          failedSelector={action.selector || action.selectorObj?.css || action.args?.[0]?.toString() || ''}
+                          pageUrl={action.url || ''}
+                          onSelectFix={(selector) => {
+                            // Apply the selected selector to the step
+                            setActions(prev => {
+                              const newActions = [...prev];
+                              if (idx >= 0 && idx < newActions.length) {
+                                newActions[idx] = {
+                                  ...newActions[idx],
+                                  selector: selector,
+                                  selectorObj: { ...newActions[idx].selectorObj, css: selector },
+                                  args: newActions[idx].args ? [selector, ...newActions[idx].args.slice(1)] : [selector],
+                                };
+                              }
+                              return newActions;
+                            });
+                            setManualAssistStep(null);
+                            setAutoFixResults(prev => new Map(prev).set(idx, { success: true, message: 'Fixed via Manual Assist' }));
+                            toast.success(`Step ${idx + 1} selector updated via Manual Assist. Run test again to verify.`, { duration: 4000 });
+                          }}
+                          onClose={() => setManualAssistStep(null)}
+                        />
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </div>
