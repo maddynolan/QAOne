@@ -224,12 +224,21 @@ The Flowstral Engine is the core recording and automation engine, available as b
   3. **Vision AI** — screenshot + OpenAI to find the element visually (2-5s)
   4. **OCR** — Tesseract text recognition as last resort (500ms)
 - If AI succeeds: selector auto-applied, green badge shown, no manual intervention
-- If AI fails: falls back to Smart Suggestions panel for manual element selection
+- If AI fails: **ManualAssistCard appears inline** below the failed step (stays on test results modal)
 - **"Auto-Fix All" button** — fixes all failed steps in a test run at once
 - Budget-controlled: max 3 AI calls per run
 - Healed selectors recorded for future runs (knowledge reuse)
 - False positive persistence — flags survive page refresh via backend API
 - Flaky step detection — identifies intermittently failing steps
+
+**Manual Assist Card (v3.10.4+):**
+- When AI auto-fix fails, a **Manual Assist card** appears inline below the failed step with 3 modes:
+  1. **Paste Element** — user copies outerHTML from DevTools → backend `DOMElementParser` parses it → `EnhancedSelectorEngine` generates 13 ranked selectors
+  2. **Enter Selector** — user types CSS/XPath/text selector directly → validated and formatted as Playwright locator
+  3. **Paste Screenshot** — user uploads screenshot of element area → Vision AI analyzes → suggests selectors
+- Per-step **Manual** button available alongside Fix/Flag/Wrong for direct access
+- Backend endpoint: `POST /api/ai/enhancements/manual-assist` (3 modes via `mode` field)
+- Key files: `ManualAssistCard.tsx`, `dom_element_parser.py`, `aiEnhancements.ts`
 
 **Script Generation:**
 - Generates Playwright test scripts in real-time as user records
@@ -238,7 +247,7 @@ The Flowstral Engine is the core recording and automation engine, available as b
 - Export to multiple formats (Playwright, Selenium, Cypress)
 
 **Key Files:** `FlowstralEngine.ts` (18KB), `ElementCollector.ts` (19KB), `PlaywrightScriptGenerator.ts` (22KB), `LocatorHealingRuntime.ts` (18KB), `SessionManager.ts` (17KB), `TestUtilities.ts` (18KB)
-**AI Healing Files:** `src/lib/aiEnhancements.ts`, `backend/app/services/automation/healing_orchestrator.py`, `backend/app/routers/ai_enhancements_api.py`
+**AI Healing Files:** `src/lib/aiEnhancements.ts`, `src/components/ManualAssistCard.tsx`, `backend/app/services/automation/healing_orchestrator.py`, `backend/app/services/automation/dom_element_parser.py`, `backend/app/routers/ai_enhancements_api.py`
 
 ### 3.4 API Testing
 

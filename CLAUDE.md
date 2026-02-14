@@ -152,23 +152,46 @@ When a test step fails, the **Fix/Flag/Wrong** buttons on the test result card t
 2. Frontend calls `autoFixStepApi()` → `POST /api/ai/enhancements/auto-fix-step`
 3. Backend runs **4-layer healing chain** (Knowledge → Deterministic → Vision AI → OCR)
 4. If AI finds a fix → selector auto-applied in the step list, green ✅ badge shown
-5. If AI fails → falls back to Smart Suggestions panel for manual element selection
+5. If AI fails → **ManualAssistCard appears inline** below the failed step (stays on test results modal)
 
 **Key state variables** (PlaywrightRecorderPage.tsx):
 - `autoFixingSteps: Set<number>` — tracks which steps are currently being auto-fixed (shows spinner)
 - `autoFixResults: Map<number, { success, message }>` — stores fix results per step
+- `manualAssistStep: number | null` — which step has the ManualAssistCard open (null = none)
 
 **Buttons:**
 - **"🤖 Auto-Fix All"** — appears in test result summary footer, fixes all failed steps at once
 - Per-step **🤖 Fix** — auto-fixes individual failed steps
 - Per-step **🚩 Flag** — flags as false positive + auto-fixes
 - Per-step **🚩 Wrong** — flags wrong element + auto-fixes (for passed steps that clicked the wrong thing)
+- Per-step **🔧 Manual** — opens ManualAssistCard inline for manual element fixing
+
+### Manual Assist Card (v3.10.4+)
+
+When AI auto-fix fails, the **ManualAssistCard** appears inline below the failed step with 3 modes:
+
+1. **Paste Element**: User copies outerHTML from DevTools → backend parses it → generates 13 selector strategies ranked by reliability
+2. **Enter Selector**: User types CSS/XPath/text selector directly → validated and formatted as Playwright locator
+3. **Paste Screenshot**: User uploads screenshot of element area → Vision AI analyzes → suggests selectors
+
+**Backend:**
+- `POST /api/ai/enhancements/manual-assist` — single endpoint, 3 modes via `mode` field
+- `backend/app/services/automation/dom_element_parser.py` — parses HTML into element dict for `EnhancedSelectorEngine`
+- Reuses `EnhancedSelectorEngine.generate_robust_selectors()` for paste_element mode (13 strategies)
+- Reuses `HealingOrchestrator` vision pipeline for paste_screenshot mode
+
+**Frontend:**
+- `src/components/ManualAssistCard.tsx` — inline 3-tab card component
+- `src/lib/aiEnhancements.ts` — `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
+- When user clicks "Use This" on a selector → step's selector is updated in-place via `setActions()`
 
 **Key files:**
-- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()` API helpers
+- `src/lib/aiEnhancements.ts` — `autoFixStep()`, `detectFalsePositive()`, `explainFailure()`, `manualAssistPasteElement()`, `manualAssistEnterSelector()`, `manualAssistScreenshot()` API helpers
+- `src/components/ManualAssistCard.tsx` — inline 3-tab card for manual step fixing
 - `src/components/confidence/ElementRepairWizard.tsx` — 4-tab dialog (Manual, Pick, Debug, AI) for advanced repair
-- `backend/app/routers/ai_enhancements_api.py` — `/api/ai/enhancements/auto-fix-step` endpoint
+- `backend/app/routers/ai_enhancements_api.py` — `/api/ai/enhancements/auto-fix-step` + `/api/ai/enhancements/manual-assist` endpoints
 - `backend/app/services/automation/healing_orchestrator.py` — HealingOrchestrator backend service
+- `backend/app/services/automation/dom_element_parser.py` — HTML → element dict parser
 
 ### False Positive Persistence
 
@@ -269,6 +292,7 @@ Subdirectories: `collector/`, `core/`, `detection/`, `generator/`, `handlers/`, 
 - `GET /api/ai/enhancements/flaky-steps/{test_id}` — Get flaky step info
 - `POST /api/ai/enhancements/explain-failure` — AI failure explanation with fix options
 - `POST /api/ai/enhancements/detect-false-positive` — Vision-based false positive detection
+- `POST /api/ai/enhancements/manual-assist` — Manual assist: parse HTML / validate selector / screenshot AI (3 modes)
 
 ---
 
