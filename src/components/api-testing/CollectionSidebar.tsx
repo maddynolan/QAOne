@@ -88,12 +88,61 @@ interface RequestItemProps {
   selectMode?: boolean;
   isChecked?: boolean;
   onToggleSelect?: (id: string) => void;
+  /** Inline rename */
+  isRenaming?: boolean;
+  onStartRename?: (id: string) => void;
+  onRenameSubmit?: (id: string, newName: string) => void;
+  onCancelRename?: () => void;
 }
 
-const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastResult, onClick, onContextAction, onRun, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, selectMode, isChecked, onToggleSelect }: RequestItemProps) => {
+const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastResult, onClick, onContextAction, onRun, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, selectMode, isChecked, onToggleSelect, isRenaming, onStartRename, onRenameSubmit, onCancelRename }: RequestItemProps) => {
   const label = request.name || `${request.method} ${request.path || request.url || '/'}`;
   const endpointPath = request.path || request.url || '';
   const showPath = request.name && endpointPath && endpointPath !== request.name;
+
+  // Inline rename state
+  const [localName, setLocalName] = React.useState(request.name || '');
+  const localInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (isRenaming) {
+      setLocalName(request.name || '');
+      setTimeout(() => {
+        localInputRef.current?.focus();
+        localInputRef.current?.select();
+      }, 50);
+    }
+  }, [isRenaming, request.name]);
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1">
+        <MethodBadge method={request.method} />
+        <Input
+          ref={localInputRef}
+          value={localName}
+          onChange={(e) => setLocalName(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') {
+              if (localName.trim()) onRenameSubmit?.(request.id, localName.trim());
+              else onCancelRename?.();
+            }
+            if (e.key === 'Escape') onCancelRename?.();
+          }}
+          onBlur={() => {
+            setTimeout(() => {
+              if (localName.trim()) onRenameSubmit?.(request.id, localName.trim());
+              else onCancelRename?.();
+            }, 150);
+          }}
+          className="h-6 text-xs flex-1"
+          placeholder="Request name"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -115,6 +164,7 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastR
               : 'hover:bg-muted/70'
         }`}
         onClick={() => selectMode ? onToggleSelect?.(request.id) : onClick(request.id)}
+        onDoubleClick={() => onContextAction('rename', request.id)}
       >
         {/* Checkbox in select mode, status dot otherwise */}
         {selectMode ? (
@@ -144,7 +194,7 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastR
           )}
         </span>
       </button>
-      
+
       {/* Hover actions: Run + Context menu */}
       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         {onRun && (
@@ -167,6 +217,9 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastR
             <DropdownMenuItem onClick={() => onContextAction('edit', request.id)}>
               <Edit3 className="w-3.5 h-3.5 mr-2" /> Edit in Builder
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onContextAction('rename', request.id)}>
+              <Edit3 className="w-3.5 h-3.5 mr-2" /> Rename
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onRun?.(request.id)}>
               <Play className="w-3.5 h-3.5 mr-2" /> Run
             </DropdownMenuItem>
@@ -177,7 +230,7 @@ const RequestItem = memo(({ request, isSelected, isDragging, isDropTarget, lastR
               <ArrowRight className="w-3.5 h-3.5 mr-2" /> Move to folder
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => onContextAction('delete', request.id)}
               className="text-destructive"
             >
@@ -221,6 +274,14 @@ interface FolderNodeProps {
   selectMode?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  /** Inline folder rename state */
+  renamingFolderId?: string | null;
+  onStartRename?: (folderId: string) => void;
+  onRenameSubmit?: (folderId: string, newName: string) => void;
+  onCancelRename?: () => void;
+  /** Inline request rename state */
+  renamingRequestId?: string | null;
+  onRequestRenameSubmit?: (requestId: string, newName: string) => void;
 }
 
 const FolderNode = memo(({
@@ -228,9 +289,12 @@ const FolderNode = memo(({
   onToggleExpand, onRequestClick, onRequestContextAction, onFolderAction,
   onRunRequest, onRunFolder, depth,
   dropTargetId, dragRequestId, onDragStart, onDragOver, onDragLeave, onDropOnFolder, onDropReorder, onDragEnd,
-  selectMode, selectedIds, onToggleSelect
+  selectMode, selectedIds, onToggleSelect,
+  renamingFolderId, onStartRename, onRenameSubmit, onCancelRename,
+  renamingRequestId, onRequestRenameSubmit
 }: FolderNodeProps) => {
   const isExpanded = expandedFolders.has(folder.id);
+  const isRenaming = renamingFolderId === folder.id;
   const folderRequests = requests.filter(r => r.folder_id === folder.id)
     .sort((a, b) => a.sort_order - b.sort_order);
   const childFolders = allFolders.filter(f => f.parent_folder_id === folder.id);
@@ -240,10 +304,22 @@ const FolderNode = memo(({
   ];
   const totalCount = allFolderRequestIds.length;
   const isFolderDropTarget = dropTargetId === `folder_${folder.id}`;
-  
+
+  // Inline rename state
+  const [localRenameName, setLocalRenameName] = React.useState(folder.name);
+  const localRenameRef = React.useRef<HTMLInputElement>(null);
+
+  // Focus the rename input when this folder enters rename mode
+  React.useEffect(() => {
+    if (isRenaming) {
+      setLocalRenameName(folder.name);
+      setTimeout(() => localRenameRef.current?.focus(), 50);
+    }
+  }, [isRenaming, folder.name]);
+
   // Folder-level pass/fail summary
   const folderStats = lastResultMap ? getFolderStats(allFolderRequestIds, lastResultMap) : null;
-  
+
   return (
     <div className={depth > 0 ? 'pl-2 border-l border-border ml-1.5' : ''}>
       <div
@@ -252,6 +328,35 @@ const FolderNode = memo(({
         onDragLeave={() => onDragLeave?.()}
         onDrop={(e) => { e.stopPropagation(); onDropOnFolder?.(e, folder.id); }}
       >
+        {isRenaming ? (
+          /* Inline rename input */
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <Folder className="w-3.5 h-3.5 text-amber-500/70 shrink-0" />
+            <Input
+              ref={localRenameRef}
+              value={localRenameName}
+              onChange={(e) => setLocalRenameName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
+                  else onCancelRename?.();
+                }
+                if (e.key === 'Escape') onCancelRename?.();
+              }}
+              onBlur={() => {
+                // Small delay to allow click events to fire first
+                setTimeout(() => {
+                  if (localRenameName.trim()) onRenameSubmit?.(folder.id, localRenameName.trim());
+                  else onCancelRename?.();
+                }, 150);
+              }}
+              className="h-6 text-xs flex-1"
+              placeholder="Folder name"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        ) : (
         <button
           type="button"
           className="flex items-center gap-1.5 flex-1 min-w-0"
@@ -273,6 +378,7 @@ const FolderNode = memo(({
             </span>
           )}
         </button>
+        )}
         
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           {/* Run all folder requests */}
@@ -352,6 +458,12 @@ const FolderNode = memo(({
               selectMode={selectMode}
               selectedIds={selectedIds}
               onToggleSelect={onToggleSelect}
+              renamingFolderId={renamingFolderId}
+              onStartRename={onStartRename}
+              onRenameSubmit={onRenameSubmit}
+              onCancelRename={onCancelRename}
+              renamingRequestId={renamingRequestId}
+              onRequestRenameSubmit={onRequestRenameSubmit}
             />
           ))}
           {/* Then requests */}
@@ -374,6 +486,9 @@ const FolderNode = memo(({
               onDragLeave={onDragLeave}
               onDrop={onDropReorder}
               onDragEnd={onDragEnd}
+              isRenaming={renamingRequestId === req.id}
+              onRenameSubmit={onRequestRenameSubmit}
+              onCancelRename={onCancelRename}
             />
           ))}
           {folderRequests.length === 0 && childFolders.length === 0 && (
@@ -413,6 +528,10 @@ interface EndpointGroupProps {
   selectMode?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  /** Request rename */
+  renamingRequestId?: string | null;
+  onRequestRenameSubmit?: (requestId: string, newName: string) => void;
+  onCancelRename?: () => void;
 }
 
 const EndpointGroup = memo(({
@@ -421,7 +540,8 @@ const EndpointGroup = memo(({
   onAddTestCase, onRunEndpoint, onRunRequest,
   onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
   dragRequestId, dropTargetId,
-  selectMode, selectedIds, onToggleSelect
+  selectMode, selectedIds, onToggleSelect,
+  renamingRequestId, onRequestRenameSubmit, onCancelRename
 }: EndpointGroupProps) => {
   const [method, ...pathParts] = endpointKey.split(' ');
   const path = pathParts.join(' ') || '/';
@@ -447,6 +567,9 @@ const EndpointGroup = memo(({
         selectMode={selectMode}
         isChecked={selectedIds?.has(requests[0].id)}
         onToggleSelect={onToggleSelect}
+        isRenaming={renamingRequestId === requests[0].id}
+        onRenameSubmit={onRequestRenameSubmit}
+        onCancelRename={onCancelRename}
       />
     );
   }
@@ -515,6 +638,9 @@ const EndpointGroup = memo(({
               selectMode={selectMode}
               isChecked={selectedIds?.has(req.id)}
               onToggleSelect={onToggleSelect}
+              isRenaming={renamingRequestId === req.id}
+              onRenameSubmit={onRequestRenameSubmit}
+              onCancelRename={onCancelRename}
             />
           ))}
         </div>
@@ -712,13 +838,14 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const addRequest = useApiTestingStore(s => s.addRequest);
   const moveRequest = useApiTestingStore(s => s.moveRequest);
   const reorderRequest = useApiTestingStore(s => s.reorderRequest);
+  const updateRequest = useApiTestingStore(s => s.updateRequest);
   const createCollection = useApiTestingStore(s => s.createCollection);
   const switchCollection = useApiTestingStore(s => s.switchCollection);
   
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
-  const [newFolderName, setNewFolderName] = useState('');
   const [moveDialogRequestId, setMoveDialogRequestId] = useState<string | null>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  // Inline request rename state
+  const [renamingRequestId, setRenamingRequestId] = useState<string | null>(null);
   // Drag-and-drop state
   const [dragRequestId, setDragRequestId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -891,6 +1018,7 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   const handleRequestContextAction = useCallback((action: string, requestId: string) => {
     switch (action) {
       case 'edit': openRequestInBuilder(requestId); break;
+      case 'rename': setRenamingRequestId(requestId); break;
       case 'duplicate': duplicateRequest(requestId); break;
       case 'delete': {
         const req = collection?.requests.find(r => r.id === requestId);
@@ -1010,36 +1138,47 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
   
   const handleFolderAction = useCallback((action: string, folderId: string) => {
     switch (action) {
-      case 'add-request':
-        addRequest({ method: 'GET', name: 'New Request' }, folderId);
+      case 'add-request': {
+        const reqId = addRequest({ method: 'GET', name: 'New Request' }, folderId);
+        if (reqId) openRequestInBuilder(reqId);
         break;
+      }
       case 'add-subfolder':
         createFolder('New Folder', folderId);
         break;
       case 'rename':
+        // Just set the renamingFolderId — the FolderNode will show an inline input
         setRenamingFolderId(folderId);
-        const folder = collection?.folders.find(f => f.id === folderId);
-        setNewFolderName(folder?.name || '');
-        setTimeout(() => renameInputRef.current?.focus(), 50);
         break;
       case 'delete': {
         const f = collection?.folders.find(f => f.id === folderId);
-        const requestCount = collection?.requests.filter(r => r.folderId === folderId).length || 0;
+        const requestCount = collection?.requests.filter(r => r.folder_id === folderId).length || 0;
         if (window.confirm(`Delete folder "${f?.name || 'Untitled'}"${requestCount > 0 ? ` and its ${requestCount} request(s)` : ''}? This cannot be undone.`)) {
           deleteFolder(folderId);
         }
         break;
       }
     }
-  }, [addRequest, createFolder, deleteFolder, collection]);
-  
-  const handleRenameSubmit = useCallback(() => {
-    if (renamingFolderId && newFolderName.trim()) {
-      renameFolder(renamingFolderId, newFolderName.trim());
-    }
+  }, [addRequest, createFolder, deleteFolder, collection, openRequestInBuilder]);
+
+  const handleFolderRenameSubmit = useCallback((folderId: string, newName: string) => {
+    renameFolder(folderId, newName);
     setRenamingFolderId(null);
-    setNewFolderName('');
-  }, [renamingFolderId, newFolderName, renameFolder]);
+  }, [renameFolder]);
+
+  const handleCancelRename = useCallback(() => {
+    setRenamingFolderId(null);
+    setRenamingRequestId(null);
+  }, []);
+
+  const handleStartRequestRename = useCallback((requestId: string) => {
+    setRenamingRequestId(requestId);
+  }, []);
+
+  const handleRequestRenameSubmit = useCallback((requestId: string, newName: string) => {
+    updateRequest(requestId, { name: newName });
+    setRenamingRequestId(null);
+  }, [updateRequest]);
   
   const handleCreateFolder = useCallback(() => {
     createFolder('New Folder');
@@ -1241,24 +1380,6 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                         </Button>
                       </div>
                       
-                      {/* Rename input */}
-                      {renamingFolderId && (
-                        <div className="px-2 py-1">
-                          <Input
-                            ref={renameInputRef}
-                            value={newFolderName}
-                            onChange={(e) => setNewFolderName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleRenameSubmit();
-                              if (e.key === 'Escape') { setRenamingFolderId(null); setNewFolderName(''); }
-                            }}
-                            onBlur={handleRenameSubmit}
-                            className="h-6 text-xs"
-                            placeholder="Folder name"
-                          />
-                        </div>
-                      )}
-                      
                       <div className="space-y-0.5">
                         {rootFolders.map(folder => (
                           <FolderNode
@@ -1287,6 +1408,12 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             selectMode={selectMode}
                             selectedIds={selectedRequestIds}
                             onToggleSelect={handleToggleSelect}
+                            renamingFolderId={renamingFolderId}
+                            onStartRename={(id) => setRenamingFolderId(id)}
+                            onRenameSubmit={handleFolderRenameSubmit}
+                            onCancelRename={handleCancelRename}
+                            renamingRequestId={renamingRequestId}
+                            onRequestRenameSubmit={handleRequestRenameSubmit}
                           />
                         ))}
                       </div>
@@ -1307,7 +1434,7 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                           <span className="text-xs font-medium">Endpoints</span>
                           <span className="text-[10px]">({totalEndpoints})</span>
                         </div>
-                        {rootFolders.length === 0 && (
+                        {(
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1345,6 +1472,9 @@ const CollectionSidebar = memo(({ className = '' }: CollectionSidebarProps) => {
                             selectMode={selectMode}
                             selectedIds={selectedRequestIds}
                             onToggleSelect={handleToggleSelect}
+                            renamingRequestId={renamingRequestId}
+                            onRequestRenameSubmit={handleRequestRenameSubmit}
+                            onCancelRename={handleCancelRename}
                           />
                         ))}
                       </div>
