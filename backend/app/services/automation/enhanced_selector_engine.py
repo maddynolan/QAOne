@@ -242,6 +242,76 @@ class EnhancedSelectorEngine:
                 framework_specific=None
             ))
         
+        # Strategy 6b: Title attribute (88% stable — very common in enterprise apps)
+        element_title = element.get("title", "").strip()
+        if element_title and len(element_title) < 100:
+            escaped_title = element_title.replace('"', '\\"')
+            # Tag + title (most specific)
+            candidates.append(SelectorCandidate(
+                selector=f'{element_tag}[title="{escaped_title}"]',
+                playwright_locator=f"page.locator('{element_tag}[title=\"{escaped_title}\"]')",
+                strategy=SelectorStrategy.NAME_ATTRIBUTE,
+                confidence=0.88,
+                stability_score=0.88,
+                description=f"Title attribute: {element_title[:40]}",
+                fallback_order=6,
+                framework_specific=None
+            ))
+            # Also generate getByTitle Playwright locator
+            escaped_title_sq = element_title.replace("'", "\\'")
+            candidates.append(SelectorCandidate(
+                selector=f'[title="{escaped_title}"]',
+                playwright_locator=f"page.getByTitle('{escaped_title_sq}')",
+                strategy=SelectorStrategy.NAME_ATTRIBUTE,
+                confidence=0.86,
+                stability_score=0.86,
+                description=f"getByTitle: {element_title[:40]}",
+                fallback_order=6,
+                framework_specific=None
+            ))
+
+        # Strategy 6c: Href attribute (85% stable — links and navigation)
+        element_href = element.get("href", "").strip()
+        if element_href and element_tag == "a" and not element_href.startswith("javascript:"):
+            escaped_href = element_href.replace('"', '\\"')
+            candidates.append(SelectorCandidate(
+                selector=f'a[href="{escaped_href}"]',
+                playwright_locator=f"page.locator('a[href=\"{escaped_href}\"]')",
+                strategy=SelectorStrategy.NAME_ATTRIBUTE,
+                confidence=0.85,
+                stability_score=0.85,
+                description=f"Href: {element_href[:50]}",
+                fallback_order=6,
+                framework_specific=None
+            ))
+            # Role + href combo if role available
+            if role:
+                candidates.append(SelectorCandidate(
+                    selector=f'a[role="{role}"][href="{escaped_href}"]',
+                    playwright_locator=f"page.locator('a[role=\"{role}\"][href=\"{escaped_href}\"]')",
+                    strategy=SelectorStrategy.NAME_ATTRIBUTE,
+                    confidence=0.87,
+                    stability_score=0.87,
+                    description=f"Role + href: {role} + {element_href[:40]}",
+                    fallback_order=6,
+                    framework_specific=None
+                ))
+
+        # Strategy 6d: Placeholder attribute (82% stable — form inputs)
+        element_placeholder = element.get("placeholder", "").strip()
+        if element_placeholder and element_tag in ["input", "textarea"]:
+            escaped_ph = element_placeholder.replace("'", "\\'")
+            candidates.append(SelectorCandidate(
+                selector=f'{element_tag}[placeholder="{element_placeholder}"]',
+                playwright_locator=f"page.getByPlaceholder('{escaped_ph}')",
+                strategy=SelectorStrategy.NAME_ATTRIBUTE,
+                confidence=0.82,
+                stability_score=0.82,
+                description=f"Placeholder: {element_placeholder[:40]}",
+                fallback_order=6,
+                framework_specific=None
+            ))
+
         # Strategy 7: Context-aware (85% stable - parent-child)
         if element_context and element_context.parent_selector:
             parent_sel = element_context.parent_selector
