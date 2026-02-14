@@ -48,6 +48,9 @@ class SidebarController {
   }
 
   async init() {
+    // Initialize centralized URL config (reads from chrome.storage.local)
+    if (typeof initApiConfig === 'function') await initApiConfig();
+
     this.cacheElements();
     this.setupTabs();
     this.attachEventListeners();
@@ -338,10 +341,17 @@ class SidebarController {
       failedElementsSection: document.getElementById('failedElementsSection'),
       failedCount: document.getElementById('failedCount'),
       failedElementsList: document.getElementById('failedElementsList'),
+      // Open in Desktop button
+      openDesktopBtn: document.getElementById('openDesktopBtn'),
     };
-    
+
     // Initialize show code toggle state
     this.showSelectorCode = false;
+
+    // Manual assist state — which step index has the manual assist card open (null = none)
+    this.manualAssistStepIndex = null;
+    // False positive flags loaded from backend
+    this.falsePositiveFlags = new Map();
     
     // Workflow steps (elements selected for flow)
     this.workflowSteps = [];
@@ -378,7 +388,12 @@ class SidebarController {
     this.elements.saveTestCaseBtn.addEventListener('click', () => this.saveTestCase());
     // Record tab uses openInWorkflowEditorFromRecord
     this.elements.openWorkflowBtn.addEventListener('click', () => this.openInWorkflowEditorFromRecord());
-    
+
+    // Open in Desktop Recorder — save session then open in full desktop UI
+    if (this.elements.openDesktopBtn) {
+      this.elements.openDesktopBtn.addEventListener('click', () => this.openInDesktopRecorder());
+    }
+
     // Network capture toggle
     if (this.elements.networkCaptureToggle) {
       this.elements.networkCaptureToggle.addEventListener('change', (e) => {
@@ -736,7 +751,10 @@ class SidebarController {
         this.options.serverUrl = settings.flowstral_server_url;
         this.elements.serverUrl.value = settings.flowstral_server_url;
       }
-      
+      if (settings.flowstral_frontend_url) {
+        this.options.frontendUrl = settings.flowstral_frontend_url;
+      }
+
       // Load advanced feature toggles
       const advancedOptions = [
         { key: 'selfHealing', storageKey: 'flowstral_self_healing', el: this.elements.selfHealingToggle },
@@ -777,6 +795,7 @@ class SidebarController {
         flowstral_browser: this.options.browser,
         flowstral_show_browser: this.options.showBrowser,
         flowstral_server_url: this.options.serverUrl,
+        flowstral_frontend_url: this.options.frontendUrl,
         flowstral_base_url: this.options.baseUrl || '',  // Save base URL
         // Advanced features
         flowstral_self_healing: this.options.selfHealing,
@@ -882,6 +901,7 @@ class SidebarController {
     this.elements.saveTestCaseBtn.disabled = actions.length === 0;
     this.elements.openWorkflowBtn.disabled = actions.length === 0;
     this.elements.generateBtn.disabled = actions.length === 0;
+    if (this.elements.openDesktopBtn) this.elements.openDesktopBtn.disabled = actions.length === 0;
     
     // AI Enhancement button (in Review tab)
     if (this.elements.enhanceAIBtn) {
@@ -1040,7 +1060,7 @@ class SidebarController {
 
   renderActionsList() {
     const container = this.elements.actionsList;
-    
+
     if (this.state.actions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
@@ -1050,23 +1070,49 @@ class SidebarController {
       `;
       return;
     }
-    
+
     container.innerHTML = '';
-    
+
     this.state.actions.forEach((action, index) => {
       const item = document.createElement('div');
       item.className = 'action-item';
+
+      // Check if this step has been flagged as false positive
+      const isFlagged = this.falsePositiveFlags.has(action.id);
+      const flagBadge = isFlagged ? '<span style="color:#f59e0b;font-size:10px;margin-left:4px;" title="Flagged as false positive">🚩</span>' : '';
+
+      // Check if this step has a status (from test results)
+      const statusBadge = action._status === 'failed'
+        ? '<span style="color:#ef4444;font-size:10px;margin-left:4px;">✗</span>'
+        : action._status === 'passed'
+        ? '<span style="color:#22c55e;font-size:10px;margin-left:4px;">✓</span>'
+        : '';
+
       item.innerHTML = `
         <span class="action-number">${index + 1}</span>
         <div class="action-icon">${this.getActionIcon(action.type)}</div>
-        <div class="action-details">
-          <div class="action-type">${action.type}</div>
+        <div class="action-details" style="flex:1;min-width:0;">
+          <div class="action-type">${action.type}${statusBadge}${flagBadge}</div>
           <div class="action-selector">${action.description || this.getActionDescription(action)}</div>
+          ${action._status === 'failed' || action._fixable ? `
+          <div class="action-ai-buttons" style="display:flex;gap:4px;margin-top:4px;">
+            <button onclick="sidebar.handleAiFix(${index})" style="font-size:9px;padding:2px 6px;border:1px solid rgba(139,92,246,0.5);border-radius:4px;background:rgba(139,92,246,0.15);color:#a78bfa;cursor:pointer;" title="AI Auto-Fix">🤖 Fix</button>
+            <button onclick="sidebar.handleFlag(${index})" style="font-size:9px;padding:2px 6px;border:1px solid rgba(245,158,11,0.5);border-radius:4px;background:rgba(245,158,11,0.15);color:#fbbf24;cursor:pointer;" title="Flag as False Positive">${isFlagged ? '🚩 Unflag' : '🚩 Flag'}</button>
+            <button onclick="sidebar.handleManualAssist(${index})" style="font-size:9px;padding:2px 6px;border:1px solid rgba(56,189,248,0.5);border-radius:4px;background:rgba(56,189,248,0.15);color:#38bdf8;cursor:pointer;" title="Manual Fix">🔧 Manual</button>
+          </div>
+          ` : ''}
         </div>
       `;
+
       container.appendChild(item);
+
+      // Render inline Manual Assist card if this step is active
+      if (this.manualAssistStepIndex === index) {
+        const card = this._createManualAssistCard(action, index);
+        container.appendChild(card);
+      }
     });
-    
+
     // Scroll to bottom
     container.scrollTop = container.scrollHeight;
   }
@@ -5369,6 +5415,341 @@ ${testCase.postconditions}
     this.renderActionsList();
     this.updateUI();
     this.addLog('success', `Captured page with ${assertionCount} assertions`);
+  }
+
+  // ============================================
+  // OPEN IN DESKTOP RECORDER
+  // ============================================
+
+  async openInDesktopRecorder() {
+    if (this.state.actions.length === 0) {
+      this.addLog('warn', 'No actions recorded yet');
+      return;
+    }
+
+    this.addLog('info', 'Saving session and opening in Desktop Recorder...');
+
+    try {
+      // Save session to backend first
+      const sessionId = `ext_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const sessionData = {
+        session_id: sessionId,
+        actions: this.state.actions,
+        metadata: {
+          source: 'extension',
+          appType: this.options.appType,
+          startUrl: this.options.baseUrl,
+          recordedAt: new Date().toISOString(),
+        },
+      };
+
+      const serverUrl = this.options.serverUrl || (typeof getServerUrl === 'function' ? getServerUrl() : 'http://localhost:8000');
+      const response = await fetch(`${serverUrl}/api/flowstral/save-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`);
+      }
+
+      // Open in desktop recorder
+      const frontendUrl = this.options.frontendUrl || (typeof getFrontendUrl === 'function' ? getFrontendUrl() : 'http://localhost:8080');
+      const desktopUrl = `${frontendUrl}/recorder?sessionId=${encodeURIComponent(sessionId)}`;
+      chrome.tabs.create({ url: desktopUrl });
+
+      this.addLog('success', `Opened in Desktop Recorder (session: ${sessionId.substring(0, 12)}...)`);
+    } catch (error) {
+      this.addLog('error', `Failed to open in Desktop: ${error.message}`);
+      console.error('[Sidebar] openInDesktopRecorder error:', error);
+    }
+  }
+
+  // ============================================
+  // AI AUTO-FIX — Fix broken step selectors
+  // ============================================
+
+  async handleAiFix(stepIndex) {
+    const action = this.state.actions[stepIndex];
+    if (!action) return;
+
+    this.addLog('info', `🤖 Running AI auto-fix for step ${stepIndex + 1}...`);
+
+    // Show spinner on the action item
+    const items = this.elements.actionsList.querySelectorAll('.action-item');
+    const item = items[stepIndex];
+    if (item) {
+      const fixBtn = item.querySelector('[onclick*="handleAiFix"]');
+      if (fixBtn) {
+        fixBtn.textContent = '⏳';
+        fixBtn.disabled = true;
+      }
+    }
+
+    try {
+      if (typeof aiAutoFixStep !== 'function') {
+        throw new Error('AI enhancements module not loaded');
+      }
+
+      const sessionId = `ext_${Date.now()}`;
+      const result = await aiAutoFixStep({
+        test_id: sessionId,
+        step_id: action.id || `step-${stepIndex}`,
+        step_index: stepIndex,
+        step_label: action.description || this.getActionDescription(action),
+        failed_selector: action.selector?.primary?.css || action.selector?.selector || '',
+        error_message: action._error || 'Element not found',
+        step_info: {
+          type: action.type,
+          selector: action.selector,
+          value: action.value,
+        },
+        page_url: action.url || this.options.baseUrl,
+      });
+
+      if (result.success && result.fixed_selector) {
+        // Apply the fixed selector
+        if (!action.selector) action.selector = {};
+        action.selector.primary = { css: result.fixed_selector };
+        action.selector.selector = result.fixed_selector;
+        action._status = 'healed';
+        this.addLog('success', `✅ Step ${stepIndex + 1} fixed: ${result.strategy_used} (${Math.round(result.confidence * 100)}% confidence)`);
+      } else {
+        // AI failed — show Manual Assist inline
+        this.addLog('warn', `⚠️ AI couldn't fix step ${stepIndex + 1}. Try Manual Assist.`);
+        this.manualAssistStepIndex = stepIndex;
+      }
+
+      this.renderActionsList();
+    } catch (error) {
+      this.addLog('error', `AI Fix failed: ${error.message}`);
+      this.manualAssistStepIndex = stepIndex;
+      this.renderActionsList();
+    }
+  }
+
+  // ============================================
+  // FLAG / UNFLAG FALSE POSITIVE
+  // ============================================
+
+  async handleFlag(stepIndex) {
+    const action = this.state.actions[stepIndex];
+    if (!action) return;
+
+    const stepId = action.id || `step-${stepIndex}`;
+    const testId = `ext_session`;
+
+    if (this.falsePositiveFlags.has(stepId)) {
+      // Unflag
+      if (typeof aiRemoveFalsePositive === 'function') {
+        await aiRemoveFalsePositive(testId, stepId);
+      }
+      this.falsePositiveFlags.delete(stepId);
+      this.addLog('info', `Step ${stepIndex + 1} unflagged`);
+    } else {
+      // Flag as false positive
+      if (typeof aiSaveFalsePositive === 'function') {
+        await aiSaveFalsePositive({
+          test_id: testId,
+          step_id: stepId,
+          step_index: stepIndex,
+          step_label: action.description || this.getActionDescription(action),
+          reason: 'Flagged from extension',
+        });
+      }
+      this.falsePositiveFlags.set(stepId, true);
+      this.addLog('info', `🚩 Step ${stepIndex + 1} flagged as false positive`);
+    }
+
+    this.renderActionsList();
+  }
+
+  // ============================================
+  // MANUAL ASSIST — Toggle inline card
+  // ============================================
+
+  handleManualAssist(stepIndex) {
+    if (this.manualAssistStepIndex === stepIndex) {
+      // Toggle off
+      this.manualAssistStepIndex = null;
+    } else {
+      this.manualAssistStepIndex = stepIndex;
+    }
+    this.renderActionsList();
+  }
+
+  /**
+   * Create the inline Manual Assist card DOM for a step.
+   * Two modes: Paste Element and Enter Selector.
+   */
+  _createManualAssistCard(action, stepIndex) {
+    const card = document.createElement('div');
+    card.className = 'manual-assist-card';
+    card.style.cssText = 'background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px;margin:4px 0 8px 28px;';
+
+    const stepId = action.id || `step-${stepIndex}`;
+    const stepLabel = action.description || this.getActionDescription(action);
+
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11px;font-weight:600;color:#38bdf8;">🔧 Manual Assist</span>
+        <button onclick="sidebar.handleManualAssist(${stepIndex})" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;">✕</button>
+      </div>
+      <!-- Tab buttons -->
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <button class="ma-tab-btn active" data-ma-tab="paste" onclick="sidebar._switchManualAssistTab(this,'paste')" style="font-size:10px;padding:3px 8px;border:1px solid rgba(56,189,248,0.4);border-radius:4px;background:rgba(56,189,248,0.2);color:#38bdf8;cursor:pointer;">Paste Element</button>
+        <button class="ma-tab-btn" data-ma-tab="selector" onclick="sidebar._switchManualAssistTab(this,'selector')" style="font-size:10px;padding:3px 8px;border:1px solid rgba(139,92,246,0.4);border-radius:4px;background:transparent;color:#a78bfa;cursor:pointer;">Enter Selector</button>
+      </div>
+      <!-- Paste Element tab -->
+      <div class="ma-tab-content" data-ma-content="paste">
+        <p style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Right-click element in DevTools → Copy → Copy outerHTML, then paste below:</p>
+        <textarea id="maHtmlInput_${stepIndex}" placeholder='<button class="btn" data-testid="submit">Submit</button>' style="width:100%;height:60px;font-family:monospace;font-size:10px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:white;padding:6px;resize:vertical;box-sizing:border-box;"></textarea>
+        <button onclick="sidebar._submitManualAssistPaste(${stepIndex})" style="width:100%;margin-top:6px;font-size:10px;padding:5px;border:none;border-radius:4px;background:linear-gradient(135deg,#38bdf8,#8b5cf6);color:white;cursor:pointer;font-weight:600;">Generate Selectors</button>
+      </div>
+      <!-- Enter Selector tab -->
+      <div class="ma-tab-content" data-ma-content="selector" style="display:none;">
+        <div style="display:flex;gap:4px;margin-bottom:6px;">
+          <select id="maSelectorType_${stepIndex}" style="font-size:10px;padding:3px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:white;">
+            <option value="css">CSS</option>
+            <option value="xpath">XPath</option>
+            <option value="text">Text</option>
+          </select>
+          <input id="maSelectorInput_${stepIndex}" type="text" placeholder='[data-testid="submit"]' style="flex:1;font-family:monospace;font-size:10px;padding:3px 6px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:white;">
+        </div>
+        <button onclick="sidebar._submitManualAssistSelector(${stepIndex})" style="width:100%;font-size:10px;padding:5px;border:none;border-radius:4px;background:linear-gradient(135deg,#8b5cf6,#38bdf8);color:white;cursor:pointer;font-weight:600;">Apply Selector</button>
+      </div>
+      <!-- Results area -->
+      <div id="maResults_${stepIndex}" style="margin-top:8px;display:none;"></div>
+    `;
+
+    return card;
+  }
+
+  _switchManualAssistTab(btn, tabName) {
+    // Update tab button styles
+    const card = btn.closest('.manual-assist-card');
+    card.querySelectorAll('.ma-tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = 'transparent';
+    });
+    btn.classList.add('active');
+    btn.style.background = tabName === 'paste' ? 'rgba(56,189,248,0.2)' : 'rgba(139,92,246,0.2)';
+
+    // Show/hide content
+    card.querySelectorAll('.ma-tab-content').forEach(c => c.style.display = 'none');
+    card.querySelector(`[data-ma-content="${tabName}"]`).style.display = 'block';
+  }
+
+  async _submitManualAssistPaste(stepIndex) {
+    const action = this.state.actions[stepIndex];
+    const html = document.getElementById(`maHtmlInput_${stepIndex}`)?.value?.trim();
+    if (!html) {
+      this.addLog('warn', 'Paste the element HTML first');
+      return;
+    }
+
+    const resultsEl = document.getElementById(`maResults_${stepIndex}`);
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<p style="font-size:10px;color:#94a3b8;">⏳ Generating selectors...</p>';
+
+    try {
+      if (typeof aiManualAssistPasteElement !== 'function') {
+        throw new Error('AI module not loaded');
+      }
+
+      const result = await aiManualAssistPasteElement({
+        test_id: 'ext_session',
+        step_id: action.id || `step-${stepIndex}`,
+        step_index: stepIndex,
+        step_label: action.description || this.getActionDescription(action),
+        html_content: html,
+        failed_selector: action.selector?.primary?.css || '',
+        page_url: action.url || this.options.baseUrl,
+      });
+
+      if (result.success && result.selectors?.length > 0) {
+        this._renderManualAssistResults(resultsEl, result.selectors, stepIndex);
+      } else {
+        resultsEl.innerHTML = `<p style="font-size:10px;color:#f87171;">${result.message || 'No selectors generated'}</p>`;
+      }
+    } catch (error) {
+      resultsEl.innerHTML = `<p style="font-size:10px;color:#f87171;">Error: ${error.message}</p>`;
+    }
+  }
+
+  async _submitManualAssistSelector(stepIndex) {
+    const action = this.state.actions[stepIndex];
+    const selectorType = document.getElementById(`maSelectorType_${stepIndex}`)?.value || 'css';
+    const selectorValue = document.getElementById(`maSelectorInput_${stepIndex}`)?.value?.trim();
+
+    if (!selectorValue) {
+      this.addLog('warn', 'Enter a selector first');
+      return;
+    }
+
+    const resultsEl = document.getElementById(`maResults_${stepIndex}`);
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = '<p style="font-size:10px;color:#94a3b8;">⏳ Validating selector...</p>';
+
+    try {
+      if (typeof aiManualAssistEnterSelector !== 'function') {
+        throw new Error('AI module not loaded');
+      }
+
+      const result = await aiManualAssistEnterSelector({
+        test_id: 'ext_session',
+        step_id: action.id || `step-${stepIndex}`,
+        step_index: stepIndex,
+        step_label: action.description || this.getActionDescription(action),
+        selector_type: selectorType,
+        selector_value: selectorValue,
+      });
+
+      if (result.success && result.selectors?.length > 0) {
+        this._renderManualAssistResults(resultsEl, result.selectors, stepIndex);
+      } else {
+        resultsEl.innerHTML = `<p style="font-size:10px;color:#f87171;">${result.message || 'Invalid selector'}</p>`;
+      }
+    } catch (error) {
+      resultsEl.innerHTML = `<p style="font-size:10px;color:#f87171;">Error: ${error.message}</p>`;
+    }
+  }
+
+  _renderManualAssistResults(container, selectors, stepIndex) {
+    let html = '';
+    selectors.forEach((sel, i) => {
+      const confidencePct = Math.round((sel.confidence || 0) * 100);
+      const color = confidencePct >= 80 ? '#22c55e' : confidencePct >= 50 ? '#f59e0b' : '#ef4444';
+      const isRecommended = i === 0;
+      html += `
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;margin-bottom:3px;background:rgba(0,0,0,0.2);border-radius:4px;${isRecommended ? 'border:1px solid rgba(34,197,94,0.4);' : ''}">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:10px;color:white;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(sel.selector || '').replace(/"/g, '&quot;')}">${sel.selector || sel.playwright_locator || ''}</div>
+            <div style="font-size:9px;color:#94a3b8;">${sel.strategy || sel.description || ''} <span style="color:${color};">${confidencePct}%</span></div>
+          </div>
+          <button onclick="sidebar._applyManualAssistSelector(${stepIndex}, '${(sel.selector || '').replace(/'/g, "\\'")}')" style="font-size:9px;padding:2px 8px;border:none;border-radius:3px;background:${isRecommended ? '#22c55e' : '#6366f1'};color:white;cursor:pointer;white-space:nowrap;">Use</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  }
+
+  _applyManualAssistSelector(stepIndex, selector) {
+    const action = this.state.actions[stepIndex];
+    if (!action) return;
+
+    // Apply the selector to the action
+    if (!action.selector) action.selector = {};
+    action.selector.primary = { css: selector };
+    action.selector.selector = selector;
+    action._status = 'healed';
+
+    // Close the manual assist card
+    this.manualAssistStepIndex = null;
+
+    this.addLog('success', `✅ Step ${stepIndex + 1} selector updated via Manual Assist`);
+    this.renderActionsList();
   }
 }
 

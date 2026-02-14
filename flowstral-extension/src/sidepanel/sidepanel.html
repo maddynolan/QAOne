@@ -1216,17 +1216,21 @@
     <div class="tab" data-tab="salesforce">
       <span class="tab-icon">☁️</span> SF
     </div>
+    <div class="tab" data-tab="script">
+      <span class="tab-icon">📜</span> Script
+    </div>
+    <div class="tab" data-tab="run">
+      <span class="tab-icon">▶️</span> Run
+    </div>
     <!-- Settings as icon button -->
     <div class="tab-action" id="settingsBtn" title="Settings">
       <span>⚙️</span>
     </div>
   </div>
-  
-  <!-- Hidden tabs for backward compatibility - not shown in UI but functionality preserved -->
+
+  <!-- Hidden tabs for backward compatibility -->
   <div class="hidden-tabs" style="display: none;">
-    <div class="tab" data-tab="script"></div>
     <div class="tab" data-tab="review"></div>
-    <div class="tab" data-tab="run"></div>
     <div class="tab" data-tab="settings"></div>
   </div>
 
@@ -1295,6 +1299,9 @@
       </button>
       <button class="btn btn-outline" id="exportOptionsBtn" title="Export Options" disabled style="flex: 1; padding: 6px;">
         📥 Export
+      </button>
+      <button class="btn btn-outline" id="openDesktopBtn" title="Open in Desktop Recorder" disabled style="flex: 1; padding: 6px;">
+        🖥️ Desktop
       </button>
     </div>
     
@@ -1870,7 +1877,7 @@
 
     <div class="script-section" id="scriptSection">
       <div class="script-header">
-        <span>Generated Playwright Script</span>
+        <span>Generated Test Script</span>
         <span id="scriptLang">Python</span>
       </div>
       <pre class="script-preview" id="scriptPreview">// Record actions and click Generate to see script...</pre>
@@ -2385,6 +2392,9 @@
     </button>
   </div>
 
+  <!-- Shared Utilities -->
+  <script src="../lib/api-config.js"></script>
+  <script src="../lib/ai-enhancements.js"></script>
   <!-- Salesforce Templates -->
   <script src="../lib/salesforce-templates.js"></script>
   <script src="sidepanel.js"></script>
@@ -2417,7 +2427,21 @@
       };
       localStorage.setItem('qaai_settings', JSON.stringify(settings));
       document.getElementById('settingsModal').style.display = 'none';
-      
+
+      // Sync to chrome.storage.local so background.js picks up changes
+      chrome.storage.local.set({
+        flowstral_server_url: settings.backendUrl,
+        flowstral_frontend_url: settings.frontendUrl,
+      });
+
+      // Update sidebar controller options
+      if (window.sidebar) {
+        window.sidebar.options.serverUrl = settings.backendUrl;
+        window.sidebar.options.frontendUrl = settings.frontendUrl;
+        window.sidebar.saveSettings();
+        window.sidebar.checkServerConnection();
+      }
+
       // Update backend URL if available
       if (window.updateBackendUrl) {
         window.updateBackendUrl(settings.backendUrl);

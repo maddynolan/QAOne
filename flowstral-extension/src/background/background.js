@@ -1,12 +1,13 @@
 /**
  * Background Service Worker
- * Manages recording state across tabs and generates Playwright scripts
+ * Manages recording state across tabs and generates test scripts
  * 
  * v2.0 - Added Network Capture for Protocol-Level Testing
  * Better than LoadRunner/NeoLoad: Browser-native, no proxy needed
  */
 
-// Import Network Capture module
+// Import shared modules
+importScripts('../lib/api-config.js');
 importScripts('../lib/network-capture.js');
 
 class RecordingManager {
@@ -33,6 +34,10 @@ class RecordingManager {
   }
 
   async init() {
+    // Initialize centralized URL config and listen for settings changes
+    await initApiConfig();
+    listenForConfigChanges();
+
     // Listen for messages from content scripts and popup
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
@@ -134,13 +139,29 @@ class RecordingManager {
         await chrome.tabs.sendMessage(tabId, { type: 'START_RECORDING' });
         console.log('[Background] Started recording in existing content script, tab:', tabId);
       } else {
-        // Inject content script
+        // Request host permission if needed (optional_host_permissions)
+        const hasPermission = await chrome.permissions.contains({ origins: ['<all_urls>'] });
+        if (!hasPermission) {
+          const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+          if (!granted) {
+            console.warn('[Background] Host permission denied by user');
+            return;
+          }
+        }
+
+        // Inject CSS first
+        await chrome.scripting.insertCSS({
+          target: { tabId: tabId, allFrames: true },
+          files: ['src/content/content.css']
+        }).catch(() => {});
+
+        // Inject content scripts in order: shared engine → coalescer → recorder
         await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['src/content/content.js']
+          target: { tabId: tabId, allFrames: true },
+          files: ['src/lib/recorder-engine.js', 'src/lib/action-coalescer-browser.js', 'src/content/content.js']
         });
-        console.log('[Background] Injected content script into tab:', tabId);
-        
+        console.log('[Background] Injected content scripts into tab:', tabId);
+
         // Start recording after injection
         setTimeout(async () => {
           await chrome.tabs.sendMessage(tabId, { type: 'START_RECORDING' }).catch(() => {});
@@ -550,6 +571,16 @@ class RecordingManager {
       await this.stopRecording();
     }
 
+    // Request optional permissions needed for recording
+    try {
+      await chrome.permissions.request({
+        permissions: ['tabs'],
+        origins: ['<all_urls>'],
+      });
+    } catch (e) {
+      console.warn('[Background] Permission request failed (may already be granted):', e.message);
+    }
+
     // Get the current tab (fast)
     const tab = await chrome.tabs.get(tabId);
     
@@ -584,9 +615,13 @@ class RecordingManager {
     // Clear any old script from storage
     await chrome.storage.local.remove('recorderState');
 
-    // NEW: Start network capture if enabled
+    // Start network capture if enabled (requires optional webRequest + downloads permissions)
     if (this.state.captureNetwork) {
       try {
+        // Request optional permissions for network capture
+        await chrome.permissions.request({
+          permissions: ['webRequest', 'downloads'],
+        }).catch(() => {});
         this.networkCapture.start(sessionId);
         console.log('[Background] Network capture started for session:', sessionId);
       } catch (error) {
@@ -609,15 +644,19 @@ class RecordingManager {
     } catch (error) {
       console.warn('[Background] Content script not found, injecting now...');
       
-      // Inject the content script
+      // Inject the content scripts (all 3 in order + CSS)
       try {
+        await chrome.scripting.insertCSS({
+          target: { tabId: tabId, allFrames: true },
+          files: ['src/content/content.css']
+        }).catch(() => {});
         await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          files: ['src/content/content.js']
+          target: { tabId: tabId, allFrames: true },
+          files: ['src/lib/recorder-engine.js', 'src/lib/action-coalescer-browser.js', 'src/content/content.js']
         });
-        console.log('[Background] Content script injected successfully');
-        
-        // Wait a moment for script to initialize
+        console.log('[Background] Content scripts injected successfully');
+
+        // Wait a moment for scripts to initialize
         await new Promise(r => setTimeout(r, 300));
         
         // Try sending the message again
@@ -812,7 +851,7 @@ class RecordingManager {
         } : null,
       };
 
-      const response = await fetch('http://localhost:8000/api/flowstral/save-session', {
+      const response = await fetch(apiUrl('/api/flowstral/save-session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sessionData),
@@ -845,7 +884,7 @@ class RecordingManager {
         this.networkCapture.exportAsHAR() : 
         this._convertToHAR(networkData);
       
-      const response = await fetch('http://localhost:8000/api/protocol-recording/import-har', {
+      const response = await fetch(apiUrl('/api/protocol-recording/import-har'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2439,10 +2478,8 @@ Feature: ${featureName}
 
   async generateScriptViaAPI(options = {}) {
     // Backend API URL (configurable)
-    const API_BASE_URL = 'http://localhost:8000'; // Default, can be configured
-    
     try {
-      const response = await fetch(`${API_BASE_URL}/api/flowstral/generate`, {
+      const response = await fetch(apiUrl('/api/flowstral/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

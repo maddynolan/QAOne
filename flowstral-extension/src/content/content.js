@@ -4951,10 +4951,16 @@
         console.log('[Recorder] Action skipped:', action.type, action.description);
         return;
       }
-      
+
       // Remove any recent redundant action before adding new one
       this.removeRedundantActions(action);
-      
+
+      // Generate unique action ID for AI healing chain, false positive tracking, and manual assist
+      if (!action.id) {
+        const rand = Math.random().toString(36).substring(2, 6);
+        action.id = `action_${Date.now()}_${rand}`;
+      }
+
       this.actions.push(action);
       this.lastAction = action;
       
