@@ -57,10 +57,18 @@ import type {
 import { DEFAULT_FOLDERS } from '../types/test-repository.types';
 import { TreeItem } from '../components/TreeItem';
 import { TestCaseCard } from '../components/TestCaseCard';
-import { TestRunResultsDialog } from '../components/TestRunResultsDialog';
-import { CreateDefectForm } from '../components/CreateDefectForm';
+import { SuitesTabPanel } from '../components/SuitesTabPanel';
+import { ReleasesTabPanel } from '../components/ReleasesTabPanel';
+import { DefectsTabPanel } from '../components/DefectsTabPanel';
+import { PlansTabPanel } from '../components/PlansTabPanel';
+import { RunsTabPanel } from '../components/RunsTabPanel';
+import { RepositoryDialogs } from '../components/RepositoryDialogs';
 import { mapSuiteFromApi, mapPlanFromApi, mapRunFromApi, mapDefectFromApi } from '../lib/data-mappers';
 import { convertStepToExecutorFormat as convertStepToExecutorFormatFn } from '../lib/test-execution';
+import { LAZY_BATCH_SIZE, SEARCH_PLACEHOLDERS, buildTabDefinitions } from '../constants/test-repository.constants';
+import { calculateAutomationStatus, isApiTest as isApiTestUtil, isElectronApp, sortTestCases, prioritizeTestCases } from '../lib/test-repository-utils';
+import { deleteTestCaseFromAllSources, loadAllTestCases, loadRelatedData, runApiTestFromRepository as runApiTestApi } from '../lib/test-repository-api';
+import type { ApiRunResult } from '../lib/test-repository-api';
 
 export default function TestRepository() {
   const navigate = useNavigate();
@@ -85,7 +93,7 @@ export default function TestRepository() {
   const [allTestCasesLoaded, setAllTestCasesLoaded] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [backendSearchResults, setBackendSearchResults] = useState<TestCase[] | null>(null);
-  const BATCH_SIZE = 100; // Load 100 more each time
+  const BATCH_SIZE = LAZY_BATCH_SIZE;
   
   // Filter state for enterprise scale
   const [statusFilter, setStatusFilter] = useState<'all' | 'none' | 'partial' | 'full'>('all');
@@ -241,253 +249,13 @@ export default function TestRepository() {
       localStorage.setItem('test_repository_folders', JSON.stringify(DEFAULT_FOLDERS));
     }
 
-    // Load test cases from multiple sources
-    const loadAllTestCases = async () => {
-      const allCases: TestCase[] = [];
-      const seenIds = new Set<string>();
-      
-      // FIRST: Load deleted IDs to skip them while loading
-      const deletedIds = new Set<string>(JSON.parse(localStorage.getItem('deleted_test_ids') || '[]'));
-      console.log('[Repository] Deleted IDs to skip:', deletedIds.size);
-      
-      // CLEANUP: Actually remove deleted entries from localStorage to prevent reappearing
-      if (deletedIds.size > 0) {
-        // Clean up unified_test_case_* entries for deleted IDs
-        for (const deletedId of deletedIds) {
-          localStorage.removeItem(`unified_test_case_${deletedId}`);
-        }
-        
-        // Clean up test_cases array
-        try {
-          const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-          const cleanedLocal = localCases.filter((tc: any) => !deletedIds.has(tc.id));
-          if (cleanedLocal.length !== localCases.length) {
-            localStorage.setItem('test_cases', JSON.stringify(cleanedLocal));
-            console.log('[Repository] Cleaned', localCases.length - cleanedLocal.length, 'deleted entries from test_cases');
-          }
-        } catch (e) {}
-        
-        // Clean up flowstral_test_cases array
-        try {
-          const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
-          const cleanedFlowstral = flowstralCases.filter((tc: any) => !deletedIds.has(tc.id));
-          if (cleanedFlowstral.length !== flowstralCases.length) {
-            localStorage.setItem('flowstral_test_cases', JSON.stringify(cleanedFlowstral));
-            console.log('[Repository] Cleaned', flowstralCases.length - cleanedFlowstral.length, 'deleted entries from flowstral_test_cases');
-          }
-        } catch (e) {}
-      }
-      
-      // Helper: Check if ID should be skipped (deleted)
-      const isDeleted = (id: string) => deletedIds.has(id);
-      
-      // Helper: Calculate automation status based on step coverage
-      const calculateAutomationStatus = (tc: any): 'none' | 'partial' | 'full' => {
-        // First check if already has correct status saved
-        if (tc.automationStatus === 'full' || tc.automationStatus === 'automated') {
-          console.log(`[Status] ${tc.name}: Using saved status 'full'`);
-          return 'full';
-        }
-        
-        // Get steps from unified_data or steps array
-        let steps = tc.unified_data?.steps || tc.steps || [];
-        if (typeof tc.unified_data === 'string') {
-          try {
-            const parsed = JSON.parse(tc.unified_data);
-            steps = parsed?.steps || steps;
-            console.log(`[Status] ${tc.name}: Parsed unified_data string, got ${steps.length} steps`);
-          } catch (e) {
-            console.warn(`[Status] ${tc.name}: Failed to parse unified_data`);
-          }
-        }
-        
-        if (!steps || steps.length === 0) {
-          console.log(`[Status] ${tc.name}: No steps found, returning 'none'`);
-          return 'none';
-        }
-        
-        // Count automated steps - must have REAL automation data:
-        // - qword (GoTo, Fill, ClickText, etc.) WITH args, OR
-        // - selectorObj (from recording), OR
-        // - automationStatus explicitly set to 'recorded'
-        const automatedSteps = steps.filter((s: any) => {
-          // Must have qword with args (actual recorded action)
-          if (s.qword && s.args && s.args.length > 0) return true;
-          // Or have selector object from recording
-          if (s.selectorObj && Object.keys(s.selectorObj).length > 0) return true;
-          // Or explicitly marked as recorded
-          if (s.automationStatus === 'recorded') return true;
-          return false;
-        });
-        
-        console.log(`[Status] ${tc.name}: ${automatedSteps.length}/${steps.length} automated steps`);
-        if (automatedSteps.length > 0) {
-          console.log(`[Status] First automated step has: qword=${automatedSteps[0].qword}, args=${JSON.stringify(automatedSteps[0].args)}`);
-        }
-        
-        if (automatedSteps.length === steps.length) return 'full';  // All automated
-        if (automatedSteps.length > 0) return 'partial';  // Some automated
-        return 'none';  // Manual only
-      };
-      
-      // 0. Check if we should load from backend scale database (for large datasets)
-      const useScaleDb = localStorage.getItem('use_scale_db') === 'true';
-      if (useScaleDb) {
-        try {
-          console.log('[Repository] Loading from backend scale database...');
-          const response = await fetch(`${API_BASE_URL}/test-cases/scale-data`);
-          if (response.ok) {
-            const data = await response.json();
-            console.log('[Repository] Loaded from scale DB:', data.testCases?.length || 0, 'test cases');
-            for (const tc of (data.testCases || [])) {
-              if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
-                seenIds.add(tc.id);
-                allCases.push({
-                  id: tc.id,
-                  name: tc.name,
-                  description: tc.description || '',
-                  folderId: tc.folder_id || null,
-                  folderName: tc.folder_name || undefined,
-                  priority: tc.priority || 'medium',
-                  status: tc.status || 'ready',
-                  automationStatus: (tc.automation_status as 'none' | 'partial' | 'full') || 'none',
-                  automationScriptPath: tc.automation_script_path || undefined,
-                  tags: tc.tags || [],
-                  steps: tc.steps || [],
-                  createdAt: tc.created_at,
-                  updatedAt: tc.updated_at
-                });
-              }
-            }
-            // Also load suites, plans, releases if present
-            if (data.suites?.length > 0) {
-              console.log('[Repository] Saving suites to localStorage:', data.suites.length);
-              localStorage.setItem('test_suites', JSON.stringify(data.suites));
-            }
-            if (data.plans?.length > 0) {
-              console.log('[Repository] Saving plans to localStorage:', data.plans.length);
-              localStorage.setItem('test_plans', JSON.stringify(data.plans));
-            }
-            if (data.releases?.length > 0) {
-              console.log('[Repository] Saving releases to localStorage:', data.releases.length);
-              localStorage.setItem('test_releases', JSON.stringify(data.releases));
-            }
-            // Trigger reload of related data
-            window.dispatchEvent(new CustomEvent('reload-related-data'));
-          }
-        } catch (e) {
-          console.log('[Repository] Scale DB not available, falling back to other sources');
-        }
-      }
-      
-      // 1. From Electron local storage (JSON files on disk) - primary source in desktop app
-      try {
-        const electronAPI = (window as any).electronAPI || (window as any).flowstral;
-        if (electronAPI?.localStorage?.getTestCases) {
-          const electronCases = await electronAPI.localStorage.getTestCases();
-          console.log('[Repository] Loaded from Electron storage:', electronCases?.length || 0, 'test cases');
-          for (const tc of (electronCases || [])) {
-            if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
-              seenIds.add(tc.id);
-              allCases.push({
-                ...tc,
-                folderId: tc.folderId || null,
-                automationStatus: calculateAutomationStatus(tc)
-              });
-            }
-          }
-        }
-      } catch (e) {
-        console.log('[Repository] Electron storage not available, using browser localStorage');
-      }
-      
-      // 2. From browser localStorage test_cases key
-      try {
-        const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-        for (const tc of localCases) {
-          if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
-            seenIds.add(tc.id);
-            allCases.push({
-              ...tc,
-              folderId: tc.folderId || null,
-              automationStatus: calculateAutomationStatus(tc)
-            });
-          }
-        }
-      } catch (e) {}
-      
-      // 3. From unified_test_case_* keys (legacy format)
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('unified_test_case_'));
-      for (const key of keys) {
-        try {
-          const tc = JSON.parse(localStorage.getItem(key) || '{}');
-          if (tc.id && !seenIds.has(tc.id) && !isDeleted(tc.id)) {
-            seenIds.add(tc.id);
-            allCases.push({
-              ...tc,
-              folderId: tc.folderId || null,
-              automationStatus: calculateAutomationStatus(tc)
-            });
-          }
-        } catch (e) {}
-      }
-
-      // 4. From persistent database API (/api/db/test-cases) - API tests saved from Builder "Add to Tests"
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/db/test-cases?limit=1000`);
-        if (response.ok) {
-          const dbCases = await response.json();
-          const list = Array.isArray(dbCases) ? dbCases : dbCases.items || dbCases.test_cases || [];
-          for (const row of list) {
-            const id = row.id || row.test_case_id;
-            if (!id || seenIds.has(id) || isDeleted(id)) continue;
-            seenIds.add(id);
-            const meta = row.metadata || {};
-            const isApi = row.category === 'api' || meta.type === 'automated';
-            allCases.push({
-              id,
-              name: row.name || row.title || 'Untitled',
-              description: row.description || '',
-              folderId: row.folder_id || row.folderId || null,
-              priority: (row.priority as TestCase['priority']) || 'medium',
-              status: (row.status as TestCase['status']) || 'draft',
-              type: (row.category === 'api' ? 'functional' : row.type) as TestCase['type'],
-              automationStatus: isApi ? 'full' : (meta.automationStatus as TestCase['automationStatus']) || calculateAutomationStatus({ steps: row.steps }),
-              tags: [...new Set([...(Array.isArray(row.tags) ? row.tags : row.tags ? [row.tags] : []), ...(row.category === 'api' ? ['api-testing'] : [])])],
-              steps: row.steps || [],
-              createdAt: row.created_at || row.createdAt,
-              updatedAt: row.updated_at || row.updatedAt,
-              unified_data: { ...meta, method: meta.method, endpoint: meta.endpoint, assertions: meta.assertions },
-            });
-          }
-          console.log('[Repository] Loaded from /api/db/test-cases:', list.length, 'test cases');
-        }
-      } catch (e) {
-        console.log('[Repository] /api/db/test-cases not available:', (e as Error).message);
-      }
-      
-      // Deduplicate by name - keep the most recently updated version
-      const byName = new Map<string, TestCase>();
-      for (const tc of allCases) {
-        const existing = byName.get(tc.name);
-        if (!existing) {
-          byName.set(tc.name, tc);
-        } else {
-          // Keep the one with more recent updatedAt
-          const existingDate = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
-          const newDate = new Date(tc.updatedAt || tc.createdAt || 0).getTime();
-          if (newDate > existingDate) {
-            byName.set(tc.name, tc);
-          }
-        }
-      }
-      const dedupedCases = Array.from(byName.values());
-      
-      console.log('[Repository] Total test cases loaded:', dedupedCases.length, '(deduped from', allCases.length, ', skipped', deletedIds.size, 'deleted)');
-      setTestCases(dedupedCases);
+    // Load test cases from all sources (extracted to lib/test-repository-api.ts)
+    const doLoad = async () => {
+      const cases = await loadAllTestCases();
+      setTestCases(cases);
     };
-    
-    loadAllTestCases();
+
+    doLoad();
     
     // Also reload when triggered by focus or external event
     const handleReload = () => loadAllTestCases();
@@ -646,33 +414,12 @@ export default function TestRepository() {
       });
     }
     
-    // Apply sorting
-    result = [...result].sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'priority') {
-        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-        return (priorityOrder[a.priority || 'medium'] || 2) - (priorityOrder[b.priority || 'medium'] || 2);
-      }
-      // Default: sort by updated
-      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
-    });
-    
-    return result;
+    // Apply sorting (extracted to lib/test-repository-utils.ts)
+    return sortTestCases(result, sortBy);
   }, [currentFolderContent.tests, statusFilter, priorityFilter, planFilter, releaseFilter, tagFilter, sortBy, testPlans, releases, suites]);
   
-  // Prioritized sort: newest first, then by priority
-  const prioritizedTests = useMemo(() => {
-    return [...filteredTests].sort((a, b) => {
-      // First priority: recently updated
-      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      if (dateB !== dateA) return dateB - dateA;
-      
-      // Second priority: by priority level
-      const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-      return (priorityOrder[a.priority || 'medium'] || 2) - (priorityOrder[b.priority || 'medium'] || 2);
-    });
-  }, [filteredTests]);
+  // Prioritized sort: newest first, then by priority (extracted to lib/test-repository-utils.ts)
+  const prioritizedTests = useMemo(() => prioritizeTestCases(filteredTests), [filteredTests]);
   
   // Lazy loaded tests for rendering (first visibleCount tests)
   const displayedTests = useMemo(() => {
@@ -932,12 +679,7 @@ export default function TestRepository() {
   const [testCaseToRun, setTestCaseToRun] = useState<TestCase | null>(null);
   const [apiRunResult, setApiRunResult] = useState<{ passed: boolean; message: string; detail?: string } | null>(null);
 
-  const isApiTest = useCallback((tc: TestCase) => {
-    return tc.tags?.includes('api-testing') === true ||
-      (tc as any).category === 'api' ||
-      (tc as any).type === 'api' ||
-      !!(tc.unified_data?.method && (tc.unified_data?.endpoint || tc.unified_data?.path));
-  }, []);
+  const isApiTest = useCallback((tc: TestCase) => isApiTestUtil(tc), []);
 
   const handleRunTest = useCallback((testCase: TestCase) => {
     setTestCaseToRun(testCase);
@@ -946,49 +688,10 @@ export default function TestRepository() {
   }, []);
 
   const runApiTestFromRepository = useCallback(async (tc: TestCase): Promise<{ passed: boolean; message: string }> => {
-    const ud = tc.unified_data || {};
-    const method = ud.method || 'GET';
-    const endpoint = ud.endpoint || ud.path || (tc as any).path || '';
-    const isFullUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-    const testPath = isFullUrl ? endpoint : (endpoint.startsWith('/') ? endpoint : `/${endpoint}`);
-    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      if (ud.headers) headers = typeof ud.headers === 'string' ? JSON.parse(ud.headers) : ud.headers;
-    } catch { /* keep default */ }
-    let body: any = undefined;
-    try {
-      if (ud.request_body != null) body = typeof ud.request_body === 'string' ? JSON.parse(ud.request_body) : ud.request_body;
-    } catch { /* leave undefined */ }
-    const assertions = Array.isArray(ud.assertions) ? ud.assertions : [];
-    const expectedStatus = ud.expected_status != null ? parseInt(String(ud.expected_status), 10) : (method === 'POST' ? 201 : 200);
-    const res = await fetch(`${API_BASE_URL}/api/v2/testing/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        test_suite: {
-          test_cases: [{
-            test_case_id: tc.id,
-            title: tc.name || 'API Test',
-            method,
-            path: testPath,
-            request: { headers, body },
-            expected_status: expectedStatus,
-            assertions,
-            test_type: 'functional',
-          }],
-          base_url: isFullUrl ? '' : '',
-        },
-        execution_config: { base_url: '', parallel: false },
-        mode: 'automated',
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    const tr = data?.execution_results?.test_results?.[0];
-    const passed = tr?.status === 'passed';
-    const message = passed ? `Passed (${tr?.actual_status} in ${tr?.response_time_ms ?? 0}ms)` : (tr?.error || `Failed: ${tr?.actual_status} (expected ${expectedStatus})`);
-    setApiRunResult({ passed, message, detail: tr?.response_body ? String(tr.response_body).slice(0, 200) : undefined });
-    if (passed) toast.success(message); else toast.error(message);
-    return { passed, message };
+    const result = await runApiTestApi(tc);
+    setApiRunResult(result);
+    if (result.passed) toast.success(result.message); else toast.error(result.message);
+    return { passed: result.passed, message: result.message };
   }, []);
 
   // Edit test steps in builder
@@ -1040,87 +743,7 @@ export default function TestRepository() {
     setShowDeleteConfirmDialog(true);
   }, []);
 
-  // Helper function to delete a test case from all sources (backend, electron, localStorage)
-  const deleteTestCaseFromAllSources = useCallback(async (testId: string) => {
-    // FIRST: Update deleted_test_ids in localStorage SYNCHRONOUSLY to prevent race conditions
-    // This ensures that even if reload happens during async operations, the ID is filtered out
-    try {
-      const existingDeleted = JSON.parse(localStorage.getItem('deleted_test_ids') || '[]');
-      if (!existingDeleted.includes(testId)) {
-        existingDeleted.push(testId);
-        localStorage.setItem('deleted_test_ids', JSON.stringify(existingDeleted));
-        console.log(`[Repository] Added ${testId} to deleted_test_ids (sync)`);
-      }
-    } catch (e) {
-      console.warn(`[Repository] Failed to update deleted_test_ids:`, e);
-    }
-    
-    // 1. Delete from localStorage entries FIRST (synchronous)
-    localStorage.removeItem(`unified_test_case_${testId}`);
-    
-    // 2. Delete from flowstral_test_cases localStorage
-    try {
-      const flowstralCases = JSON.parse(localStorage.getItem('flowstral_test_cases') || '[]');
-      const updatedFlowstral = flowstralCases.filter((tc: any) => tc.id !== testId);
-      localStorage.setItem('flowstral_test_cases', JSON.stringify(updatedFlowstral));
-    } catch (e) {}
-    
-    // 3. Delete from test_cases localStorage
-    try {
-      const localCases = JSON.parse(localStorage.getItem('test_cases') || '[]');
-      const updatedLocal = localCases.filter((tc: any) => tc.id !== testId);
-      localStorage.setItem('test_cases', JSON.stringify(updatedLocal));
-    } catch (e) {}
-    
-    // NOW do async backend deletions (these can happen in parallel)
-    const deletePromises: Promise<any>[] = [];
-    
-    // 4. Delete from backend API (PostgreSQL)
-    deletePromises.push(
-      fetch(`${API_BASE_URL}/test-cases/${testId}`, { method: 'DELETE' })
-        .then(res => {
-          if (res.ok) console.log(`[Repository] Deleted ${testId} from PostgreSQL backend`);
-          return res;
-        })
-        .catch(e => console.warn(`[Repository] PostgreSQL delete failed:`, e))
-    );
-    
-    // 5. Delete from Flowstral backend (alternative endpoint)
-    deletePromises.push(
-      fetch(`${API_BASE_URL}/api/flowstral/test-cases/${testId}`, { method: 'DELETE' })
-        .then(res => {
-          if (res.ok) console.log(`[Repository] Deleted ${testId} from Flowstral backend`);
-          return res;
-        })
-        .catch(e => {})
-    );
-    
-    // 6. Delete from SQLite scale database
-    deletePromises.push(
-      fetch(`${API_BASE_URL}/test-cases/scale-data/${testId}`, { method: 'DELETE' })
-        .then(res => {
-          if (res.ok) console.log(`[Repository] Deleted ${testId} from SQLite scale DB`);
-          return res;
-        })
-        .catch(e => console.warn(`[Repository] SQLite delete failed:`, e))
-    );
-    
-    // 7. Delete from Electron storage if available
-    try {
-      const electronAPI = (window as any).electronAPI || (window as any).flowstral;
-      if (electronAPI?.localStorage?.deleteTestCase) {
-        deletePromises.push(
-          electronAPI.localStorage.deleteTestCase(testId)
-            .then(() => console.log(`[Repository] Deleted ${testId} from Electron storage`))
-            .catch((e: any) => console.warn(`[Repository] Electron delete failed:`, e))
-        );
-      }
-    } catch (e) {}
-    
-    // Wait for all backend deletions to complete
-    await Promise.allSettled(deletePromises);
-    console.log(`[Repository] Completed deletion of ${testId} from all sources`);
-  }, []);
+  // Helper function to delete a test case from all sources (extracted to lib/test-repository-api.ts)
 
   const handleConfirmDelete = useCallback(async () => {
     if (!deletingItem) return;
@@ -1594,11 +1217,8 @@ export default function TestRepository() {
     toast.success(`Release "${newRelease.name}" created with ${newReleaseSuites.length} suites`);
   }, [newReleaseName, newReleaseDescription, newReleaseStartDate, newReleaseEndDate, newReleaseSuites]);
 
-  // Check if running in Electron desktop app
-  const isElectron = useCallback(() => {
-    return typeof window !== 'undefined' && 
-           ((window as any).electronAPI?.isElectron === true || (window as any).platform?.isElectron === true);
-  }, []);
+  // Check if running in Electron desktop app (extracted to lib/test-repository-utils.ts)
+  const isElectron = useCallback(() => isElectronApp(), []);
 
   // Step conversion from Builder format to Executor format (imported utility)
   const convertStepToExecutorFormat = useCallback(convertStepToExecutorFormatFn, []);
@@ -2101,93 +1721,20 @@ export default function TestRepository() {
     }
   }, [testCases, convertStepToExecutorFormat]);
 
-  // Load suites, plans, runs, defects from backend first (so all testers see same data), then fallback to localStorage
+  // Load suites, plans, runs, defects from backend first, then fallback to localStorage
   useEffect(() => {
-    const loadRelatedData = async () => {
-      let apiSuitesOk = false, apiPlansOk = false, apiRunsOk = false, apiDefectsOk = false;
-      try {
-        const [suitesRes, plansRes, runsRes, defectsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/db/test-suites?limit=1000`),
-          fetch(`${API_BASE_URL}/api/db/test-plans?limit=1000`),
-          fetch(`${API_BASE_URL}/api/db/test-runs?limit=1000`),
-          fetch(`${API_BASE_URL}/api/db/defects?limit=1000`),
-        ]);
-        if (suitesRes.ok) {
-          const list = await suitesRes.json().catch(() => []);
-          const arr = Array.isArray(list) ? list : list.items ?? [];
-          setSuites(arr.map((r: Record<string, unknown>) => mapSuiteFromApi(r)));
-          apiSuitesOk = true;
-          console.log('[Repository] Loaded suites from /api/db/test-suites:', arr.length);
-        }
-        if (plansRes.ok) {
-          const list = await plansRes.json().catch(() => []);
-          const arr = Array.isArray(list) ? list : list.items ?? [];
-          setTestPlans(arr.map((r: Record<string, unknown>) => mapPlanFromApi(r)));
-          apiPlansOk = true;
-          console.log('[Repository] Loaded plans from /api/db/test-plans:', arr.length);
-        }
-        if (runsRes.ok) {
-          const list = await runsRes.json().catch(() => []);
-          const arr = Array.isArray(list) ? list : list.items ?? [];
-          setTestRuns(arr.map((r: Record<string, unknown>) => mapRunFromApi(r)));
-          apiRunsOk = true;
-          console.log('[Repository] Loaded runs from /api/db/test-runs:', arr.length);
-        }
-        if (defectsRes.ok) {
-          const list = await defectsRes.json().catch(() => []);
-          const arr = Array.isArray(list) ? list : list.items ?? [];
-          setDefects(arr.map((r: Record<string, unknown>) => mapDefectFromApi(r)));
-          apiDefectsOk = true;
-          console.log('[Repository] Loaded defects from /api/db/defects:', arr.length);
-        }
-      } catch (e) {
-        console.log('[Repository] Backend not available for related data, using localStorage');
-      }
-      // Releases: no backend endpoint yet; always from localStorage
-      const savedReleases = localStorage.getItem('test_releases');
-      if (savedReleases) {
-        try {
-          setReleases(JSON.parse(savedReleases));
-        } catch (e) {}
-      }
-      // Fallback to localStorage only when API did not succeed
-      if (!apiSuitesOk) {
-        const savedSuites = localStorage.getItem('test_suites');
-        if (savedSuites) {
-          try {
-            setSuites(JSON.parse(savedSuites));
-          } catch (e) {}
-        }
-      }
-      if (!apiPlansOk) {
-        const savedPlans = localStorage.getItem('test_plans');
-        if (savedPlans) {
-          try {
-            setTestPlans(JSON.parse(savedPlans));
-          } catch (e) {}
-        }
-      }
-      if (!apiRunsOk) {
-        const savedRuns = localStorage.getItem('test_execution_history');
-        if (savedRuns) {
-          try {
-            setTestRuns(JSON.parse(savedRuns));
-          } catch (e) {}
-        }
-      }
-      if (!apiDefectsOk) {
-        const savedDefects = localStorage.getItem('test_defects');
-        if (savedDefects) {
-          try {
-            setDefects(JSON.parse(savedDefects));
-          } catch (e) {}
-        }
-      }
+    const doLoadRelated = async () => {
+      const data = await loadRelatedData();
+      setSuites(data.suites);
+      setTestPlans(data.plans);
+      setTestRuns(data.runs);
+      setDefects(data.defects);
+      setReleases(data.releases);
     };
 
-    loadRelatedData();
+    doLoadRelated();
 
-    const handleReloadRelated = () => loadRelatedData();
+    const handleReloadRelated = () => doLoadRelated();
     window.addEventListener('reload-related-data', handleReloadRelated);
     return () => window.removeEventListener('reload-related-data', handleReloadRelated);
   }, []);
@@ -3036,909 +2583,226 @@ export default function TestRepository() {
 
       {/* SUITES TAB */}
       {activeTab === 'suites' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-5xl mx-auto">
-            {/* Search results info */}
-            {searchTerm.trim() && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-blue-600 dark:text-primary">
-                  Found {filteredSuites.length} suites matching "{searchTerm}"
-                </span>
-              </div>
-            )}
-            {filteredSuites.length === 0 ? (
-              <div className="text-center py-16">
-                <Layers className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {searchTerm.trim() ? 'No Matching Suites' : 'No Test Suites'}
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  {searchTerm.trim() ? `No suites found matching "${searchTerm}"` : 'Create suites to group related tests for execution'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredSuites.map((suite) => (
-                  <Card key={suite.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 dark:text-white">{suite.name}</h3>
-                          {suite.description && (
-                            <p className="text-sm text-gray-500 mt-1">{suite.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 mt-3">
-                            <Badge className="bg-secondary text-foreground">
-                              {suite.testCaseIds.length} tests
-                            </Badge>
-                            {suite.schedule && (
-                              <Badge className="bg-blue-500/10 text-blue-400">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {suite.schedule}
-                              </Badge>
-                            )}
-                            {suite.lastRun && (
-                              <span className="text-xs text-gray-500">
-                                Last run: {new Date(suite.lastRun.date).toLocaleDateString()}
-                                <span className="ml-2 text-green-400">{suite.lastRun.passed}✓</span>
-                                <span className="ml-1 text-red-400">{suite.lastRun.failed}✗</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              toast.info(`Running suite: ${suite.name}`);
-                            }}
-                            className="bg-green-600 hover:bg-green-500"
-                          >
-                            <Play className="w-4 h-4 mr-1" />
-                            Run
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
-                              <DropdownMenuItem 
-                                className="text-foreground focus:bg-secondary"
-                                onClick={() => handleEditSuite(suite)}
-                              >
-                                <Edit className="w-4 h-4 mr-2" /> Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-foreground focus:bg-secondary">
-                                <Copy className="w-4 h-4 mr-2" /> Duplicate
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-secondary" />
-                              <DropdownMenuItem 
-                                className="text-red-400 focus:bg-red-500/10"
-                                onClick={() => handleDeleteSuite(suite.id)}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <SuitesTabPanel
+          suites={filteredSuites}
+          searchTerm={searchTerm}
+          onEditSuite={handleEditSuite}
+          onDeleteSuite={handleDeleteSuite}
+        />
       )}
 
       {/* RELEASES TAB */}
       {activeTab === 'releases' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-5xl mx-auto">
-            {/* Search results info */}
-            {searchTerm.trim() && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-blue-600 dark:text-primary">
-                  Found {filteredReleases.length} releases matching "{searchTerm}"
-                </span>
-              </div>
-            )}
-            {filteredReleases.length === 0 ? (
-              <div className="text-center py-16">
-                <Rocket className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {searchTerm.trim() ? 'No Matching Releases' : 'No Releases'}
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  {searchTerm.trim() ? `No releases found matching "${searchTerm}"` : 'Create releases to track testing across sprints'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredReleases.map((release) => (
-                  <Card key={release.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-white">{release.name}</h3>
-                            <Badge className={cn(
-                              "text-xs",
-                              release.status === 'planning' && "bg-blue-500/10 text-blue-400",
-                              release.status === 'active' && "bg-green-500/10 text-green-400",
-                              release.status === 'completed' && "bg-gray-500/10 text-gray-500 dark:text-gray-400"
-                            )}>
-                              {release.status}
-                            </Badge>
-                          </div>
-                          {release.description && (
-                            <p className="text-sm text-gray-500 mt-1">{release.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 mt-3">
-                            <span className="text-xs text-gray-500 flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(release.startDate).toLocaleDateString()}
-                              {release.endDate && ` - ${new Date(release.endDate).toLocaleDateString()}`}
-                            </span>
-                            <Badge className="bg-secondary text-foreground">
-                              {release.suiteIds.length} suites
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-border text-foreground"
-                          >
-                            <Target className="w-4 h-4 mr-1" />
-                            View
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
-                              <DropdownMenuItem 
-                                className="text-foreground focus:bg-secondary"
-                                onClick={() => handleEditRelease(release)}
-                              >
-                                <Edit className="w-4 h-4 mr-2" /> Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-foreground focus:bg-secondary">
-                                <Copy className="w-4 h-4 mr-2" /> Duplicate
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-secondary" />
-                              <DropdownMenuItem 
-                                className="text-red-400 focus:bg-red-500/10"
-                                onClick={() => handleDeleteRelease(release.id)}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <ReleasesTabPanel
+          releases={filteredReleases}
+          searchTerm={searchTerm}
+          onEditRelease={handleEditRelease}
+          onDeleteRelease={handleDeleteRelease}
+        />
       )}
 
       {/* PLANS TAB */}
       {activeTab === 'plans' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-5xl mx-auto">
-            {/* Search results info */}
-            {searchTerm.trim() && (
-              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <span className="text-blue-600 dark:text-primary">
-                  Found {filteredPlans.length} plans matching "{searchTerm}"
-                </span>
-              </div>
-            )}
-            {filteredPlans.length === 0 ? (
-              <div className="text-center py-16">
-                <Target className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {searchTerm.trim() ? 'No Matching Plans' : 'No Test Plans'}
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  {searchTerm.trim() ? `No plans found matching "${searchTerm}"` : 'Create plans to organize test execution for releases'}
-                </p>
-                <Button 
-                  onClick={() => {
-                    const newPlan: TestPlan = {
-                      id: `plan_${Date.now()}`,
-                      name: 'New Test Plan',
-                      description: '',
-                      suiteIds: [],
-                      testCaseIds: [],
-                      status: 'draft',
-                      createdAt: new Date().toISOString()
-                    };
-                    setTestPlans(prev => {
-                      const updated = [...prev, newPlan];
-                      localStorage.setItem('test_plans', JSON.stringify(updated));
-                      return updated;
-                    });
-                    toast.success('Test plan created');
-                  }}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Test Plan
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {filteredPlans.map((plan) => {
-                  const linkedSuites = suites.filter(s => plan.suiteIds.includes(s.id));
-                  const linkedRelease = releases.find(r => r.id === plan.releaseId);
-                  const totalTests = plan.testCaseIds.length + linkedSuites.reduce((acc, s) => acc + s.testCaseIds.length, 0);
-                  
-                  return (
-                    <Card key={plan.id} className="bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-blue-500/50 dark:hover:border-amber-500/30 transition-all">
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-gray-900 dark:text-white">{plan.name}</h3>
-                              <Badge className={cn(
-                                "text-xs",
-                                plan.status === 'draft' && "bg-gray-500/10 text-gray-500 dark:text-gray-400",
-                                plan.status === 'ready' && "bg-blue-500/10 text-blue-400",
-                                plan.status === 'in-progress' && "bg-amber-500/10 text-blue-600 dark:text-primary",
-                                plan.status === 'completed' && "bg-green-500/10 text-green-400"
-                              )}>
-                                {plan.status}
-                              </Badge>
-                            </div>
-                            {plan.description && (
-                              <p className="text-sm text-gray-500 mb-2">{plan.description}</p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-3 text-xs">
-                              <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                                <FileText className="w-3 h-3" />
-                                {totalTests} tests
-                              </span>
-                              <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                                <Layers className="w-3 h-3" />
-                                {plan.suiteIds.length} suites
-                              </span>
-                              {linkedRelease && (
-                                <span className="flex items-center gap-1 text-purple-400">
-                                  <Rocket className="w-3 h-3" />
-                                  {linkedRelease.name}
-                                </span>
-                              )}
-                              {plan.lastRun && (
-                                <span className="text-gray-500">
-                                  Last run: {new Date(plan.lastRun.date).toLocaleDateString()}
-                                  <span className="ml-2 text-green-400">{plan.lastRun.passed}✓</span>
-                                  <span className="ml-1 text-red-400">{plan.lastRun.failed}✗</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                // Create a new test run from this plan
-                                const newRun: TestRun = {
-                                  id: `run_${Date.now()}`,
-                                  name: `${plan.name} - Run`,
-                                  planId: plan.id,
-                                  releaseId: plan.releaseId,
-                                  mode: 'automated',
-                                  status: 'pending',
-                                  startTime: new Date().toISOString()
-                                };
-                                setTestRuns(prev => {
-                                  const updated = [...prev, newRun];
-                                  localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                                  return updated;
-                                });
-                                setActiveTab('runs');
-                                toast.success('Test run created from plan');
-                              }}
-                              className="bg-green-600 hover:bg-green-500"
-                            >
-                              <Play className="w-4 h-4 mr-1" />
-                              Run
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
-                                  <MoreVertical className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
-                                <DropdownMenuItem 
-                                  className="text-foreground focus:bg-secondary"
-                                  onClick={() => {
-                                    setEditingPlan(plan);
-                                    setShowEditPlanDialog(true);
-                                  }}
-                                >
-                                  <Edit className="w-4 h-4 mr-2" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-foreground focus:bg-secondary"
-                                  onClick={() => {
-                                    setEditingPlan(plan);
-                                    setShowLinkPlanToReleaseDialog(true);
-                                  }}
-                                >
-                                  <Link2 className="w-4 h-4 mr-2" /> Link to Release
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-foreground focus:bg-secondary"
-                                  onClick={() => {
-                                    const duplicate: TestPlan = {
-                                      ...plan,
-                                      id: `plan_${Date.now()}`,
-                                      name: `${plan.name} (Copy)`,
-                                      createdAt: new Date().toISOString()
-                                    };
-                                    setTestPlans(prev => {
-                                      const updated = [...prev, duplicate];
-                                      localStorage.setItem('test_plans', JSON.stringify(updated));
-                                      return updated;
-                                    });
-                                    toast.success('Plan duplicated');
-                                  }}
-                                >
-                                  <Copy className="w-4 h-4 mr-2" /> Duplicate
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-secondary" />
-                                <DropdownMenuItem 
-                                  className="text-red-400 focus:bg-red-500/10"
-                                  onClick={() => {
-                                    if (!confirm('Delete this test plan?')) return;
-                                    setTestPlans(prev => {
-                                      const updated = prev.filter(p => p.id !== plan.id);
-                                      localStorage.setItem('test_plans', JSON.stringify(updated));
-                                      return updated;
-                                    });
-                                    toast.success('Plan deleted');
-                                  }}
-                                >
-                                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+        <PlansTabPanel
+          plans={filteredPlans}
+          suites={suites}
+          releases={releases}
+          searchTerm={searchTerm}
+          onCreatePlan={() => {
+            const newPlan: TestPlan = {
+              id: `plan_${Date.now()}`,
+              name: 'New Test Plan',
+              description: '',
+              suiteIds: [],
+              testCaseIds: [],
+              status: 'draft',
+              createdAt: new Date().toISOString()
+            };
+            setTestPlans(prev => {
+              const updated = [...prev, newPlan];
+              localStorage.setItem('test_plans', JSON.stringify(updated));
+              return updated;
+            });
+            toast.success('Test plan created');
+          }}
+          onEditPlan={(plan) => {
+            setEditingPlan(plan);
+            setShowEditPlanDialog(true);
+          }}
+          onLinkPlanToRelease={(plan) => {
+            setEditingPlan(plan);
+            setShowLinkPlanToReleaseDialog(true);
+          }}
+          onDuplicatePlan={(plan) => {
+            const duplicate: TestPlan = {
+              ...plan,
+              id: `plan_${Date.now()}`,
+              name: `${plan.name} (Copy)`,
+              createdAt: new Date().toISOString()
+            };
+            setTestPlans(prev => {
+              const updated = [...prev, duplicate];
+              localStorage.setItem('test_plans', JSON.stringify(updated));
+              return updated;
+            });
+            toast.success('Plan duplicated');
+          }}
+          onDeletePlan={(planId) => {
+            if (!confirm('Delete this test plan?')) return;
+            setTestPlans(prev => {
+              const updated = prev.filter(p => p.id !== planId);
+              localStorage.setItem('test_plans', JSON.stringify(updated));
+              return updated;
+            });
+            toast.success('Plan deleted');
+          }}
+          onRunPlan={(plan) => {
+            const newRun: TestRun = {
+              id: `run_${Date.now()}`,
+              name: `${plan.name} - Run`,
+              planId: plan.id,
+              releaseId: plan.releaseId,
+              mode: 'automated',
+              status: 'pending',
+              startTime: new Date().toISOString()
+            };
+            setTestRuns(prev => {
+              const updated = [...prev, newRun];
+              localStorage.setItem('test_execution_history', JSON.stringify(updated));
+              return updated;
+            });
+            setActiveTab('runs');
+            toast.success('Test run created from plan');
+          }}
+        />
       )}
 
       {/* RUNS TAB */}
       {activeTab === 'runs' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-5xl mx-auto">
-            {testRuns.length === 0 ? (
-              <div className="text-center py-16">
-                <PlayCircle className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                <h3 className="text-lg font-semibold mb-2">No Test Runs</h3>
-                <p className="text-gray-500 mb-4">Create a test run to execute your test cases</p>
-                <Button 
-                  onClick={() => setShowCreateRunDialog(true)}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Test Run
-                </Button>
-                <div className="mt-6 p-4 bg-secondary rounded-lg max-w-md mx-auto">
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">
-                    <strong className="text-blue-600 dark:text-primary">Automated:</strong> Runs tests via Playwright in desktop app<br/>
-                    <strong className="text-blue-400">Manual:</strong> Step-by-step execution with screenshots & defect linking
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Execution Summary */}
-                {(() => {
-                  const totalRuns = testRuns.length;
-                  const passedRuns = testRuns.filter(r => r.status === 'passed').length;
-                  const failedRuns = testRuns.filter(r => r.status === 'failed').length;
-                  const pendingRuns = testRuns.filter(r => r.status === 'pending').length;
-                  const runningRuns = testRuns.filter(r => r.status === 'running').length;
-                  const passRate = totalRuns > 0 ? Math.round((passedRuns / (totalRuns - pendingRuns - runningRuns)) * 100) || 0 : 0;
-                  
-                  return (
-                    <div className="grid grid-cols-5 gap-3 mb-4">
-                      <div className="bg-secondary rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-white">{totalRuns}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Runs</div>
-                      </div>
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-emerald-400">{passedRuns}</div>
-                        <div className="text-xs text-emerald-400/70">Passed</div>
-                      </div>
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-red-400">{failedRuns}</div>
-                        <div className="text-xs text-red-400/70">Failed</div>
-                      </div>
-                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-blue-600 dark:text-primary">{pendingRuns + runningRuns}</div>
-                        <div className="text-xs text-blue-600 dark:text-primary/70">Pending</div>
-                      </div>
-                      <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-purple-400">{passRate}%</div>
-                        <div className="text-xs text-purple-400/70">Pass Rate</div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                
-                {/* Run List */}
-                <div className="space-y-2">
-                {testRuns.slice(0, 50).map((run) => (
-                  <div
-                    key={run.id}
-                    className="flex items-center justify-between p-3 bg-white dark:bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 hover:border-primary/30 group"
-                  >
-                    <div className="flex items-center gap-3">
-                      {run.status === 'passed' && <CheckCircle className="w-5 h-5 text-green-500" />}
-                      {run.status === 'failed' && <AlertCircle className="w-5 h-5 text-red-500" />}
-                      {run.status === 'running' && <Clock className="w-5 h-5 text-blue-600 dark:text-primary animate-pulse" />}
-                      {run.status === 'pending' && <Clock className="w-5 h-5 text-gray-500" />}
-                      {run.status === 'blocked' && <AlertCircle className="w-5 h-5 text-yellow-500" />}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900 dark:text-white">{run.name || 'Test Run'}</p>
-                          {(run.testCaseIds?.length || 0) > 1 && (
-                            <Badge className="text-xs bg-purple-500/10 text-purple-400">
-                              {run.testCaseIds?.length} tests
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500">
-                          {new Date(run.startTime).toLocaleString()} • {run.mode}
-                          {run.executionMode && run.testCaseIds && run.testCaseIds.length > 1 && 
-                            ` • ${run.executionMode}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {run.results && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-green-400">{run.results.passed}✓</span>
-                          <span className="text-red-400">{run.results.failed}✗</span>
-                          <span className="text-gray-500 dark:text-gray-400">{run.results.skipped}○</span>
-                        </div>
-                      )}
-                      <Badge className={cn(
-                        "text-xs",
-                        run.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-primary"
-                      )}>
-                        {run.mode}
-                      </Badge>
-                      {run.status === 'pending' && (run.testCaseId || (run.testCaseIds && run.testCaseIds.length > 0)) && (
-                        <Button
-                          size="sm"
-                          className={cn(
-                            "h-7 px-3",
-                            run.mode === 'manual' 
-                              ? "bg-primary hover:bg-primary/90" 
-                              : "bg-green-600 hover:bg-green-500"
-                          )}
-                          disabled={run.mode === 'automated' && (executingRunId === run.id || executingRunId !== null)}
-                          onClick={async () => {
-                            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
-                            if (testIds.length === 0) return;
-                            
-                            // Manual mode: Navigate to step-level execution
-                            if (run.mode === 'manual') {
-                              navigate(`/execution/run/${run.id}/${testIds[0]}`);
-                              return;
-                            }
-                            
-                            // Automated mode: Execute via Playwright in Electron
-                            if (isElectron()) {
-                              if (testIds.length === 1) {
-                                await executeTestDirectly(testIds[0], run.id);
-                              } else {
-                                await executeMultipleTests(testIds, run.id, run.executionMode || 'sequential');
-                              }
-                            } else {
-                              // In browser: navigate to builder for automated test
-                              setTestRuns(prev => {
-                                const updated = prev.map(r => 
-                                  r.id === run.id ? { ...r, status: 'running' as const } : r
-                                );
-                                localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                                return updated;
-                              });
-                              navigate(`/test-cases/builder?testCaseId=${testIds[0]}&autoRun=true&runId=${run.id}`);
-                            }
-                          }}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          {run.mode === 'manual' 
-                            ? 'Start Manual Test' 
-                            : executingRunId === run.id 
-                              ? 'Running...' 
-                              : (run.testCaseIds?.length || 1) > 1 
-                                ? `Run ${run.testCaseIds?.length} Tests` 
-                                : 'Execute'}
-                        </Button>
-                      )}
-                      {run.status === 'running' && executingRunId === run.id && (
-                        <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-primary">
-                          <Clock className="w-3 h-3 animate-spin" />
-                          {run.testCaseIds && run.testCaseIds.length > 1 
-                            ? `Test ${(run.currentTestIndex || 0) + 1}/${run.testCaseIds.length}`
-                            : `Step ${executingStepIndex + 1}`}
-                        </div>
-                      )}
-                      {/* Continue button for partial manual execution */}
-                      {run.status === 'running' && run.mode === 'manual' && executingRunId !== run.id && (
-                        <Button
-                          size="sm"
-                          className="h-7 px-3 bg-primary hover:bg-primary/90"
-                          onClick={() => {
-                            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
-                            // Find the first test case that isn't completed
-                            let testIdToResume = testIds[0];
-                            if (run.testCaseStatuses) {
-                              for (const id of testIds) {
-                                const status = run.testCaseStatuses[id];
-                                if (status !== 'passed' && status !== 'failed') {
-                                  testIdToResume = id;
-                                  break;
-                                }
-                              }
-                            }
-                            navigate(`/execution/run/${run.id}/${testIdToResume}`);
-                          }}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Continue
-                        </Button>
-                      )}
-                      {/* View Results button for completed or partial runs */}
-                      {(run.status === 'passed' || run.status === 'failed' || (run.status === 'running' && run.manualStepResults)) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-3 border-border text-foreground hover:bg-accent"
-                          onClick={() => {
-                            setSelectedRunForResults(run);
-                            setShowResultsDialog(true);
-                          }}
-                        >
-                          <BarChart3 className="w-3 h-3 mr-1" />
-                          Results
-                        </Button>
-                      )}
-                      {/* Rerun button for completed runs */}
-                      {(run.status === 'passed' || run.status === 'failed') && (run.testCaseId || (run.testCaseIds && run.testCaseIds.length > 0)) && (
-                        <Button
-                          size="sm"
-                          className="bg-primary hover:bg-primary/90 h-7 px-3"
-                          disabled={run.mode === 'automated' && executingRunId !== null}
-                          onClick={async () => {
-                            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
-                            if (testIds.length === 0) return;
-                            
-                            // Create new run
-                            const newRunId = `run_${Date.now()}`;
-                            const newRun: TestRun = {
-                              id: newRunId,
-                              name: `${run.name} (Re-run)`,
-                              testCaseId: testIds[0],
-                              testCaseIds: testIds,
-                              planId: run.planId,
-                              suiteId: run.suiteId,
-                              releaseId: run.releaseId,
-                              mode: run.mode,
-                              executionMode: run.executionMode,
-                              status: 'pending',
-                              startTime: new Date().toISOString()
-                            };
-                            setTestRuns(prev => {
-                              const updated = [newRun, ...prev];
-                              localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                              return updated;
-                            });
-                            
-                            // Manual mode: Navigate to step-level execution
-                            if (run.mode === 'manual') {
-                              toast.success('Starting manual re-run...');
-                              navigate(`/execution/run/${newRunId}/${testIds[0]}`);
-                              return;
-                            }
-                            
-                            // Automated mode: Execute via Playwright in Electron
-                            if (isElectron()) {
-                              if (testIds.length === 1) {
-                                await executeTestDirectly(testIds[0], newRunId);
-                              } else {
-                                await executeMultipleTests(testIds, newRunId, run.executionMode || 'sequential');
-                              }
-                            } else {
-                              toast.info('Run created - click Execute to start');
-                            }
-                          }}
-                        >
-                          <RefreshCw className="w-3 h-3 mr-1" />
-                          Rerun
-                        </Button>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-7 w-7 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
-                          <DropdownMenuItem 
-                            className="text-foreground focus:bg-secondary"
-                            onClick={() => {
-                              setSelectedRunForResults(run);
-                              setShowResultsDialog(true);
-                            }}
-                          >
-                            <BarChart3 className="w-4 h-4 mr-2" /> View Results
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-foreground focus:bg-secondary"
-                            disabled={!run.testCaseId || executingRunId !== null}
-                            onClick={async () => {
-                              if (!run.testCaseId) return;
-                              // Re-run: create new run and execute
-                              const newRunId = `run_${Date.now()}`;
-                              const newRun: TestRun = {
-                                id: newRunId,
-                                name: `${run.name} (Re-run)`,
-                                testCaseId: run.testCaseId,
-                                planId: run.planId,
-                                suiteId: run.suiteId,
-                                releaseId: run.releaseId,
-                                mode: run.mode,
-                                status: 'pending',
-                                startTime: new Date().toISOString()
-                              };
-                              setTestRuns(prev => {
-                                const updated = [newRun, ...prev];
-                                localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                                return updated;
-                              });
-                              
-                              if (isElectron() && run.testCaseId) {
-                                await executeTestDirectly(run.testCaseId, newRunId);
-                              }
-                            }}
-                          >
-                            <Play className="w-4 h-4 mr-2" /> Re-run
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-secondary" />
-                          <DropdownMenuItem 
-                            className="text-red-400 focus:bg-red-500/10"
-                            onClick={() => handleDeleteRun(run.id)}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <RunsTabPanel
+          testRuns={testRuns}
+          executingRunId={executingRunId}
+          executingStepIndex={executingStepIndex}
+          onCreateRun={() => setShowCreateRunDialog(true)}
+          onExecuteRun={async (run) => {
+            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
+            if (testIds.length === 0) return;
+            if (run.mode === 'manual') {
+              navigate(`/execution/run/${run.id}/${testIds[0]}`);
+              return;
+            }
+            if (isElectron()) {
+              if (testIds.length === 1) {
+                await executeTestDirectly(testIds[0], run.id);
+              } else {
+                await executeMultipleTests(testIds, run.id, run.executionMode || 'sequential');
+              }
+            } else {
+              setTestRuns(prev => {
+                const updated = prev.map(r =>
+                  r.id === run.id ? { ...r, status: 'running' as const } : r
+                );
+                localStorage.setItem('test_execution_history', JSON.stringify(updated));
+                return updated;
+              });
+              navigate(`/test-cases/builder?testCaseId=${testIds[0]}&autoRun=true&runId=${run.id}`);
+            }
+          }}
+          onContinueManualRun={(run) => {
+            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
+            let testIdToResume = testIds[0];
+            if (run.testCaseStatuses) {
+              for (const id of testIds) {
+                const status = run.testCaseStatuses[id];
+                if (status !== 'passed' && status !== 'failed') {
+                  testIdToResume = id;
+                  break;
+                }
+              }
+            }
+            navigate(`/execution/run/${run.id}/${testIdToResume}`);
+          }}
+          onViewResults={(run) => {
+            setSelectedRunForResults(run);
+            setShowResultsDialog(true);
+          }}
+          onRerunFromRun={async (run) => {
+            const testIds = run.testCaseIds || (run.testCaseId ? [run.testCaseId] : []);
+            if (testIds.length === 0) return;
+            const newRunId = `run_${Date.now()}`;
+            const newRun: TestRun = {
+              id: newRunId,
+              name: `${run.name} (Re-run)`,
+              testCaseId: testIds[0],
+              testCaseIds: testIds,
+              planId: run.planId,
+              suiteId: run.suiteId,
+              releaseId: run.releaseId,
+              mode: run.mode,
+              executionMode: run.executionMode,
+              status: 'pending',
+              startTime: new Date().toISOString()
+            };
+            setTestRuns(prev => {
+              const updated = [newRun, ...prev];
+              localStorage.setItem('test_execution_history', JSON.stringify(updated));
+              return updated;
+            });
+            if (run.mode === 'manual') {
+              toast.success('Starting manual re-run...');
+              navigate(`/execution/run/${newRunId}/${testIds[0]}`);
+              return;
+            }
+            if (isElectron()) {
+              if (testIds.length === 1) {
+                await executeTestDirectly(testIds[0], newRunId);
+              } else {
+                await executeMultipleTests(testIds, newRunId, run.executionMode || 'sequential');
+              }
+            } else {
+              toast.info('Run created - click Execute to start');
+            }
+          }}
+          onRerunFromDropdown={async (run) => {
+            if (!run.testCaseId) return;
+            const newRunId = `run_${Date.now()}`;
+            const newRun: TestRun = {
+              id: newRunId,
+              name: `${run.name} (Re-run)`,
+              testCaseId: run.testCaseId,
+              planId: run.planId,
+              suiteId: run.suiteId,
+              releaseId: run.releaseId,
+              mode: run.mode,
+              status: 'pending',
+              startTime: new Date().toISOString()
+            };
+            setTestRuns(prev => {
+              const updated = [newRun, ...prev];
+              localStorage.setItem('test_execution_history', JSON.stringify(updated));
+              return updated;
+            });
+            if (isElectron() && run.testCaseId) {
+              await executeTestDirectly(run.testCaseId, newRunId);
+            }
+          }}
+          onDeleteRun={handleDeleteRun}
+        />
       )}
 
       {/* DEFECTS TAB */}
       {activeTab === 'defects' && (
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="max-w-6xl mx-auto">
-            {defects.length === 0 ? (
-              <div className="text-center py-16">
-                <Bug className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                <h2 className="text-xl font-semibold mb-2">No Defects Found</h2>
-                <p className="text-gray-500 dark:text-gray-400 mb-6">Track bugs and issues linked to your test runs</p>
-                <Button 
-                  onClick={() => setShowCreateDefectDialog(true)}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Report First Defect
-                </Button>
-              </div>
-            ) : (
-              <div>
-                {/* Defect Stats */}
-                <div className="grid grid-cols-5 gap-4 mb-6">
-                  {[
-                    { label: 'Total', count: defects.length, color: 'gray' },
-                    { label: 'Open', count: defects.filter(d => ['new', 'open', 'reopened'].includes(d.status)).length, color: 'red' },
-                    { label: 'In Progress', count: defects.filter(d => d.status === 'in-progress').length, color: 'amber' },
-                    { label: 'Fixed', count: defects.filter(d => ['fixed', 'verified'].includes(d.status)).length, color: 'blue' },
-                    { label: 'Closed', count: defects.filter(d => d.status === 'closed').length, color: 'green' },
-                  ].map(stat => (
-                    <Card key={stat.label} className={`bg-gray-900 border-${stat.color}-500/30`}>
-                      <CardContent className="p-4 text-center">
-                        <div className={`text-2xl font-bold text-${stat.color}-400`}>{stat.count}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* Defect List */}
-                <div className="space-y-3">
-                {defects.map((defect) => (
-                  <Card key={defect.id} className="bg-popover border-border hover:border-border transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge className={cn(
-                              "text-xs",
-                              defect.severity === 'critical' && "bg-red-500/20 text-red-400 border-red-500/50",
-                              defect.severity === 'major' && "bg-orange-500/20 text-orange-400 border-orange-500/50",
-                              defect.severity === 'minor' && "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
-                              defect.severity === 'trivial' && "bg-gray-500/20 text-gray-500 dark:text-gray-400 border-gray-500/50",
-                            )}>
-                              {defect.severity}
-                            </Badge>
-                            <Badge className={cn(
-                              "text-xs",
-                              defect.status === 'new' && "bg-purple-500/20 text-purple-400",
-                              defect.status === 'open' && "bg-red-500/20 text-red-400",
-                              defect.status === 'in-progress' && "bg-amber-500/20 text-blue-600 dark:text-primary",
-                              defect.status === 'fixed' && "bg-blue-500/20 text-blue-400",
-                              defect.status === 'verified' && "bg-cyan-500/20 text-cyan-400",
-                              defect.status === 'closed' && "bg-green-500/20 text-green-400",
-                              defect.status === 'reopened' && "bg-red-500/20 text-red-400",
-                              defect.status === 'deferred' && "bg-gray-500/20 text-gray-500 dark:text-gray-400",
-                            )}>
-                              {defect.status}
-                            </Badge>
-                            <span className="text-xs text-gray-500">{defect.id}</span>
-                          </div>
-                          <h3 className="font-medium text-white mb-1">{defect.title}</h3>
-                          {defect.description && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{defect.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                            {defect.assignedTo && (
-                              <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                {defect.assignedTo}
-                              </span>
-                            )}
-                            {defect.component && (
-                              <span className="flex items-center gap-1">
-                                <Layers className="w-3 h-3" />
-                                {defect.component}
-                              </span>
-                            )}
-                            {defect.affectedVersion && (
-                              <span>v{defect.affectedVersion}</span>
-                            )}
-                            <span>{new Date(defect.createdAt).toLocaleDateString()}</span>
-                            {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
-                              <span className="flex items-center gap-1 text-blue-600 dark:text-primary">
-                                <Link2 className="w-3 h-3" />
-                                {defect.linkedTestCaseIds.length} test(s)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 ml-4">
-                          <Badge className={cn(
-                            "text-xs",
-                            defect.priority === 'critical' && "bg-red-500/20 text-red-400",
-                            defect.priority === 'high' && "bg-orange-500/20 text-orange-400",
-                            defect.priority === 'medium' && "bg-yellow-500/20 text-yellow-400",
-                            defect.priority === 'low' && "bg-green-500/20 text-green-400",
-                          )}>
-                            P: {defect.priority}
-                          </Badge>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500 dark:text-gray-400">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border">
-                              <DropdownMenuItem 
-                                className="text-foreground focus:bg-secondary"
-                                onClick={() => {
-                                  setEditingDefect(defect);
-                                  setShowEditDefectDialog(true);
-                                }}
-                              >
-                                <Edit className="w-4 h-4 mr-2" /> Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="text-foreground focus:bg-secondary"
-                                onClick={() => {
-                                  // Change status
-                                  const nextStatus = {
-                                    'new': 'open',
-                                    'open': 'in-progress',
-                                    'in-progress': 'fixed',
-                                    'fixed': 'verified',
-                                    'verified': 'closed',
-                                    'closed': 'reopened',
-                                    'reopened': 'in-progress',
-                                    'deferred': 'open'
-                                  }[defect.status] || 'open';
-                                  setDefects(prev => {
-                                    const updated = prev.map(d => d.id === defect.id ? { ...d, status: nextStatus as any, updatedAt: new Date().toISOString() } : d);
-                                    localStorage.setItem('test_defects', JSON.stringify(updated));
-                                    return updated;
-                                  });
-                                  toast.success(`Status changed to ${nextStatus}`);
-                                }}
-                              >
-                                <CheckCircle className="w-4 h-4 mr-2" /> Move to Next Status
-                              </DropdownMenuItem>
-                              {defect.linkedTestCaseIds && defect.linkedTestCaseIds.length > 0 && (
-                                <DropdownMenuItem 
-                                  className="text-foreground focus:bg-secondary"
-                                  onClick={() => {
-                                    const tc = testCases.find(t => defect.linkedTestCaseIds?.includes(t.id));
-                                    if (tc) navigate(`/test-cases/builder?testCaseId=${tc.id}`);
-                                  }}
-                                >
-                                  <ExternalLink className="w-4 h-4 mr-2" /> View Linked Test
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator className="bg-secondary" />
-                              <DropdownMenuItem 
-                                className="text-red-400 focus:bg-red-500/10"
-                                onClick={() => {
-                                  if (!confirm('Delete this defect?')) return;
-                                  setDefects(prev => {
-                                    const updated = prev.filter(d => d.id !== defect.id);
-                                    localStorage.setItem('test_defects', JSON.stringify(updated));
-                                    return updated;
-                                  });
-                                  toast.success('Defect deleted');
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <DefectsTabPanel
+          defects={defects}
+          testCases={testCases}
+          onCreateDefect={() => setShowCreateDefectDialog(true)}
+          onEditDefect={(defect) => {
+            setEditingDefect(defect);
+            setShowEditDefectDialog(true);
+          }}
+          onUpdateDefects={setDefects}
+          onNavigate={(path) => navigate(path)}
+        />
       )}
 
       {/* New Folder Dialog */}
@@ -4076,1471 +2940,291 @@ export default function TestRepository() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Suite Dialog */}
-      <Dialog open={showEditSuiteDialog} onOpenChange={setShowEditSuiteDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Test Suite</DialogTitle>
-          </DialogHeader>
-          {editingSuite && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name</label>
-                <Input
-                  value={editingSuite.name}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, name: e.target.value })}
-                  placeholder="Enter suite name"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-                <Input
-                  value={editingSuite.description || ''}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, description: e.target.value })}
-                  placeholder="Enter description"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Schedule</label>
-                <select
-                  value={editingSuite.schedule || 'on-demand'}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, schedule: e.target.value as any })}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="on-demand">On Demand</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                </select>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditSuiteDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button onClick={handleSaveSuite} className="bg-amber-500 hover:bg-amber-400">
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Release Dialog */}
-      <Dialog open={showEditReleaseDialog} onOpenChange={setShowEditReleaseDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Release</DialogTitle>
-          </DialogHeader>
-          {editingRelease && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name</label>
-                <Input
-                  value={editingRelease.name}
-                  onChange={(e) => setEditingRelease({ ...editingRelease, name: e.target.value })}
-                  placeholder="Enter release name"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-                <Input
-                  value={editingRelease.description || ''}
-                  onChange={(e) => setEditingRelease({ ...editingRelease, description: e.target.value })}
-                  placeholder="Enter description"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
-                  <Input
-                    type="date"
-                    value={editingRelease.startDate?.split('T')[0] || ''}
-                    onChange={(e) => setEditingRelease({ ...editingRelease, startDate: e.target.value })}
-                    className="bg-secondary border-border"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
-                  <Input
-                    type="date"
-                    value={editingRelease.endDate?.split('T')[0] || ''}
-                    onChange={(e) => setEditingRelease({ ...editingRelease, endDate: e.target.value })}
-                    className="bg-secondary border-border"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
-                <select
-                  value={editingRelease.status}
-                  onChange={(e) => setEditingRelease({ ...editingRelease, status: e.target.value as any })}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="planning">Planning</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                  Link Test Suites ({editingRelease.suiteIds?.length || 0} selected)
-                </label>
-                <div className="max-h-32 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {suites.length === 0 ? (
-                    <p className="text-gray-500 text-sm text-center py-2">No test suites available</p>
-                  ) : (
-                    suites.map((suite) => (
-                      <label
-                        key={suite.id}
-                        className={cn(
-                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                          editingRelease.suiteIds?.includes(suite.id) 
-                            ? "bg-amber-500/10 border border-amber-500/30" 
-                            : "hover:bg-secondary"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editingRelease.suiteIds?.includes(suite.id) || false}
-                          onChange={(e) => {
-                            const currentIds = editingRelease.suiteIds || [];
-                            if (e.target.checked) {
-                              setEditingRelease({ ...editingRelease, suiteIds: [...currentIds, suite.id] });
-                            } else {
-                              setEditingRelease({ ...editingRelease, suiteIds: currentIds.filter(id => id !== suite.id) });
-                            }
-                          }}
-                          className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-white truncate">{suite.name}</span>
-                        <span className="text-xs text-gray-500">({suite.testCaseIds.length} tests)</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                  Link Test Plans ({editingRelease.planIds?.length || 0} selected)
-                </label>
-                <div className="max-h-32 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {testPlans.length === 0 ? (
-                    <p className="text-gray-500 text-sm text-center py-2">No test plans available</p>
-                  ) : (
-                    testPlans.map((plan) => (
-                      <label
-                        key={plan.id}
-                        className={cn(
-                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                          editingRelease.planIds?.includes(plan.id) 
-                            ? "bg-amber-500/10 border border-amber-500/30" 
-                            : "hover:bg-secondary"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editingRelease.planIds?.includes(plan.id) || false}
-                          onChange={(e) => {
-                            const currentIds = editingRelease.planIds || [];
-                            if (e.target.checked) {
-                              setEditingRelease({ ...editingRelease, planIds: [...currentIds, plan.id] });
-                            } else {
-                              setEditingRelease({ ...editingRelease, planIds: currentIds.filter(id => id !== plan.id) });
-                            }
-                          }}
-                          className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                        />
-                        <span className="text-sm text-gray-900 dark:text-white truncate">{plan.name}</span>
-                        <Badge className="text-[10px] bg-secondary">{plan.status}</Badge>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditReleaseDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button onClick={handleSaveRelease} className="bg-amber-500 hover:bg-amber-400">
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Suite Dialog with Test Case Linking */}
-      <Dialog open={showCreateSuiteDialog} onOpenChange={setShowCreateSuiteDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Test Suite</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Suite Name *</label>
-              <Input
-                value={newSuiteName}
-                onChange={(e) => setNewSuiteName(e.target.value)}
-                placeholder="e.g., Login Flow Tests, Checkout Regression"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-              <Input
-                value={newSuiteDescription}
-                onChange={(e) => setNewSuiteDescription(e.target.value)}
-                placeholder="Brief description of this test suite"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                Link Test Cases ({newSuiteTestCases.length} selected)
-              </label>
-              <div className="max-h-48 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {testCases.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">No test cases available</p>
-                ) : (
-                  testCases.map((tc) => (
-                    <label
-                      key={tc.id}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                        newSuiteTestCases.includes(tc.id) 
-                          ? "bg-amber-500/10 border border-amber-500/30" 
-                          : "hover:bg-secondary"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={newSuiteTestCases.includes(tc.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewSuiteTestCases(prev => [...prev, tc.id]);
-                          } else {
-                            setNewSuiteTestCases(prev => prev.filter(id => id !== tc.id));
-                          }
-                        }}
-                        className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{tc.name}</p>
-                        <p className="text-xs text-muted-foreground">{tc.priority || 'No priority'} • {tc.automationStatus || 'none'}</p>
-                      </div>
-                      {tc.lastResult && (
-                        <Badge className={cn(
-                          "text-xs",
-                          tc.lastResult === 'passed' ? "bg-green-500/10 text-green-400" :
-                          tc.lastResult === 'failed' ? "bg-red-500/10 text-red-400" :
-                          "bg-gray-500/10 text-gray-500 dark:text-gray-400"
-                        )}>
-                          {tc.lastResult}
-                        </Badge>
-                      )}
-                    </label>
-                  ))
-                )}
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => setNewSuiteTestCases(testCases.map(tc => tc.id))}
-                >
-                  Select All
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => setNewSuiteTestCases([])}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateSuiteDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button onClick={handleCreateSuite} className="bg-amber-500 hover:bg-amber-400">
-              Create Suite
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Release Dialog with Suite Linking */}
-      <Dialog open={showCreateReleaseDialog} onOpenChange={setShowCreateReleaseDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Release</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Release Name *</label>
-              <Input
-                value={newReleaseName}
-                onChange={(e) => setNewReleaseName(e.target.value)}
-                placeholder="e.g., Sprint 1.0, Q1 2024 Release"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-              <Input
-                value={newReleaseDescription}
-                onChange={(e) => setNewReleaseDescription(e.target.value)}
-                placeholder="Brief description of this release"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Start Date</label>
-                <Input
-                  type="date"
-                  value={newReleaseStartDate}
-                  onChange={(e) => setNewReleaseStartDate(e.target.value)}
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">End Date</label>
-                <Input
-                  type="date"
-                  value={newReleaseEndDate}
-                  onChange={(e) => setNewReleaseEndDate(e.target.value)}
-                  className="bg-secondary border-border"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                Link Test Suites ({newReleaseSuites.length} selected)
-              </label>
-              <div className="max-h-48 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {suites.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">No test suites available. Create suites first.</p>
-                ) : (
-                  suites.map((suite) => (
-                    <label
-                      key={suite.id}
-                      className={cn(
-                        "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                        newReleaseSuites.includes(suite.id) 
-                          ? "bg-amber-500/10 border border-amber-500/30" 
-                          : "hover:bg-secondary"
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={newReleaseSuites.includes(suite.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewReleaseSuites(prev => [...prev, suite.id]);
-                          } else {
-                            setNewReleaseSuites(prev => prev.filter(id => id !== suite.id));
-                          }
-                        }}
-                        className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{suite.name}</p>
-                        <p className="text-xs text-gray-500">{suite.testCaseIds.length} test cases • {suite.schedule || 'on-demand'}</p>
-                      </div>
-                      {suite.lastRun && (
-                        <div className="text-xs text-gray-500">
-                          <span className="text-green-400">{suite.lastRun.passed}✓</span>
-                          <span className="text-red-400 ml-1">{suite.lastRun.failed}✗</span>
-                        </div>
-                      )}
-                    </label>
-                  ))
-                )}
-              </div>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => setNewReleaseSuites(suites.map(s => s.id))}
-                >
-                  Select All
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => setNewReleaseSuites([])}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateReleaseDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button onClick={handleCreateRelease} className="bg-amber-500 hover:bg-amber-400">
-              Create Release
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Plan Dialog */}
-      <Dialog open={showEditPlanDialog} onOpenChange={setShowEditPlanDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Test Plan</DialogTitle>
-          </DialogHeader>
-          {editingPlan && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Plan Name *</label>
-                <Input
-                  value={editingPlan.name}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })}
-                  placeholder="Enter plan name"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-                <Input
-                  value={editingPlan.description || ''}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, description: e.target.value })}
-                  placeholder="Enter description"
-                  className="bg-secondary border-border"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
-                  <select
-                    value={editingPlan.status}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, status: e.target.value as any })}
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="ready">Ready</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Environment</label>
-                  <Input
-                    value={editingPlan.environment || ''}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, environment: e.target.value })}
-                    placeholder="e.g., QA, Staging, Prod"
-                    className="bg-secondary border-border"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                  Link Test Suites ({editingPlan.suiteIds.length} selected)
-                </label>
-                <div className="max-h-40 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {suites.length === 0 ? (
-                    <p className="text-gray-500 text-sm text-center py-2">No test suites available</p>
-                  ) : (
-                    suites.map((suite) => (
-                      <label
-                        key={suite.id}
-                        className={cn(
-                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                          editingPlan.suiteIds.includes(suite.id) 
-                            ? "bg-amber-500/10 border border-amber-500/30" 
-                            : "hover:bg-secondary"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editingPlan.suiteIds.includes(suite.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditingPlan({ ...editingPlan, suiteIds: [...editingPlan.suiteIds, suite.id] });
-                            } else {
-                              setEditingPlan({ ...editingPlan, suiteIds: editingPlan.suiteIds.filter(id => id !== suite.id) });
-                            }
-                          }}
-                          className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{suite.name}</p>
-                          <p className="text-xs text-gray-500">{suite.testCaseIds.length} test cases</p>
-                        </div>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                  Link Individual Test Cases ({editingPlan.testCaseIds.length} selected)
-                </label>
-                <div className="max-h-40 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                  {testCases.length === 0 ? (
-                    <p className="text-gray-500 text-sm text-center py-2">No test cases available</p>
-                  ) : (
-                    testCases.slice(0, 50).map((tc) => (
-                      <label
-                        key={tc.id}
-                        className={cn(
-                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                          editingPlan.testCaseIds.includes(tc.id) 
-                            ? "bg-amber-500/10 border border-amber-500/30" 
-                            : "hover:bg-secondary"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editingPlan.testCaseIds.includes(tc.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditingPlan({ ...editingPlan, testCaseIds: [...editingPlan.testCaseIds, tc.id] });
-                            } else {
-                              setEditingPlan({ ...editingPlan, testCaseIds: editingPlan.testCaseIds.filter(id => id !== tc.id) });
-                            }
-                          }}
-                          className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                        />
-                        <span className="text-sm text-foreground truncate">{tc.name}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditPlanDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (!editingPlan) return;
-                setTestPlans(prev => {
-                  const updated = prev.map(p => p.id === editingPlan.id ? { ...editingPlan, updatedAt: new Date().toISOString() } : p);
-                  localStorage.setItem('test_plans', JSON.stringify(updated));
-                  return updated;
-                });
-                setShowEditPlanDialog(false);
-                setEditingPlan(null);
-                toast.success('Plan updated');
-              }}
-              className="bg-amber-500 hover:bg-amber-400"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Run Details Dialog */}
-      <Dialog open={showRunDetailsDialog} onOpenChange={setShowRunDetailsDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Test Run Details</DialogTitle>
-          </DialogHeader>
-          {selectedRun && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {selectedRun.status === 'passed' && <CheckCircle className="w-8 h-8 text-green-500" />}
-                {selectedRun.status === 'failed' && <AlertCircle className="w-8 h-8 text-red-500" />}
-                {selectedRun.status === 'running' && <Clock className="w-8 h-8 text-blue-600 dark:text-primary animate-pulse" />}
-                {selectedRun.status === 'pending' && <Clock className="w-8 h-8 text-gray-500" />}
-                {selectedRun.status === 'blocked' && <AlertCircle className="w-8 h-8 text-yellow-500" />}
-                <div>
-                  <h3 className="font-semibold text-lg">{selectedRun.name}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedRun.mode} execution</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 p-4 bg-secondary rounded-lg">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Status</p>
-                  <Badge className={cn(
-                    selectedRun.status === 'passed' && "bg-green-500/10 text-green-400",
-                    selectedRun.status === 'failed' && "bg-red-500/10 text-red-400",
-                    selectedRun.status === 'running' && "bg-amber-500/10 text-blue-600 dark:text-primary",
-                    selectedRun.status === 'pending' && "bg-gray-500/10 text-gray-500 dark:text-gray-400",
-                    selectedRun.status === 'blocked' && "bg-yellow-500/10 text-yellow-400"
-                  )}>
-                    {selectedRun.status}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Mode</p>
-                  <Badge className={cn(
-                    selectedRun.mode === 'automated' ? "bg-blue-500/10 text-blue-400" : "bg-amber-500/10 text-blue-600 dark:text-primary"
-                  )}>
-                    {selectedRun.mode}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Started</p>
-                  <p className="text-sm">{new Date(selectedRun.startTime).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Ended</p>
-                  <p className="text-sm">{selectedRun.endTime ? new Date(selectedRun.endTime).toLocaleString() : 'In progress'}</p>
-                </div>
-              </div>
-              
-              {selectedRun.results && (
-                <div className="p-4 bg-secondary rounded-lg">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Results</p>
-                  <div className="flex items-center justify-around">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-green-400">{selectedRun.results.passed}</p>
-                      <p className="text-xs text-gray-500">Passed</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-red-400">{selectedRun.results.failed}</p>
-                      <p className="text-xs text-gray-500">Failed</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-gray-500 dark:text-gray-400">{selectedRun.results.skipped}</p>
-                      <p className="text-xs text-gray-500">Skipped</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {selectedRun.planId && (
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                  <Target className="w-4 h-4" />
-                  Plan: {testPlans.find(p => p.id === selectedRun.planId)?.name || 'Unknown'}
-                </div>
-              )}
-              {selectedRun.releaseId && (
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                  <Rocket className="w-4 h-4" />
-                  Release: {releases.find(r => r.id === selectedRun.releaseId)?.name || 'Unknown'}
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRunDetailsDialog(false)} className="border-border">
-              Close
-            </Button>
-            {selectedRun && selectedRun.status !== 'running' && (
-              <Button 
-                onClick={() => {
-                  // Re-run
-                  const newRun: TestRun = {
-                    id: `run_${Date.now()}`,
-                    name: `${selectedRun.name} (Re-run)`,
-                    planId: selectedRun.planId,
-                    suiteId: selectedRun.suiteId,
-                    releaseId: selectedRun.releaseId,
-                    mode: selectedRun.mode,
-                    status: 'pending',
-                    startTime: new Date().toISOString()
-                  };
-                  setTestRuns(prev => {
-                    const updated = [newRun, ...prev];
-                    localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                    return updated;
-                  });
-                  setShowRunDetailsDialog(false);
-                  toast.success('Re-run scheduled');
-                }}
-                className="bg-green-600 hover:bg-green-500"
-              >
-                <Play className="w-4 h-4 mr-1" />
-                Re-run
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Link Plan to Release Dialog */}
-      <Dialog open={showLinkPlanToReleaseDialog} onOpenChange={setShowLinkPlanToReleaseDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Link Plan to Release</DialogTitle>
-          </DialogHeader>
-          {editingPlan && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Select a release to link <strong>{editingPlan.name}</strong> to:
-              </p>
-              <div className="space-y-2">
-                {releases.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">
-                    No releases available. Create a release first.
-                  </p>
-                ) : (
-                  releases.map((release) => (
-                    <button
-                      key={release.id}
-                      onClick={() => {
-                        setTestPlans(prev => {
-                          const updated = prev.map(p => 
-                            p.id === editingPlan.id 
-                              ? { ...p, releaseId: release.id } 
-                              : p
-                          );
-                          localStorage.setItem('test_plans', JSON.stringify(updated));
-                          return updated;
-                        });
-                        setShowLinkPlanToReleaseDialog(false);
-                        setEditingPlan(null);
-                        toast.success(`Linked to ${release.name}`);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left",
-                        editingPlan.releaseId === release.id
-                          ? "bg-primary/10 border-primary/30"
-                          : "bg-secondary border-border hover:border-blue-500/50 dark:hover:border-amber-500/30"
-                      )}
-                    >
-                      <Rocket className="w-5 h-5 text-purple-400" />
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900 dark:text-white">{release.name}</p>
-                        <p className="text-xs text-gray-500">{release.status} • {release.suiteIds.length} suites</p>
-                      </div>
-                      {editingPlan.releaseId === release.id && (
-                        <CheckCircle className="w-5 h-5 text-blue-600 dark:text-primary" />
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-              {editingPlan.releaseId && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-border text-gray-500 dark:text-gray-400"
-                  onClick={() => {
-                    setTestPlans(prev => {
-                      const updated = prev.map(p => 
-                        p.id === editingPlan.id 
-                          ? { ...p, releaseId: undefined } 
-                          : p
-                      );
-                      localStorage.setItem('test_plans', JSON.stringify(updated));
-                      return updated;
-                    });
-                    setShowLinkPlanToReleaseDialog(false);
-                    setEditingPlan(null);
-                    toast.success('Unlinked from release');
-                  }}
-                >
-                  Remove Link
-                </Button>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowLinkPlanToReleaseDialog(false)} className="border-border">
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Test Case Dialog */}
-      <Dialog open={showCreateTestDialog} onOpenChange={setShowCreateTestDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Create Test Case</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label>
-              <Input
-                value={newTestName}
-                onChange={(e) => setNewTestName(e.target.value)}
-                placeholder="e.g., User Login with Valid Credentials"
-                className="bg-secondary border-border"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-              <Input
-                value={newTestDescription}
-                onChange={(e) => setNewTestDescription(e.target.value)}
-                placeholder="Brief description of what this test validates"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
-                <select
-                  value={newTestPriority}
-                  onChange={(e) => setNewTestPriority(e.target.value as any)}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label>
-                <select
-                  value={newTestFolder}
-                  onChange={(e) => setNewTestFolder(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="root">Test Repository (Root)</option>
-                  {folders.filter(f => f.id !== 'root').map(folder => (
-                    <option key={folder.id} value={folder.id}>{folder.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateTestDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (!newTestName.trim()) {
-                  toast.error('Test name is required');
-                  return;
-                }
-                const newTestCase: TestCase = {
-                  id: `tc_${Date.now()}`,
-                  name: newTestName.trim(),
-                  description: newTestDescription,
-                  folderId: newTestFolder === 'root' ? null : newTestFolder,
-                  priority: newTestPriority,
-                  status: 'draft',
-                  automationStatus: 'none',
-                  tags: [],
-                  steps: [],
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString()
-                };
-                // Save to state AND localStorage so builder can find it
-                setTestCases(prev => {
-                  const updated = [...prev, newTestCase];
-                  localStorage.setItem('test_cases', JSON.stringify(updated));
-                  return updated;
-                });
-                // Clear any stale unified_test_case data to prevent confusion
-                localStorage.removeItem('unified_test_case');
-                localStorage.removeItem('unified_test_case_timestamp');
-                setShowCreateTestDialog(false);
-                toast.success('Test case created');
-                // Navigate to builder with the new test case
-                navigate(`/test-cases/builder?testCaseId=${newTestCase.id}`);
-              }}
-              disabled={!newTestName.trim()}
-              className="bg-amber-500 hover:bg-amber-400"
-            >
-              Create & Edit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Run Test Dialog - Add to existing run or create new */}
-      <Dialog open={showRunTestDialog} onOpenChange={setShowRunTestDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Run Test Case</DialogTitle>
-          </DialogHeader>
-          {testCaseToRun && (() => {
-            const apiTest = isApiTest(testCaseToRun);
-            return (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  How would you like to run <strong className="text-gray-900 dark:text-white">{testCaseToRun.name}</strong>?
-                </p>
-                {apiTest && (
-                  <Badge variant="secondary" className="text-xs">API test — runs via API Testing engine</Badge>
-                )}
-
-                {apiTest ? (
-                  <button
-                    onClick={async () => { await runApiTestFromRepository(testCaseToRun); }}
-                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
-                  >
-                    <div className="p-2 rounded-lg bg-green-600">
-                      <Play className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-white">Quick Run (Execute Now)</p>
-                      <p className="text-xs text-gray-500">Runs this API test and shows result here</p>
-                    </div>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      const runId = `run_${Date.now()}`;
-                      const newRun: TestRun = {
-                        id: runId,
-                        name: `Quick Run: ${testCaseToRun.name}`,
-                        testCaseId: testCaseToRun.id,
-                        mode: 'automated',
-                        status: 'running',
-                        startTime: new Date().toISOString()
-                      };
-                      setTestRuns(prev => {
-                        const updated = [newRun, ...prev];
-                        localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                        return updated;
-                      });
-                      setShowRunTestDialog(false);
-                      navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}&autoRun=true&runId=${runId}`);
-                    }}
-                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-green-500/50 hover:bg-green-900/20 transition-all text-left"
-                  >
-                    <div className="p-2 rounded-lg bg-green-600">
-                      <Play className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-white">Quick Run (Execute Now)</p>
-                      <p className="text-xs text-gray-500">Opens builder and runs test immediately</p>
-                    </div>
-                  </button>
-                )}
-
-                {apiRunResult && (
-                  <div className={cn('rounded-lg border p-3 text-sm', apiRunResult.passed ? 'border-green-500/50 bg-green-500/10' : 'border-red-500/50 bg-red-500/10')}>
-                    <p className="font-medium">{apiRunResult.passed ? 'Passed' : 'Failed'}</p>
-                    <p className="text-muted-foreground">{apiRunResult.message}</p>
-                    {apiRunResult.detail && <pre className="mt-1 text-xs overflow-auto max-h-20">{apiRunResult.detail}</pre>}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    setShowRunTestDialog(false);
-                    // Always transport to Builder (Build tab) with test steps
-                    navigate(`/test-cases/builder?testCaseId=${testCaseToRun.id}`);
-                  }}
-                  className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-amber-500/50 hover:bg-accent transition-all text-left"
-                >
-                  <div className="p-2 rounded-lg bg-blue-600">
-                    <Pencil className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-white">Open in Builder</p>
-                    <p className="text-xs text-gray-500">Edit steps in the visual builder, then run when ready</p>
-                  </div>
-                </button>
-
-                {apiTest && (
-                  <button
-                    onClick={() => {
-                      setShowRunTestDialog(false);
-                      navigate('/api');
-                    }}
-                    className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-cyan-500/50 hover:bg-cyan-900/20 transition-all text-left"
-                  >
-                    <div className="p-2 rounded-lg bg-cyan-600">
-                      <Zap className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-white">Open in API Testing</p>
-                      <p className="text-xs text-gray-500">Edit request, assertions, and run in API tab</p>
-                    </div>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => {
-                    setShowRunTestDialog(false);
-                    setNewRunTestCases([testCaseToRun.id]);
-                    setNewRunName(`Test Run: ${testCaseToRun.name}`);
-                    setShowCreateRunDialog(true);
-                  }}
-                  className="w-full flex items-center gap-3 p-4 rounded-lg border border-border bg-secondary hover:border-purple-500/50 hover:bg-purple-900/20 transition-all text-left"
-                >
-                  <div className="p-2 rounded-lg bg-purple-600">
-                    <Plus className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-white">Add to Test Run</p>
-                    <p className="text-xs text-gray-500">Create or add to a formal test run with more cases</p>
-                  </div>
-                </button>
-              </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRunTestDialog(false)} className="border-border">
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Test Run Dialog */}
-      <Dialog open={showCreateRunDialog} onOpenChange={setShowCreateRunDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Test Run</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Run Name *</label>
-              <Input
-                value={newRunName}
-                onChange={(e) => setNewRunName(e.target.value)}
-                placeholder="e.g., Smoke Test - Sprint 1"
-                className="bg-secondary border-border"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Mode</label>
-                <select
-                  value={newRunMode}
-                  onChange={(e) => {
-                    const mode = e.target.value as 'automated' | 'manual';
-                    setNewRunMode(mode);
-                    // Reset to sequential for manual mode
-                    if (mode === 'manual') {
-                      setNewRunExecutionMode('sequential');
-                    }
-                  }}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="automated">Automated</option>
-                  <option value="manual">Manual (Step-by-Step)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Execution Order</label>
-                <select
-                  value={newRunExecutionMode}
-                  onChange={(e) => setNewRunExecutionMode(e.target.value as any)}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                  disabled={newRunMode === 'manual'} // No parallel for manual
-                >
-                  <option value="sequential">Sequential (one by one)</option>
-                  {newRunMode === 'automated' && (
-                    <option value="parallel">Parallel (all at once)</option>
-                  )}
-                </select>
-                {newRunMode === 'manual' && (
-                  <p className="text-xs text-gray-500 mt-1">Manual tests run sequentially</p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Link to Release</label>
-                <select
-                  value={newRunReleaseId}
-                  onChange={(e) => setNewRunReleaseId(e.target.value)}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="">No Release</option>
-                  {releases.map(r => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {newRunExecutionMode === 'parallel' && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-blue-600 dark:text-primary">
-                <strong>Note:</strong> Parallel execution runs tests in headless mode. 
-                Best for independent tests that don't share state.
-              </div>
-            )}
-            <div>
-              <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">
-                Select Test Cases ({newRunTestCases.length} selected)
-              </label>
-              {/* Search input for test cases */}
-              <div className="relative mb-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                <Input
-                  value={newRunTestSearch}
-                  onChange={(e) => setNewRunTestSearch(e.target.value)}
-                  placeholder="Search by test ID or name..."
-                  className="pl-10 bg-secondary border-border text-white"
-                />
-              </div>
-              <div className="max-h-56 overflow-y-auto border border-border rounded-md bg-secondary p-2 space-y-1">
-                {testCases.length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">No test cases available</p>
-                ) : (
-                  (() => {
-                    const searchLower = newRunTestSearch.toLowerCase();
-                    const filteredCases = searchLower 
-                      ? testCases.filter(tc => 
-                          tc.id.toLowerCase().includes(searchLower) || 
-                          tc.name.toLowerCase().includes(searchLower)
-                        )
-                      : testCases.slice(0, 50); // Show latest 50 by default
-                    
-                    if (filteredCases.length === 0) {
-                      return (
-                        <p className="text-gray-500 text-sm text-center py-4">
-                          No test cases match "{newRunTestSearch}"
-                        </p>
-                      );
-                    }
-                    
-                    return filteredCases.map((tc) => (
-                      <label
-                        key={tc.id}
-                        className={cn(
-                          "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                          newRunTestCases.includes(tc.id) 
-                            ? "bg-amber-500/10 border border-amber-500/30" 
-                            : "hover:bg-secondary"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={newRunTestCases.includes(tc.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewRunTestCases(prev => [...prev, tc.id]);
-                            } else {
-                              setNewRunTestCases(prev => prev.filter(id => id !== tc.id));
-                            }
-                          }}
-                          className="rounded border-gray-600 text-blue-600 dark:text-primary focus:ring-amber-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{tc.name}</p>
-                            <code className="text-[10px] text-gray-500 bg-secondary px-1 rounded">{tc.id.slice(0, 8)}</code>
-                          </div>
-                          <p className="text-xs text-gray-500">{tc.priority || 'medium'} • {tc.automationStatus || 'manual'}</p>
-                        </div>
-                      </label>
-                    ));
-                  })()
-                )}
-              </div>
-              {testCases.length > 50 && !newRunTestSearch && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Showing first 50 tests. Use search to find more.
-                </p>
-              )}
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => {
-                    const searchLower = newRunTestSearch.toLowerCase();
-                    const toSelect = searchLower 
-                      ? testCases.filter(tc => tc.id.toLowerCase().includes(searchLower) || tc.name.toLowerCase().includes(searchLower))
-                      : testCases.slice(0, 50);
-                    setNewRunTestCases(toSelect.map(tc => tc.id));
-                  }}
-                >
-                  Select All Visible
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs border-border"
-                  onClick={() => setNewRunTestCases([])}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowCreateRunDialog(false);
-              setNewRunName('');
-              setNewRunTestCases([]);
-              setNewRunReleaseId('');
-              setNewRunExecutionMode('sequential');
-              setNewRunMode('automated');
-              setNewRunTestSearch('');
-            }} className="border-border">
-              Cancel
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => {
-                if (!newRunName.trim()) {
-                  toast.error('Run name is required');
-                  return;
-                }
-                if (newRunTestCases.length === 0) {
-                  toast.error('Select at least one test case');
-                  return;
-                }
-                // Create run as pending (not executed yet)
-                const newRun: TestRun = {
-                  id: `run_${Date.now()}`,
-                  name: newRunName.trim(),
-                  mode: newRunMode,
-                  executionMode: newRunExecutionMode,
-                  releaseId: newRunReleaseId || undefined,
-                  testCaseIds: newRunTestCases, // All test cases
-                  testCaseId: newRunTestCases[0], // First test case (legacy)
-                  status: 'pending',
-                  startTime: new Date().toISOString(),
-                  results: { passed: 0, failed: 0, skipped: newRunTestCases.length }
-                };
-                setTestRuns(prev => {
-                  const updated = [newRun, ...prev];
-                  localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                  return updated;
-                });
-                setShowCreateRunDialog(false);
-                setNewRunName('');
-                setNewRunTestCases([]);
-                setNewRunReleaseId('');
-                setNewRunExecutionMode('sequential');
-                setNewRunMode('automated');
-                setNewRunTestSearch('');
-                toast.success(`Test run created with ${newRunTestCases.length} test(s)`);
-              }}
-              className="border-border"
-            >
-              Save (Run Later)
-            </Button>
-            <Button 
-              onClick={async () => {
-                if (!newRunName.trim()) {
-                  toast.error('Run name is required');
-                  return;
-                }
-                if (newRunTestCases.length === 0) {
-                  toast.error('Select at least one test case');
-                  return;
-                }
-                
-                // Create run with all test cases
-                const runId = `run_${Date.now()}`;
-                const newRun: TestRun = {
-                  id: runId,
-                  name: newRunName.trim(),
-                  mode: newRunMode,
-                  executionMode: newRunExecutionMode,
-                  releaseId: newRunReleaseId || undefined,
-                  testCaseIds: newRunTestCases, // All test cases
-                  testCaseId: newRunTestCases[0], // First test case (legacy)
-                  status: 'pending',
-                  startTime: new Date().toISOString()
-                };
-                setTestRuns(prev => {
-                  const updated = [newRun, ...prev];
-                  localStorage.setItem('test_execution_history', JSON.stringify(updated));
-                  return updated;
-                });
-                
-                const testsToRun = [...newRunTestCases];
-                const execMode = newRunExecutionMode;
-                const runMode = newRunMode; // manual or automated
-                
-                setShowCreateRunDialog(false);
-                setNewRunName('');
-                setNewRunTestCases([]);
-                setNewRunReleaseId('');
-                setNewRunExecutionMode('sequential');
-                setNewRunMode('automated');
-                setNewRunTestSearch('');
-                
-                // Manual mode: Navigate to step-level execution
-                if (runMode === 'manual') {
-                  toast.success(`Starting manual test execution for ${testsToRun.length} test(s)...`);
-                  navigate(`/execution/run/${runId}/${testsToRun[0]}`);
-                  return;
-                }
-                
-                // Automated mode: Execute via Playwright in Electron
-                if (isElectron()) {
-                  toast.success(`Executing ${testsToRun.length} test(s) in ${execMode} mode...`);
-                  if (testsToRun.length === 1) {
-                    // Single test - use simple executor
-                    await executeTestDirectly(testsToRun[0], runId);
-                  } else {
-                    // Multiple tests - use multi-test executor
-                    await executeMultipleTests(testsToRun, runId, execMode);
-                  }
-                } else {
-                  // Navigate to builder to execute first test (web mode)
-                  navigate(`/test-cases/builder?testCaseId=${testsToRun[0]}&autoRun=true&runId=${runId}`);
-                  toast.info('Note: Multiple tests will run one at a time in web mode');
-                }
-              }}
-              className={cn(
-                newRunMode === 'manual' ? "bg-primary hover:bg-primary/90" : "bg-green-600 hover:bg-green-500"
-              )}
-              disabled={newRunMode === 'automated' && executingRunId !== null}
-            >
-              <Play className="w-4 h-4 mr-1" />
-              {newRunMode === 'manual'
-                ? 'Start Manual Execution'
-                : newRunTestCases.length > 1 
-                  ? `Run ${newRunTestCases.length} Tests (${newRunExecutionMode})`
-                  : 'Create & Run Now'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Test Case Configuration Dialog */}
-      <Dialog open={showEditTestConfigDialog} onOpenChange={setShowEditTestConfigDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Edit Test Case Configuration</DialogTitle>
-          </DialogHeader>
-          {editingTestCase && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Test Name *</label>
-                <textarea
-                  value={editingTestCase.name}
-                  onChange={(e) => setEditingTestCase({ ...editingTestCase, name: e.target.value })}
-                  placeholder="Test case name"
-                  rows={2}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
-                  style={{ minHeight: '42px', maxHeight: '100px' }}
-                />
-                {editingTestCase.name?.length > 50 && (
-                  <p className="text-xs text-blue-600 dark:text-primary mt-1">
-                    {editingTestCase.name.length} characters - Consider shortening for better readability
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Description</label>
-                <textarea
-                  value={editingTestCase.description || ''}
-                  onChange={(e) => setEditingTestCase({ ...editingTestCase, description: e.target.value })}
-                  placeholder="Brief description of what this test case validates"
-                  rows={2}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Priority</label>
-                  <select
-                    value={editingTestCase.priority || 'medium'}
-                    onChange={(e) => setEditingTestCase({ ...editingTestCase, priority: e.target.value as any })}
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                  >
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Status</label>
-                  <select
-                    value={editingTestCase.status || 'draft'}
-                    onChange={(e) => setEditingTestCase({ ...editingTestCase, status: e.target.value as any })}
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="ready">Ready</option>
-                    <option value="approved">Approved</option>
-                    <option value="deprecated">Deprecated</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Folder</label>
-                <select
-                  value={editingTestCase.folderId || 'root'}
-                  onChange={(e) => setEditingTestCase({ ...editingTestCase, folderId: e.target.value === 'root' ? null : e.target.value })}
-                  className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-white"
-                >
-                  <option value="root">Test Repository (Root)</option>
-                  {folders.filter(f => f.id !== 'root').map(folder => (
-                    <option key={folder.id} value={folder.id}>{folder.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-500 dark:text-gray-400 mb-1 block">Tags (comma separated)</label>
-                <Input
-                  value={editingTestCase.tags?.join(', ') || ''}
-                  onChange={(e) => setEditingTestCase({ 
-                    ...editingTestCase, 
-                    tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) 
-                  })}
-                  placeholder="e.g., smoke, regression, login"
-                  className="bg-secondary border-border"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                handleEditTest(editingTestCase!);
-                setShowEditTestConfigDialog(false);
-              }} 
-              className="border-border mr-auto"
-            >
-              <Pencil className="w-4 h-4 mr-1" />
-              Edit Steps
-            </Button>
-            <Button variant="outline" onClick={() => setShowEditTestConfigDialog(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                if (!editingTestCase?.name?.trim()) {
-                  toast.error('Test name is required');
-                  return;
-                }
-                setTestCases(prev => {
-                  const updated = prev.map(tc => 
-                    tc.id === editingTestCase.id 
-                      ? { ...editingTestCase, updatedAt: new Date().toISOString() } 
-                      : tc
-                  );
-                  localStorage.setItem('test_cases', JSON.stringify(updated));
-                  return updated;
-                });
-                setShowEditTestConfigDialog(false);
-                setEditingTestCase(null);
-                toast.success('Test case updated');
-              }}
-              className="bg-amber-500 hover:bg-amber-400"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Test Run Results Dialog */}
-      <TestRunResultsDialog
-        open={showResultsDialog}
-        onClose={() => {
+      {/* All entity editing dialogs extracted to RepositoryDialogs */}
+      <RepositoryDialogs
+        showEditSuiteDialog={showEditSuiteDialog}
+        setShowEditSuiteDialog={setShowEditSuiteDialog}
+        editingSuite={editingSuite}
+        setEditingSuite={setEditingSuite}
+        handleSaveSuite={handleSaveSuite}
+        showEditReleaseDialog={showEditReleaseDialog}
+        setShowEditReleaseDialog={setShowEditReleaseDialog}
+        editingRelease={editingRelease}
+        setEditingRelease={setEditingRelease}
+        handleSaveRelease={handleSaveRelease}
+        suites={suites}
+        testPlans={testPlans}
+        showCreateSuiteDialog={showCreateSuiteDialog}
+        setShowCreateSuiteDialog={setShowCreateSuiteDialog}
+        newSuiteName={newSuiteName}
+        setNewSuiteName={setNewSuiteName}
+        newSuiteDescription={newSuiteDescription}
+        setNewSuiteDescription={setNewSuiteDescription}
+        newSuiteTestCases={newSuiteTestCases}
+        setNewSuiteTestCases={setNewSuiteTestCases}
+        testCases={testCases}
+        handleCreateSuite={handleCreateSuite}
+        showCreateReleaseDialog={showCreateReleaseDialog}
+        setShowCreateReleaseDialog={setShowCreateReleaseDialog}
+        newReleaseName={newReleaseName}
+        setNewReleaseName={setNewReleaseName}
+        newReleaseDescription={newReleaseDescription}
+        setNewReleaseDescription={setNewReleaseDescription}
+        newReleaseStartDate={newReleaseStartDate}
+        setNewReleaseStartDate={setNewReleaseStartDate}
+        newReleaseEndDate={newReleaseEndDate}
+        setNewReleaseEndDate={setNewReleaseEndDate}
+        newReleaseSuites={newReleaseSuites}
+        setNewReleaseSuites={setNewReleaseSuites}
+        handleCreateRelease={handleCreateRelease}
+        showEditPlanDialog={showEditPlanDialog}
+        setShowEditPlanDialog={setShowEditPlanDialog}
+        editingPlan={editingPlan}
+        setEditingPlan={setEditingPlan}
+        onSavePlan={() => {
+          if (!editingPlan) return;
+          setTestPlans(prev => {
+            const updated = prev.map(p => p.id === editingPlan.id ? { ...editingPlan, updatedAt: new Date().toISOString() } : p);
+            localStorage.setItem('test_plans', JSON.stringify(updated));
+            return updated;
+          });
+          setShowEditPlanDialog(false);
+          setEditingPlan(null);
+          toast.success('Plan updated');
+        }}
+        showLinkPlanToReleaseDialog={showLinkPlanToReleaseDialog}
+        setShowLinkPlanToReleaseDialog={setShowLinkPlanToReleaseDialog}
+        releases={releases}
+        onLinkPlanToRelease={(releaseId) => {
+          if (!editingPlan) return;
+          setTestPlans(prev => {
+            const updated = prev.map(p => p.id === editingPlan.id ? { ...p, releaseId } : p);
+            localStorage.setItem('test_plans', JSON.stringify(updated));
+            return updated;
+          });
+          setShowLinkPlanToReleaseDialog(false);
+          setEditingPlan(null);
+          const relName = releases.find(r => r.id === releaseId)?.name || releaseId;
+          toast.success(`Linked to ${relName}`);
+        }}
+        onUnlinkPlanFromRelease={() => {
+          if (!editingPlan) return;
+          setTestPlans(prev => {
+            const updated = prev.map(p => p.id === editingPlan.id ? { ...p, releaseId: undefined } : p);
+            localStorage.setItem('test_plans', JSON.stringify(updated));
+            return updated;
+          });
+          setShowLinkPlanToReleaseDialog(false);
+          setEditingPlan(null);
+          toast.success('Unlinked from release');
+        }}
+        showRunDetailsDialog={showRunDetailsDialog}
+        setShowRunDetailsDialog={setShowRunDetailsDialog}
+        selectedRun={selectedRun}
+        onRerunFromDetails={() => {
+          if (!selectedRun) return;
+          const newRun: TestRun = {
+            id: `run_${Date.now()}`,
+            name: `${selectedRun.name} (Re-run)`,
+            planId: selectedRun.planId,
+            suiteId: selectedRun.suiteId,
+            releaseId: selectedRun.releaseId,
+            mode: selectedRun.mode,
+            status: 'pending',
+            startTime: new Date().toISOString()
+          };
+          setTestRuns(prev => {
+            const updated = [newRun, ...prev];
+            localStorage.setItem('test_execution_history', JSON.stringify(updated));
+            return updated;
+          });
+          setShowRunDetailsDialog(false);
+          toast.success('Re-run scheduled');
+        }}
+        showCreateTestDialog={showCreateTestDialog}
+        setShowCreateTestDialog={setShowCreateTestDialog}
+        newTestName={newTestName}
+        setNewTestName={setNewTestName}
+        newTestDescription={newTestDescription}
+        setNewTestDescription={setNewTestDescription}
+        newTestPriority={newTestPriority}
+        setNewTestPriority={setNewTestPriority}
+        newTestFolder={newTestFolder}
+        setNewTestFolder={setNewTestFolder}
+        folders={folders}
+        onCreateTestCase={() => {
+          if (!newTestName.trim()) {
+            toast.error('Test name is required');
+            return;
+          }
+          const newTestCase: TestCase = {
+            id: `tc_${Date.now()}`,
+            name: newTestName.trim(),
+            description: newTestDescription,
+            folderId: newTestFolder === 'root' ? null : newTestFolder,
+            priority: newTestPriority,
+            status: 'draft',
+            automationStatus: 'none',
+            tags: [],
+            steps: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          setTestCases(prev => {
+            const updated = [...prev, newTestCase];
+            localStorage.setItem('test_cases', JSON.stringify(updated));
+            return updated;
+          });
+          localStorage.removeItem('unified_test_case');
+          localStorage.removeItem('unified_test_case_timestamp');
+          setShowCreateTestDialog(false);
+          toast.success('Test case created');
+          navigate(`/test-cases/builder?testCaseId=${newTestCase.id}`);
+        }}
+        showRunTestDialog={showRunTestDialog}
+        setShowRunTestDialog={setShowRunTestDialog}
+        testCaseToRun={testCaseToRun}
+        isApiTest={isApiTest}
+        runApiTestFromRepository={async (tc) => { await runApiTestFromRepository(tc); }}
+        apiRunResult={apiRunResult}
+        onQuickRunTest={(tc) => {
+          const runId = `run_${Date.now()}`;
+          const newRun: TestRun = {
+            id: runId,
+            name: `Quick Run: ${tc.name}`,
+            testCaseId: tc.id,
+            mode: 'automated',
+            status: 'running',
+            startTime: new Date().toISOString()
+          };
+          setTestRuns(prev => {
+            const updated = [newRun, ...prev];
+            localStorage.setItem('test_execution_history', JSON.stringify(updated));
+            return updated;
+          });
+          setShowRunTestDialog(false);
+          navigate(`/test-cases/builder?testCaseId=${tc.id}&autoRun=true&runId=${runId}`);
+        }}
+        onOpenInBuilder={(tc) => {
+          setShowRunTestDialog(false);
+          navigate(`/test-cases/builder?testCaseId=${tc.id}`);
+        }}
+        onOpenInApiTesting={() => {
+          setShowRunTestDialog(false);
+          navigate('/api');
+        }}
+        onAddToTestRun={(tc) => {
+          setShowRunTestDialog(false);
+          setNewRunTestCases([tc.id]);
+          setNewRunName(`Test Run: ${tc.name}`);
+          setShowCreateRunDialog(true);
+        }}
+        showCreateRunDialog={showCreateRunDialog}
+        setShowCreateRunDialog={setShowCreateRunDialog}
+        newRunName={newRunName}
+        setNewRunName={setNewRunName}
+        newRunMode={newRunMode}
+        setNewRunMode={setNewRunMode}
+        newRunExecutionMode={newRunExecutionMode}
+        setNewRunExecutionMode={setNewRunExecutionMode}
+        newRunReleaseId={newRunReleaseId}
+        setNewRunReleaseId={setNewRunReleaseId}
+        newRunTestCases={newRunTestCases}
+        setNewRunTestCases={setNewRunTestCases}
+        newRunTestSearch={newRunTestSearch}
+        setNewRunTestSearch={setNewRunTestSearch}
+        executingRunId={executingRunId}
+        onCreateRunSaveLater={() => {
+          if (!newRunName.trim()) { toast.error('Run name is required'); return; }
+          if (newRunTestCases.length === 0) { toast.error('Select at least one test case'); return; }
+          const newRun: TestRun = {
+            id: `run_${Date.now()}`,
+            name: newRunName.trim(),
+            mode: newRunMode,
+            executionMode: newRunExecutionMode,
+            releaseId: newRunReleaseId || undefined,
+            testCaseIds: newRunTestCases,
+            testCaseId: newRunTestCases[0],
+            status: 'pending',
+            startTime: new Date().toISOString(),
+            results: { passed: 0, failed: 0, skipped: newRunTestCases.length }
+          };
+          setTestRuns(prev => {
+            const updated = [newRun, ...prev];
+            localStorage.setItem('test_execution_history', JSON.stringify(updated));
+            return updated;
+          });
+          setShowCreateRunDialog(false);
+          setNewRunName(''); setNewRunTestCases([]); setNewRunReleaseId('');
+          setNewRunExecutionMode('sequential'); setNewRunMode('automated'); setNewRunTestSearch('');
+          toast.success(`Test run created with ${newRunTestCases.length} test(s)`);
+        }}
+        onCreateRunAndExecute={async () => {
+          if (!newRunName.trim()) { toast.error('Run name is required'); return; }
+          if (newRunTestCases.length === 0) { toast.error('Select at least one test case'); return; }
+          const runId = `run_${Date.now()}`;
+          const newRun: TestRun = {
+            id: runId,
+            name: newRunName.trim(),
+            mode: newRunMode,
+            executionMode: newRunExecutionMode,
+            releaseId: newRunReleaseId || undefined,
+            testCaseIds: newRunTestCases,
+            testCaseId: newRunTestCases[0],
+            status: 'pending',
+            startTime: new Date().toISOString()
+          };
+          setTestRuns(prev => {
+            const updated = [newRun, ...prev];
+            localStorage.setItem('test_execution_history', JSON.stringify(updated));
+            return updated;
+          });
+          const testsToRun = [...newRunTestCases];
+          const execMode = newRunExecutionMode;
+          const runMode = newRunMode;
+          setShowCreateRunDialog(false);
+          setNewRunName(''); setNewRunTestCases([]); setNewRunReleaseId('');
+          setNewRunExecutionMode('sequential'); setNewRunMode('automated'); setNewRunTestSearch('');
+          if (runMode === 'manual') {
+            toast.success(`Starting manual test execution for ${testsToRun.length} test(s)...`);
+            navigate(`/execution/run/${runId}/${testsToRun[0]}`);
+            return;
+          }
+          if (isElectron()) {
+            toast.success(`Executing ${testsToRun.length} test(s) in ${execMode} mode...`);
+            if (testsToRun.length === 1) {
+              await executeTestDirectly(testsToRun[0], runId);
+            } else {
+              await executeMultipleTests(testsToRun, runId, execMode);
+            }
+          } else {
+            navigate(`/test-cases/builder?testCaseId=${testsToRun[0]}&autoRun=true&runId=${runId}`);
+            toast.info('Note: Multiple tests will run one at a time in web mode');
+          }
+        }}
+        showEditTestConfigDialog={showEditTestConfigDialog}
+        setShowEditTestConfigDialog={setShowEditTestConfigDialog}
+        editingTestCase={editingTestCase}
+        setEditingTestCase={setEditingTestCase}
+        handleEditTest={handleEditTest}
+        onSaveTestConfig={() => {
+          if (!editingTestCase?.name?.trim()) { toast.error('Test name is required'); return; }
+          setTestCases(prev => {
+            const updated = prev.map(tc => tc.id === editingTestCase.id ? { ...editingTestCase, updatedAt: new Date().toISOString() } : tc);
+            localStorage.setItem('test_cases', JSON.stringify(updated));
+            return updated;
+          });
+          setShowEditTestConfigDialog(false);
+          setEditingTestCase(null);
+          toast.success('Test case updated');
+        }}
+        showResultsDialog={showResultsDialog}
+        selectedRunForResults={selectedRunForResults}
+        onCloseResults={() => {
           setShowResultsDialog(false);
           setSelectedRunForResults(null);
         }}
-        run={selectedRunForResults}
-        testCase={selectedRunForResults?.testCaseId 
-          ? testCases.find(tc => tc.id === selectedRunForResults.testCaseId) || null 
-          : null}
-        testCases={testCases}
-        onRerun={selectedRunForResults?.testCaseId ? async () => {
+        onRerunFromResults={selectedRunForResults?.testCaseId ? async () => {
           if (!selectedRunForResults?.testCaseId) return;
           const newRunId = `run_${Date.now()}`;
           const newRun: TestRun = {
@@ -5556,71 +3240,37 @@ export default function TestRepository() {
             localStorage.setItem('test_execution_history', JSON.stringify(updated));
             return updated;
           });
-          
           if (isElectron() && selectedRunForResults.testCaseId) {
             await executeTestDirectly(selectedRunForResults.testCaseId, newRunId);
           }
         } : undefined}
+        showCreateDefectDialog={showCreateDefectDialog}
+        setShowCreateDefectDialog={setShowCreateDefectDialog}
+        showEditDefectDialog={showEditDefectDialog}
+        setShowEditDefectDialog={setShowEditDefectDialog}
+        editingDefect={editingDefect}
+        setEditingDefect={setEditingDefect}
+        testRuns={testRuns}
+        onCreateDefect={(defect) => {
+          setDefects(prev => {
+            const updated = [defect, ...prev];
+            localStorage.setItem('test_defects', JSON.stringify(updated));
+            return updated;
+          });
+          setShowCreateDefectDialog(false);
+          toast.success('Defect created');
+        }}
+        onUpdateDefect={(defect) => {
+          setDefects(prev => {
+            const updated = prev.map(d => d.id === defect.id ? defect : d);
+            localStorage.setItem('test_defects', JSON.stringify(updated));
+            return updated;
+          });
+          setShowEditDefectDialog(false);
+          setEditingDefect(null);
+          toast.success('Defect updated');
+        }}
       />
-
-      {/* Create Defect Dialog */}
-      <Dialog open={showCreateDefectDialog} onOpenChange={setShowCreateDefectDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bug className="w-5 h-5 text-red-400" />
-              Report New Defect
-            </DialogTitle>
-          </DialogHeader>
-          <CreateDefectForm 
-            testCases={testCases}
-            testRuns={testRuns}
-            onSubmit={(defect) => {
-              setDefects(prev => {
-                const updated = [defect, ...prev];
-                localStorage.setItem('test_defects', JSON.stringify(updated));
-                return updated;
-              });
-              setShowCreateDefectDialog(false);
-              toast.success('Defect created');
-            }}
-            onCancel={() => setShowCreateDefectDialog(false)}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Defect Dialog */}
-      <Dialog open={showEditDefectDialog} onOpenChange={setShowEditDefectDialog}>
-        <DialogContent className="bg-white dark:bg-gray-900 border-gray-200 dark:border-border text-gray-900 dark:text-white max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bug className="w-5 h-5 text-blue-600 dark:text-primary" />
-              Edit Defect - {editingDefect?.id}
-            </DialogTitle>
-          </DialogHeader>
-          {editingDefect && (
-            <CreateDefectForm 
-              testCases={testCases}
-              testRuns={testRuns}
-              initialDefect={editingDefect}
-              onSubmit={(defect) => {
-                setDefects(prev => {
-                  const updated = prev.map(d => d.id === defect.id ? defect : d);
-                  localStorage.setItem('test_defects', JSON.stringify(updated));
-                  return updated;
-                });
-                setShowEditDefectDialog(false);
-                setEditingDefect(null);
-                toast.success('Defect updated');
-              }}
-              onCancel={() => {
-                setShowEditDefectDialog(false);
-                setEditingDefect(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

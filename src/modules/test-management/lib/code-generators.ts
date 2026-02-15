@@ -4,9 +4,7 @@
  * Extracted from UnifiedWorkflowEditor.tsx.
  * Functions that generate code output (Python/Playwright, API, DB, Performance, Manual, ISTQB, Gherkin, Markdown).
  *
- * NOTE: generateAutomationCode is very large (~2000 lines) and remains in UnifiedWorkflowEditor.tsx
- * because it heavily references convertSelector and escapeForPython in complex template-literal code
- * generation that makes extraction fragile. The other generators are extracted here.
+ * NOTE: generateAutomationCode (~2000 lines) has been extracted to ./automation-code-generator.ts.
  */
 
 import type { UnifiedTestCase, StepAssertion, TestStep } from '../types/workflow-editor.types';
