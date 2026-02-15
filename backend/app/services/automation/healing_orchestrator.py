@@ -90,7 +90,7 @@ class HealingOrchestrator:
     def _check_ai_budget(self) -> bool:
         """Check if we can make an AI call within budget."""
         try:
-            from app.routers.ai_automation_api import _budget_state
+            from app.routers.ai.ai_automation_api import _budget_state
             return _budget_state["current_run_calls"] < _budget_state["max_calls_per_run"]
         except Exception:
             return True  # If budget module not available, allow calls
@@ -98,7 +98,7 @@ class HealingOrchestrator:
     def _record_ai_call(self, success: bool):
         """Record an AI call for budget tracking."""
         try:
-            from app.routers.ai_automation_api import record_ai_usage
+            from app.routers.ai.ai_automation_api import record_ai_usage
             record_ai_usage(success)
         except Exception:
             pass

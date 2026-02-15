@@ -58,7 +58,7 @@ class FailureAnalyzer:
         # Try to get API key from shared config first (same as explorer/flowmap)
         if api_key is None:
             try:
-                from app.routers.vision_healing_api import get_openai_api_key
+                from app.routers.ai.vision_healing_api import get_openai_api_key
                 api_key = get_openai_api_key()
             except ImportError:
                 pass
@@ -83,7 +83,7 @@ class FailureAnalyzer:
     def refresh_api_key(self):
         """Refresh API key from shared config (call if key was updated)."""
         try:
-            from app.routers.vision_healing_api import get_openai_api_key
+            from app.routers.ai.vision_healing_api import get_openai_api_key
             new_key = get_openai_api_key()
             if new_key and new_key != self.api_key:
                 self.api_key = new_key
