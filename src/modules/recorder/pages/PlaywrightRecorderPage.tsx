@@ -115,6 +115,7 @@ import CrossOriginEditorDialog from "@/modules/recorder/components/CrossOriginEd
 import MergePreviewDialog from "@/modules/recorder/components/MergePreviewDialog";
 import VisualCheckpointDialog from "@/modules/recorder/components/VisualCheckpointDialog";
 import SFToolsDialog from "@/modules/recorder/components/SFToolsDialog";
+import StepListPanel from "@/modules/recorder/components/StepListPanel";
 // Extracted constants and helpers
 import {
   DEVICE_CATEGORIES, NETWORK_PRESETS, getDeviceName,
@@ -201,89 +202,9 @@ export default function PlaywrightRecorderPage() {
   } | null>(null);
   const [showRerecordBanner, setShowRerecordBanner] = useState(false);
   
-  // Device categories for organized dropdown
-  const deviceCategories = {
-    'Popular': [
-      { id: 'iPhone 15 Pro Max', name: 'iPhone 15 Pro Max' },
-      { id: 'iPhone 14 Pro', name: 'iPhone 14 Pro' },
-      { id: 'Pixel 8', name: 'Pixel 8' },
-      { id: 'Galaxy S24', name: 'Galaxy S24' },
-      { id: 'iPad Pro 11', name: 'iPad Pro 11"' },
-    ],
-    'iOS - iPhone': [
-      { id: 'iPhone 15 Pro Max', name: 'iPhone 15 Pro Max' },
-      { id: 'iPhone 15 Pro', name: 'iPhone 15 Pro' },
-      { id: 'iPhone 15', name: 'iPhone 15' },
-      { id: 'iPhone 14 Pro Max', name: 'iPhone 14 Pro Max' },
-      { id: 'iPhone 14 Pro', name: 'iPhone 14 Pro' },
-      { id: 'iPhone 14', name: 'iPhone 14' },
-      { id: 'iPhone 13 Pro Max', name: 'iPhone 13 Pro Max' },
-      { id: 'iPhone 13 Pro', name: 'iPhone 13 Pro' },
-      { id: 'iPhone 13', name: 'iPhone 13' },
-      { id: 'iPhone 13 Mini', name: 'iPhone 13 Mini' },
-      { id: 'iPhone 12 Pro Max', name: 'iPhone 12 Pro Max' },
-      { id: 'iPhone 12 Pro', name: 'iPhone 12 Pro' },
-      { id: 'iPhone 12', name: 'iPhone 12' },
-      { id: 'iPhone SE (3rd Gen)', name: 'iPhone SE (3rd Gen)' },
-      { id: 'iPhone SE', name: 'iPhone SE' },
-      { id: 'iPhone 11', name: 'iPhone 11' },
-    ],
-    'iOS - iPad': [
-      { id: 'iPad Pro 12.9', name: 'iPad Pro 12.9"' },
-      { id: 'iPad Pro 11', name: 'iPad Pro 11"' },
-      { id: 'iPad Air', name: 'iPad Air' },
-      { id: 'iPad Mini', name: 'iPad Mini' },
-      { id: 'iPad', name: 'iPad (10th Gen)' },
-    ],
-    'Android - Google Pixel': [
-      { id: 'Pixel 8 Pro', name: 'Pixel 8 Pro' },
-      { id: 'Pixel 8', name: 'Pixel 8' },
-      { id: 'Pixel 7 Pro', name: 'Pixel 7 Pro' },
-      { id: 'Pixel 7', name: 'Pixel 7' },
-      { id: 'Pixel 6 Pro', name: 'Pixel 6 Pro' },
-      { id: 'Pixel 6', name: 'Pixel 6' },
-      { id: 'Pixel 5', name: 'Pixel 5' },
-    ],
-    'Android - Samsung Galaxy': [
-      { id: 'Galaxy S24 Ultra', name: 'Galaxy S24 Ultra' },
-      { id: 'Galaxy S24+', name: 'Galaxy S24+' },
-      { id: 'Galaxy S24', name: 'Galaxy S24' },
-      { id: 'Galaxy S23 Ultra', name: 'Galaxy S23 Ultra' },
-      { id: 'Galaxy S23', name: 'Galaxy S23' },
-      { id: 'Galaxy S22 Ultra', name: 'Galaxy S22 Ultra' },
-      { id: 'Galaxy S21', name: 'Galaxy S21' },
-      { id: 'Galaxy A54', name: 'Galaxy A54' },
-      { id: 'Galaxy A34', name: 'Galaxy A34' },
-      { id: 'Galaxy Tab S9', name: 'Galaxy Tab S9' },
-      { id: 'Galaxy Tab S8', name: 'Galaxy Tab S8' },
-    ],
-    'Android - Other Brands': [
-      { id: 'OnePlus 12', name: 'OnePlus 12' },
-      { id: 'OnePlus 11', name: 'OnePlus 11' },
-      { id: 'Xiaomi 14 Pro', name: 'Xiaomi 14 Pro' },
-      { id: 'Redmi Note 13 Pro', name: 'Redmi Note 13 Pro' },
-    ],
-  };
-  
-  const networkPresets = [
-    { id: 'none', name: 'No Throttling' },
-    { id: '5G', name: '5G' },
-    { id: '4G LTE', name: '4G LTE' },
-    { id: '4G', name: '4G' },
-    { id: '3G', name: '3G' },
-    { id: 'Slow 3G', name: 'Slow 3G' },
-    { id: '2G', name: '2G' },
-  ];
-  
-  // Helper to get device display name
-  const getDeviceName = (deviceId: string) => {
-    if (deviceId === 'desktop') return 'Desktop';
-    for (const category of Object.values(deviceCategories)) {
-      const device = category.find(d => d.id === deviceId);
-      if (device) return device.name;
-    }
-    return deviceId;
-  };
+  // Device categories and network presets — imported from constants
+  const deviceCategories = DEVICE_CATEGORIES;
+  const networkPresets = NETWORK_PRESETS;
   
   // Visual checkpoint state
   const [isCapturingVisual, setIsCapturingVisual] = useState(false);
@@ -5193,349 +5114,39 @@ const handleExportToBuilder = async () => {
             </div>
           )}
 
-          {/* Recorded Steps Header */}
-          <div className="px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Recorded Steps</span>
-              <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-xs">
-                {actions.length}
-              </Badge>
-              {selectedActionIndices.size > 0 && (
-                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
-                  {selectedActionIndices.size} selected
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              {/* Multi-select toggle */}
-              {actions.length > 0 && mode === 'existing' && selectedTestCase && (
-                <Button
-                  variant={isMultiSelectMode ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => {
-                    setIsMultiSelectMode(!isMultiSelectMode);
-                    if (isMultiSelectMode) {
-                      setSelectedActionIndices(new Set());
-                    }
-                  }}
-                  className={cn(
-                    "h-6 px-2 text-xs",
-                    isMultiSelectMode && "bg-purple-500 hover:bg-purple-600 text-white"
-                  )}
-                >
-                  <CheckSquare className="h-3 w-3 mr-1" />
-                  Select
-                </Button>
-              )}
-              {actions.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleClearActions} className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive">
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-          
-          {/* Multi-select action bar - shown when actions are selected */}
-          {isMultiSelectMode && mode === 'existing' && selectedTestCase && (
-            <div className="px-3 py-2 bg-purple-500/10 border-b border-purple-500/30">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={selectAllActions}
-                    className="h-6 px-2 text-xs border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
-                  >
-                    Select All
-                  </Button>
-                  {selectedActionIndices.size > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearAllSelections}
-                      className="h-6 px-2 text-xs text-muted-foreground"
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
-                {selectedActionIndices.size > 0 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-purple-300">Link to:</span>
-                    <Select 
-                      value={String(currentStepIndex)} 
-                      onValueChange={(v) => setCurrentStepIndex(parseInt(v))}
-                    >
-                      <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs bg-purple-500/20 border-purple-500/30">
-                        <SelectValue placeholder="Select step" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(selectedTestCase.steps || []).map((step: any, idx: number) => (
-                          <SelectItem key={idx} value={String(idx)} className="text-xs">
-                            <span className="flex items-center gap-2">
-                              <span className="font-mono text-purple-400">{String(idx + 1).padStart(2, '0')}</span>
-                              <span className="truncate max-w-[150px]">{step.name || step.description || `Step ${idx + 1}`}</span>
-                              {stepLinks[idx]?.actions.length > 0 && (
-                                <Badge variant="outline" className="text-[9px] h-4 px-1 ml-1">
-                                  {stepLinks[idx].actions.length}
-                                </Badge>
-                              )}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      onClick={linkSelectedActionsToStep}
-                      className="h-7 px-3 text-xs bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                    >
-                      <Link className="h-3 w-3 mr-1.5" />
-                      Link {selectedActionIndices.size}
-                    </Button>
-                  </div>
-                )}
-              </div>
-              {/* Range selection hint */}
-              <p className="text-[10px] text-purple-300/70 mt-1">
-                💡 Hold Shift+Click for range selection
-              </p>
-            </div>
-          )}
-
-          {/* Recorded Steps List */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-full">
-            {actions.length === 0 ? (
-              <div className="text-center py-12 px-4 text-muted-foreground">
-                <Video className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm">No actions recorded yet.</p>
-                <p className="text-xs mt-1">Click 'Start Recording' to begin.</p>
-              </div>
-            ) : (
-              <div className="px-2 pb-20 space-y-1"> {/* pb-20 for fixed footer space */}
-                {actions.map((action, index) => {
-                  // NOTE: Duplicate fills are now removed from the array itself (in setActions),
-                  // so we no longer need display-only filtering here.
-                  
-                  // Apply masking for sensitive fields (passwords)
-                  const displayAction = maskSensitiveAction(action);
-                  const isPw = isPasswordField(action);
-                  const isSelected = selectedActionIndex === index;
-                  const isMultiSelected = selectedActionIndices.has(index);
-                  const isNewlyAdded = index === actions.length - 1;
-                  
-                  return (
-                  <div
-                    key={action.id || `action_${index}_${action.timestamp}`}
-                    draggable={!isMultiSelectMode}
-                    onDragStart={() => !isMultiSelectMode && handleDragStart(index)}
-                    onDragOver={(e) => !isMultiSelectMode && handleDragOver(e, index)}
-                    onDragEnd={() => !isMultiSelectMode && handleDragEnd()}
-                    onClick={(e) => {
-                      if (isMultiSelectMode) {
-                        toggleActionSelection(index, e);
-                      } else {
-                        setSelectedActionIndex(isSelected ? null : index);
-                      }
-                    }}
-                    className={cn(
-                      "flex items-center gap-2 p-2.5 rounded-lg bg-card hover:bg-accent border group cursor-pointer transition-all",
-                      !isMultiSelectMode && "active:cursor-grabbing",
-                      isSelected && !isMultiSelectMode && "border-primary bg-primary/10 ring-1 ring-primary/30",
-                      isMultiSelected && "border-purple-500 bg-purple-500/20 ring-1 ring-purple-500/30",
-                      draggedIndex === index && "opacity-50 border-cyan-500/50",
-                      dragOverIndex === index && draggedIndex !== index && "border-cyan-500 bg-cyan-500/10",
-                      !isSelected && !isMultiSelected && draggedIndex === null && "border-transparent hover:border-white/5",
-                      isNewlyAdded && !isMultiSelectMode && "animate-pulse-once"
-                    )}
-                  >
-                    {/* Checkbox for multi-select mode */}
-                    {isMultiSelectMode ? (
-                      <div 
-                        className={cn(
-                          "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                          isMultiSelected 
-                            ? "bg-purple-500 border-purple-500" 
-                            : "border-muted-foreground/50 hover:border-purple-400"
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleActionSelection(index, e);
-                        }}
-                      >
-                        {isMultiSelected && <Check className="h-3 w-3 text-white" />}
-                      </div>
-                    ) : (
-                      /* Drag handle */
-                      <div className="flex flex-col gap-0.5 text-muted-foreground group-hover:text-foreground shrink-0 cursor-grab">
-                        <div className="flex gap-0.5">
-                          <div className="w-1 h-1 rounded-full bg-current" />
-                          <div className="w-1 h-1 rounded-full bg-current" />
-                        </div>
-                        <div className="flex gap-0.5">
-                          <div className="w-1 h-1 rounded-full bg-current" />
-                          <div className="w-1 h-1 rounded-full bg-current" />
-                        </div>
-                      </div>
-                    )}
-                    <div className={cn(
-                      "flex items-center justify-center w-6 h-6 rounded text-xs font-mono shrink-0",
-                      isMultiSelected ? "bg-purple-500/30 text-purple-300" : "bg-white/5 text-muted-foreground"
-                    )}>
-                      {String(index + 1).padStart(2, '0')}
-                    </div>
-                    {getActionIcon(action.qword || action.type || '')}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm text-foreground truncate flex-1 min-w-0">
-                          {getDisplayDescription(displayAction)}
-                          {isPw && <span className="ml-1 text-primary">🔒</span>}
-                          {isCrossOriginAction(action) && (
-                            <span className="ml-1 text-yellow-500">⚠️</span>
-                          )}
-                          {/* Flagged step indicator (false positive or wrong element) */}
-                          {action.id && falsePositiveSteps.has(action.id) && (
-                            <span
-                              className={cn(
-                                "ml-1 px-1.5 py-0.5 text-[10px] rounded border",
-                                falsePositiveSteps.get(action.id)?.reason?.includes('Wrong element')
-                                  ? "bg-red-500/20 text-red-400 border-red-500/30"
-                                  : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                              )}
-                              title={falsePositiveSteps.get(action.id)?.reason || "Flagged — test will stop here for fixing"}
-                            >
-                              🚩 {falsePositiveSteps.get(action.id)?.reason?.includes('Wrong element') ? 'Wrong Element' : 'Flagged'}
-                            </span>
-                          )}
-                        </p>
-                        {/* Confidence indicator - shows when confidence is not HIGH or multiple matches */}
-                        <StepConfidenceIndicator
-                          confidence={action.confidence}
-                          matchAnalysis={action.matchAnalysis}
-                        />
-                      </div>
-                      {isCrossOriginAction(action) ? (
-                        <p className="text-xs text-yellow-500/80 truncate">
-                          {(action as any).userActions?.length > 0 
-                            ? `${(action as any).userActions.length} action(s) defined`
-                            : 'Click to add selectors'}
-                        </p>
-                      ) : displayAction.args?.[0] && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {isPw ? `${displayAction.args[0]} → ••••••••` : displayAction.args.join(' → ')}
-                        </p>
-                      )}
-                    </div>
-                    {/* ============ ACTION BUTTONS - Always visible ============ */}
-                    <div className="flex items-center gap-1 shrink-0 ml-auto pl-2">
-                      {/* Edit button for cross-origin actions */}
-                      {isCrossOriginAction(action) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-[10px] bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCrossOriginIndex(index);
-                            setCrossOriginUserActions((action as any).userActions || []);
-                            setShowCrossOriginEditor(true);
-                          }}
-                        >
-                          <PenLine className="h-3 w-3 mr-1" />
-                          Edit
-                        </Button>
-                      )}
-                      {/* Quick link button - shown when hovering in existing mode */}
-                      {mode === 'existing' && selectedTestCase && !isMultiSelectMode && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-1.5 opacity-0 group-hover:opacity-100 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            linkActionToStep(currentStepIndex, action, 'recorded');
-                            // Remove from actions list after linking
-                            setActions(prev => prev.filter((_, i) => i !== index));
-                          }}
-                          title={`Link to Step ${currentStepIndex + 1}`}
-                        >
-                          <Link className="h-3 w-3 mr-0.5" />
-                          <span className="text-[10px]">{currentStepIndex + 1}</span>
-                        </Button>
-                      )}
-                      {/* COPY SELECTOR BUTTON - Quick copy for debugging */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-secondary/50 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const selector = action.selectorObj?.manualOverride || 
-                                          action.selectorObj?.primary || 
-                                          action.selectorObj?.selector || 
-                                          action.selector || '';
-                          if (selector) {
-                            navigator.clipboard.writeText(selector);
-                            toast.success('Selector copied!', { duration: 1500 });
-                          } else {
-                            toast.error('No selector to copy');
-                          }
-                        }}
-                        title="Copy selector to clipboard"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      {/* EDIT SELECTOR BUTTON - Manual Override - Always visible */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditSelectorModal(index);
-                        }}
-                        title="Edit step - Modify selector or value"
-                      >
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                      {/* DELETE BUTTON - Always visible */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const actionName = action.description || action.qword || 'step';
-                          setActions(prev => prev.filter((_, i) => i !== index));
-                          // Also remove from selection if multi-selected
-                          if (selectedActionIndices.has(index)) {
-                            setSelectedActionIndices(prev => {
-                              const newSet = new Set(prev);
-                              newSet.delete(index);
-                              // Adjust indices for items after the deleted one
-                              const adjusted = new Set<number>();
-                              newSet.forEach(i => adjusted.add(i > index ? i - 1 : i));
-                              return adjusted;
-                            });
-                          }
-                          toast.success(`Deleted: ${actionName}`);
-                        }}
-                        title="Delete step"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  );
-                })}
-                {/* Auto-scroll target */}
-                <div ref={actionsEndRef} />
-              </div>
-            )}
-            </ScrollArea>
-          </div>
+          <StepListPanel
+            actions={actions}
+            setActions={setActions}
+            mode={mode}
+            selectedTestCase={selectedTestCase}
+            isMultiSelectMode={isMultiSelectMode}
+            setIsMultiSelectMode={setIsMultiSelectMode}
+            selectedActionIndices={selectedActionIndices}
+            setSelectedActionIndices={setSelectedActionIndices}
+            selectedActionIndex={selectedActionIndex}
+            setSelectedActionIndex={setSelectedActionIndex}
+            currentStepIndex={currentStepIndex}
+            setCurrentStepIndex={setCurrentStepIndex}
+            stepLinks={stepLinks}
+            falsePositiveSteps={falsePositiveSteps}
+            draggedIndex={draggedIndex}
+            dragOverIndex={dragOverIndex}
+            handleDragStart={handleDragStart}
+            handleDragOver={handleDragOver}
+            handleDragEnd={handleDragEnd}
+            handleClearActions={handleClearActions}
+            selectAllActions={selectAllActions}
+            clearAllSelections={clearAllSelections}
+            linkSelectedActionsToStep={linkSelectedActionsToStep}
+            toggleActionSelection={toggleActionSelection}
+            linkActionToStep={linkActionToStep}
+            openEditSelectorModal={openEditSelectorModal}
+            setEditingCrossOriginIndex={setEditingCrossOriginIndex}
+            setCrossOriginUserActions={setCrossOriginUserActions}
+            setShowCrossOriginEditor={setShowCrossOriginEditor}
+            getActionIcon={getActionIcon}
+            actionsEndRef={actionsEndRef}
+          />
         </div>
 
         {/* ============ RESIZABLE DIVIDER ============ */}
