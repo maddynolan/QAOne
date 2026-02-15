@@ -1179,58 +1179,7 @@ class PlaywrightRecorder extends EventEmitter {
   _getClickCaptureScript() {
     return getClickCaptureScript();
   }
-        
-        // Capture on focusout to flush input (including contenteditable)
-        window.addEventListener('focusout', function(e) {
-          try {
-            const path = e.composedPath ? e.composedPath() : [e.target];
-            let input = null;
-            
-            for (const el of path) {
-              if (!el || !el.tagName) continue;
-              const tag = el.tagName.toLowerCase();
-              if (tag === 'input' || tag === 'textarea') {
-                input = el;
-                break;
-              }
-              // Also handle contenteditable elements (rich text editors)
-              if (el.getAttribute && (el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox')) {
-                input = el;
-                break;
-              }
-            }
-            
-            flushInput(input);
-          } catch(err) {}
-        }, true);
-        
-        // Also capture on 'change' event (fires when input value changes and loses focus)
-        window.addEventListener('change', function(e) {
-          try {
-            const path = e.composedPath ? e.composedPath() : [e.target];
-            let input = null;
-            
-            for (const el of path) {
-              if (!el || !el.tagName) continue;
-              const tag = el.tagName.toLowerCase();
-              if (tag === 'input' || tag === 'textarea') {
-                input = el;
-                break;
-              }
-              // Also handle contenteditable elements
-              if (el.getAttribute && (el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox')) {
-                input = el;
-                break;
-              }
-            }
-            
-            flushInput(input);
-          } catch(err) {}
-        }, true);
-    })();
-    `;
-  }
-  
+
   /**
    * Inject the click capture script into a page
    * @param {Page} targetPage - The page to inject into (defaults to this.page)
