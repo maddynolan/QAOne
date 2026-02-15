@@ -12,6 +12,9 @@ export { default as ScheduleManager } from './ScheduleManager';
 
 // Node types and configurations
 export * from './WorkflowNodes';
+export type { Node, Edge, FlowstralWorkflowEditorProps } from './types';
+export { NodeComponent } from './NodeComponent';
+export { isNodeComplete, generateSmartLocator } from './workflow-utils';
 export type { TestSuite, TestSuiteWorkflow, Environment } from './TestSuiteManager';
 export type { WorkflowVariable, DataSource } from './VariableStore';
 export type { Schedule } from './ScheduleManager';

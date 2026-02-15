@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { 
-  Play, Save, Download, Trash2, Plus, Code, MousePointer, 
+import {
+  Play, Save, Download, Trash2, Plus, Code, MousePointer,
   Type, Navigation, Clock, CheckCircle, GitBranch, Repeat,
   Zap, Eye, Move, ZoomIn, ZoomOut, Upload, FileText, Import,
   Loader2, AlertCircle, Copy, ArrowUp, ArrowDown, List
@@ -17,140 +17,9 @@ import { API_BASE_URL } from '@/lib/api-config';
 import { ApplicationDetector, ApplicationType } from '@/lib/application-detector';
 import LocatorBuilder from './LocatorBuilder';
 import TestRunner from './TestRunner';
-
-interface Node {
-  id: string;
-  position: { x: number; y: number };
-  data: {
-    type: 'navigate' | 'click' | 'input' | 'wait' | 'assert' | 'condition' | 'loop';
-    label: string;
-    selector?: string;
-    value?: string;
-    url?: string;
-    duration?: number;
-    elementData?: {
-      tagName?: string;
-      attributes?: Record<string, string>;
-      textContent?: string;
-      className?: string;
-    };
-  };
-  stepNumber?: number;
-}
-
-interface Edge {
-  id: string;
-  source: string;
-  target: string;
-}
-
-interface FlowstralWorkflowEditorProps {
-  sessionId?: string;
-  importSource?: string;  // 'extension' for auto-import from extension
-  onExport?: (workflow: any) => void;
-  onImport?: (workflow: any) => void;
-}
-
-// Node Component
-const NodeComponent = ({ node, isSelected, onClick, onDragStart }: {
-  node: Node;
-  isSelected: boolean;
-  onClick: () => void;
-  onDragStart: (e: React.DragEvent) => void;
-}) => {
-  const getIcon = () => {
-    switch (node.data.type) {
-      case 'navigate': return <Navigation className="h-4 w-4" />;
-      case 'click': return <MousePointer className="h-4 w-4" />;
-      case 'input': return <Type className="h-4 w-4" />;
-      case 'wait': return <Clock className="h-4 w-4" />;
-      case 'assert': return <CheckCircle className="h-4 w-4" />;
-      case 'condition': return <GitBranch className="h-4 w-4" />;
-      case 'loop': return <Repeat className="h-4 w-4" />;
-      default: return <Zap className="h-4 w-4" />;
-    }
-  };
-
-  const getColor = () => {
-    switch (node.data.type) {
-      case 'navigate': return 'border-blue-500 bg-blue-50 dark:bg-blue-950';
-      case 'click': return 'border-green-500 bg-green-50 dark:bg-green-950';
-      case 'input': return 'border-purple-500 bg-purple-50 dark:bg-purple-950';
-      case 'wait': return 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950';
-      case 'assert': return 'border-red-500 bg-red-50 dark:bg-red-950';
-      case 'condition': return 'border-orange-500 bg-orange-50 dark:bg-orange-950';
-      case 'loop': return 'border-pink-500 bg-pink-50 dark:bg-pink-950';
-      default: return 'border-gray-500 bg-gray-50 dark:bg-gray-900';
-    }
-  };
-
-  const getIconColor = () => {
-    switch (node.data.type) {
-      case 'navigate': return 'bg-blue-500';
-      case 'click': return 'bg-green-500';
-      case 'input': return 'bg-purple-500';
-      case 'wait': return 'bg-yellow-500';
-      case 'assert': return 'bg-red-500';
-      case 'condition': return 'bg-orange-500';
-      case 'loop': return 'bg-pink-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  return (
-    <div
-      onClick={onClick}
-      draggable
-      onDragStart={onDragStart}
-      style={{
-        position: 'absolute',
-        left: node.position.x,
-        top: node.position.y,
-        cursor: 'move'
-      }}
-      className={`
-        px-4 py-3 rounded-lg border-2 bg-white dark:bg-gray-900 shadow-md min-w-[200px] max-w-[250px]
-        ${isSelected ? 'border-blue-600 dark:border-amber-500 shadow-lg ring-2 ring-blue-200 dark:ring-amber-500/30' : getColor()}
-        hover:shadow-lg transition-all
-      `}
-    >
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-full hover:border-blue-500 dark:hover:border-amber-500" />
-      
-      <div className="flex items-center gap-2 mb-1">
-        <div className={`${getIconColor()} text-white p-1.5 rounded`}>
-          {getIcon()}
-        </div>
-        <div className="flex-1">
-          <div className="font-semibold text-sm text-gray-800 dark:text-gray-100">{node.data.label}</div>
-        </div>
-        {/* Step number badge */}
-        <div className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-          {node.stepNumber || '?'}
-        </div>
-      </div>
-      
-      {node.data.selector && (
-        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
-          {node.data.selector}
-        </div>
-      )}
-      
-      {node.data.value && (
-        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
-          Value: {node.data.value}
-        </div>
-      )}
-      
-      {node.data.url && (
-        <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">
-          {node.data.url}
-        </div>
-      )}
-      
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 rounded-full hover:border-blue-500 dark:hover:border-amber-500" />
-    </div>
-  );
-};
+import { NodeComponent } from './NodeComponent';
+import { isNodeComplete, generateSmartLocator } from './workflow-utils';
+import type { Node, Edge, FlowstralWorkflowEditorProps } from './types';
 
 export default function FlowstralWorkflowEditor({ sessionId, importSource: autoImportSource, onExport, onImport }: FlowstralWorkflowEditorProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -216,23 +85,6 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
     const timeoutId = setTimeout(saveState, 1000);
     return () => clearTimeout(timeoutId);
   }, [workflowName, nodes, edges]);
-
-  // Helper to check if node is complete
-  const isNodeComplete = (node: Node): boolean => {
-    switch (node.data.type) {
-      case 'navigate':
-        return !!node.data.url;
-      case 'click':
-      case 'assert':
-        return !!node.data.selector;
-      case 'input':
-        return !!node.data.selector && !!node.data.value;
-      case 'wait':
-        return !!node.data.value;
-      default:
-        return true;
-    }
-  };
 
   // Load saved state on mount (skip if importing from trace/extension)
   useEffect(() => {
@@ -1024,37 +876,6 @@ export default function FlowstralWorkflowEditor({ sessionId, importSource: autoI
         </g>
       );
     });
-  };
-
-  // Auto-generate smart locator based on node type and context
-  const generateSmartLocator = (type: Node['data']['type'], label: string): string => {
-    const cleanLabel = label.replace(/^(New|Click|Enter|Fill|Wait|Assert)\s+/i, '').trim();
-    
-    switch (type) {
-      case 'click':
-        // Try button first, then link
-        if (cleanLabel) {
-          return `page.getByRole('button', { name: '${cleanLabel}' })`;
-        }
-        return `page.getByRole('button').first()`;
-      
-      case 'input':
-        // Use label if available, otherwise use placeholder text
-        if (cleanLabel) {
-          return `page.getByLabel('${cleanLabel}')`;
-        }
-        return `page.getByRole('textbox').first()`;
-      
-      case 'assert':
-        // Use text content for assertions
-        if (cleanLabel) {
-          return `page.getByText('${cleanLabel}')`;
-        }
-        return `page.locator('body')`;
-      
-      default:
-        return '';
-    }
   };
 
   const addNode = (type: Node['data']['type']) => {
